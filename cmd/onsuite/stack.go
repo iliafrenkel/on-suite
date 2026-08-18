@@ -53,5 +53,12 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		}
 	}))
 
-	return mux, nil
+	errs := web.NewErrors(rend, deps.Log)
+	mux.Handle("/", http.HandlerFunc(errs.NotFound))
+
+	return web.Chain(mux,
+		web.Recover(deps.Log, errs),
+		web.RequestLog(deps.Log),
+		web.SecurityHeaders(),
+	), nil
 }
