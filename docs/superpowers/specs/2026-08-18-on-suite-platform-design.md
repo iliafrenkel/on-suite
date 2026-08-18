@@ -124,11 +124,15 @@ file. Adding an app is: write the package, add one line.
 | Client-side state | Alpine.js, vendored — deferred | HTMX covers server round-trips, not pure-client state such as keyboard navigation. Not introduced until an app needs it; ON Paste does not. |
 | DB driver | `modernc.org/sqlite` | Pure Go, no CGO, so `GOOS=linux GOARCH=arm64 go build` from macOS produces a genuinely static binary. Supports FTS5, which Notes and Reader will want. |
 | Password hashing | `golang.org/x/crypto/argon2` | Argon2id. |
+| Terminal input | `golang.org/x/term` | Reads a password from a terminal without echoing it, for `onsuite user add`. Pure Go, no CGO. |
 | Logging | stdlib `log/slog` | Structured JSON to stdout, collected by journald. |
 
-Platform dependencies total three. Per-app dependencies are added only when
-that app is built: `alecthomas/chroma` for ON Paste syntax highlighting,
-`mmcdole/gofeed` for ON Reader.
+Platform dependencies total three, all of them pure Go and CGO-free:
+`modernc.org/sqlite`, `golang.org/x/crypto` and `golang.org/x/term`.
+Per-app dependencies are added only when that app is built:
+`alecthomas/chroma` for ON Paste syntax highlighting, `mmcdole/gofeed` for
+ON Reader. `golang.org/x/net` is a test-only dependency used to parse HTML in
+handler tests and does not count against this budget.
 
 The build is `go build ./cmd/onsuite`. There is nothing else to install.
 
@@ -204,6 +208,14 @@ users it is attack surface with no benefit.
 - Bootstrap via CLI: `onsuite user add ilia --admin`. This avoids the
   chicken-and-egg first-run setup wizard — the first account exists before the
   server listens.
+- **Password entry never puts a plaintext password in shell history or in the
+  process table.** The command prompts twice on the terminal with echo
+  disabled. When standard input is not a terminal it reads one line instead,
+  so `onsuite user add ilia < secret.txt` works for scripted setup. There is
+  no `--password` flag, because a flag value is visible in `ps` output and in
+  shell history.
+- Passwords must be at least 12 characters. Length is the only rule;
+  composition requirements push users toward worse passwords.
 - Subsequent accounts: the same command, or an admin-only page that mints a
   single-use invite link the recipient redeems by choosing their own password.
 
