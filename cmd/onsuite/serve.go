@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
@@ -40,6 +41,29 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 		}
 	}()
 	log.Info("database ready", "path", cfg.DBPath())
+
+	migrations, err := db.Collect(auth.Namespace, auth.Migrations())
+	if err != nil {
+		return err
+	}
+	applied, err := db.Apply(context.Background(), handle, migrations)
+	if err != nil {
+		return err
+	}
+	if applied > 0 {
+		log.Info("migrations applied", "count", applied)
+	}
+
+	users := auth.NewStore(handle)
+	switch n, err := users.CountUsers(context.Background()); {
+	case err != nil:
+		return err
+	case n == 0:
+		// The single most likely first-run confusion, so say it plainly
+		// rather than leaving an empty login page as the only clue.
+		log.Warn("no accounts exist yet; create one with: onsuite user add <name> --admin",
+			"data_dir", cfg.DataDir)
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", healthzHandler(version, handle))
