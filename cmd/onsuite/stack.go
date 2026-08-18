@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 	"github.com/iliafrenkel/on-suite/internal/ui"
@@ -14,6 +15,7 @@ import (
 // one parameter rather than six, and so tests can substitute pieces.
 type stackDeps struct {
 	DB      *sql.DB
+	Users   *auth.Store
 	Log     *slog.Logger
 	Version string
 	Secure  bool
@@ -36,28 +38,38 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		return nil, err
 	}
 
+	errs := web.NewErrors(rend, deps.Log)
+	csrf := web.NewCSRF(deps.Secure, errs)
+	authn := web.NewAuth(web.AuthOptions{
+		Users:  deps.Users,
+		Render: rend,
+		Errors: errs,
+		CSRF:   csrf,
+		Log:    deps.Log,
+		Secure: deps.Secure,
+	})
+
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", healthzHandler(deps.Version, deps.DB))
 	mux.Handle("GET /static/", http.StripPrefix("/static", assets.Handler()))
+	authn.Routes(mux)
 
-	mux.Handle("GET /{$}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := rend.Page(w, http.StatusOK, "error", render.Page{
+	mux.Handle("GET /{$}", authn.RequireUser(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, _ := web.UserFrom(r.Context())
+		page := render.Page{
 			Title: "ON Suite",
-			Shell: render.Shell{Version: deps.Version},
-			Data: map[string]any{
-				"Status": http.StatusOK, "Title": "It works",
-				"Message": "The renderer and the design system are wired up.",
+			Shell: render.Shell{
+				LoggedIn: true, Username: u.Username, IsAdmin: u.IsAdmin,
+				CSRFToken: web.CSRFToken(r.Context()), Version: deps.Version,
 			},
-		}); err != nil {
-			deps.Log.Error("render root", "error", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			Data: map[string]any{"Status": 200, "Title": "Signed in", "Message": "No apps are registered yet."},
 		}
-	}))
+		if err := rend.Page(w, http.StatusOK, "error", page); err != nil {
+			errs.Internal(w, r, err)
+		}
+	})))
 
-	errs := web.NewErrors(rend, deps.Log)
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
-
-	csrf := web.NewCSRF(deps.Secure, errs)
 
 	return web.Chain(mux,
 		web.Recover(deps.Log, errs),
@@ -65,5 +77,6 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		web.SecurityHeaders(),
 		web.LimitBody(web.DefaultMaxBodyBytes),
 		csrf.Middleware,
+		authn.LoadUser,
 	), nil
 }

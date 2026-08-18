@@ -123,3 +123,24 @@ func VerifyPassword(encoded, plain string) (bool, error) {
 	// hash matched.
 	return subtle.ConstantTimeCompare(got, want) == 1, nil
 }
+
+// dummyHash is a real Argon2id hash of a value nobody will guess. It exists so
+// a login attempt for an unknown username can perform the same work as one for
+// a real account, making the two indistinguishable by response time.
+//
+// Generated with the default parameters; the plaintext is irrelevant.
+var dummyHash = mustHash("timing-equalisation-placeholder")
+
+func mustHash(s string) string {
+	h, err := HashPassword(s)
+	if err != nil {
+		panic("auth: hashing the dummy password failed: " + err.Error())
+	}
+	return h
+}
+
+// DummyVerify spends roughly the same time as VerifyPassword would, and
+// discards the result. Call it when a username was not found.
+func DummyVerify(password string) {
+	_, _ = VerifyPassword(dummyHash, password)
+}

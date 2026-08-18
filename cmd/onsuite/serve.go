@@ -67,6 +67,7 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 
 	handler, err := buildStack(stackDeps{
 		DB:      handle,
+		Users:   users,
 		Log:     log,
 		Version: version,
 		Secure:  cfg.TLSDomain != "",
