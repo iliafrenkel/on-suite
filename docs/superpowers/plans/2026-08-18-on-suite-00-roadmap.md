@@ -15,7 +15,7 @@ absorb what was actually learned.
 | Plan | File | Delivers |
 |---|---|---|
 | 1 | `2026-08-18-on-suite-01-platform-core.md` | Config, SQLite, migrations, password hashing, users, sessions, `onsuite user add`. **Written.** |
-| 2 | `2026-08-18-on-suite-02-web-and-apps.md` | Assets, templates, middleware, CSRF, login, the app framework. *Written after Plan 1 is executed.* |
+| 2 | `2026-08-18-on-suite-02-web-and-apps.md` | Assets, templates, middleware, CSRF, login, the app framework. **Written.** |
 | 3 | `2026-08-18-on-suite-03-paste-and-ops.md` | ON Paste, backup, TLS, packaging, CI. *Written after Plan 2 is executed.* |
 
 ## Full task inventory
@@ -24,7 +24,7 @@ Tasks 1–7 are specified in full in Plan 1. Tasks 8–23 are listed here so the
 scope is on record; each becomes a full task specification when its plan is
 written.
 
-### Plan 1 — Platform core (written)
+### Plan 1 — Platform core (executed)
 
 | # | Task | Notes |
 |---|---|---|
@@ -38,7 +38,7 @@ written.
 
 **Deliverable:** a real account in a real database, created by the binary.
 
-### Plan 2 — Web plumbing and the app framework
+### Plan 2 — Web plumbing and the app framework (written)
 
 | # | Task | Notes |
 |---|---|---|
@@ -53,14 +53,25 @@ written.
 **Deliverable:** log in with the account from Plan 1 and land on the shell,
 with the app switcher rendering from the registry. Satisfies spec §11.3.
 
-**Refinement to record now, before Plan 2 is written.** Spec §7.4 describes the
-auth middleware skipping a list of app-declared public routes. While writing
-Plan 1 a better shape became apparent: give apps a `Router` whose default
-`Handle` requires authentication and whose explicit `Public` method does not.
-Both satisfy the spec's intent — only declared routes are anonymous — but the
-skip-list fails *open* if an app forgets to declare a route, while the wrapper
-fails *closed*. Plan 2 will implement the wrapper. This is a strengthening of
+**Refinement to §7.4, now implemented in Plan 2 Task 13.** The spec describes the
+auth middleware skipping a list of app-declared public routes. Plan 2 instead
+gives apps a `Router` whose default `Handle` requires authentication and whose
+explicit `Public` method does not. Both satisfy the spec's intent — only declared
+routes are anonymous — but the skip-list fails *open* if an app forgets to
+declare a route, while the wrapper fails *closed*. This is a strengthening of
 §7.4, not a departure from it.
+
+**Two findings from Plan 2 that Plan 3 must respect.**
+
+1. **`ServeMux` panics at startup on ambiguous patterns.** Two patterns of equal
+   segment count, one wildcard-first and one literal-first, collide:
+   `GET /{slug}/raw` and `GET /s/{slug}` both match `/paste/s/raw`. ON Paste's
+   route design must keep wildcards at distinct depths.
+2. **A test can pass while asserting nothing.** Two such bugs were found in
+   Plan 2 by running its own code — a selector that silently matched nothing and
+   a scan that silently found no packages. Plan 3's tests should be checked
+   against a deliberately broken implementation, not only against a working
+   one.
 
 ### Plan 3 — ON Paste and operations
 
