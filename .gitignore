@@ -1,0 +1,26 @@
+# Compiled binary
+/onsuite
+/dist/
+
+# Runtime data — the entire persistent state of a local instance
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Go
+*.test
+*.out
+/vendor/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
+
+# Local environment overrides
+.env
+.env.local
