@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 func serve(args []string, getenv func(string) string, errOut io.Writer) error {
@@ -26,8 +27,22 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 		return fmt.Errorf("create data dir %s: %w", cfg.DataDir, err)
 	}
 
+	handle, err := db.Open(cfg.DBPath())
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := db.Checkpoint(context.Background(), handle); err != nil {
+			log.Warn("wal checkpoint on shutdown failed", "error", err)
+		}
+		if err := handle.Close(); err != nil {
+			log.Warn("closing database failed", "error", err)
+		}
+	}()
+	log.Info("database ready", "path", cfg.DBPath())
+
 	mux := http.NewServeMux()
-	mux.Handle("GET /healthz", healthzHandler(version, nil))
+	mux.Handle("GET /healthz", healthzHandler(version, handle))
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
