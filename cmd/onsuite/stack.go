@@ -5,31 +5,27 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/app"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 	"github.com/iliafrenkel/on-suite/internal/ui"
 )
 
-// stackDeps is everything the HTTP stack needs. It exists so buildStack has
-// one parameter rather than six, and so tests can substitute pieces.
 type stackDeps struct {
-	DB      *sql.DB
-	Users   *auth.Store
-	Log     *slog.Logger
-	Version string
-	Secure  bool
+	DB       *sql.DB
+	Users    *auth.Store
+	Registry *app.Registry
+	Log      *slog.Logger
+	Version  string
+	Secure   bool
 }
 
-// buildStack assembles the complete HTTP handler. Later tasks in this plan add
-// the renderer, middleware and app registry here; serve() stays concerned only
-// with configuration, storage and the listener.
 func buildStack(deps stackDeps) (http.Handler, error) {
 	assets, err := web.NewAssets(ui.Static(), "/static")
 	if err != nil {
 		return nil, err
 	}
-
 	rend, err := render.NewRenderer(render.Options{
 		Layouts:  ui.Templates(),
 		AssetURL: assets.URL,
@@ -54,21 +50,17 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	mux.Handle("GET /static/", http.StripPrefix("/static", assets.Handler()))
 	authn.Routes(mux)
 
-	mux.Handle("GET /{$}", authn.RequireUser(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		u, _ := web.UserFrom(r.Context())
-		page := render.Page{
-			Title: "ON Suite",
-			Shell: render.Shell{
-				LoggedIn: true, Username: u.Username, IsAdmin: u.IsAdmin,
-				CSRFToken: web.CSRFToken(r.Context()), Version: deps.Version,
-			},
-			Data: map[string]any{"Status": 200, "Title": "Signed in", "Message": "No apps are registered yet."},
-		}
-		if err := rend.Page(w, http.StatusOK, "error", page); err != nil {
-			errs.Internal(w, r, err)
-		}
-	})))
+	if err := deps.Registry.Mount(mux, app.Deps{
+		DB:     deps.DB,
+		Render: rend,
+		Users:  deps.Users,
+		Errors: errs,
+		Log:    deps.Log,
+	}, authn.RequireUser); err != nil {
+		return nil, err
+	}
 
+	mux.Handle("GET /{$}", authn.RequireUser(homeHandler(deps, rend, errs)))
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
 
 	return web.Chain(mux,
@@ -79,4 +71,31 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		csrf.Middleware,
 		authn.LoadUser,
 	), nil
+}
+
+// homeHandler is the dashboard. It lists whatever apps are in this build, so
+// adding an app requires no change here.
+func homeHandler(deps stackDeps, rend *render.Renderer, errs *web.Errors) http.Handler {
+	type entry struct {
+		Name    string
+		Path    string
+		Summary string
+	}
+
+	nav := deps.Registry.NavItems()
+	entries := make([]entry, 0, len(nav))
+	for _, a := range deps.Registry.Apps() {
+		m := a.Meta()
+		entries = append(entries, entry{Name: m.Name, Path: m.Path(), Summary: m.Summary})
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := app.NewPage(r, "", nav)
+		page.Shell.Version = deps.Version
+		page.Data = map[string]any{"Apps": entries}
+
+		if err := rend.Page(w, http.StatusOK, "home", page); err != nil {
+			errs.Internal(w, r, err)
+		}
+	})
 }

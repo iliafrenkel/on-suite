@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
 
 // version is overwritten at build time with -ldflags "-X main.version=v1.2.3".
@@ -51,4 +53,15 @@ Usage:
 
 Run "onsuite serve -h" for serve flags.
 `)
+}
+
+// registeredApps is the definitive list of applications in this binary.
+//
+// Adding an app is one line here plus its package. Nothing else in the
+// platform needs to change, and reading this function tells you exactly what
+// this build contains.
+func registeredApps() []app.App {
+	return []app.App{
+		// ON Paste arrives in Plan 3.
+	}
 }

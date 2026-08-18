@@ -234,3 +234,18 @@ button.quiet {
 }
 
 button.quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
+
+/* ---- Dashboard --------------------------------------------------------- */
+
+.app-list { margin: 0; padding: 0; list-style: none; }
+
+.app-list li {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-3);
+	padding: var(--s-2) 0;
+	border-bottom: var(--border);
+}
+
+.app-list li:last-child { border-bottom: none; }
+.app-list a { font-weight: 600; white-space: nowrap; }

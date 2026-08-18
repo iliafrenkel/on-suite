@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="measure stack">
+	<h1>ON Suite</h1>
+
+	{{if .Data.Apps}}
+	<ul class="app-list">
+		{{range .Data.Apps}}
+		<li>
+			<a href="{{.Path}}">{{.Name}}</a>
+			<span class="faint">{{.Summary}}</span>
+		</li>
+		{{end}}
+	</ul>
+	{{else}}
+	<p class="dim">No applications are registered in this build yet.</p>
+	{{end}}
+
+	<p class="faint">Version {{.Shell.Version}}</p>
+</div>
+{{end}}
