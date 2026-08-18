@@ -53,10 +53,17 @@ type User struct {
 // Store is all the SQL for identity. It has no HTTP knowledge, which is what
 // lets it be tested against a real database with no server running.
 type Store struct {
-	db *sql.DB
+	db  *sql.DB
+	now func() time.Time
 }
 
-func NewStore(handle *sql.DB) *Store { return &Store{db: handle} }
+func NewStore(handle *sql.DB) *Store {
+	return &Store{db: handle, now: func() time.Time { return time.Now().UTC() }}
+}
+
+// SetClock replaces the time source. It exists so expiry behaviour can be
+// tested by moving time forward instead of sleeping for thirty days.
+func (s *Store) SetClock(now func() time.Time) { s.now = now }
 
 // ValidateUsername reports whether name is acceptable for a new account.
 func ValidateUsername(name string) error {
@@ -80,7 +87,7 @@ func (s *Store) CreateUser(ctx context.Context, username, passwordHash string, i
 		return User{}, errors.New("auth: password hash must not be empty")
 	}
 
-	now := time.Now().UTC()
+	now := s.now()
 	var (
 		u         = User{Username: username, PasswordHash: passwordHash, IsAdmin: isAdmin}
 		createdAt string
