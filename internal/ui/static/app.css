@@ -218,3 +218,19 @@ button[type="submit"] {
 /* Wide content scrolls inside its own box rather than making the page
  * scroll sideways. */
 .scroll-x { overflow-x: auto; }
+
+/* ---- Shell chrome additions ------------------------------------------- */
+
+.shell-user form { display: inline; }
+
+/* A button that reads as a link: used for actions that must be POSTs, such as
+ * logging out, without shouting like a primary button. */
+button.quiet {
+	padding: var(--s-1) var(--s-2);
+	background: transparent;
+	border-color: transparent;
+	color: var(--c-text-dim);
+	font-weight: 400;
+}
+
+button.quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }

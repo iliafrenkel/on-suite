@@ -1,1 +1,36 @@
-<!-- replaced in Task 9 -->
+{{define "base"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{with .Title}}{{.}} · {{end}}ON Suite</title>
+<link rel="stylesheet" href="{{asset "app.css"}}">
+<script src="{{asset "htmx.min.js"}}" defer></script>
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{.Shell.CSRFToken}}"}'>
+{{template "shell" .Shell}}
+<main>
+{{block "content" .}}{{end}}
+</main>
+</body>
+</html>{{end}}
+
+{{define "shell"}}
+<header class="shell-bar">
+	<a class="shell-mark" href="/">ON Suite</a>
+	<nav class="shell-nav" aria-label="Applications">
+		{{range .Apps}}
+		<a href="{{.Path}}"{{if eq .ID $.ActiveApp}} aria-current="page"{{end}}>{{.Name}}</a>
+		{{end}}
+	</nav>
+	{{if .LoggedIn}}
+	<div class="shell-user">
+		<span>{{.Username}}</span>
+		<form method="post" action="/logout">
+			<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+			<button type="submit" class="quiet">Log out</button>
+		</form>
+	</div>
+	{{end}}
+</header>
+{{end}}

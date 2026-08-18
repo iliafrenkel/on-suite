@@ -1,0 +1,12 @@
+{{define "content"}}
+<div class="measure stack">
+	<h1>{{.Data.Status}} — {{.Data.Title}}</h1>
+	<p class="dim">{{.Data.Message}}</p>
+	<p><a href="/">Back to ON Suite</a></p>
+</div>
+{{end}}
+
+{{/* The same content as an HTMX swap: no document, no shell. */}}
+{{define "fragment"}}
+<div class="notice notice-error">{{.Title}} — {{.Message}}</div>
+{{end}}
