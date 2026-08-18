@@ -1,0 +1,220 @@
+/* ON Suite — quiet, dense, keyboard-first.
+ *
+ * Everything is driven by the tokens in :root. Apps must not introduce new
+ * colours or spacing values; they compose these. That constraint is what
+ * makes four separately-built apps look like one suite.
+ */
+
+:root {
+	/* Greys carry the interface; the accent is used sparingly and on purpose. */
+	--c-bg:          #ffffff;
+	--c-bg-subtle:   #f6f6f5;
+	--c-bg-inset:    #efefed;
+	--c-border:      #dcdcd8;
+	--c-border-firm: #c2c2bc;
+	--c-text:        #1c1c1a;
+	--c-text-dim:    #6b6b66;
+	--c-text-faint:  #93938c;
+	--c-accent:      #1a5fb4;
+	--c-accent-bg:   #e8f0fb;
+	--c-danger:      #a51d2d;
+	--c-danger-bg:   #fbeaec;
+
+	/* A 4px scale. Dense by intent: vertical space is the scarce resource in
+	 * an outliner and in a code listing. */
+	--s-1: 0.25rem;
+	--s-2: 0.5rem;
+	--s-3: 0.75rem;
+	--s-4: 1rem;
+	--s-5: 1.5rem;
+	--s-6: 2rem;
+
+	--font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+	--fs-sm: 0.8125rem;
+	--fs-base: 0.9375rem;
+	--fs-lg: 1.125rem;
+	--fs-xl: 1.375rem;
+
+	--radius: 3px;
+	--border: 1px solid var(--c-border);
+	--ring: 2px solid var(--c-accent);
+
+	--measure: 68ch; /* comfortable reading width */
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--c-bg:          #16161a;
+		--c-bg-subtle:   #1e1e23;
+		--c-bg-inset:    #26262c;
+		--c-border:      #35353d;
+		--c-border-firm: #4a4a54;
+		--c-text:        #e6e6e3;
+		--c-text-dim:    #9e9e98;
+		--c-text-faint:  #74746e;
+		--c-accent:      #7aa9e8;
+		--c-accent-bg:   #1c2a3d;
+		--c-danger:      #f08c95;
+		--c-danger-bg:   #3a1e22;
+	}
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+	margin: 0;
+	background: var(--c-bg);
+	color: var(--c-text);
+	font: var(--fs-base)/1.45 var(--font-ui);
+}
+
+/* Focus is restyled, never removed. This suite is meant to be usable
+ * entirely from the keyboard. */
+:focus-visible {
+	outline: var(--ring);
+	outline-offset: 2px;
+	border-radius: var(--radius);
+}
+
+a { color: var(--c-accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+
+h1, h2, h3 { margin: 0 0 var(--s-3); font-weight: 600; line-height: 1.25; }
+h1 { font-size: var(--fs-xl); }
+h2 { font-size: var(--fs-lg); }
+h3 { font-size: var(--fs-base); }
+
+code, pre, kbd { font-family: var(--font-mono); font-size: 0.9em; }
+
+pre {
+	margin: 0;
+	padding: var(--s-3);
+	overflow-x: auto;
+	background: var(--c-bg-subtle);
+	border: var(--border);
+	border-radius: var(--radius);
+}
+
+kbd {
+	padding: 1px var(--s-1);
+	background: var(--c-bg-inset);
+	border: 1px solid var(--c-border-firm);
+	border-radius: var(--radius);
+	font-size: 0.85em;
+}
+
+/* ---- Shell ------------------------------------------------------------- */
+
+.shell-bar {
+	display: flex;
+	align-items: center;
+	gap: var(--s-4);
+	padding: var(--s-2) var(--s-4);
+	background: var(--c-bg-subtle);
+	border-bottom: var(--border);
+}
+
+.shell-mark {
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: var(--c-text);
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.shell-nav { display: flex; gap: var(--s-1); flex: 1; min-width: 0; }
+
+.shell-nav a {
+	padding: var(--s-1) var(--s-2);
+	border-radius: var(--radius);
+	color: var(--c-text-dim);
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.shell-nav a:hover { background: var(--c-bg-inset); color: var(--c-text); }
+
+.shell-nav a[aria-current="page"] {
+	background: var(--c-accent-bg);
+	color: var(--c-accent);
+	font-weight: 600;
+}
+
+.shell-user { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-sm); color: var(--c-text-dim); }
+
+main { padding: var(--s-5) var(--s-4); }
+.measure { max-width: var(--measure); }
+
+/* ---- Forms and buttons ------------------------------------------------- */
+
+label { display: block; margin-bottom: var(--s-1); font-size: var(--fs-sm); color: var(--c-text-dim); }
+
+input[type="text"], input[type="password"], textarea, select {
+	width: 100%;
+	padding: var(--s-2);
+	background: var(--c-bg);
+	color: var(--c-text);
+	border: 1px solid var(--c-border-firm);
+	border-radius: var(--radius);
+	font: inherit;
+}
+
+textarea { font-family: var(--font-mono); resize: vertical; }
+
+.field { margin-bottom: var(--s-4); }
+
+button, .button {
+	padding: var(--s-2) var(--s-4);
+	background: var(--c-bg-inset);
+	color: var(--c-text);
+	border: 1px solid var(--c-border-firm);
+	border-radius: var(--radius);
+	font: inherit;
+	cursor: pointer;
+}
+
+button:hover, .button:hover { background: var(--c-border); }
+
+button[type="submit"] {
+	background: var(--c-accent);
+	border-color: var(--c-accent);
+	color: #fff;
+	font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+	button[type="submit"] { color: #10141a; }
+}
+
+/* ---- Notices ----------------------------------------------------------- */
+
+.notice {
+	padding: var(--s-2) var(--s-3);
+	margin-bottom: var(--s-4);
+	border: var(--border);
+	border-radius: var(--radius);
+	background: var(--c-bg-subtle);
+	font-size: var(--fs-sm);
+}
+
+.notice-error {
+	background: var(--c-danger-bg);
+	border-color: var(--c-danger);
+	color: var(--c-danger);
+}
+
+/* ---- Layout helpers used across apps ---------------------------------- */
+
+.stack > * + * { margin-top: var(--s-3); }
+.row { display: flex; align-items: center; gap: var(--s-2); }
+.dim { color: var(--c-text-dim); }
+.faint { color: var(--c-text-faint); font-size: var(--fs-sm); }
+.centered { max-width: 22rem; margin: var(--s-6) auto; }
+
+/* Wide content scrolls inside its own box rather than making the page
+ * scroll sideways. */
+.scroll-x { overflow-x: auto; }

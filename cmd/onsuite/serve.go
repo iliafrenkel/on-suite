@@ -65,12 +65,14 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 			"data_dir", cfg.DataDir)
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("GET /healthz", healthzHandler(version, handle))
+	handler, err := buildStack(stackDeps{DB: handle, Log: log, Version: version})
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
@@ -107,8 +109,8 @@ func listenAndServe(parent context.Context, srv *http.Server, log *slog.Logger) 
 	return nil
 }
 
-// pinger is satisfied by *sql.DB. Task 2 passes a real database in; until
-// then healthz reports the process is up and nothing more.
+// pinger is satisfied by *sql.DB. It is an interface rather than a concrete
+// type so healthz can be tested without a database.
 type pinger interface {
 	PingContext(context.Context) error
 }
