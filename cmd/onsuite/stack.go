@@ -16,6 +16,7 @@ type stackDeps struct {
 	DB      *sql.DB
 	Log     *slog.Logger
 	Version string
+	Secure  bool
 }
 
 // buildStack assembles the complete HTTP handler. Later tasks in this plan add
@@ -56,9 +57,13 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	errs := web.NewErrors(rend, deps.Log)
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
 
+	csrf := web.NewCSRF(deps.Secure, errs)
+
 	return web.Chain(mux,
 		web.Recover(deps.Log, errs),
 		web.RequestLog(deps.Log),
 		web.SecurityHeaders(),
+		web.LimitBody(web.DefaultMaxBodyBytes),
+		csrf.Middleware,
 	), nil
 }

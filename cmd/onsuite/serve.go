@@ -65,7 +65,12 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 			"data_dir", cfg.DataDir)
 	}
 
-	handler, err := buildStack(stackDeps{DB: handle, Log: log, Version: version})
+	handler, err := buildStack(stackDeps{
+		DB:      handle,
+		Log:     log,
+		Version: version,
+		Secure:  cfg.TLSDomain != "",
+	})
 	if err != nil {
 		return err
 	}
