@@ -3,6 +3,7 @@ package paste
 import (
 	"errors"
 	"html/template"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -246,20 +247,112 @@ func preview(body string, limit int) string {
 	return strings.TrimRight(string(runes[:limit]), " ") + "…"
 }
 
-// Stubs replaced in Task 18. They exist so this task compiles and its
-// routes are registered in the shape the route map specifies.
-func (a *App) raw(w http.ResponseWriter, r *http.Request) {
-	a.deps.Errors.Status(w, r, http.StatusNotFound)
-}
 func (a *App) share(w http.ResponseWriter, r *http.Request) {
-	a.deps.Errors.Status(w, r, http.StatusNotFound)
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.snippetID(w, r)
+	if !ok {
+		return
+	}
+
+	slug, err := a.store.Share(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	// The slug itself is a credential, so it is not written to the log.
+	a.deps.Log.Info("snippet shared", "app", ID, "user_id", userID, "snippet_id", id)
+	_ = slug
+
+	http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
+
 func (a *App) unshare(w http.ResponseWriter, r *http.Request) {
-	a.deps.Errors.Status(w, r, http.StatusNotFound)
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.snippetID(w, r)
+	if !ok {
+		return
+	}
+
+	if err := a.store.Unshare(r.Context(), userID, id); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.deps.Log.Info("snippet unshared", "app", ID, "user_id", userID, "snippet_id", id)
+
+	http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
+
+// viewShared renders a snippet for anyone holding its slug. Note the separate
+// template: the owner's view carries delete and unshare controls, and the way
+// to guarantee those never reach a public page is for the public template not
+// to contain them at all.
 func (a *App) viewShared(w http.ResponseWriter, r *http.Request) {
-	a.deps.Errors.Status(w, r, http.StatusNotFound)
+	s, err := a.store.ByShareSlug(r.Context(), r.PathValue("slug"))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+
+	page := a.deps.Page(r, s.DisplayTitle())
+	page.Data = viewModel{
+		Snippet:   s,
+		Highlight: Highlight(s.Body, s.Language),
+		Language:  LanguageLabel(s.Language),
+		RawURL:    "/paste/s/" + s.ShareSlug + "/raw",
+		Owner:     false,
+	}
+	a.render(w, r, http.StatusOK, "paste/shared", page)
 }
+
+// raw serves the owner's own snippet as plain text.
+func (a *App) raw(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.snippetID(w, r)
+	if !ok {
+		return
+	}
+
+	s, err := a.store.ByID(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.writeRaw(w, r, s)
+}
+
+// rawShared serves a shared snippet as plain text, so it can be piped straight
+// into a terminal.
 func (a *App) rawShared(w http.ResponseWriter, r *http.Request) {
-	a.deps.Errors.Status(w, r, http.StatusNotFound)
+	s, err := a.store.ByShareSlug(r.Context(), r.PathValue("slug"))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.writeRaw(w, r, s)
+}
+
+// writeRaw sends a snippet body verbatim.
+//
+// text/plain plus the platform's global nosniff header means a snippet that
+// happens to contain HTML cannot be coaxed into executing as a page on this
+// origin. Content-Disposition names the download without forcing one, so a
+// browser still shows it and curl still prints it.
+func (a *App) writeRaw(w http.ResponseWriter, r *http.Request, s Snippet) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", "inline")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := io.WriteString(w, s.Body); err != nil {
+		a.deps.Log.Error("writing a raw snippet failed", "error", err, "snippet_id", s.ID)
+	}
 }

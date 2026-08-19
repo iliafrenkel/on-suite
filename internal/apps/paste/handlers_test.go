@@ -538,6 +538,247 @@ func TestDeleteRequiresCSRFAndPOST(t *testing.T) {
 	}
 }
 
+// shareAndGetSlug shares a snippet and returns its public slug, read back from
+// the store so the test does not have to scrape it out of the page.
+func (s *server) shareAndGetSlug(t *testing.T, sess *session, id int64) string {
+	t.Helper()
+
+	rec := s.post(t, sess, "/paste/"+itoa(id)+"/share", url.Values{})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("share = %d, want 303", rec.Code)
+	}
+	snippet, err := s.store.ByID(context.Background(), sess.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !snippet.Shared() {
+		t.Fatal("the snippet is not shared after sharing it")
+	}
+	return snippet.ShareSlug
+}
+
+func TestSharedSnippetIsReadableWhileSignedOut(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "Shared config", "yaml", "key: value\n")
+	slug := s.shareAndGetSlug(t, s.alice, id)
+
+	// nil session: no cookies at all.
+	rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("anonymous shared view = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	if got := htmlassert.Text(doc.MustHave("h1")); got != "Shared config" {
+		t.Errorf("title = %q", got)
+	}
+	if !strings.Contains(doc.Text(), "key") {
+		t.Error("the snippet body is not on the shared page")
+	}
+	doc.MustHave(".chroma") // highlighted for anonymous readers too
+}
+
+// TestSharedPageOffersNoDestructiveControls is why the shared view has its own
+// template rather than reusing the owner's with conditionals.
+func TestSharedPageOffersNoDestructiveControls(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "Shared", "go", "package main\n")
+	slug := s.shareAndGetSlug(t, s.alice, id)
+
+	rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	doc.MustNotHave(`form[action=/paste/` + itoa(id) + `/delete]`)
+	doc.MustNotHave(`form[action=/paste/` + itoa(id) + `/unshare]`)
+	doc.MustNotHave(".shell-user") // nobody is signed in
+	for _, word := range []string{"Delete", "Stop sharing"} {
+		if strings.Contains(doc.Text(), word) {
+			t.Errorf("the shared page offers %q", word)
+		}
+	}
+}
+
+// TestUnshareKillsTheLink is the point of choosing a revocable share model.
+func TestUnshareKillsTheLink(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "Shared", "go", "package main\n")
+	slug := s.shareAndGetSlug(t, s.alice, id)
+
+	if rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil)); rec.Code != http.StatusOK {
+		t.Fatal("the link did not work before revoking it")
+	}
+
+	rec := s.post(t, s.alice, "/paste/"+itoa(id)+"/unshare", url.Values{})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("unshare = %d", rec.Code)
+	}
+
+	if rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil)); rec.Code != http.StatusNotFound {
+		t.Errorf("the revoked link still works: %d", rec.Code)
+	}
+	if rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug+"/raw", nil)); rec.Code != http.StatusNotFound {
+		t.Errorf("the revoked raw link still works: %d", rec.Code)
+	}
+
+	// Re-sharing must produce a different link, leaving the old one dead.
+	second := s.shareAndGetSlug(t, s.alice, id)
+	if second == slug {
+		t.Fatal("re-sharing reissued the revoked slug")
+	}
+	if rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil)); rec.Code != http.StatusNotFound {
+		t.Error("the old link came back to life after re-sharing")
+	}
+}
+
+func TestUnsharedSnippetIsNotPubliclyReachable(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "Private", "go", "top secret\n")
+
+	// The owner's own URL must not work for an anonymous visitor.
+	rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("anonymous access to a private snippet = %d, want a redirect to login", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "top secret") {
+		t.Fatal("a private snippet leaked to an anonymous request")
+	}
+
+	// And a guessed share URL must not either.
+	for _, slug := range []string{itoa(id), "aaaaaaaaaaaaaaaaaaaaaa", ""} {
+		rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
+		if rec.Code == http.StatusOK {
+			t.Errorf("GET /paste/s/%q returned 200", slug)
+		}
+	}
+}
+
+func TestShareStateIsShownToTheOwner(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "Shared", "go", "package main\n")
+	slug := s.shareAndGetSlug(t, s.alice, id)
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	// The link is shown so it can be copied, and the control now revokes.
+	if got := htmlassert.Text(doc.MustHave(".notice code")); !strings.Contains(got, slug) {
+		t.Errorf("the share link is not displayed; got %q", got)
+	}
+	doc.MustHave(`form[action=/paste/` + itoa(id) + `/unshare]`)
+	doc.MustNotHave(`form[action=/paste/` + itoa(id) + `/share]`)
+}
+
+func TestRawIsPlainTextForOwnerAndShared(t *testing.T) {
+	s := newServer(t)
+	const body = "line one\nline two\n"
+	// "plaintext" is the offered language value for plain text; "text" is not
+	// on the list and IsLanguage would reject it, so createSnippet would 400
+	// instead of storing the snippet.
+	id := s.createSnippet(t, s.alice, "Raw", "plaintext", body)
+	slug := s.shareAndGetSlug(t, s.alice, id)
+
+	cases := []struct {
+		name    string
+		path    string
+		session *session
+	}{
+		{"owner", "/paste/raw/" + itoa(id), s.alice},
+		{"shared, signed out", "/paste/s/" + slug + "/raw", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := s.do(t, tc.session, httptest.NewRequest("GET", tc.path, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d", rec.Code)
+			}
+			if got := rec.Body.String(); got != body {
+				t.Errorf("body = %q, want the snippet verbatim %q", got, body)
+			}
+			if ct := rec.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+				t.Errorf("Content-Type = %q, want text/plain; charset=utf-8", ct)
+			}
+			// No HTML anywhere: this is the response a terminal consumes.
+			if strings.Contains(rec.Body.String(), "<html") {
+				t.Error("the raw response contains markup")
+			}
+		})
+	}
+}
+
+// TestRawOfHTMLIsNotServedAsHTML: a snippet containing a page must not become
+// one on this origin.
+func TestRawOfHTMLIsNotServedAsHTML(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "evil", "html",
+		"<html><body><script>alert(1)</script></body></html>\n")
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/raw/"+itoa(id), nil))
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Fatalf("Content-Type = %q; the browser could render this as a page", ct)
+	}
+	// The body is verbatim on purpose — nosniff plus text/plain is what makes
+	// that safe, so assert the header rather than mangling the content.
+	if !strings.Contains(rec.Body.String(), "<script>") {
+		t.Error("the raw response altered the snippet")
+	}
+}
+
+func TestRawOfAnotherUsersSnippetIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "alice's", "go", "secret\n")
+
+	rec := s.do(t, s.bob, httptest.NewRequest("GET", "/paste/raw/"+itoa(id), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "secret") {
+		t.Error("the snippet leaked")
+	}
+}
+
+func TestShareRequiresCSRF(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "t", "go", "package main\n")
+
+	for _, action := range []string{"share", "unshare"} {
+		req := httptest.NewRequest("POST", "/paste/"+itoa(id)+"/"+action, nil)
+		if rec := s.do(t, s.alice, req); rec.Code != http.StatusForbidden {
+			t.Errorf("%s without a CSRF token = %d, want 403", action, rec.Code)
+		}
+	}
+}
+
+// TestPublicSurfaceIsExactlyThreeRoutes is the backstop on the whole sharing
+// design. If a future change makes a fourth path anonymous, this fails first.
+func TestPublicSurfaceIsExactlyThreeRoutes(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "shared", "go", "package main\n")
+	slug := s.shareAndGetSlug(t, s.alice, id)
+
+	reachable := []string{
+		"/paste/highlight.css",
+		"/paste/s/" + slug,
+		"/paste/s/" + slug + "/raw",
+	}
+	blocked := []string{
+		"/paste/",
+		"/paste/new",
+		"/paste/" + itoa(id),
+		"/paste/raw/" + itoa(id),
+	}
+
+	for _, path := range reachable {
+		if rec := s.do(t, nil, httptest.NewRequest("GET", path, nil)); rec.Code != http.StatusOK {
+			t.Errorf("public path %s = %d, want 200", path, rec.Code)
+		}
+	}
+	for _, path := range blocked {
+		if rec := s.do(t, nil, httptest.NewRequest("GET", path, nil)); rec.Code == http.StatusOK {
+			t.Errorf("%s is reachable anonymously and must not be", path)
+		}
+	}
+}
+
 func itoa(n int64) string {
 	if n == 0 {
 		return "0"

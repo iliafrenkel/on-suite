@@ -1,0 +1,24 @@
+{{define "head"}}
+<link rel="stylesheet" href="/paste/highlight.css">
+{{end}}
+
+{{define "content"}}
+{{$s := .Data.Snippet}}
+<div class="stack">
+	<div class="snippet-head">
+		<h1>{{$s.DisplayTitle}}</h1>
+		<p class="faint">
+			{{.Data.Language}} · {{$s.Lines}} lines · shared from ON Paste
+		</p>
+	</div>
+
+	{{/* Deliberately no delete, share or unshare controls: this template is
+	     reachable by anyone with the link, and a control that is not written
+	     here cannot be exposed by a later edit. */}}
+	<div class="row snippet-actions">
+		<a class="button" href="{{.Data.RawURL}}">Raw</a>
+	</div>
+
+	<div class="scroll-x snippet-body">{{.Data.Highlight}}</div>
+</div>
+{{end}}
