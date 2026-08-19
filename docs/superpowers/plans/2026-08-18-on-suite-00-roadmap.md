@@ -16,7 +16,7 @@ absorb what was actually learned.
 |---|---|---|
 | 1 | `2026-08-18-on-suite-01-platform-core.md` | Config, SQLite, migrations, password hashing, users, sessions, `onsuite user add`. **Written.** |
 | 2 | `2026-08-18-on-suite-02-web-and-apps.md` | Assets, templates, middleware, CSRF, login, the app framework. **Written.** |
-| 3 | `2026-08-18-on-suite-03-paste-and-ops.md` | ON Paste, backup, TLS, packaging, CI. *Written after Plan 2 is executed.* |
+| 3 | `2026-08-18-on-suite-03-paste-and-ops.md` | ON Paste, backup, TLS, packaging, CI. **Written.** |
 
 ## Full task inventory
 
@@ -38,7 +38,7 @@ written.
 
 **Deliverable:** a real account in a real database, created by the binary.
 
-### Plan 2 — Web plumbing and the app framework (written)
+### Plan 2 — Web plumbing and the app framework (executed)
 
 | # | Task | Notes |
 |---|---|---|
@@ -73,7 +73,7 @@ declare a route, while the wrapper fails *closed*. This is a strengthening of
    against a deliberately broken implementation, not only against a working
    one.
 
-### Plan 3 — ON Paste and operations
+### Plan 3 — ON Paste and operations (written)
 
 | # | Task | Notes |
 |---|---|---|
@@ -89,6 +89,30 @@ declare a route, while the wrapper fails *closed*. This is a strengthening of
 
 **Deliverable:** the full spec, including success criteria §11.4 through §11.8.
 
+## What building the first real app taught us
+
+ON Paste was the test of whether the platform holds up. It mostly did — the app
+is a package under `internal/apps` plus one line in `registeredApps`, and it
+appears in the nav and dashboard with no platform code naming it. Three things
+surfaced:
+
+1. **One genuine platform gap.** `base.html` gave a page no way to add anything
+   to `<head>`, which any app with its own stylesheet needs. Fixed with a `head`
+   block. This is the kind of change the spec said to watch for, and it added no
+   knowledge of ON Paste to the platform.
+2. **One latent crash.** `Registry.Mount` handed a nil filesystem to `fs.Glob`
+   when an app did not implement `Templates()`, panicking instead of reporting
+   the problem. Fixed with a clear error and a test.
+3. **Drifted duplication in the commands.** `serve`, `user add` and the new
+   `export` had each grown their own version of "open the database and set up the
+   schema", and they disagreed about which migrations to apply. Unified behind
+   `openDatabase`. Worth remembering when ON Notes adds commands of its own.
+
+Also worth carrying forward: `ServeMux` panics at startup on ambiguous patterns,
+and a strict CSP means any library emitting inline styles — Chroma's default
+formatter, for one — must be reconfigured or it silently produces an unstyled
+page.
+
 ## Deliberately not built
 
 Recorded so these stay decisions rather than oversights:
@@ -96,6 +120,25 @@ Recorded so these stay decisions rather than oversights:
 - **Paste expiry.** The brainstorming sketch mentioned expiring snippets, but
   the spec's success criteria do not require it, so it is out. Adding an
   `expires_at` column later is one migration.
+- **Editing a snippet.** Pastebins are conventionally immutable and the spec
+  names only create, view, list and delete.
 - Everything in spec §10: full-text search, a background job scheduler,
   uploads, metrics, Alpine.js, multi-tenant hardening. Each arrives with the
   app that first needs it.
+
+## Beyond the spec, on purpose
+
+Decided during planning rather than in the spec, and recorded here so they are
+not mistaken for scope creep:
+
+- **Raw text endpoints** (`/paste/raw/{id}` and `/paste/s/{slug}/raw`), because
+  piping a snippet into a terminal is how a pastebin actually gets used.
+- **Revocable sharing.** The spec asked only for an unguessable public link;
+  re-sharing mints a fresh slug so a revoked link stays dead.
+- **JSON export** and the **`export` command**, from spec section 6.5's data
+  ownership note.
+
+## Next
+
+ON Notes is the next project: its own spec, its own plan, and — if the platform
+is right — no platform changes at all.
