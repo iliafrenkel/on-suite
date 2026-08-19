@@ -31,6 +31,8 @@ func run(args []string, getenv func(string) string, errOut io.Writer) error {
 		return serve(args[1:], getenv, errOut)
 	case "user":
 		return userCmd(args[1:], getenv, errOut)
+	case "export":
+		return exportCmd(args[1:], getenv, os.Stdout, errOut)
 	case "version":
 		fmt.Println("onsuite", version)
 		return nil
@@ -49,6 +51,7 @@ func usage(w io.Writer) {
 Usage:
   onsuite serve [flags]     run the server
   onsuite user add <name>   create an account
+  onsuite export <name>     write a user's data as JSON
   onsuite version           print the build version
   onsuite help              show this message
 

@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/iliafrenkel/on-suite/internal/platform/app"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
@@ -29,7 +28,7 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 		return fmt.Errorf("create data dir %s: %w", cfg.DataDir, err)
 	}
 
-	handle, err := db.Open(cfg.DBPath())
+	handle, registry, applied, err := openDatabase(context.Background(), cfg)
 	if err != nil {
 		return err
 	}
@@ -43,25 +42,6 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 	}()
 	log.Info("database ready", "path", cfg.DBPath())
 
-	registry, err := app.NewRegistry(registeredApps()...)
-	if err != nil {
-		return err
-	}
-
-	migrations, err := db.Collect(auth.Namespace, auth.Migrations())
-	if err != nil {
-		return err
-	}
-	appMigrations, err := registry.Migrations()
-	if err != nil {
-		return err
-	}
-	migrations = append(migrations, appMigrations...)
-
-	applied, err := db.Apply(context.Background(), handle, migrations)
-	if err != nil {
-		return err
-	}
 	if applied > 0 {
 		log.Info("migrations applied", "count", applied)
 	}

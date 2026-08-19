@@ -6,6 +6,7 @@
 package app
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"io/fs"
@@ -207,4 +208,34 @@ func appTemplates(a App) fs.FS {
 		return t.Templates()
 	}
 	return nil
+}
+
+// Exporter is implemented by apps that can dump one user's data as JSON. It is
+// optional and discovered by type assertion, so an app that has nothing to
+// export does not have to stub out a method.
+//
+// It takes the database rather than using Mount's Deps, so exporting works
+// from the command line without building the HTTP stack.
+type Exporter interface {
+	Export(ctx context.Context, handle *sql.DB, userID int64) (any, error)
+}
+
+// Export collects every registered app's data for one user, keyed by app id.
+// Apps that do not implement Exporter are skipped silently — that is a design
+// choice, not a failure.
+func (reg *Registry) Export(ctx context.Context, handle *sql.DB, userID int64) (map[string]any, error) {
+	out := make(map[string]any)
+	for _, a := range reg.apps {
+		e, ok := a.(Exporter)
+		if !ok {
+			continue
+		}
+		id := a.Meta().ID
+		data, err := e.Export(ctx, handle, userID)
+		if err != nil {
+			return nil, fmt.Errorf("export %s: %w", id, err)
+		}
+		out[id] = data
+	}
+	return out, nil
 }

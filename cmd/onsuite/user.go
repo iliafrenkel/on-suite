@@ -14,7 +14,6 @@ import (
 
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
-	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 func userCmd(args []string, getenv func(string) string, errOut io.Writer) error {
@@ -61,20 +60,12 @@ func userAdd(args []string, getenv func(string) string, in *os.File, out, errOut
 	}
 
 	cfg := config.Config{DataDir: *dataDir}
-	handle, err := db.Open(cfg.DBPath())
+	ctx := context.Background()
+	handle, _, _, err := openDatabase(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = handle.Close() }()
-
-	ctx := context.Background()
-	migrations, err := db.Collect(auth.Namespace, auth.Migrations())
-	if err != nil {
-		return err
-	}
-	if _, err := db.Apply(ctx, handle, migrations); err != nil {
-		return err
-	}
 
 	user, err := auth.NewStore(handle).CreateUser(ctx, username, hash, *admin)
 	if err != nil {

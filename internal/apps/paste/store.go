@@ -200,6 +200,34 @@ func (st *Store) List(ctx context.Context, userID int64, limit int) ([]Snippet, 
 	return out, nil
 }
 
+// All returns every one of userID's snippets, oldest first.
+//
+// It exists separately from List because List is capped for the web page,
+// whereas an export must be complete or it is not an export.
+func (st *Store) All(ctx context.Context, userID int64) ([]Snippet, error) {
+	rows, err := st.db.QueryContext(ctx,
+		`SELECT id, user_id, title, language, body, share_slug, created_at
+		 FROM paste_snippets WHERE user_id = ?
+		 ORDER BY created_at ASC, id ASC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("paste: all: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Snippet
+	for rows.Next() {
+		s, err := scanSnippetRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("paste: all: %w", err)
+	}
+	return out, nil
+}
+
 // Delete removes one of userID's own snippets.
 func (st *Store) Delete(ctx context.Context, userID, id int64) error {
 	res, err := st.db.ExecContext(ctx,
