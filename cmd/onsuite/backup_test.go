@@ -66,6 +66,55 @@ func TestBackupCmdWritesARestorableSnapshot(t *testing.T) {
 	}
 }
 
+// TestBackupCmdSweepsExpiredSessions guards against the gap where
+// --backup-interval 0 (the cron-driven setup documented in
+// docs/deploy/README.md) disables runMaintenance entirely, leaving nothing to
+// sweep expired sessions. backupCmd is what such a deployment actually runs
+// on a schedule, so it must do the sweep itself.
+func TestBackupCmdSweepsExpiredSessions(t *testing.T) {
+	dir := seedDatabase(t)
+
+	handle, err := db.Open(filepath.Join(dir, "onsuite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var userID int64
+	if err := handle.QueryRow("SELECT id FROM users LIMIT 1").Scan(&userID); err != nil {
+		t.Fatal(err)
+	}
+	expiredAt := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano)
+	if _, err := handle.Exec(
+		`INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+		"expired-session", userID, expiredAt, expiredAt,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := handle.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := backupCmd([]string{"--data-dir", dir}, nil, &out, io.Discard); err != nil {
+		t.Fatalf("backupCmd: %v", err)
+	}
+	if !strings.Contains(out.String(), "Swept 1 expired session") {
+		t.Errorf("output %q does not report the sweep", out.String())
+	}
+
+	handle, err = db.Open(filepath.Join(dir, "onsuite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = handle.Close() }()
+	var remaining int
+	if err := handle.QueryRow("SELECT count(*) FROM sessions").Scan(&remaining); err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 0 {
+		t.Errorf("%d sessions remain, want the expired one swept", remaining)
+	}
+}
+
 func TestBackupCmdOutFlag(t *testing.T) {
 	dir := seedDatabase(t)
 	target := filepath.Join(t.TempDir(), "explicit.db")

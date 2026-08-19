@@ -48,6 +48,17 @@ func backupCmd(args []string, getenv func(string) string, out, errOut io.Writer)
 	}
 	defer func() { _ = handle.Close() }()
 
+	// A deployment that drives backups from an external cron job runs with
+	// --backup-interval 0, which disables runMaintenance (and the session
+	// sweep it does) entirely. This command is what such a deployment
+	// actually invokes on a schedule, so it takes over session hygiene in
+	// that case too: without it, the sessions table would grow forever.
+	if swept, err := auth.NewStore(handle).DeleteExpiredSessions(ctx); err != nil {
+		return fmt.Errorf("backup: sweep expired sessions: %w", err)
+	} else if swept > 0 {
+		fmt.Fprintf(out, "Swept %d expired sessions\n", swept)
+	}
+
 	if *outPath != "" {
 		if err := db.BackupTo(ctx, handle, *outPath); err != nil {
 			return err
