@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch rather than paying for both.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Read the version from go.mod so there is one source of truth.
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"
+            echo "$unformatted"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: staticcheck
+        # Run rather than installed as a module dependency: this project caps
+        # its dependencies deliberately, and a linter is not part of the
+        # program. The cost is that the version floats.
+        run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+
+      - name: go mod tidy is clean
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: test
+        # The architecture test that enforces import boundaries runs here too.
+        run: go test ./... -race -count=1
+
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build
+        # CGO_ENABLED=0 is the constraint the whole deployment story rests on.
+        # If a dependency ever needs CGO, this is where it must be noticed.
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -trimpath -o /dev/null ./cmd/onsuite
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build the image
+        run: docker build --build-arg VERSION=ci -t onsuite:ci .
+      - name: the image runs
+        run: docker run --rm onsuite:ci version

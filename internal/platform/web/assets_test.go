@@ -146,7 +146,11 @@ func TestNewAssetsRejectsBadInput(t *testing.T) {
 }
 
 // TestRealAssetsAreEmbedded checks the actual embedded tree, so a missing
-// go:embed directive or a deleted file fails the build rather than the page.
+// embed directive or a deleted file fails the build rather than the page.
+//
+// The word "go:embed" is deliberately not written at the start of a comment
+// line here: the toolchain and staticcheck both read "// go:embed" as a
+// malformed directive (SA9009).
 func TestRealAssetsAreEmbedded(t *testing.T) {
 	a, err := NewAssets(ui.Static(), "/static")
 	if err != nil {
