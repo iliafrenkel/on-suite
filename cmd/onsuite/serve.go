@@ -63,7 +63,7 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 		Registry: registry,
 		Log:      log,
 		Version:  version,
-		Secure:   cfg.TLSDomain != "",
+		Secure:   cfg.SecureCookies,
 	})
 	if err != nil {
 		return err
@@ -80,12 +80,15 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 	defer stopMaintenance()
 	go runMaintenance(maintenanceCtx, handle, users, cfg, log)
 
-	return listenAndServe(context.Background(), srv, log)
+	if cfg.TLSEnabled() {
+		return serveAutocert(context.Background(), cfg, srv, log)
+	}
+	return serveHTTP(context.Background(), srv, log)
 }
 
-// listenAndServe runs srv until SIGINT or SIGTERM, then drains in-flight
+// serveHTTP runs srv until SIGINT or SIGTERM, then drains in-flight
 // requests. It is separated from serve so tests can drive it directly.
-func listenAndServe(parent context.Context, srv *http.Server, log *slog.Logger) error {
+func serveHTTP(parent context.Context, srv *http.Server, log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

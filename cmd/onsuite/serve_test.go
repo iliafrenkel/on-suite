@@ -42,9 +42,9 @@ func TestHealthzReportsDatabaseFailure(t *testing.T) {
 	}
 }
 
-// TestListenAndServeDrainsInFlightRequests proves shutdown waits for a
+// TestServeHTTPDrainsInFlightRequests proves shutdown waits for a
 // request that is already running rather than cutting it off.
-func TestListenAndServeDrainsInFlightRequests(t *testing.T) {
+func TestServeHTTPDrainsInFlightRequests(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestListenAndServeDrainsInFlightRequests(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- listenAndServe(ctx, srv, slog.New(slog.DiscardHandler))
+		done <- serveHTTP(ctx, srv, slog.New(slog.DiscardHandler))
 	}()
 
 	var resp *http.Response
@@ -99,6 +99,6 @@ func TestListenAndServeDrainsInFlightRequests(t *testing.T) {
 		t.Errorf("body = %q, want %q", body, "finished")
 	}
 	if err := <-done; err != nil {
-		t.Errorf("listenAndServe returned %v, want nil", err)
+		t.Errorf("serveHTTP returned %v, want nil", err)
 	}
 }

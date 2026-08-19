@@ -26,6 +26,16 @@ type Config struct {
 	BackupInterval time.Duration
 	// BackupKeep is how many snapshots to retain.
 	BackupKeep int
+
+	// TLSHTTPAddr is where the plain-HTTP listener runs when built-in TLS is
+	// enabled. It answers ACME HTTP-01 challenges and redirects to HTTPS.
+	// Empty disables it, leaving only TLS-ALPN-01 on the HTTPS port.
+	TLSHTTPAddr string
+	// SecureCookies marks session and CSRF cookies Secure. It is implied by
+	// TLSDomain and must be set explicitly when a TLS-terminating proxy is in
+	// front, because from this process's point of view that traffic is plain
+	// HTTP.
+	SecureCookies bool
 }
 
 // Parse resolves configuration in the order: flag, then environment, then
@@ -52,6 +62,10 @@ func Parse(args []string, getenv func(string) string, errOut io.Writer) (Config,
 	fs.IntVar(&c.BackupKeep, "backup-keep",
 		envInt(getenv, "ONSUITE_BACKUP_KEEP", 7),
 		"how many snapshots to keep")
+	fs.StringVar(&c.TLSHTTPAddr, "tls-http-addr", envOr(getenv, "ONSUITE_TLS_HTTP_ADDR", ":80"),
+		"plain-HTTP address for ACME challenges and HTTPS redirects; empty to disable")
+	secureCookies := fs.Bool("secure-cookies", envOr(getenv, "ONSUITE_SECURE_COOKIES", "") == "true",
+		"mark cookies Secure; implied by -tls-domain, set this behind an HTTPS proxy")
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
@@ -75,6 +89,22 @@ func Parse(args []string, getenv func(string) string, errOut io.Writer) (Config,
 		return Config{}, err
 	}
 	c.LogLevel = lvl
+
+	// Which flags were given explicitly, so a TLS-aware default for the listen
+	// address does not override a deliberate choice.
+	explicit := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+
+	if c.TLSDomain != "" && !explicit["addr"] && envOr(getenv, "ONSUITE_ADDR", "") == "" {
+		// Serving your own certificates on port 8080 is almost never what
+		// anyone means.
+		c.Addr = ":443"
+	}
+
+	// TLS implies Secure cookies; the flag can also switch them on alone, for
+	// a proxy that terminates TLS upstream.
+	c.SecureCookies = *secureCookies || c.TLSDomain != ""
+
 	return c, nil
 }
 
@@ -83,6 +113,13 @@ func (c Config) DBPath() string { return filepath.Join(c.DataDir, "onsuite.db") 
 
 // BackupDir is where snapshots are written.
 func (c Config) BackupDir() string { return filepath.Join(c.DataDir, "backups") }
+
+// TLSEnabled reports whether the binary obtains its own certificates.
+func (c Config) TLSEnabled() bool { return c.TLSDomain != "" }
+
+// TLSCacheDir is where Let's Encrypt certificates are stored. It lives inside
+// the data directory so the whole persistent state is still one tree.
+func (c Config) TLSCacheDir() string { return filepath.Join(c.DataDir, "certs") }
 
 func envOr(getenv func(string) string, key, def string) string {
 	if getenv == nil {
