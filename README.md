@@ -11,13 +11,13 @@ bet, optimised for "one binary, one data directory, nothing else to run."
 
 ## Status
 
-The three planned build phases are complete.
+The three planned build phases are underway; Plan 3 is done except for CI.
 
 | Plan | Delivers | Status |
 |---|---|---|
 | 1 — Platform core | Config, SQLite + migrations, Argon2id auth, sessions, `onsuite user add` | **Done** |
 | 2 — Web plumbing and app framework | Templates, middleware, CSRF, login, the `App` interface and router | **Done** |
-| 3 — ON Paste and operations | The first real app, backup, TLS, packaging, CI | **Done** |
+| 3 — ON Paste and operations | The first real app, backup, TLS, packaging, CI | **Done except CI** |
 
 Of the four apps the "ON" prefix is reserved for, only **ON Paste** is built
 and registered today. ON Notes, ON Reader, and ON Flash are future work — the
