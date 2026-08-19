@@ -2933,6 +2933,7 @@ func TestShareRequiresCSRF(t *testing.T) {
 		}
 	}
 }
+```
 
 Finally, pin the public surface. This asserts behaviour — what an anonymous
 visitor can actually reach — rather than reading registration data back out of
