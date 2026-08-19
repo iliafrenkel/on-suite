@@ -96,16 +96,26 @@ them somewhere private.
 
 ## Upgrades
 
-Replace the binary and restart. Migrations are forward-only and run
-automatically at startup; there is no separate migration step.
+**Take a snapshot first, with the binary currently installed** — before
+replacing it. Migrations are forward-only and run automatically at startup,
+and also on any command that touches the database, including `onsuite
+backup`; once the new binary has been installed, even taking a snapshot runs
+its migrations first, so a snapshot taken after that point is already past
+them and can't serve as the rollback for the upgrade you're about to do.
+
+```bash
+onsuite backup --data-dir /var/lib/onsuite --keep 30
+```
+
+Then replace the binary and restart. There is no separate migration step:
 
 ```bash
 sudo install -m 0755 /tmp/onsuite /usr/local/bin/onsuite
 sudo systemctl restart onsuite
 ```
 
-**Take a snapshot first.** There are no down migrations, so rolling back a
-schema change means restoring a backup.
+There are no down migrations, so rolling back a schema change means restoring
+the backup taken above.
 
 ## Adding people
 
