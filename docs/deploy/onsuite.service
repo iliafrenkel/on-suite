@@ -1,0 +1,42 @@
+# /etc/systemd/system/onsuite.service
+[Unit]
+Description=ON Suite
+Documentation=https://github.com/iliafrenkel/on-suite
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/onsuite serve --data-dir /var/lib/onsuite --addr 127.0.0.1:8080
+
+# DynamicUser gives the service its own transient account, and StateDirectory
+# creates /var/lib/onsuite owned by it. Neither needs a user to be created by
+# hand, and nothing outside the state directory is writable.
+DynamicUser=yes
+StateDirectory=onsuite
+
+# The process only ever needs its own data directory.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# SIGTERM makes the server drain in-flight requests and checkpoint the WAL, so
+# give it room to finish rather than killing it mid-request.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

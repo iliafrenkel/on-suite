@@ -11,24 +11,22 @@ bet, optimised for "one binary, one data directory, nothing else to run."
 
 ## Status
 
-Early and incomplete. The project is being built in three plans, executed one
-at a time so each can absorb what was learned from the last.
+The three planned build phases are complete.
 
 | Plan | Delivers | Status |
 |---|---|---|
 | 1 — Platform core | Config, SQLite + migrations, Argon2id auth, sessions, `onsuite user add` | **Done** |
 | 2 — Web plumbing and app framework | Templates, middleware, CSRF, login, the `App` interface and router | **Done** |
-| 3 — ON Paste and operations | The first real app, backup, TLS, packaging, CI | Not started |
+| 3 — ON Paste and operations | The first real app, backup, TLS, packaging, CI | **Done** |
 
-You can build the binary, create an account, and log in to a real dashboard
-today — there just aren't any apps registered in it yet. That's Plan 3: the
-nav switcher and the dashboard already render correctly for zero apps, and
-adding the first one (ON Paste) is one line in `cmd/onsuite/main.go` plus its
-package.
+Of the four apps the "ON" prefix is reserved for, only **ON Paste** is built
+and registered today. ON Notes, ON Reader, and ON Flash are future work — the
+platform and app framework are ready for them, but no code exists yet.
 
 See [`docs/superpowers/plans/2026-08-18-on-suite-00-roadmap.md`](docs/superpowers/plans/2026-08-18-on-suite-00-roadmap.md)
 for the full task list and [`docs/superpowers/specs/2026-08-18-on-suite-platform-design.md`](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md)
-for the design this project is being built against.
+for the design this project is being built against. Plan-by-plan write-ups
+live under [`docs/superpowers/plans/`](docs/superpowers/plans/).
 
 ## Why
 
@@ -78,25 +76,33 @@ in the design spec linked above.
 
 ```
 on-suite/
-├── cmd/onsuite/                 # the single binary: command dispatch, serve, stack, user add
+├── cmd/onsuite/               # the single binary: command dispatch, serve, backup, export, user add
 ├── internal/
+│   ├── apps/
+│   │   └── paste/             # ON Paste: snippets, sharing, syntax highlighting
 │   ├── platform/
-│   │   ├── config/              # flags + ONSUITE_* env -> Config
-│   │   ├── db/                  # SQLite open/pragmas, migration runner, backup
-│   │   ├── auth/                # Argon2id hashing, users, sessions
-│   │   ├── render/              # template registry, layout composition (imports nothing else)
-│   │   ├── web/                 # request context, middleware, CSRF, login/logout, static assets
-│   │   └── app/                 # the App interface, default-deny Router, registry
-│   ├── ui/                      # go:embed'd CSS, vendored HTMX, HTML templates (a leaf package)
-│   ├── htmlassert/              # test-only HTML structure assertions
-│   └── arch/                    # one test enforcing the import-boundary rules below
-└── docs/
-    └── superpowers/
-        ├── specs/               # the design document
-        └── plans/                # task-by-task implementation plans
+│   │   ├── config/            # flags + ONSUITE_* env -> Config
+│   │   ├── db/                # SQLite open/pragmas, migration runner, backup
+│   │   ├── auth/               # Argon2id hashing, users, sessions
+│   │   ├── render/             # template registry, layout composition (imports nothing else)
+│   │   ├── web/                # request context, middleware, CSRF, login/logout, static assets
+│   │   └── app/                # the App interface, default-deny Router, registry
+│   ├── ui/                    # go:embed'd CSS, vendored HTMX, HTML templates (a leaf package)
+│   ├── htmlassert/             # test-only HTML structure assertions
+│   └── arch/                  # one test enforcing the import-boundary rules below
+├── docs/
+│   ├── deploy/                 # systemd unit and the deployment guide
+│   └── superpowers/
+│       ├── specs/              # the design document
+│       └── plans/              # task-by-task implementation plans
+├── Dockerfile / .dockerignore  # scratch-based container image, optional
+└── .goreleaser.yaml            # cross-compiled release builds
 ```
 
-`internal/apps/` (ON Paste, and later ON Notes/Reader/Flash) arrives in Plan 3.
+Adding an app (ON Notes, ON Reader, ON Flash, or anything else) means writing
+a package under `internal/apps/` that implements the `App` interface and
+adding one line to `registeredApps()` in `cmd/onsuite/main.go` — nothing else
+in the platform changes.
 
 ## Requirements
 
@@ -140,8 +146,8 @@ curl -s localhost:8080/healthz
 
 Then open `http://localhost:8080/` in a browser. You'll be redirected to
 `/login`; sign in with the account you just created and you'll land on the
-dashboard, with your username and a working log-out button in the top bar.
-The app switcher is empty until Plan 3 registers ON Paste — that's expected.
+dashboard, with your username and a working log-out button in the top bar,
+and ON Paste in the app switcher.
 
 Cross-compiling for a Linux server from any machine needs nothing extra,
 since there's no CGO to worry about:
@@ -149,6 +155,10 @@ since there's no CGO to worry about:
 ```bash
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o onsuite ./cmd/onsuite
 ```
+
+For running this somewhere real — a systemd unit, choosing between a reverse
+proxy and built-in TLS, backups and restores, upgrades, and a Docker option —
+see [`docs/deploy/README.md`](docs/deploy/README.md).
 
 ## Testing
 

@@ -1,0 +1,49 @@
+# goreleaser cross-compiles the binary for every target and publishes a release
+# with checksums. CGO is off everywhere, which is only possible because the
+# SQLite driver is pure Go.
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./... -race
+
+builds:
+  - id: onsuite
+    main: ./cmd/onsuite
+    binary: onsuite
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      # -s -w drop the symbol table and DWARF data; the version is stamped in.
+      - -s -w -X main.version={{ .Version }}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: onsuite
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - docs/deploy/**
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - Merge pull request
