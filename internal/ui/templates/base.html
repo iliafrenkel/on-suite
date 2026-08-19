@@ -6,6 +6,7 @@
 <title>{{with .Title}}{{.}} · {{end}}ON Suite</title>
 <link rel="stylesheet" href="{{asset "app.css"}}">
 <script src="{{asset "htmx.min.js"}}" defer></script>
+{{block "head" .}}{{end}}
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{.Shell.CSRFToken}}"}'>
 {{template "shell" .Shell}}

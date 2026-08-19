@@ -1,0 +1,47 @@
+{{define "head"}}
+<link rel="stylesheet" href="/paste/highlight.css">
+{{end}}
+
+{{define "content"}}
+{{$s := .Data.Snippet}}
+<div class="stack">
+	<div class="snippet-head">
+		<h1>{{$s.DisplayTitle}}</h1>
+		<p class="faint">
+			{{.Data.Language}} · {{$s.Lines}} lines · saved {{$s.CreatedAt.Format "2 Jan 2006 15:04"}}
+		</p>
+	</div>
+
+	{{if .Data.Owner}}
+	<div class="row snippet-actions">
+		<a class="button" href="{{.Data.RawURL}}">Raw</a>
+
+		{{if $s.Shared}}
+		<form method="post" action="/paste/{{$s.ID}}/unshare">
+			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
+			<button type="submit" class="quiet">Stop sharing</button>
+		</form>
+		{{else}}
+		<form method="post" action="/paste/{{$s.ID}}/share">
+			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
+			<button type="submit" class="quiet">Share</button>
+		</form>
+		{{end}}
+
+		<form method="post" action="/paste/{{$s.ID}}/delete">
+			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
+			<button type="submit" class="quiet danger">Delete</button>
+		</form>
+	</div>
+
+	{{with .Data.ShareURL}}
+	<div class="notice">
+		Anyone with this link can read this snippet:
+		<code>{{.}}</code>
+	</div>
+	{{end}}
+	{{end}}
+
+	<div class="scroll-x snippet-body">{{.Data.Highlight}}</div>
+</div>
+{{end}}

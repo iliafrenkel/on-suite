@@ -8,6 +8,9 @@ import (
 	"testing/fstest"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
+	"github.com/iliafrenkel/on-suite/internal/platform/render"
+	"github.com/iliafrenkel/on-suite/internal/platform/web"
+	"github.com/iliafrenkel/on-suite/internal/ui"
 )
 
 // fakeApp is a minimal App for exercising the framework.
@@ -153,5 +156,36 @@ func TestRegistryEmptyIsUsable(t *testing.T) {
 	ms, err := reg.Migrations()
 	if err != nil || len(ms) != 0 {
 		t.Errorf("Migrations = %v, %v", ms, err)
+	}
+}
+
+// TestMountRejectsAnAppWithNoTemplates covers a defect found while building
+// ON Paste: Mount used to hand a nil filesystem to fs.Glob, which panics with
+// a nil-pointer dereference instead of saying what is wrong.
+func TestMountRejectsAnAppWithNoTemplates(t *testing.T) {
+	f := newFake("paste", "ON Paste", 0)
+	f.templates = nil
+
+	reg, err := app.NewRegistry(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assets, err := web.NewAssets(ui.Static(), "/static")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rend, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Must be an error, and must not panic.
+	err = reg.Mount(http.NewServeMux(), app.Deps{Render: rend}, func(h http.Handler) http.Handler { return h })
+	if err == nil {
+		t.Fatal("Mount accepted an app with no templates")
+	}
+	if !strings.Contains(err.Error(), "Templates()") {
+		t.Errorf("error %q does not explain what is missing", err)
 	}
 }

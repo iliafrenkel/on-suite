@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/iliafrenkel/on-suite/internal/apps/paste"
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
 
@@ -62,6 +63,6 @@ Run "onsuite serve -h" for serve flags.
 // this build contains.
 func registeredApps() []app.App {
 	return []app.App{
-		// ON Paste arrives in Plan 3.
+		paste.New(),
 	}
 }

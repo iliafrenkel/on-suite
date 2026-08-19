@@ -178,7 +178,13 @@ func (reg *Registry) Mount(mux *http.ServeMux, deps Deps, guard web.Middleware) 
 	for _, a := range reg.apps {
 		m := a.Meta()
 
-		if err := deps.Render.AddApp(m.ID, appTemplates(a)); err != nil {
+		templates := appTemplates(a)
+		if templates == nil {
+			// Without this, fs.Glob dereferences a nil interface and the
+			// server dies with a runtime panic instead of saying what is wrong.
+			return fmt.Errorf("app: %q must implement Templates() fs.FS returning a non-nil filesystem", m.ID)
+		}
+		if err := deps.Render.AddApp(m.ID, templates); err != nil {
 			return err
 		}
 		r := newRouter(mux, m.ID, guard)

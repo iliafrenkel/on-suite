@@ -249,3 +249,31 @@ button.quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
 
 .app-list li:last-child { border-bottom: none; }
 .app-list a { font-weight: 600; white-space: nowrap; }
+
+/* ---- Snippets ---------------------------------------------------------- */
+
+.snippet-head h1 { margin-bottom: var(--s-1); }
+.snippet-head p { margin: 0; }
+
+.snippet-actions { flex-wrap: wrap; }
+.snippet-actions form { display: inline; }
+
+button.danger { color: var(--c-danger); }
+button.danger:hover { background: var(--c-danger-bg); }
+
+.snippet-body {
+	border: var(--border);
+	border-radius: var(--radius);
+	background: var(--c-bg-subtle);
+	padding: var(--s-2) var(--s-3);
+	font-size: var(--fs-sm);
+}
+
+.snippet-body pre { margin: 0; padding: 0; border: none; background: none; }
+
+.notice code {
+	word-break: break-all;
+	background: var(--c-bg-inset);
+	padding: 1px var(--s-1);
+	border-radius: var(--radius);
+}
