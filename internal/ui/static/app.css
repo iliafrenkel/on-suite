@@ -277,3 +277,34 @@ button.danger:hover { background: var(--c-danger-bg); }
 	padding: 1px var(--s-1);
 	border-radius: var(--radius);
 }
+
+/* ---- Snippet list ------------------------------------------------------ */
+
+.list-head { justify-content: space-between; }
+.list-head h1 { margin: 0; }
+
+.snippet-list { margin: 0; padding: 0; list-style: none; }
+
+.snippet-list li {
+	padding: var(--s-3) 0;
+	border-bottom: var(--border);
+}
+
+.snippet-list li:last-child { border-bottom: none; }
+.snippet-list a { font-weight: 600; }
+.snippet-list p { margin: var(--s-1) 0 0; }
+
+.snippet-preview {
+	font-family: var(--font-mono);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tag {
+	padding: 0 var(--s-1);
+	border: 1px solid var(--c-border-firm);
+	border-radius: var(--radius);
+	color: var(--c-text-dim);
+	font-size: var(--fs-sm);
+}

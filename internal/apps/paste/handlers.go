@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -176,15 +177,78 @@ func upperFirst(s string) string {
 	return string(b)
 }
 
-// Stubs replaced in Tasks 17 and 18. They exist so this task compiles and its
-// routes are registered in the shape the route map specifies.
+// listItem is one row on the list page. The preview is computed here rather
+// than in the template so the truncation rules are testable.
+type listItem struct {
+	Snippet  Snippet
+	Preview  string
+	Language string
+}
+
+const previewRunes = 100
+
 func (a *App) list(w http.ResponseWriter, r *http.Request) {
-	a.deps.Errors.Status(w, r, http.StatusNotFound)
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+
+	snippets, err := a.store.List(r.Context(), userID, 0)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	items := make([]listItem, 0, len(snippets))
+	for _, s := range snippets {
+		items = append(items, listItem{
+			Snippet:  s,
+			Preview:  preview(s.Body, previewRunes),
+			Language: LanguageLabel(s.Language),
+		})
+	}
+
+	page := a.deps.Page(r, "Snippets")
+	page.Data = map[string]any{"Items": items}
+	a.render(w, r, http.StatusOK, "paste/list", page)
 }
-func (a *App) raw(w http.ResponseWriter, r *http.Request) {
-	a.deps.Errors.Status(w, r, http.StatusNotFound)
-}
+
 func (a *App) delete(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.snippetID(w, r)
+	if !ok {
+		return
+	}
+
+	if err := a.store.Delete(r.Context(), userID, id); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.deps.Log.Info("snippet deleted", "app", ID, "user_id", userID, "snippet_id", id)
+
+	// Back to the list: the snippet the user was looking at no longer exists,
+	// so there is nowhere else sensible to land.
+	http.Redirect(w, r, "/paste/", http.StatusSeeOther)
+}
+
+// preview is a single-line excerpt for the list page. Newlines and runs of
+// whitespace collapse to single spaces so a row cannot grow to the height of
+// the whole snippet.
+func preview(body string, limit int) string {
+	collapsed := strings.Join(strings.Fields(body), " ")
+	runes := []rune(collapsed)
+	if len(runes) <= limit {
+		return collapsed
+	}
+	return strings.TrimRight(string(runes[:limit]), " ") + "…"
+}
+
+// Stubs replaced in Task 18. They exist so this task compiles and its
+// routes are registered in the shape the route map specifies.
+func (a *App) raw(w http.ResponseWriter, r *http.Request) {
 	a.deps.Errors.Status(w, r, http.StatusNotFound)
 }
 func (a *App) share(w http.ResponseWriter, r *http.Request) {

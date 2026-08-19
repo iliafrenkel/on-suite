@@ -418,6 +418,126 @@ func TestHighlightStylesheetIsServedAndCacheable(t *testing.T) {
 	}
 }
 
+func TestListShowsOnlyYourSnippetsNewestFirst(t *testing.T) {
+	s := newServer(t)
+
+	s.createSnippet(t, s.alice, "alice one", "go", "package one\n")
+	s.createSnippet(t, s.alice, "alice two", "go", "package two\n")
+	s.createSnippet(t, s.bob, "bob's secret", "go", "package bob\n")
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	links := doc.QueryAll("ul.snippet-list li a")
+	if len(links) != 2 {
+		t.Fatalf("the list has %d entries, want 2 (alice's only)", len(links))
+	}
+	if got := htmlassert.Text(links[0]); got != "alice two" {
+		t.Errorf("first entry = %q, want the newest", got)
+	}
+	if text := doc.Text(); strings.Contains(text, "bob") {
+		t.Error("another user's snippet appeared in the list")
+	}
+}
+
+func TestListWhenEmpty(t *testing.T) {
+	s := newServer(t)
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/", nil))
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustNotHave("ul.snippet-list")
+	if !strings.Contains(doc.Text(), "No snippets yet") {
+		t.Errorf("no empty-state message: %q", doc.Text())
+	}
+	// The way to get started must still be offered.
+	doc.MustHave(`a[href=/paste/new]`)
+}
+
+// TestListPreviewIsOneLine: a snippet is arbitrarily tall, and a list row
+// must not be.
+func TestListPreviewIsOneLine(t *testing.T) {
+	s := newServer(t)
+	s.createSnippet(t, s.alice, "tall", "plaintext",
+		strings.Repeat("a line of text that goes on\n", 40))
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/", nil))
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	got := htmlassert.Text(doc.MustHave(".snippet-preview"))
+	if strings.Contains(got, "\n") {
+		t.Error("the preview contains a newline")
+	}
+	if len([]rune(got)) > 120 {
+		t.Errorf("the preview is %d characters, which is too long: %q", len([]rune(got)), got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("a truncated preview should be marked with an ellipsis: %q", got)
+	}
+}
+
+// TestDeleteHandler is TestDelete's HTTP-level counterpart: store_test.go
+// already covers Store.Delete directly, so this one is named to avoid
+// colliding with it while exercising the handler's redirect and status code.
+func TestDeleteHandler(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "doomed", "go", "package main\n")
+
+	rec := s.post(t, s.alice, "/paste/"+itoa(id)+"/delete", url.Values{})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("delete = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/paste/" {
+		t.Errorf("Location = %q, want /paste/", loc)
+	}
+
+	rec = s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("the snippet is still viewable: %d", rec.Code)
+	}
+}
+
+// TestDeleteSomeoneElsesSnippetFails is the one that would matter most if it
+// regressed.
+func TestDeleteSomeoneElsesSnippetFails(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "alice's", "go", "package main\n")
+
+	rec := s.post(t, s.bob, "/paste/"+itoa(id)+"/delete", url.Values{})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+
+	// And it is genuinely still there.
+	rec = s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	if rec.Code != http.StatusOK {
+		t.Error("the owner's snippet was destroyed by another user's request")
+	}
+}
+
+func TestDeleteRequiresCSRFAndPOST(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "safe", "go", "package main\n")
+
+	// No token.
+	req := httptest.NewRequest("POST", "/paste/"+itoa(id)+"/delete", nil)
+	if rec := s.do(t, s.alice, req); rec.Code != http.StatusForbidden {
+		t.Errorf("delete without a CSRF token = %d, want 403", rec.Code)
+	}
+
+	// A GET must not delete: the route is POST-only, so ServeMux refuses it.
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id)+"/delete", nil))
+	if rec.Code == http.StatusSeeOther {
+		t.Error("a GET performed the deletion")
+	}
+
+	if rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil)); rec.Code != http.StatusOK {
+		t.Error("the snippet was deleted by a request that should have been refused")
+	}
+}
+
 func itoa(n int64) string {
 	if n == 0 {
 		return "0"
