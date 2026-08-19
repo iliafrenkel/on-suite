@@ -33,6 +33,8 @@ func run(args []string, getenv func(string) string, errOut io.Writer) error {
 		return userCmd(args[1:], getenv, errOut)
 	case "export":
 		return exportCmd(args[1:], getenv, os.Stdout, errOut)
+	case "backup":
+		return backupCmd(args[1:], getenv, os.Stdout, errOut)
 	case "version":
 		fmt.Println("onsuite", version)
 		return nil
@@ -52,6 +54,7 @@ Usage:
   onsuite serve [flags]     run the server
   onsuite user add <name>   create an account
   onsuite export <name>     write a user's data as JSON
+  onsuite backup            write a database snapshot
   onsuite version           print the build version
   onsuite help              show this message
 

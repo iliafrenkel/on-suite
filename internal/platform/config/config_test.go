@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestParsePrecedence(t *testing.T) {
@@ -69,6 +70,59 @@ func TestParseRejectsBadInput(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if _, err := Parse(tt.args, nil, io.Discard); err == nil {
 				t.Fatal("Parse succeeded, want error")
+			}
+		})
+	}
+}
+
+func TestParseBackupSettings(t *testing.T) {
+	c, err := Parse(nil, nil, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.BackupInterval != 24*time.Hour {
+		t.Errorf("default BackupInterval = %v, want 24h", c.BackupInterval)
+	}
+	if c.BackupKeep != 7 {
+		t.Errorf("default BackupKeep = %d, want 7", c.BackupKeep)
+	}
+
+	c, err = Parse([]string{"-backup-interval", "0", "-backup-keep", "30"}, nil, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.BackupInterval != 0 {
+		t.Errorf("BackupInterval = %v, want 0 (disabled)", c.BackupInterval)
+	}
+	if c.BackupKeep != 30 {
+		t.Errorf("BackupKeep = %d, want 30", c.BackupKeep)
+	}
+
+	getenv := func(k string) string {
+		return map[string]string{"ONSUITE_BACKUP_INTERVAL": "6h", "ONSUITE_BACKUP_KEEP": "4"}[k]
+	}
+	if c, err = Parse(nil, getenv, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if c.BackupInterval != 6*time.Hour || c.BackupKeep != 4 {
+		t.Errorf("env values ignored: %v, %d", c.BackupInterval, c.BackupKeep)
+	}
+}
+
+func TestParseRejectsBadBackupSettings(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"negative interval", []string{"-backup-interval", "-1h"}},
+		{"absurdly short interval", []string{"-backup-interval", "2s"}},
+		{"keep of zero", []string{"-backup-keep", "0"}},
+		{"negative keep", []string{"-backup-keep", "-3"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := Parse(tt.args, nil, io.Discard); err == nil {
+				t.Fatal("Parse accepted it")
 			}
 		})
 	}

@@ -75,6 +75,11 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+
+	maintenanceCtx, stopMaintenance := context.WithCancel(context.Background())
+	defer stopMaintenance()
+	go runMaintenance(maintenanceCtx, handle, users, cfg, log)
+
 	return listenAndServe(context.Background(), srv, log)
 }
 
