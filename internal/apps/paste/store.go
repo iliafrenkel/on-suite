@@ -27,10 +27,17 @@ const ID = "paste"
 const (
 	// MaxTitleRunes bounds a title so the list page stays readable.
 	MaxTitleRunes = 120
-	// MaxBodyBytes bounds a snippet. Half a megabyte is a very large snippet
-	// and still well inside the platform's 1 MiB request limit, leaving room
-	// for the form's other fields and percent-encoding.
-	MaxBodyBytes = 512 << 10
+	// MaxBodyBytes bounds a snippet. The form that carries it is
+	// application/x-www-form-urlencoded, which percent-encodes every
+	// non-ASCII UTF-8 byte as "%XX" — a 3x expansion in the worst case
+	// (Cyrillic, Hebrew, CJK, ...). At the platform's 1 MiB request limit
+	// (web.DefaultMaxBodyBytes), a naive "half the limit" bound can still be
+	// blown by a snippet that is mostly non-Latin text, which makes the body
+	// read fail and surfaces as a confusing CSRF-looking 403 rather than a
+	// validation message. 256 KiB keeps the worst case (768 KiB) safely under
+	// the limit with headroom for the form's other fields, and is still a
+	// very large snippet.
+	MaxBodyBytes = 256 << 10
 	// shareSlugBytes is 16 bytes, 128 bits, base64url encoded to 22
 	// characters. The slug is the only protection on a shared snippet, so it
 	// must be unguessable rather than merely unique.
