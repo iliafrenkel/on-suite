@@ -65,7 +65,7 @@ func newAuthFixture(t *testing.T) *authFixture {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.DiscardHandler)
-	errs := web.NewErrors(rend, log, "test")
+	errs := web.NewErrors(rend, log)
 	csrf := web.NewCSRF(false, errs)
 
 	a := web.NewAuth(web.AuthOptions{

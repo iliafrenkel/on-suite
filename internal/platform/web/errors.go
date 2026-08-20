@@ -10,13 +10,17 @@ import (
 // Errors renders error responses. It is a type rather than a set of functions
 // because it needs the renderer and the logger.
 type Errors struct {
-	render  *render.Renderer
-	log     *slog.Logger
-	version string
+	render *render.Renderer
+	log    *slog.Logger
+	// Version is shown in the error page footer. It is a plain settable
+	// field rather than a constructor parameter so that adding it did not
+	// require changing every existing call site; the zero value ("") is
+	// fine for callers that don't care about the footer.
+	Version string
 }
 
-func NewErrors(r *render.Renderer, log *slog.Logger, version string) *Errors {
-	return &Errors{render: r, log: log, version: version}
+func NewErrors(r *render.Renderer, log *slog.Logger) *Errors {
+	return &Errors{render: r, log: log}
 }
 
 // titles keeps user-facing wording in one place. Anything not listed gets a
@@ -58,7 +62,7 @@ func (e *Errors) Status(w http.ResponseWriter, r *http.Request, status int) {
 			Theme:            ThemeFrom(r),
 			Font:             FontFrom(r),
 			SidebarCollapsed: SidebarCollapsedFrom(r),
-			Version:          e.version,
+			Version:          e.Version,
 		},
 		Data: data,
 	}

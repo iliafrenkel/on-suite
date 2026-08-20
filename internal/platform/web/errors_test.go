@@ -26,7 +26,7 @@ func testErrors(t *testing.T) (*web.Errors, *bytes.Buffer) {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
-	return web.NewErrors(rend, slog.New(slog.NewJSONHandler(&buf, nil)), "test"), &buf
+	return web.NewErrors(rend, slog.New(slog.NewJSONHandler(&buf, nil))), &buf
 }
 
 func TestErrorsStatusRendersAPage(t *testing.T) {

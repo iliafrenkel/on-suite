@@ -40,7 +40,7 @@ func testHomeHandler(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	errs := web.NewErrors(rend, slog.New(slog.DiscardHandler), "test")
+	errs := web.NewErrors(rend, slog.New(slog.DiscardHandler))
 	deps := stackDeps{Registry: reg, Version: "v9.9.9"}
 	return homeHandler(deps, rend, errs)
 }
