@@ -98,6 +98,70 @@ func TestRegistryOrdersByOrderThenID(t *testing.T) {
 	}
 }
 
+func TestMountAppendsExtraNavItems(t *testing.T) {
+	assets, err := web.NewAssets(ui.Static(), "/static")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rend, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var capturedNav []render.NavItem
+	f := newFake("paste", "ON Paste", 0)
+	f.mount = func(r *app.Router, d app.Deps) {
+		r.HandleFunc("GET /{$}", func(w http.ResponseWriter, req *http.Request) {
+			capturedNav = d.Page(req, "").Shell.Apps
+		})
+	}
+	reg, err := app.NewRegistry(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	placeholder := render.NavItem{ID: "notes", Name: "ON Notes", ComingSoon: true}
+	mux := http.NewServeMux()
+	if err := reg.Mount(mux, app.Deps{Render: rend}, func(h http.Handler) http.Handler { return h }, placeholder); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/paste/", nil))
+
+	if len(capturedNav) != 2 {
+		t.Fatalf("nav has %d items, want 2; got %+v", len(capturedNav), capturedNav)
+	}
+	if capturedNav[0].ID != "paste" || capturedNav[0].ComingSoon {
+		t.Errorf("first item = %+v, want the real registered app", capturedNav[0])
+	}
+	if capturedNav[1].ID != "notes" || !capturedNav[1].ComingSoon {
+		t.Errorf("second item = %+v, want the coming-soon placeholder", capturedNav[1])
+	}
+}
+
+// TestMountWithNoExtraNavItemsStillWorks proves the variadic parameter is
+// truly optional, so every existing call site keeps compiling and behaving
+// the same.
+func TestMountWithNoExtraNavItemsStillWorks(t *testing.T) {
+	reg, err := app.NewRegistry(newFake("paste", "ON Paste", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assets, err := web.NewAssets(ui.Static(), "/static")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rend, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = reg.Mount(http.NewServeMux(), app.Deps{Render: rend}, func(h http.Handler) http.Handler { return h })
+	if err != nil {
+		t.Fatalf("Mount with no extra items: %v", err)
+	}
+}
+
 func TestRegistryNavItems(t *testing.T) {
 	reg, err := app.NewRegistry(newFake("paste", "ON Paste", 0))
 	if err != nil {

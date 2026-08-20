@@ -184,12 +184,15 @@ func (reg *Registry) Migrations() ([]db.Migration, error) {
 	return out, nil
 }
 
-// Mount registers every app's routes and templates.
+// Mount registers every app's routes and templates, then appends extra to
+// the nav every page receives. extra is for placeholder entries — apps that
+// are specced but not yet built — so the shell can show them as disabled
+// rather than pretending they don't exist.
 //
 // guard is applied to everything except routes an app explicitly declares
 // public.
-func (reg *Registry) Mount(mux *http.ServeMux, deps Deps, guard web.Middleware) error {
-	deps.nav = reg.NavItems()
+func (reg *Registry) Mount(mux *http.ServeMux, deps Deps, guard web.Middleware, extra ...render.NavItem) error {
+	deps.nav = append(reg.NavItems(), extra...)
 
 	for _, a := range reg.apps {
 		m := a.Meta()
