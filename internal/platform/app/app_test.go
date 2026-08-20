@@ -3,6 +3,7 @@ package app_test
 import (
 	"io/fs"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -156,6 +157,62 @@ func TestRegistryEmptyIsUsable(t *testing.T) {
 	ms, err := reg.Migrations()
 	if err != nil || len(ms) != 0 {
 		t.Errorf("Migrations = %v, %v", ms, err)
+	}
+}
+
+func TestNewPageFillsPreferencesAndActiveAppFromRequest(t *testing.T) {
+	r := httptest.NewRequest("GET", "/paste/", nil)
+	r.AddCookie(&http.Cookie{Name: web.ThemeCookieName, Value: "dark"})
+	r.AddCookie(&http.Cookie{Name: web.FontCookieName, Value: "literata"})
+	r.AddCookie(&http.Cookie{Name: web.SidebarCookieName, Value: "collapsed"})
+	r = r.WithContext(web.WithActiveApp(r.Context(), "paste"))
+
+	nav := []render.NavItem{
+		{ID: "paste", Name: "ON Paste", Path: "/paste/"},
+		{ID: "notes", Name: "ON Notes", Path: "/notes/", ComingSoon: true},
+	}
+	page := app.NewPage(r, "Snippets", nav)
+
+	if page.Shell.Theme != "dark" {
+		t.Errorf("Theme = %q, want dark", page.Shell.Theme)
+	}
+	if page.Shell.Font != "literata" {
+		t.Errorf("Font = %q, want literata", page.Shell.Font)
+	}
+	if !page.Shell.SidebarCollapsed {
+		t.Error("SidebarCollapsed = false, want true")
+	}
+	if page.Shell.ActiveAppName != "ON Paste" {
+		t.Errorf("ActiveAppName = %q, want ON Paste", page.Shell.ActiveAppName)
+	}
+	if page.Shell.ActiveAppPath != "/paste/" {
+		t.Errorf("ActiveAppPath = %q, want /paste/", page.Shell.ActiveAppPath)
+	}
+}
+
+func TestNewPageDefaultsWithNoCookiesAndNoActiveApp(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	page := app.NewPage(r, "", nil)
+
+	if page.Shell.Theme != "light" {
+		t.Errorf("Theme = %q, want light", page.Shell.Theme)
+	}
+	if page.Shell.Font != "default" {
+		t.Errorf("Font = %q, want default", page.Shell.Font)
+	}
+	if page.Shell.SidebarCollapsed {
+		t.Error("SidebarCollapsed = true, want false")
+	}
+	if page.Shell.ActiveAppName != "" {
+		t.Errorf("ActiveAppName = %q, want empty", page.Shell.ActiveAppName)
+	}
+}
+
+func TestDepsPageCarriesVersion(t *testing.T) {
+	d := app.Deps{Version: "v1.2.3"}
+	page := d.Page(httptest.NewRequest("GET", "/paste/", nil), "Snippets")
+	if page.Shell.Version != "v1.2.3" {
+		t.Errorf("Version = %q, want v1.2.3", page.Shell.Version)
 	}
 }
 

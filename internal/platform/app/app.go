@@ -77,6 +77,9 @@ type Deps struct {
 	Users  *auth.Store
 	Errors *web.Errors
 	Log    *slog.Logger
+	// Version is the running build version, shown in the footer of every
+	// page.
+	Version string
 
 	// nav is the switcher contents, set by the registry so Page can fill in
 	// the shell without every app knowing about every other app.
@@ -89,16 +92,28 @@ type Deps struct {
 // Apps set only Data on the result. This is the reason a handler never has to
 // think about the chrome.
 func (d Deps) Page(r *http.Request, title string) render.Page {
-	return NewPage(r, title, d.nav)
+	p := NewPage(r, title, d.nav)
+	p.Shell.Version = d.Version
+	return p
 }
 
 // NewPage builds a page shell from a request. Exported so the platform's own
 // pages, which are not apps, can use the same code.
 func NewPage(r *http.Request, title string, nav []render.NavItem) render.Page {
 	shell := render.Shell{
-		Apps:      nav,
-		ActiveApp: web.ActiveApp(r.Context()),
-		CSRFToken: web.CSRFToken(r.Context()),
+		Apps:             nav,
+		ActiveApp:        web.ActiveApp(r.Context()),
+		CSRFToken:        web.CSRFToken(r.Context()),
+		Theme:            web.ThemeFrom(r),
+		Font:             web.FontFrom(r),
+		SidebarCollapsed: web.SidebarCollapsedFrom(r),
+	}
+	for _, n := range nav {
+		if n.ID == shell.ActiveApp {
+			shell.ActiveAppName = n.Name
+			shell.ActiveAppPath = n.Path
+			break
+		}
 	}
 	if u, ok := web.UserFrom(r.Context()); ok {
 		shell.LoggedIn = true
