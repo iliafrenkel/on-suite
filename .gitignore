@@ -24,3 +24,6 @@
 # Local environment overrides
 .env
 .env.local
+
+# Brainstorming companion mockups
+.superpowers/
