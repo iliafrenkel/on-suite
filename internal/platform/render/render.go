@@ -15,6 +15,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/iliafrenkel/on-suite/internal/ui"
 )
 
 // NavItem is one entry in the app switcher.
@@ -92,7 +94,10 @@ func NewRenderer(opts Options) (*Renderer, error) {
 
 	r := &Renderer{
 		pages: make(map[string]*template.Template),
-		funcs: template.FuncMap{"asset": opts.AssetURL},
+		funcs: template.FuncMap{
+			"asset": opts.AssetURL,
+			"icon":  ui.IconFor,
+		},
 	}
 
 	// base.html and any *.partial.html are shared by every page.

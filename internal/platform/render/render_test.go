@@ -208,6 +208,23 @@ func TestAddApp(t *testing.T) {
 	}
 }
 
+func TestIconFuncIsAvailableInTemplates(t *testing.T) {
+	r := testRenderer(t)
+	app := fstest.MapFS{
+		"icon.html": {Data: []byte(`{{define "content"}}{{icon "paste"}}{{end}}`)},
+	}
+	if err := r.AddApp("iconcheck", app); err != nil {
+		t.Fatalf("AddApp: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	if err := r.Page(rec, http.StatusOK, "iconcheck/icon", render.Page{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rec.Body.String(), "<svg") {
+		t.Errorf("body has no <svg>: %q", rec.Body.String())
+	}
+}
+
 func TestRendererRejectsBadInput(t *testing.T) {
 	if _, err := render.NewRenderer(render.Options{AssetURL: func(string) string { return "" }}); err == nil {
 		t.Error("NewRenderer accepted a nil Layouts")
