@@ -162,3 +162,21 @@ func TestRealAssetsAreEmbedded(t *testing.T) {
 		}
 	}
 }
+
+func TestFontsAreEmbedded(t *testing.T) {
+	a, err := NewAssets(ui.Static(), "/static")
+	if err != nil {
+		t.Fatalf("NewAssets on the embedded tree: %v", err)
+	}
+	for _, want := range []string{
+		"fonts/inter.woff2",
+		"fonts/jetbrains-mono.woff2",
+		"fonts/literata.woff2",
+		"fonts/public-sans.woff2",
+		"fonts/space-grotesk.woff2",
+	} {
+		if !strings.Contains(strings.Join(a.Names(), ","), want) {
+			t.Errorf("%s is not embedded; got %v", want, a.Names())
+		}
+	}
+}

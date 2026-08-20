@@ -1,4 +1,4 @@
-/* ON Suite — quiet, dense, keyboard-first.
+/* ON Suite — quiet, calm, and a little more spacious than it used to be.
  *
  * Everything is driven by the tokens in :root. Apps must not introduce new
  * colours or spacing values; they compose these. That constraint is what
@@ -6,22 +6,24 @@
  */
 
 :root {
-	/* Greys carry the interface; the accent is used sparingly and on purpose. */
+	/* Greys carry the interface; the accent is a muted slate/teal, used
+	 * sparingly and on purpose. */
 	--c-bg:          #ffffff;
-	--c-bg-subtle:   #f6f6f5;
-	--c-bg-inset:    #efefed;
-	--c-border:      #dcdcd8;
-	--c-border-firm: #c2c2bc;
-	--c-text:        #1c1c1a;
-	--c-text-dim:    #6b6b66;
-	--c-text-faint:  #93938c;
-	--c-accent:      #1a5fb4;
-	--c-accent-bg:   #e8f0fb;
+	--c-bg-subtle:   #f4f3f1;
+	--c-bg-inset:    #eceae6;
+	--c-border:      #e2e0dc;
+	--c-border-firm: #c9c7c1;
+	--c-text:        #2b2a28;
+	--c-text-dim:    #6b6a67;
+	--c-text-faint:  #8a8983;
+	--c-accent:      #4d7570;
+	--c-accent-bg:   #e4ecea;
 	--c-danger:      #a51d2d;
 	--c-danger-bg:   #fbeaec;
 
-	/* A 4px scale. Dense by intent: vertical space is the scarce resource in
-	 * an outliner and in a code listing. */
+	/* A 4px scale. Still the scarce-vertical-space discipline of a code
+	 * listing, just with more breathing room applied on top in the shell
+	 * chrome (see .shell-bar, main, .app-sidebar below). */
 	--s-1: 0.25rem;
 	--s-2: 0.5rem;
 	--s-3: 0.75rem;
@@ -29,36 +31,72 @@
 	--s-5: 1.5rem;
 	--s-6: 2rem;
 
-	--font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-	--font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+	/* --font-ui drives headings and UI chrome; --font-body drives prose.
+	 * They're equal in the default and literary pairings and differ only in
+	 * the "grotesk" one. --font-mono never changes with the pairing. */
+	--font-ui: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--font-body: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
 	--fs-sm: 0.8125rem;
 	--fs-base: 0.9375rem;
 	--fs-lg: 1.125rem;
 	--fs-xl: 1.375rem;
 
-	--radius: 3px;
+	--radius: 6px;
 	--border: 1px solid var(--c-border);
 	--ring: 2px solid var(--c-accent);
 
 	--measure: 68ch; /* comfortable reading width */
 }
 
-@media (prefers-color-scheme: dark) {
-	:root {
-		--c-bg:          #16161a;
-		--c-bg-subtle:   #1e1e23;
-		--c-bg-inset:    #26262c;
-		--c-border:      #35353d;
-		--c-border-firm: #4a4a54;
-		--c-text:        #e6e6e3;
-		--c-text-dim:    #9e9e98;
-		--c-text-faint:  #74746e;
-		--c-accent:      #7aa9e8;
-		--c-accent-bg:   #1c2a3d;
-		--c-danger:      #f08c95;
-		--c-danger-bg:   #3a1e22;
-	}
+/* Runtime font switcher. data-font is set on <html> from a cookie, read
+ * server-side on every request (internal/platform/web/prefs.go) so the first
+ * paint already has the right fonts — no flash of the wrong typeface. */
+[data-font="literata"] {
+	--font-ui: 'Literata', Georgia, "Times New Roman", serif;
+	--font-body: 'Literata', Georgia, "Times New Roman", serif;
+}
+
+[data-font="grotesk"] {
+	--font-ui: 'Space Grotesk', system-ui, sans-serif;
+	--font-body: 'Public Sans', system-ui, sans-serif;
+}
+
+/* Self-hosted fonts. One file per family; Google's own served CSS declares
+ * every weight it supports against the same file, so we mirror that exactly
+ * rather than guessing at a variable-font weight range. */
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2"); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2"); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2"); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/jetbrains-mono.woff2") format("woff2"); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/jetbrains-mono.woff2") format("woff2"); }
+@font-face { font-family: 'Literata'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/literata.woff2") format("woff2"); }
+@font-face { font-family: 'Literata'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/literata.woff2") format("woff2"); }
+@font-face { font-family: 'Public Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/public-sans.woff2") format("woff2"); }
+@font-face { font-family: 'Public Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/public-sans.woff2") format("woff2"); }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/space-grotesk.woff2") format("woff2"); }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/space-grotesk.woff2") format("woff2"); }
+
+/* Dark mode is a real toggle, not prefers-color-scheme: data-theme is set
+ * server-side from a cookie (internal/platform/web/prefs.go, ThemeFrom)
+ * which always returns an explicit "light" or "dark", defaulting to light
+ * when no cookie exists yet. Because the server never leaves data-theme
+ * unset, there is no need for a prefers-color-scheme fallback here — every
+ * response already carries the attribute this selector keys off. */
+:root[data-theme="dark"] {
+	--c-bg:          #1c1d1f;
+	--c-bg-subtle:   #242527;
+	--c-bg-inset:    #2b2c2f;
+	--c-border:      #34373a;
+	--c-border-firm: #4a4d51;
+	--c-text:        #e8e6e2;
+	--c-text-dim:    #a3a29c;
+	--c-text-faint:  #79786f;
+	--c-accent:      #7fa39d;
+	--c-accent-bg:   #233330;
+	--c-danger:      #f08c95;
+	--c-danger-bg:   #3a1e22;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -69,7 +107,7 @@ body {
 	margin: 0;
 	background: var(--c-bg);
 	color: var(--c-text);
-	font: var(--fs-base)/1.45 var(--font-ui);
+	font: var(--fs-base)/1.6 var(--font-body);
 }
 
 /* Focus is restyled, never removed. This suite is meant to be usable
@@ -112,41 +150,143 @@ kbd {
 .shell-bar {
 	display: flex;
 	align-items: center;
-	gap: var(--s-4);
-	padding: var(--s-2) var(--s-4);
-	background: var(--c-bg-subtle);
+	gap: var(--s-5);
+	padding: var(--s-3) var(--s-5);
+	background: var(--c-bg);
 	border-bottom: var(--border);
 }
 
-.shell-mark {
-	font-weight: 600;
-	letter-spacing: 0.02em;
+.shell-logo {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
 	color: var(--c-text);
 	text-decoration: none;
 	white-space: nowrap;
 }
 
-.shell-nav { display: flex; gap: var(--s-1); flex: 1; min-width: 0; }
+.shell-mark { font-weight: 600; letter-spacing: 0.01em; }
 
-.shell-nav a {
-	padding: var(--s-1) var(--s-2);
+.shell-crumbs {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	flex: 1;
+	min-width: 0;
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+	overflow-x: auto;
+	white-space: nowrap;
+}
+
+.shell-crumbs a { color: var(--c-text-dim); text-decoration: none; }
+.shell-crumbs a:hover { color: var(--c-accent); }
+.shell-crumbs > span:last-child { color: var(--c-text); font-weight: 500; }
+
+.shell-user {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+}
+
+.shell-user form { display: inline; }
+
+.shell-settings { position: relative; }
+.shell-settings summary { list-style: none; cursor: pointer; }
+.shell-settings summary::-webkit-details-marker { display: none; }
+
+.shell-settings-menu {
+	position: absolute;
+	right: 0;
+	top: calc(100% + var(--s-2));
+	z-index: 10;
+	min-width: 12rem;
+	padding: var(--s-3);
+	background: var(--c-bg);
+	border: var(--border);
+	border-radius: var(--radius);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.shell-settings-menu .field { margin-bottom: var(--s-3); }
+.shell-settings-menu .field:last-child { margin-bottom: 0; }
+.shell-settings-menu .row { flex-wrap: wrap; margin-top: var(--s-1); }
+.shell-settings-menu button[data-theme-value].active,
+.shell-settings-menu button[data-font-value].active {
+	background: var(--c-accent-bg);
+	color: var(--c-accent);
+	border-color: var(--c-accent);
+}
+
+/* ---- App shell: sidebar + main ------------------------------------------ */
+
+.app-shell {
+	display: flex;
+	align-items: flex-start;
+	min-height: calc(100vh - 8rem);
+}
+
+.app-sidebar {
+	flex-shrink: 0;
+	width: 12rem;
+	padding: var(--s-4) var(--s-2);
+	border-right: var(--border);
+	transition: width 0.15s ease;
+}
+
+.app-sidebar[data-collapsed] { width: 3.5rem; }
+
+.sidebar-toggle {
+	width: 100%;
+	text-align: left;
+	margin-bottom: var(--s-3);
+}
+
+.shell-nav { display: flex; flex-direction: column; gap: var(--s-1); }
+
+.sidebar-item {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	padding: var(--s-2);
 	border-radius: var(--radius);
 	color: var(--c-text-dim);
 	text-decoration: none;
 	white-space: nowrap;
+	overflow: hidden;
 }
 
-.shell-nav a:hover { background: var(--c-bg-inset); color: var(--c-text); }
+.sidebar-item:not(.sidebar-item-disabled):hover { background: var(--c-bg-inset); color: var(--c-text); }
 
-.shell-nav a[aria-current="page"] {
+.sidebar-item[aria-current="page"] {
 	background: var(--c-accent-bg);
 	color: var(--c-accent);
 	font-weight: 600;
 }
 
-.shell-user { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-sm); color: var(--c-text-dim); }
+.sidebar-item-disabled { opacity: 0.5; cursor: default; }
 
-main { padding: var(--s-5) var(--s-4); }
+.app-sidebar[data-collapsed] .sidebar-label { display: none; }
+
+/* main needs no rule here: it is a flex item inside .app-shell, and the
+ * max-width + margin: 0 auto it already got in Step 3 is enough — CSS gives
+ * a flex item's auto margins first claim on any free space in the flex
+ * line, so main centers itself in whatever room the sidebar leaves without
+ * needing flex-grow. */
+
+/* ---- Footer -------------------------------------------------------------- */
+
+.app-footer {
+	padding: var(--s-3) var(--s-5);
+	border-top: var(--border);
+	color: var(--c-text-faint);
+	font-size: var(--fs-sm);
+	text-align: center;
+}
+
+main { padding: var(--s-6) var(--s-5); max-width: var(--measure); margin: 0 auto; width: 100%; }
 .measure { max-width: var(--measure); }
 
 /* ---- Forms and buttons ------------------------------------------------- */
@@ -179,6 +319,22 @@ button, .button {
 
 button:hover, .button:hover { background: var(--c-border); }
 
+/* A button that reads as a link: used for actions that must be POSTs, such as
+ * logging out, without shouting like a primary button. Comes after
+ * `button, .button` on purpose: `.quiet` and `.button` are equal
+ * specificity, so an element carrying both classes (e.g. the settings-menu
+ * gear `<summary class="quiet button">`, or the theme/font/sidebar toggle
+ * buttons) needs `.quiet` to win the source-order tie-break. */
+.quiet {
+	padding: var(--s-1) var(--s-2);
+	background: transparent;
+	border-color: transparent;
+	color: var(--c-text-dim);
+	font-weight: 400;
+}
+
+.quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
+
 button[type="submit"] {
 	background: var(--c-accent);
 	border-color: var(--c-accent);
@@ -186,9 +342,7 @@ button[type="submit"] {
 	font-weight: 600;
 }
 
-@media (prefers-color-scheme: dark) {
-	button[type="submit"] { color: #10141a; }
-}
+:root[data-theme="dark"] button[type="submit"] { color: #10141a; }
 
 /* ---- Notices ----------------------------------------------------------- */
 
@@ -219,36 +373,34 @@ button[type="submit"] {
  * scroll sideways. */
 .scroll-x { overflow-x: auto; }
 
-/* ---- Shell chrome additions ------------------------------------------- */
+/* ---- Home page card grid ------------------------------------------------ */
 
-.shell-user form { display: inline; }
-
-/* A button that reads as a link: used for actions that must be POSTs, such as
- * logging out, without shouting like a primary button. */
-button.quiet {
-	padding: var(--s-1) var(--s-2);
-	background: transparent;
-	border-color: transparent;
-	color: var(--c-text-dim);
-	font-weight: 400;
+.home-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+	gap: var(--s-4);
 }
 
-button.quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
-
-/* ---- Dashboard --------------------------------------------------------- */
-
-.app-list { margin: 0; padding: 0; list-style: none; }
-
-.app-list li {
-	display: flex;
-	align-items: baseline;
-	gap: var(--s-3);
-	padding: var(--s-2) 0;
-	border-bottom: var(--border);
+.app-card {
+	display: block;
+	padding: var(--s-4);
+	background: var(--c-bg);
+	border: var(--border);
+	border-radius: var(--radius);
+	color: var(--c-text);
+	text-decoration: none;
+	transition: border-color 0.15s ease;
 }
 
-.app-list li:last-child { border-bottom: none; }
-.app-list a { font-weight: 600; white-space: nowrap; }
+.app-card:hover { border-color: var(--c-border-firm); }
+
+.app-card h3 { margin: var(--s-3) 0 var(--s-1); }
+.app-card p { margin: 0; }
+
+.app-card-icon { width: 2.5rem; height: 2.5rem; }
+
+.app-card-disabled { opacity: 0.55; cursor: default; }
+.app-card-disabled:hover { border-color: var(--c-border); }
 
 /* ---- Snippets ---------------------------------------------------------- */
 
@@ -307,4 +459,36 @@ button.danger:hover { background: var(--c-danger-bg); }
 	border-radius: var(--radius);
 	color: var(--c-text-dim);
 	font-size: var(--fs-sm);
+}
+
+/* ---- Narrow viewports --------------------------------------------------- */
+
+@media (max-width: 640px) {
+	.shell-bar {
+		flex-wrap: wrap;
+		gap: var(--s-2) var(--s-4);
+	}
+
+	/* The sidebar has no room to sit beside content at phone width, so it
+	 * always renders in its existing icon-only collapsed state here,
+	 * regardless of the data-collapsed cookie/attribute set by theme.js. */
+	.app-sidebar {
+		width: 3.5rem;
+	}
+
+	.sidebar-label {
+		display: none;
+	}
+
+	main {
+		padding: var(--s-4) var(--s-3);
+		min-width: 0;
+	}
+
+	/* auto-fill + minmax(15rem, ...) can't produce a track narrower than
+	 * 15rem, which overflows a phone-width viewport; force a single column
+	 * instead. */
+	.home-grid {
+		grid-template-columns: 1fr;
+	}
 }

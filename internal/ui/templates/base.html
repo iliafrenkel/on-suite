@@ -1,37 +1,84 @@
 {{define "base"}}<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="{{.Shell.Theme}}" data-font="{{.Shell.Font}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{with .Title}}{{.}} · {{end}}ON Suite</title>
 <link rel="stylesheet" href="{{asset "app.css"}}">
 <script src="{{asset "htmx.min.js"}}" defer></script>
+<script src="{{asset "theme.js"}}" defer></script>
 {{block "head" .}}{{end}}
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{.Shell.CSRFToken}}"}'>
-{{template "shell" .Shell}}
-<main>
-{{block "content" .}}{{end}}
-</main>
+{{template "shell" .}}
 </body>
 </html>{{end}}
 
 {{define "shell"}}
 <header class="shell-bar">
-	<a class="shell-mark" href="/">ON Suite</a>
-	<nav class="shell-nav" aria-label="Applications">
-		{{range .Apps}}
-		<a href="{{.Path}}"{{if eq .ID $.ActiveApp}} aria-current="page"{{end}}>{{.Name}}</a>
+	<a class="shell-logo" href="/" aria-label="ON Suite home">
+		<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+			<rect x="1" y="1" width="10" height="10" rx="3" fill="var(--c-accent)"/>
+			<rect x="13" y="1" width="10" height="10" rx="3" fill="var(--c-border-firm)"/>
+			<rect x="1" y="13" width="10" height="10" rx="3" fill="var(--c-border-firm)"/>
+			<rect x="13" y="13" width="10" height="10" rx="3" fill="var(--c-accent)"/>
+		</svg>
+		<span class="shell-mark">ON<span class="dim"> Suite</span></span>
+	</a>
+	<nav class="shell-crumbs" aria-label="Breadcrumb">
+		<a href="/">Home</a>
+		{{if .Shell.ActiveAppName}}
+		<span aria-hidden="true">/</span>
+		{{if .Title}}<a href="{{.Shell.ActiveAppPath}}">{{.Shell.ActiveAppName}}</a>{{else}}<span>{{.Shell.ActiveAppName}}</span>{{end}}
 		{{end}}
+		{{if .Title}}<span aria-hidden="true">/</span><span>{{.Title}}</span>{{end}}
 	</nav>
-	{{if .LoggedIn}}
+	{{if .Shell.LoggedIn}}
 	<div class="shell-user">
-		<span>{{.Username}}</span>
+		<span>{{.Shell.Username}}</span>
+		<details class="shell-settings">
+			<summary class="quiet button" aria-label="Display settings">&#9881;&#65039;</summary>
+			<div class="shell-settings-menu">
+				<div class="field">
+					<span class="faint">Theme</span>
+					<div class="row" data-theme-switch>
+						<button type="button" class="button quiet" data-theme-value="light">Light</button>
+						<button type="button" class="button quiet" data-theme-value="dark">Dark</button>
+					</div>
+				</div>
+				<div class="field">
+					<span class="faint">Font</span>
+					<div class="row" data-font-switch>
+						<button type="button" class="button quiet" data-font-value="default">Default</button>
+						<button type="button" class="button quiet" data-font-value="literata">Literata</button>
+						<button type="button" class="button quiet" data-font-value="grotesk">Modern</button>
+					</div>
+				</div>
+			</div>
+		</details>
 		<form method="post" action="/logout">
-			<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
 			<button type="submit" class="quiet">Log out</button>
 		</form>
 	</div>
 	{{end}}
 </header>
+<div class="app-shell">
+	<aside class="app-sidebar" data-sidebar{{if .Shell.SidebarCollapsed}} data-collapsed{{end}}>
+		<button type="button" class="sidebar-toggle quiet button" data-sidebar-toggle aria-label="Toggle sidebar">&#8676;</button>
+		<nav class="shell-nav" aria-label="Applications">
+			{{range .Shell.Apps}}
+			{{if .ComingSoon}}
+			<span class="sidebar-item sidebar-item-disabled" title="Coming soon">{{icon .ID}}<span class="sidebar-label">{{.Name}}</span></span>
+			{{else}}
+			<a class="sidebar-item" href="{{.Path}}"{{if eq .ID $.Shell.ActiveApp}} aria-current="page"{{end}}>{{icon .ID}}<span class="sidebar-label">{{.Name}}</span></a>
+			{{end}}
+			{{end}}
+		</nav>
+	</aside>
+	<main>
+	{{block "content" .}}{{end}}
+	</main>
+</div>
+<footer class="app-footer">ON Suite{{with .Shell.Version}} · {{.}}{{end}}</footer>
 {{end}}

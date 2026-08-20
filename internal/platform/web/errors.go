@@ -12,6 +12,11 @@ import (
 type Errors struct {
 	render *render.Renderer
 	log    *slog.Logger
+	// Version is shown in the error page footer. It is a plain settable
+	// field rather than a constructor parameter so that adding it did not
+	// require changing every existing call site; the zero value ("") is
+	// fine for callers that don't care about the footer.
+	Version string
 }
 
 func NewErrors(r *render.Renderer, log *slog.Logger) *Errors {
@@ -52,8 +57,14 @@ func (e *Errors) Status(w http.ResponseWriter, r *http.Request, status int) {
 
 	page := render.Page{
 		Title: t.title,
-		Shell: render.Shell{ActiveApp: ActiveApp(r.Context())},
-		Data:  data,
+		Shell: render.Shell{
+			ActiveApp:        ActiveApp(r.Context()),
+			Theme:            ThemeFrom(r),
+			Font:             FontFrom(r),
+			SidebarCollapsed: SidebarCollapsedFrom(r),
+			Version:          e.Version,
+		},
+		Data: data,
 	}
 	if u, ok := UserFrom(r.Context()); ok {
 		page.Shell.LoggedIn = true

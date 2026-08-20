@@ -69,7 +69,7 @@ func newAuthFixture(t *testing.T) *authFixture {
 	csrf := web.NewCSRF(false, errs)
 
 	a := web.NewAuth(web.AuthOptions{
-		Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Secure: false,
+		Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Secure: false, Version: "test",
 	})
 
 	mux := http.NewServeMux()
@@ -145,6 +145,25 @@ func TestLoginPageRenders(t *testing.T) {
 
 	if typ, _ := htmlassert.Attr(doc.MustHave(`input[name=password]`), "type"); typ != "password" {
 		t.Errorf("password field type = %q", typ)
+	}
+}
+
+// TestLoginPageRespectsThemeCookie guards against the login page silently
+// defaulting to light regardless of the visitor's chosen theme: it once
+// built its render.Shell literal by hand and never read the theme cookie, so
+// a dark-mode user got a white flash on every visit to /login.
+func TestLoginPageRespectsThemeCookie(t *testing.T) {
+	f := newAuthFixture(t)
+	req := httptest.NewRequest("GET", "/login", nil)
+	rec := f.do(t, req, &http.Cookie{Name: web.ThemeCookieName, Value: "dark"})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	html := doc.MustHave("html")
+	if theme, _ := htmlassert.Attr(html, "data-theme"); theme != "dark" {
+		t.Errorf("<html> data-theme = %q, want %q", theme, "dark")
 	}
 }
 

@@ -1,20 +1,27 @@
 {{define "content"}}
-<div class="measure stack">
+<div class="stack">
 	<h1>ON Suite</h1>
 
 	{{if .Data.Apps}}
-	<ul class="app-list">
+	<div class="home-grid">
 		{{range .Data.Apps}}
-		<li>
-			<a href="{{.Path}}">{{.Name}}</a>
-			<span class="faint">{{.Summary}}</span>
-		</li>
+		{{if .ComingSoon}}
+		<div class="app-card app-card-disabled" title="Coming soon">
+			<div class="app-card-icon">{{icon .ID}}</div>
+			<h3>{{.Name}}</h3>
+			<p class="faint">{{.Summary}}</p>
+		</div>
+		{{else}}
+		<a class="app-card" href="{{.Path}}">
+			<div class="app-card-icon">{{icon .ID}}</div>
+			<h3>{{.Name}}</h3>
+			<p class="faint">{{.Summary}}</p>
+		</a>
 		{{end}}
-	</ul>
+		{{end}}
+	</div>
 	{{else}}
 	<p class="dim">No applications are registered in this build yet.</p>
 	{{end}}
-
-	<p class="faint">Version {{.Shell.Version}}</p>
 </div>
 {{end}}

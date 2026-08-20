@@ -35,14 +35,16 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	}
 
 	errs := web.NewErrors(rend, deps.Log)
+	errs.Version = deps.Version
 	csrf := web.NewCSRF(deps.Secure, errs)
 	authn := web.NewAuth(web.AuthOptions{
-		Users:  deps.Users,
-		Render: rend,
-		Errors: errs,
-		CSRF:   csrf,
-		Log:    deps.Log,
-		Secure: deps.Secure,
+		Users:   deps.Users,
+		Render:  rend,
+		Errors:  errs,
+		CSRF:    csrf,
+		Log:     deps.Log,
+		Secure:  deps.Secure,
+		Version: deps.Version,
 	})
 
 	mux := http.NewServeMux()
@@ -51,12 +53,13 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	authn.Routes(mux)
 
 	if err := deps.Registry.Mount(mux, app.Deps{
-		DB:     deps.DB,
-		Render: rend,
-		Users:  deps.Users,
-		Errors: errs,
-		Log:    deps.Log,
-	}, authn.RequireUser); err != nil {
+		DB:      deps.DB,
+		Render:  rend,
+		Users:   deps.Users,
+		Errors:  errs,
+		Log:     deps.Log,
+		Version: deps.Version,
+	}, authn.RequireUser, comingSoonNavItems()...); err != nil {
 		return nil, err
 	}
 
@@ -73,20 +76,52 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	), nil
 }
 
-// homeHandler is the dashboard. It lists whatever apps are in this build, so
-// adding an app requires no change here.
+// comingSoonApps lists apps that are specced but not yet built (see
+// docs/superpowers/specs/2026-08-18-on-suite-platform-design.md §3), so the
+// shell can show them as placeholders instead of pretending only one app
+// exists. Each entry becomes a muted, non-clickable card on the home page and
+// a muted, non-clickable entry in the sidebar. Remove an app from this list
+// the day it is actually registered in registeredApps().
+var comingSoonApps = []struct {
+	ID      string
+	Name    string
+	Summary string
+}{
+	{ID: "notes", Name: "ON Notes", Summary: "A hierarchical outliner for quick notes."},
+	{ID: "reader", Name: "ON Reader", Summary: "An RSS reader for the feeds you follow."},
+	{ID: "flash", Name: "ON Flash", Summary: "Flash cards for spaced repetition."},
+}
+
+// comingSoonNavItems is comingSoonApps in the shape Registry.Mount wants, for
+// the sidebar.
+func comingSoonNavItems() []render.NavItem {
+	out := make([]render.NavItem, len(comingSoonApps))
+	for i, a := range comingSoonApps {
+		out[i] = render.NavItem{ID: a.ID, Name: a.Name, ComingSoon: true}
+	}
+	return out
+}
+
+// homeHandler is the dashboard. It lists whatever apps are in this build,
+// plus the specced-but-unbuilt ones, so adding a real app requires no change
+// here beyond removing it from comingSoonApps.
 func homeHandler(deps stackDeps, rend *render.Renderer, errs *web.Errors) http.Handler {
 	type entry struct {
-		Name    string
-		Path    string
-		Summary string
+		ID         string
+		Name       string
+		Path       string
+		Summary    string
+		ComingSoon bool
 	}
 
-	nav := deps.Registry.NavItems()
-	entries := make([]entry, 0, len(nav))
+	nav := append(deps.Registry.NavItems(), comingSoonNavItems()...)
+	entries := make([]entry, 0, len(deps.Registry.Apps())+len(comingSoonApps))
 	for _, a := range deps.Registry.Apps() {
 		m := a.Meta()
-		entries = append(entries, entry{Name: m.Name, Path: m.Path(), Summary: m.Summary})
+		entries = append(entries, entry{ID: m.ID, Name: m.Name, Path: m.Path(), Summary: m.Summary})
+	}
+	for _, a := range comingSoonApps {
+		entries = append(entries, entry{ID: a.ID, Name: a.Name, Summary: a.Summary, ComingSoon: true})
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

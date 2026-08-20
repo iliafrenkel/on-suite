@@ -15,6 +15,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/iliafrenkel/on-suite/internal/ui"
 )
 
 // NavItem is one entry in the app switcher.
@@ -22,6 +24,9 @@ type NavItem struct {
 	ID   string
 	Name string
 	Path string
+	// ComingSoon marks a placeholder for an app that is specced but not yet
+	// built. It renders muted and is never a link.
+	ComingSoon bool
 }
 
 // Shell is everything the surrounding chrome needs. It is a flat struct of
@@ -35,6 +40,22 @@ type Shell struct {
 	ActiveApp string
 	CSRFToken string
 	Version   string
+
+	// Theme is "light" or "dark". Font is "default", "literata", or
+	// "grotesk". Both are read from a cookie once per request, so the first
+	// response already carries the right value.
+	Theme string
+	Font  string
+	// SidebarCollapsed is whether the app switcher should render collapsed
+	// to icons-only.
+	SidebarCollapsed bool
+
+	// ActiveAppName and ActiveAppPath are the display name and path of the
+	// app named by ActiveApp, resolved once so templates never have to
+	// search Apps themselves. Both are empty outside any app (e.g. on the
+	// home page).
+	ActiveAppName string
+	ActiveAppPath string
 }
 
 // Page is the argument to Page. Data is the page's own view model.
@@ -73,7 +94,10 @@ func NewRenderer(opts Options) (*Renderer, error) {
 
 	r := &Renderer{
 		pages: make(map[string]*template.Template),
-		funcs: template.FuncMap{"asset": opts.AssetURL},
+		funcs: template.FuncMap{
+			"asset": opts.AssetURL,
+			"icon":  ui.IconFor,
+		},
 	}
 
 	// base.html and any *.partial.html are shared by every page.
