@@ -34,15 +34,16 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		return nil, err
 	}
 
-	errs := web.NewErrors(rend, deps.Log)
+	errs := web.NewErrors(rend, deps.Log, deps.Version)
 	csrf := web.NewCSRF(deps.Secure, errs)
 	authn := web.NewAuth(web.AuthOptions{
-		Users:  deps.Users,
-		Render: rend,
-		Errors: errs,
-		CSRF:   csrf,
-		Log:    deps.Log,
-		Secure: deps.Secure,
+		Users:   deps.Users,
+		Render:  rend,
+		Errors:  errs,
+		CSRF:    csrf,
+		Log:     deps.Log,
+		Secure:  deps.Secure,
+		Version: deps.Version,
 	})
 
 	mux := http.NewServeMux()

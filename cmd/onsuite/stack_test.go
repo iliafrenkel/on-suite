@@ -40,7 +40,7 @@ func testHomeHandler(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	errs := web.NewErrors(rend, slog.New(slog.DiscardHandler))
+	errs := web.NewErrors(rend, slog.New(slog.DiscardHandler), "test")
 	deps := stackDeps{Registry: reg, Version: "v9.9.9"}
 	return homeHandler(deps, rend, errs)
 }
@@ -71,7 +71,7 @@ func TestHomePageShowsRealAndComingSoonCards(t *testing.T) {
 	}
 }
 
-func TestHomePageFootershowsVersion(t *testing.T) {
+func TestHomePageFooterShowsVersion(t *testing.T) {
 	rec := httptest.NewRecorder()
 	testHomeHandler(t).ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 

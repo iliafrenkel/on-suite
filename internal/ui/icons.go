@@ -1,8 +1,8 @@
-// Package ui also owns the small set of app icons shown in the sidebar and
-// on the home page grid. Icons are looked up by app id rather than carried on
-// app.Meta, so a "coming soon" placeholder for an app that does not exist yet
-// in code can still get one.
 package ui
+
+// Icon lookup for the sidebar and home-page cards. Icons are looked up by
+// app id rather than carried on app.Meta, so a "coming soon" placeholder for
+// an app that does not exist yet in code can still get one.
 
 import "html/template"
 

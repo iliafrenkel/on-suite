@@ -39,17 +39,20 @@ type AuthOptions struct {
 	// server, because a Secure cookie is never sent over http and login
 	// would fail with no visible reason.
 	Secure bool
+	// Version is shown in the shell footer, same as every other page.
+	Version string
 }
 
 // Auth turns a session cookie into a known user, and owns the login and
 // logout endpoints.
 type Auth struct {
-	users  *auth.Store
-	render *render.Renderer
-	errs   *Errors
-	csrf   *CSRF
-	log    *slog.Logger
-	secure bool
+	users   *auth.Store
+	render  *render.Renderer
+	errs    *Errors
+	csrf    *CSRF
+	log     *slog.Logger
+	secure  bool
+	version string
 
 	now     func() time.Time
 	limiter *attemptLimiter
@@ -63,6 +66,7 @@ func NewAuth(opts AuthOptions) *Auth {
 		csrf:    opts.CSRF,
 		log:     opts.Log,
 		secure:  opts.Secure,
+		version: opts.Version,
 		now:     func() time.Time { return time.Now().UTC() },
 		limiter: newAttemptLimiter(),
 	}
@@ -236,7 +240,13 @@ func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {
 func (a *Auth) renderLogin(w http.ResponseWriter, r *http.Request, status int, message, username, next string) {
 	page := render.Page{
 		Title: "Sign in",
-		Shell: render.Shell{CSRFToken: CSRFToken(r.Context())},
+		Shell: render.Shell{
+			CSRFToken:        CSRFToken(r.Context()),
+			Theme:            ThemeFrom(r),
+			Font:             FontFrom(r),
+			SidebarCollapsed: SidebarCollapsedFrom(r),
+			Version:          a.version,
+		},
 		Data: map[string]any{
 			"Error":    message,
 			"Username": username,

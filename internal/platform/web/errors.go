@@ -10,12 +10,13 @@ import (
 // Errors renders error responses. It is a type rather than a set of functions
 // because it needs the renderer and the logger.
 type Errors struct {
-	render *render.Renderer
-	log    *slog.Logger
+	render  *render.Renderer
+	log     *slog.Logger
+	version string
 }
 
-func NewErrors(r *render.Renderer, log *slog.Logger) *Errors {
-	return &Errors{render: r, log: log}
+func NewErrors(r *render.Renderer, log *slog.Logger, version string) *Errors {
+	return &Errors{render: r, log: log, version: version}
 }
 
 // titles keeps user-facing wording in one place. Anything not listed gets a
@@ -52,8 +53,14 @@ func (e *Errors) Status(w http.ResponseWriter, r *http.Request, status int) {
 
 	page := render.Page{
 		Title: t.title,
-		Shell: render.Shell{ActiveApp: ActiveApp(r.Context())},
-		Data:  data,
+		Shell: render.Shell{
+			ActiveApp:        ActiveApp(r.Context()),
+			Theme:            ThemeFrom(r),
+			Font:             FontFrom(r),
+			SidebarCollapsed: SidebarCollapsedFrom(r),
+			Version:          e.version,
+		},
+		Data: data,
 	}
 	if u, ok := UserFrom(r.Context()); ok {
 		page.Shell.LoggedIn = true

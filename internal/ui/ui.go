@@ -1,7 +1,7 @@
 // Package ui holds the embedded static files and HTML templates for the whole
-// suite. It is a leaf package: it contains no logic, only the embed
-// directives, so that anything can depend on it without acquiring
-// dependencies of its own.
+// suite, plus the small set of app icons shown in the sidebar and on the home
+// page grid. It is a leaf package, so that anything can depend on it without
+// acquiring dependencies of its own.
 package ui
 
 import (

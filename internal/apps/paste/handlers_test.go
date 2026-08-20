@@ -74,10 +74,10 @@ func newServer(t *testing.T) *server {
 	}
 
 	log := slog.New(slog.DiscardHandler)
-	errs := web.NewErrors(rend, log)
+	errs := web.NewErrors(rend, log, "test")
 	csrf := web.NewCSRF(false, errs)
 	authn := web.NewAuth(web.AuthOptions{
-		Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Secure: false,
+		Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Secure: false, Version: "test",
 	})
 
 	mux := http.NewServeMux()
