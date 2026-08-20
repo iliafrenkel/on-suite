@@ -220,18 +220,6 @@ kbd {
 	border-color: var(--c-accent);
 }
 
-/* A button that reads as a link: used for actions that must be POSTs, such as
- * logging out, without shouting like a primary button. */
-.quiet {
-	padding: var(--s-1) var(--s-2);
-	background: transparent;
-	border-color: transparent;
-	color: var(--c-text-dim);
-	font-weight: 400;
-}
-
-.quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
-
 /* ---- App shell: sidebar + main ------------------------------------------ */
 
 .app-shell {
@@ -330,6 +318,22 @@ button, .button {
 }
 
 button:hover, .button:hover { background: var(--c-border); }
+
+/* A button that reads as a link: used for actions that must be POSTs, such as
+ * logging out, without shouting like a primary button. Comes after
+ * `button, .button` on purpose: `.quiet` and `.button` are equal
+ * specificity, so an element carrying both classes (e.g. the settings-menu
+ * gear `<summary class="quiet button">`, or the theme/font/sidebar toggle
+ * buttons) needs `.quiet` to win the source-order tie-break. */
+.quiet {
+	padding: var(--s-1) var(--s-2);
+	background: transparent;
+	border-color: transparent;
+	color: var(--c-text-dim);
+	font-weight: 400;
+}
+
+.quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
 
 button[type="submit"] {
 	background: var(--c-accent);
