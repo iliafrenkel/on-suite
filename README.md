@@ -92,6 +92,7 @@ on-suite/
 │   └── arch/                  # one test enforcing the import-boundary rules below
 ├── docs/
 │   ├── deploy/                 # systemd unit and the deployment guide
+│   ├── RELEASING.md            # how to cut a tagged release
 │   └── superpowers/
 │       ├── specs/              # the design document
 │       └── plans/              # task-by-task implementation plans
@@ -158,7 +159,8 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o onsuite ./cmd/onsuite
 
 For running this somewhere real — a systemd unit, choosing between a reverse
 proxy and built-in TLS, backups and restores, upgrades, and a Docker option —
-see [`docs/deploy/README.md`](docs/deploy/README.md).
+see [`docs/deploy/README.md`](docs/deploy/README.md). For cutting a new
+release, see [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Testing
 
