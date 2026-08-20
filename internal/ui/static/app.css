@@ -460,3 +460,35 @@ button.danger:hover { background: var(--c-danger-bg); }
 	color: var(--c-text-dim);
 	font-size: var(--fs-sm);
 }
+
+/* ---- Narrow viewports --------------------------------------------------- */
+
+@media (max-width: 640px) {
+	.shell-bar {
+		flex-wrap: wrap;
+		gap: var(--s-2) var(--s-4);
+	}
+
+	/* The sidebar has no room to sit beside content at phone width, so it
+	 * always renders in its existing icon-only collapsed state here,
+	 * regardless of the data-collapsed cookie/attribute set by theme.js. */
+	.app-sidebar {
+		width: 3.5rem;
+	}
+
+	.sidebar-label {
+		display: none;
+	}
+
+	main {
+		padding: var(--s-4) var(--s-3);
+		min-width: 0;
+	}
+
+	/* auto-fill + minmax(15rem, ...) can't produce a track narrower than
+	 * 15rem, which overflows a phone-width viewport; force a single column
+	 * instead. */
+	.home-grid {
+		grid-template-columns: 1fr;
+	}
+}
