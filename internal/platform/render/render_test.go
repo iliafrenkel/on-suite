@@ -225,6 +225,63 @@ func TestIconFuncIsAvailableInTemplates(t *testing.T) {
 	}
 }
 
+func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
+	r := testRenderer(t)
+	rec := httptest.NewRecorder()
+
+	err := r.Page(rec, http.StatusOK, "error", render.Page{
+		Title: "New snippet",
+		Shell: render.Shell{
+			LoggedIn:      true,
+			Username:      "ilia",
+			Theme:         "dark",
+			Font:          "literata",
+			ActiveApp:     "paste",
+			ActiveAppName: "ON Paste",
+			ActiveAppPath: "/paste/",
+			Version:       "v1.2.3",
+			Apps: []render.NavItem{
+				{ID: "paste", Name: "ON Paste", Path: "/paste/"},
+				{ID: "notes", Name: "ON Notes", ComingSoon: true},
+			},
+		},
+		Data: map[string]any{"Status": 404, "Title": "Not found", "Message": "no such page"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	// data-theme/data-font land on <html>, set from the very first response.
+	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-theme"); v != "dark" {
+		t.Errorf("data-theme = %q, want dark", v)
+	}
+	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-font"); v != "literata" {
+		t.Errorf("data-font = %q, want literata", v)
+	}
+
+	// Breadcrumbs: Home / ON Paste / New snippet.
+	crumbs := doc.Text()
+	for _, want := range []string{"Home", "ON Paste", "New snippet"} {
+		if !strings.Contains(crumbs, want) {
+			t.Errorf("breadcrumb text missing %q; got %q", want, crumbs)
+		}
+	}
+
+	// The sidebar shows the real app as a link and the coming-soon one as
+	// something else, not a link.
+	links := doc.QueryAll("nav.shell-nav a")
+	if len(links) != 1 {
+		t.Fatalf("nav has %d links, want 1 (the coming-soon entry must not be a link); got %+v", len(links), links)
+	}
+
+	// The footer carries the version, outside the sidebar/header.
+	doc.MustHave("footer.app-footer")
+	if !strings.Contains(htmlassert.Text(doc.MustHave("footer.app-footer")), "v1.2.3") {
+		t.Error("footer does not show the version")
+	}
+}
+
 func TestRendererRejectsBadInput(t *testing.T) {
 	if _, err := render.NewRenderer(render.Options{AssetURL: func(string) string { return "" }}); err == nil {
 		t.Error("NewRenderer accepted a nil Layouts")
