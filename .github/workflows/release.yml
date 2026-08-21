@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write # required to create the release and upload artefacts
+  id-token: write # required for cosign's keyless signing (GitHub OIDC)
 
 jobs:
   release:
@@ -21,6 +22,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - uses: sigstore/cosign-installer@v3
 
       - uses: goreleaser/goreleaser-action@v7
         with:

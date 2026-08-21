@@ -32,14 +32,38 @@ GitHub Release — there's no separate release script or manual build step.
      `main.version`,
    - package each binary into a `.tar.gz` alongside `README.md`, `LICENSE`,
      and `docs/deploy/`, plus a `checksums.txt`,
+   - sign `checksums.txt` with [cosign](https://docs.sigstore.dev/cosign/overview/)
+     using keyless (Sigstore) signing, producing `checksums.txt.sig` and
+     `checksums.txt.pem`,
    - generate release notes from `git log` (commits starting with `docs:`,
      `test:`, or that are merge commits are filtered out — keep that in mind
      when writing commit messages for anything you want in the changelog),
    - publish everything as a GitHub Release named after the tag.
 
-No step needs `GITHUB_TOKEN` beyond what `actions/checkout` and
-`goreleaser-action` already have via the workflow's `permissions: contents:
-write`.
+`actions/checkout` and `goreleaser-action` use `permissions: contents:
+write` as before. Signing needs one more: `permissions: id-token: write`,
+which lets the workflow request a short-lived GitHub OIDC token — that
+token *is* the signing identity, so there's no private key for this project
+to generate, store, or rotate.
+
+## Verifying a release
+
+Anyone downloading a release can confirm it was actually built by this
+repo's release workflow, not just that the file wasn't corrupted in
+transit:
+
+```bash
+cosign verify-blob --certificate checksums.txt.pem --signature checksums.txt.sig \
+  --certificate-identity-regexp 'https://github.com/iliafrenkel/on-suite/.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+```
+
+The first command verifies the signature over `checksums.txt` itself; the
+second then verifies every archive's checksum against it. Verifying only
+the archive's checksum without the signature just confirms the download
+wasn't corrupted — not who built it.
 
 ## If something goes wrong
 
