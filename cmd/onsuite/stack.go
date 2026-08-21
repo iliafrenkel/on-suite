@@ -66,14 +66,7 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	mux.Handle("GET /{$}", authn.RequireUser(homeHandler(deps, rend, errs)))
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
 
-	return web.Chain(mux,
-		web.Recover(deps.Log, errs),
-		web.RequestLog(deps.Log),
-		web.SecurityHeaders(),
-		web.LimitBody(web.DefaultMaxBodyBytes),
-		csrf.Middleware,
-		authn.LoadUser,
-	), nil
+	return web.Stack(mux, deps.Log, errs, csrf, authn), nil
 }
 
 // comingSoonApps lists apps that are specced but not yet built (see
