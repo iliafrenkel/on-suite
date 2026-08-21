@@ -200,9 +200,21 @@ func maintain(
 	}
 
 	path, err := writeSnapshot(ctx, handle, cfg.BackupDir(), cfg.BackupKeep, time.Now().UTC())
-	if err != nil {
-		log.Error("snapshot failed", "error", err, "path", path)
-		return
+	logSnapshotResult(log, path, err)
+}
+
+// logSnapshotResult reports the outcome of writeSnapshot. path is only set
+// once the snapshot itself has succeeded, so an error alongside a non-empty
+// path means pruning failed after a good backup was already written — that
+// must not be logged the same way as a failed snapshot, or an operator
+// reading logs would wrongly conclude no backup exists.
+func logSnapshotResult(log *slog.Logger, path string, err error) {
+	switch {
+	case err != nil && path == "":
+		log.Error("snapshot failed", "error", err)
+	case err != nil:
+		log.Error("snapshot written but pruning old snapshots failed", "error", err, "path", path)
+	default:
+		log.Info("snapshot written", "path", path)
 	}
-	log.Info("snapshot written", "path", path)
 }
