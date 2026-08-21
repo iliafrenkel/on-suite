@@ -691,9 +691,17 @@ func TestShareStateIsShownToTheOwner(t *testing.T) {
 	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
 	doc := htmlassert.Parse(t, rec.Body.String())
 
-	// The link is shown so it can be copied, and the control now revokes.
-	if got := htmlassert.Text(doc.MustHave(".notice code")); !strings.Contains(got, slug) {
+	// The link is shown as a real, clickable link with a copy button, and
+	// the control now revokes.
+	link := doc.MustHave(".notice a")
+	if got := htmlassert.Text(link); !strings.Contains(got, slug) {
 		t.Errorf("the share link is not displayed; got %q", got)
+	}
+	if href, _ := htmlassert.Attr(link, "href"); !strings.Contains(href, slug) {
+		t.Errorf("the share link's href = %q, want it to contain %q", href, slug)
+	}
+	if copyPath, _ := htmlassert.Attr(doc.MustHave("[data-copy-link]"), "data-copy-link"); !strings.Contains(copyPath, slug) {
+		t.Errorf("the copy button's data-copy-link = %q, want it to contain %q", copyPath, slug)
 	}
 	doc.MustHave(`form[action=/paste/` + itoa(id) + `/unshare]`)
 	doc.MustNotHave(`form[action=/paste/` + itoa(id) + `/share]`)

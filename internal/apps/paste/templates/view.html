@@ -35,9 +35,9 @@
 	</div>
 
 	{{with .Data.ShareURL}}
-	<div class="notice">
-		Anyone with this link can read this snippet:
-		<code>{{.}}</code>
+	<div class="notice row">
+		<span>Anyone with this link can read this snippet: <a href="{{.}}">{{.}}</a></span>
+		<button type="button" class="button" data-copy-link="{{.}}">Copy link</button>
 	</div>
 	{{end}}
 	{{end}}
