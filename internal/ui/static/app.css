@@ -136,12 +136,15 @@ h3 { font-size: var(--fs-lg); }
 
 code, pre, kbd { font-family: var(--font-mono); font-size: 0.9em; }
 
+/* Filled, no border: a passive block of content to read, distinct from the
+ * bordered treatment on things you act on (buttons, inputs, cards). Uniform
+ * borders on everything is what made buttons, inputs, cards and code blocks
+ * all look like the same box. */
 pre {
 	margin: 0;
 	padding: var(--s-3);
 	overflow-x: auto;
 	background: var(--c-bg-subtle);
-	border: var(--border);
 	border-radius: var(--radius);
 }
 
@@ -368,10 +371,10 @@ button:hover, .button:hover { background: var(--c-border); }
 
 /* ---- Notices ----------------------------------------------------------- */
 
+/* Filled, no border — see the comment on pre above. */
 .notice {
 	padding: var(--s-2) var(--s-3);
 	margin-bottom: var(--s-4);
-	border: var(--border);
 	border-radius: var(--radius);
 	background: var(--c-bg-subtle);
 	font-size: var(--fs-sm);
@@ -379,7 +382,6 @@ button:hover, .button:hover { background: var(--c-border); }
 
 .notice-error {
 	background: var(--c-danger-bg);
-	border-color: var(--c-danger);
 	color: var(--c-danger);
 }
 
@@ -453,7 +455,6 @@ button.danger { color: var(--c-danger); }
 button.danger:hover { background: var(--c-danger-bg); }
 
 .snippet-body {
-	border: var(--border);
 	border-radius: var(--radius);
 	background: var(--c-bg-subtle);
 	padding: var(--s-2) var(--s-3);
