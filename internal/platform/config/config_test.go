@@ -128,6 +128,83 @@ func TestParseRejectsBadBackupSettings(t *testing.T) {
 	}
 }
 
+// TestParseSecureCookies guards a security-relevant flag: a value
+// strconv.ParseBool doesn't recognize must be a loud error, not a silent
+// "cookies stay non-Secure."
+func TestParseSecureCookies(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want bool
+	}{
+		{"unset", "", false},
+		{"true", "true", true},
+		{"1", "1", true},
+		{"TRUE", "TRUE", true},
+		{"t", "t", true},
+		{"false", "false", false},
+		{"0", "0", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(k string) string {
+				if k == "ONSUITE_SECURE_COOKIES" {
+					return tt.env
+				}
+				return ""
+			}
+			c, err := Parse(nil, getenv, io.Discard)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if c.SecureCookies != tt.want {
+				t.Errorf("SecureCookies = %v, want %v", c.SecureCookies, tt.want)
+			}
+		})
+	}
+
+	getenv := func(k string) string {
+		if k == "ONSUITE_SECURE_COOKIES" {
+			return "yes" // not one of strconv.ParseBool's accepted spellings
+		}
+		return ""
+	}
+	if _, err := Parse(nil, getenv, io.Discard); err == nil {
+		t.Fatal(`Parse accepted ONSUITE_SECURE_COOKIES="yes", want an error`)
+	}
+
+	// The flag itself still parses with flag.Bool's own rules, unaffected by
+	// this change.
+	c, err := Parse([]string{"-secure-cookies"}, nil, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !c.SecureCookies {
+		t.Error("-secure-cookies flag did not set SecureCookies")
+	}
+}
+
+// TestParseRejectsBadBackupEnv guards the same typo-visibility fix for
+// ONSUITE_BACKUP_INTERVAL and ONSUITE_BACKUP_KEEP: an unparseable value must
+// fail Parse, not silently fall back to the default.
+func TestParseRejectsBadBackupEnv(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{"bad interval", map[string]string{"ONSUITE_BACKUP_INTERVAL": "not-a-duration"}},
+		{"bad keep", map[string]string{"ONSUITE_BACKUP_KEEP": "not-a-number"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(k string) string { return tt.env[k] }
+			if _, err := Parse(nil, getenv, io.Discard); err == nil {
+				t.Fatal("Parse accepted a malformed env value, want an error")
+			}
+		})
+	}
+}
+
 func TestDerivedPaths(t *testing.T) {
 	c := Config{DataDir: "/var/lib/onsuite"}
 	if got, want := c.DBPath(), filepath.FromSlash("/var/lib/onsuite/onsuite.db"); got != want {
