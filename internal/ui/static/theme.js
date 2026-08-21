@@ -93,15 +93,76 @@
 		return Promise.resolve();
 	}
 
+	function flashCopied(btn) {
+		var original = btn.textContent;
+		btn.textContent = "Copied";
+		setTimeout(function () { btn.textContent = original; }, 1500);
+	}
+
 	function initCopyLink() {
 		document.querySelectorAll("[data-copy-link]").forEach(function (btn) {
 			btn.addEventListener("click", function () {
 				var url = location.origin + btn.getAttribute("data-copy-link");
-				copyText(url).then(function () {
-					var original = btn.textContent;
-					btn.textContent = "Copied";
-					setTimeout(function () { btn.textContent = original; }, 1500);
-				});
+				copyText(url).then(function () { flashCopied(btn); });
+			});
+		});
+	}
+
+	// The snippet's own content, not just its share link — fetched from the
+	// same raw endpoint the "Raw" link points to rather than duplicating the
+	// body into the page, so this works from the copy verbatim (no
+	// highlighting markup) with no risk of drifting from what "Raw" shows.
+	function initCopyRaw() {
+		document.querySelectorAll("[data-copy-raw]").forEach(function (btn) {
+			btn.addEventListener("click", function () {
+				fetch(btn.getAttribute("data-copy-raw"))
+					.then(function (res) { return res.text(); })
+					.then(function (text) { return copyText(text); })
+					.then(function () { flashCopied(btn); })
+					.catch(function () {
+						var original = btn.textContent;
+						btn.textContent = "Copy failed";
+						setTimeout(function () { btn.textContent = original; }, 1500);
+					});
+			});
+		});
+	}
+
+	// The server renders an absolute timestamp so the page is correct with
+	// JS disabled; this replaces it with a relative one for anything recent
+	// enough that "how long ago" is more useful than a clock reading. The
+	// absolute time survives in the title attribute either way, for hover.
+	function relativeTime(then, now) {
+		var seconds = Math.round((now - then) / 1000);
+		if (seconds < 5) return "just now";
+		if (seconds < 60) return seconds + " seconds ago";
+		var minutes = Math.round(seconds / 60);
+		if (minutes < 60) return minutes + (minutes === 1 ? " minute ago" : " minutes ago");
+		var hours = Math.round(minutes / 60);
+		if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago");
+		var days = Math.round(hours / 24);
+		if (days < 7) return days + (days === 1 ? " day ago" : " days ago");
+		return null; // further back reads more clearly as an absolute date
+	}
+
+	function initRelativeTimes() {
+		document.querySelectorAll("time[datetime]").forEach(function (el) {
+			var then = new Date(el.getAttribute("datetime"));
+			if (isNaN(then.getTime())) return;
+			var label = relativeTime(then, new Date());
+			if (label) el.textContent = label;
+		});
+	}
+
+	// A generic confirmation gate for any destructive form — data-confirm
+	// carries the message, so a new destructive action anywhere in the
+	// suite gets this for free instead of needing its own JS.
+	function initConfirm() {
+		document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+			form.addEventListener("submit", function (e) {
+				if (!window.confirm(form.getAttribute("data-confirm"))) {
+					e.preventDefault();
+				}
 			});
 		});
 	}
@@ -110,4 +171,7 @@
 	initFontSwitch();
 	initSidebarToggle();
 	initCopyLink();
+	initCopyRaw();
+	initRelativeTimes();
+	initConfirm();
 })();

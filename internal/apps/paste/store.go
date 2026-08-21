@@ -90,6 +90,16 @@ func (s Snippet) Lines() int {
 	return strings.Count(strings.TrimSuffix(s.Body, "\n"), "\n") + 1
 }
 
+// LinesLabel is Lines with correct singular/plural wording, so a one-line
+// snippet does not read "1 lines".
+func (s Snippet) LinesLabel() string {
+	n := s.Lines()
+	if n == 1 {
+		return "1 line"
+	}
+	return fmt.Sprintf("%d lines", n)
+}
+
 // DisplayTitle is what to show when a snippet was saved without a title.
 func (s Snippet) DisplayTitle() string {
 	if strings.TrimSpace(s.Title) == "" {

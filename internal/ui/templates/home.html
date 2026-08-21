@@ -5,13 +5,7 @@
 	{{if .Data.Apps}}
 	<div class="home-grid">
 		{{range .Data.Apps}}
-		{{if .ComingSoon}}
-		<div class="app-card app-card-disabled" title="Coming soon">
-			<div class="app-card-icon">{{icon .ID}}</div>
-			<h3>{{.Name}}</h3>
-			<p class="faint">{{.Summary}}</p>
-		</div>
-		{{else}}
+		{{if not .ComingSoon}}
 		<a class="app-card" href="{{.Path}}">
 			<div class="app-card-icon">{{icon .ID}}</div>
 			<h3>{{.Name}}</h3>
@@ -22,6 +16,10 @@
 	</div>
 	{{else}}
 	<p class="dim">No applications are registered in this build yet.</p>
+	{{end}}
+
+	{{with .Data.ComingSoonNames}}
+	<p class="faint home-coming-soon">More apps coming: {{.}}.</p>
 	{{end}}
 </div>
 {{end}}

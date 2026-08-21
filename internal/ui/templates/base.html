@@ -64,6 +64,7 @@
 	{{end}}
 </header>
 <div class="app-shell">
+	{{if .Shell.LoggedIn}}
 	<aside class="app-sidebar" data-sidebar{{if .Shell.SidebarCollapsed}} data-collapsed{{end}}>
 		<button type="button" class="sidebar-toggle quiet button" data-sidebar-toggle aria-label="Toggle sidebar">&#8676;</button>
 		<nav class="shell-nav" aria-label="Applications">
@@ -76,6 +77,7 @@
 			{{end}}
 		</nav>
 	</aside>
+	{{end}}
 	<main>
 	{{block "content" .}}{{end}}
 	</main>

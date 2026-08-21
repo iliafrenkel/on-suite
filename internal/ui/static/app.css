@@ -43,12 +43,16 @@
 	--fs-base: 0.9375rem;
 	--fs-lg: 1.125rem;
 	--fs-xl: 1.375rem;
+	--fs-2xl: 1.75rem;
 
 	--radius: 6px;
 	--border: 1px solid var(--c-border);
 	--ring: 2px solid var(--c-accent);
 
-	--measure: 68ch; /* comfortable reading width */
+	--measure: 68ch; /* comfortable reading width, for prose and forms */
+	--content-max: 75rem; /* main's own cap — wider, since a snippet list or
+	                          a wide code block has no comfortable-line-length
+	                          reason to stay prose-narrow */
 }
 
 /* Runtime font switcher. data-font is set on <html> from a cookie, read
@@ -122,19 +126,25 @@ body {
 a { color: var(--c-accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
 a:hover { text-decoration-thickness: 2px; }
 
-h1, h2, h3 { margin: 0 0 var(--s-3); font-weight: 600; line-height: 1.25; }
-h1 { font-size: var(--fs-xl); }
-h2 { font-size: var(--fs-lg); }
-h3 { font-size: var(--fs-base); }
+/* Wider steps than the 4px spacing scale on purpose: at the old h1=22px vs
+ * body=15px (a 1.47x ratio), nothing on a page announced itself as more
+ * important than anything else. */
+h1, h2, h3 { margin: 0 0 var(--s-3); font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }
+h1 { font-size: var(--fs-2xl); }
+h2 { font-size: var(--fs-xl); }
+h3 { font-size: var(--fs-lg); }
 
 code, pre, kbd { font-family: var(--font-mono); font-size: 0.9em; }
 
+/* Filled, no border: a passive block of content to read, distinct from the
+ * bordered treatment on things you act on (buttons, inputs, cards). Uniform
+ * borders on everything is what made buttons, inputs, cards and code blocks
+ * all look like the same box. */
 pre {
 	margin: 0;
 	padding: var(--s-3);
 	overflow-x: auto;
 	background: var(--c-bg-subtle);
-	border: var(--border);
 	border-radius: var(--radius);
 }
 
@@ -287,7 +297,7 @@ kbd {
 	text-align: center;
 }
 
-main { padding: var(--s-6) var(--s-5); max-width: var(--measure); margin: 0 auto; width: 100%; }
+main { padding: var(--s-6) var(--s-5); max-width: var(--content-max); margin: 0 auto; width: 100%; }
 .measure { max-width: var(--measure); }
 
 /* ---- Forms and buttons ------------------------------------------------- */
@@ -307,6 +317,12 @@ input[type="text"], input[type="password"], textarea, select {
 textarea { font-family: var(--font-mono); resize: vertical; }
 
 .field { margin-bottom: var(--s-4); }
+
+/* Title and Language side by side rather than full-width stacked fields —
+ * a single-line text input and a short dropdown don't need a whole row to
+ * themselves the way the snippet body textarea does. */
+.field-row { align-items: flex-start; }
+.field-row .field { flex: 1; margin-bottom: 0; }
 
 button, .button {
 	padding: var(--s-2) var(--s-4);
@@ -337,25 +353,28 @@ button:hover, .button:hover { background: var(--c-border); }
 
 .quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
 
-/* :not(.quiet) rather than a bare tag+attribute selector: without it, this
- * rule's higher specificity ((0,1,1) vs .quiet's (0,1,0)) always won
- * regardless of source order, filling a quiet submit button (e.g. Delete)
- * with the accent colour underneath whatever text colour .danger set. */
-button[type="submit"]:not(.quiet) {
+/* Prominence is opt-in via `.primary`, never implied by <button type=submit">
+ * on its own. A page should carry at most one of these — it is the single
+ * action the page wants a visitor to take (Sign in, Save snippet) — so a
+ * new form's submit button starts out neutral instead of accidentally
+ * shouting the loudest thing on the page. */
+.primary {
 	background: var(--c-accent);
 	border-color: var(--c-accent);
 	color: #fff;
 	font-weight: 600;
 }
 
-:root[data-theme="dark"] button[type="submit"]:not(.quiet) { color: #10141a; }
+.primary:hover { background: var(--c-accent); border-color: var(--c-accent); filter: brightness(1.1); }
+
+:root[data-theme="dark"] .primary { color: #10141a; }
 
 /* ---- Notices ----------------------------------------------------------- */
 
+/* Filled, no border — see the comment on pre above. */
 .notice {
 	padding: var(--s-2) var(--s-3);
 	margin-bottom: var(--s-4);
-	border: var(--border);
 	border-radius: var(--radius);
 	background: var(--c-bg-subtle);
 	font-size: var(--fs-sm);
@@ -363,7 +382,6 @@ button[type="submit"]:not(.quiet) {
 
 .notice-error {
 	background: var(--c-danger-bg);
-	border-color: var(--c-danger);
 	color: var(--c-danger);
 }
 
@@ -417,8 +435,10 @@ button[type="submit"]:not(.quiet) {
 
 .app-card-icon { width: 2.5rem; height: 2.5rem; }
 
-.app-card-disabled { opacity: 0.55; cursor: default; }
-.app-card-disabled:hover { border-color: var(--c-border); }
+/* Equal card area for a shipped app and three that don't exist yet reads as
+ * "this is a mockup." One muted line carries the same information without
+ * competing with ON Paste for attention. */
+.home-coming-soon { margin-top: var(--s-2); }
 
 /* ---- Snippets ---------------------------------------------------------- */
 
@@ -435,7 +455,6 @@ button.danger { color: var(--c-danger); }
 button.danger:hover { background: var(--c-danger-bg); }
 
 .snippet-body {
-	border: var(--border);
 	border-radius: var(--radius);
 	background: var(--c-bg-subtle);
 	padding: var(--s-2) var(--s-3);

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
@@ -59,7 +60,7 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		Errors:  errs,
 		Log:     deps.Log,
 		Version: deps.Version,
-	}, authn.RequireUser, comingSoonNavItems()...); err != nil {
+	}, authn.RequireUser); err != nil {
 		return nil, err
 	}
 
@@ -71,10 +72,9 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 
 // comingSoonApps lists apps that are specced but not yet built (see
 // docs/superpowers/specs/2026-08-18-on-suite-platform-design.md §3), so the
-// shell can show them as placeholders instead of pretending only one app
-// exists. Each entry becomes a muted, non-clickable card on the home page and
-// a muted, non-clickable entry in the sidebar. Remove an app from this list
-// the day it is actually registered in registeredApps().
+// home page can name them instead of pretending only one app exists. Remove
+// an app from this list the day it is actually registered in
+// registeredApps().
 var comingSoonApps = []struct {
 	ID      string
 	Name    string
@@ -85,19 +85,14 @@ var comingSoonApps = []struct {
 	{ID: "flash", Name: "ON Flash", Summary: "Flash cards for spaced repetition."},
 }
 
-// comingSoonNavItems is comingSoonApps in the shape Registry.Mount wants, for
-// the sidebar.
-func comingSoonNavItems() []render.NavItem {
-	out := make([]render.NavItem, len(comingSoonApps))
-	for i, a := range comingSoonApps {
-		out[i] = render.NavItem{ID: a.ID, Name: a.Name, ComingSoon: true}
-	}
-	return out
-}
-
 // homeHandler is the dashboard. It lists whatever apps are in this build,
 // plus the specced-but-unbuilt ones, so adding a real app requires no change
 // here beyond removing it from comingSoonApps.
+//
+// Coming-soon apps show up here (as a single muted line, not as cards — see
+// home.html) but not in the sidebar (see buildStack's Registry.Mount call,
+// which passes no extra nav items): a sidebar that is three-quarters
+// placeholders for one real app reads as unfinished rather than restrained.
 func homeHandler(deps stackDeps, rend *render.Renderer, errs *web.Errors) http.Handler {
 	type entry struct {
 		ID         string
@@ -107,7 +102,7 @@ func homeHandler(deps stackDeps, rend *render.Renderer, errs *web.Errors) http.H
 		ComingSoon bool
 	}
 
-	nav := append(deps.Registry.NavItems(), comingSoonNavItems()...)
+	nav := deps.Registry.NavItems()
 	entries := make([]entry, 0, len(deps.Registry.Apps())+len(comingSoonApps))
 	for _, a := range deps.Registry.Apps() {
 		m := a.Meta()
@@ -116,11 +111,18 @@ func homeHandler(deps stackDeps, rend *render.Renderer, errs *web.Errors) http.H
 	for _, a := range comingSoonApps {
 		entries = append(entries, entry{ID: a.ID, Name: a.Name, Summary: a.Summary, ComingSoon: true})
 	}
+	comingSoonNames := make([]string, len(comingSoonApps))
+	for i, a := range comingSoonApps {
+		comingSoonNames[i] = a.Name
+	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page := app.NewPage(r, "", nav)
 		page.Shell.Version = deps.Version
-		page.Data = map[string]any{"Apps": entries}
+		page.Data = map[string]any{
+			"Apps":            entries,
+			"ComingSoonNames": strings.Join(comingSoonNames, ", "),
+		}
 
 		if err := rend.Page(w, http.StatusOK, "home", page); err != nil {
 			errs.Internal(w, r, err)

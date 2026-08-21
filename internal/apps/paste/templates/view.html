@@ -8,29 +8,32 @@
 	<div class="snippet-head">
 		<h1>{{$s.DisplayTitle}}</h1>
 		<p class="faint">
-			{{.Data.Language}} · {{$s.Lines}} lines · saved {{$s.CreatedAt.Format "2 Jan 2006 15:04"}}
+			{{.Data.Language}} · {{$s.LinesLabel}} · saved
+			<time datetime="{{$s.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{$s.CreatedAt.Format "2 Jan 2006 15:04"}}">{{$s.CreatedAt.Format "2 Jan 2006 15:04"}}</time>
 		</p>
 	</div>
 
 	{{if .Data.Owner}}
 	<div class="row snippet-actions">
 		<a class="button" href="{{.Data.RawURL}}">Raw</a>
+		<button type="button" class="button" data-copy-raw="{{.Data.RawURL}}">Copy</button>
 
 		{{if $s.Shared}}
 		<form method="post" action="/paste/{{$s.ID}}/unshare">
 			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
-			<button type="submit" class="quiet">Stop sharing</button>
+			<button type="submit">Stop sharing</button>
 		</form>
 		{{else}}
 		<form method="post" action="/paste/{{$s.ID}}/share">
 			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
-			<button type="submit" class="quiet">Share</button>
+			<button type="submit">Share</button>
 		</form>
 		{{end}}
 
-		<form method="post" action="/paste/{{$s.ID}}/delete">
+		<form method="post" action="/paste/{{$s.ID}}/delete"
+		      data-confirm="Delete “{{$s.DisplayTitle}}”? This cannot be undone.">
 			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
-			<button type="submit" class="quiet danger">Delete</button>
+			<button type="submit" class="danger">Delete</button>
 		</form>
 	</div>
 
