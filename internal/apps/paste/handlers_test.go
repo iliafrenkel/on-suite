@@ -578,6 +578,37 @@ func TestSharedSnippetIsReadableWhileSignedOut(t *testing.T) {
 	doc.MustHave(".chroma") // highlighted for anonymous readers too
 }
 
+// TestSharedEndpointsAreNotCachedOrIndexed guards a revocable credential: a
+// share slug that a cache or crawler holds onto after the link is revoked
+// would defeat the revocation.
+func TestSharedEndpointsAreNotCachedOrIndexed(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.alice, "Shared config", "yaml", "key: value\n")
+	slug := s.shareAndGetSlug(t, s.alice, id)
+
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"view", "/paste/s/" + slug},
+		{"raw", "/paste/s/" + slug + "/raw"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := s.do(t, nil, httptest.NewRequest("GET", tc.path, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d", rec.Code)
+			}
+			if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+				t.Errorf("Cache-Control = %q, want no-store", cc)
+			}
+			if rt := rec.Header().Get("X-Robots-Tag"); rt != "noindex" {
+				t.Errorf("X-Robots-Tag = %q, want noindex", rt)
+			}
+		})
+	}
+}
+
 // TestSharedPageOffersNoDestructiveControls is why the shared view has its own
 // template rather than reusing the owner's with conditionals.
 func TestSharedPageOffersNoDestructiveControls(t *testing.T) {

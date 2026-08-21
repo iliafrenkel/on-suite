@@ -297,6 +297,11 @@ func (a *App) viewShared(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A share slug is a revocable credential: a cache or a crawler holding
+	// onto this page after the link is revoked would defeat the revocation.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Robots-Tag", "noindex")
+
 	page := a.deps.Page(r, s.DisplayTitle())
 	page.Data = viewModel{
 		Snippet:   s,
@@ -335,6 +340,9 @@ func (a *App) rawShared(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	// See viewShared: a share slug is a revocable credential, so this public
+	// endpoint must not be indexed. writeRaw already covers Cache-Control.
+	w.Header().Set("X-Robots-Tag", "noindex")
 	a.writeRaw(w, r, s)
 }
 
