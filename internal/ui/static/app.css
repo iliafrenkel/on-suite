@@ -38,6 +38,7 @@
 	--font-body: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
+	--fs-xs: 0.75rem;
 	--fs-sm: 0.8125rem;
 	--fs-base: 0.9375rem;
 	--fs-lg: 1.125rem;
@@ -314,6 +315,7 @@ button, .button {
 	border: 1px solid var(--c-border-firm);
 	border-radius: var(--radius);
 	font: inherit;
+	text-decoration: none;
 	cursor: pointer;
 }
 
@@ -335,14 +337,18 @@ button:hover, .button:hover { background: var(--c-border); }
 
 .quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
 
-button[type="submit"] {
+/* :not(.quiet) rather than a bare tag+attribute selector: without it, this
+ * rule's higher specificity ((0,1,1) vs .quiet's (0,1,0)) always won
+ * regardless of source order, filling a quiet submit button (e.g. Delete)
+ * with the accent colour underneath whatever text colour .danger set. */
+button[type="submit"]:not(.quiet) {
 	background: var(--c-accent);
 	border-color: var(--c-accent);
 	color: #fff;
 	font-weight: 600;
 }
 
-:root[data-theme="dark"] button[type="submit"] { color: #10141a; }
+:root[data-theme="dark"] button[type="submit"]:not(.quiet) { color: #10141a; }
 
 /* ---- Notices ----------------------------------------------------------- */
 
@@ -421,6 +427,9 @@ button[type="submit"] {
 
 .snippet-actions { flex-wrap: wrap; }
 .snippet-actions form { display: inline; }
+/* Delete is always the row's last form; pushing it to the far end keeps a
+ * destructive action away from the everyday Raw/Share/Stop-sharing cluster. */
+.snippet-actions form:last-child { margin-left: auto; }
 
 button.danger { color: var(--c-danger); }
 button.danger:hover { background: var(--c-danger-bg); }
@@ -474,6 +483,16 @@ button.danger:hover { background: var(--c-danger-bg); }
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	color: var(--c-text-dim);
+	font-size: var(--fs-base);
+}
+
+/* Distinct from .snippet-preview on purpose: at equal size and colour, the
+ * language/lines/date line read as more of the snippet's own text rather
+ * than metadata about it. */
+.snippet-meta {
+	font-size: var(--fs-xs);
+	color: var(--c-text-faint);
 }
 
 .tag {

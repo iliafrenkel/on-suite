@@ -89,15 +89,23 @@ func TestHighlightCSS(t *testing.T) {
 	if !strings.Contains(s, ".chroma") {
 		t.Error("stylesheet does not mention .chroma")
 	}
-	if !strings.Contains(s, "prefers-color-scheme: dark") {
+	// The dark variant must key off the app's own theme toggle, not the OS
+	// preference: app.css never uses prefers-color-scheme, because the
+	// server always sets data-theme explicitly (see its "Dark mode is a
+	// real toggle" comment). A prefers-color-scheme query here would apply
+	// dark token colours while the app is explicitly set to light.
+	if strings.Contains(s, "prefers-color-scheme") {
+		t.Error(`stylesheet uses prefers-color-scheme; the dark variant must be scoped under :root[data-theme="dark"] instead`)
+	}
+	if !strings.Contains(s, `:root[data-theme="dark"]`) {
 		t.Error("stylesheet has no dark variant")
 	}
 	// The overrides must come after Chroma's own rules, or the background
 	// fights the design system.
-	if strings.Index(s, "ON Suite overrides") < strings.LastIndex(s, "prefers-color-scheme") {
+	if strings.Index(s, "ON Suite overrides") < strings.LastIndex(s, `:root[data-theme="dark"]`) {
 		t.Error("the overrides are not last, so they will not win at equal specificity")
 	}
-	// Balanced braces, since the dark block is hand-wrapped in a media query.
+	// Balanced braces, since the dark block is hand-wrapped in a scoping rule.
 	if strings.Count(s, "{") != strings.Count(s, "}") {
 		t.Errorf("unbalanced braces: %d open, %d close", strings.Count(s, "{"), strings.Count(s, "}"))
 	}

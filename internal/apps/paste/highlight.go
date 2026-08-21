@@ -165,8 +165,13 @@ const highlightOverrides = `
 // HighlightCSS builds the stylesheet for the classes Highlight emits.
 //
 // It is generated rather than committed so it can never drift from the Chroma
-// version in go.mod. The dark variant is wrapped in a preference query, and
-// because it comes second it wins at equal specificity in dark mode.
+// version in go.mod. The dark variant is scoped under :root[data-theme="dark"]
+// rather than @media (prefers-color-scheme: dark): app.css's own theming is a
+// real toggle, not the OS preference (see its "Dark mode is a real toggle"
+// comment), and data-theme is always present since the server never leaves it
+// unset. A prefers-color-scheme query would apply dark token colours whenever
+// the OS prefers dark, even while the app itself is explicitly set to light —
+// unreadable light-gray-on-white text was exactly that bug.
 func HighlightCSS() ([]byte, error) {
 	var buf bytes.Buffer
 
@@ -175,7 +180,7 @@ func HighlightCSS() ([]byte, error) {
 		return nil, fmt.Errorf("paste: write light highlight css: %w", err)
 	}
 
-	buf.WriteString("\n@media (prefers-color-scheme: dark) {\n")
+	buf.WriteString("\n:root[data-theme=\"dark\"] {\n")
 	if err := htmlFormatter().WriteCSS(&buf, styles.Get(styleDark)); err != nil {
 		return nil, fmt.Errorf("paste: write dark highlight css: %w", err)
 	}
