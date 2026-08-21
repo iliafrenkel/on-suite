@@ -337,18 +337,21 @@ button:hover, .button:hover { background: var(--c-border); }
 
 .quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
 
-/* :not(.quiet) rather than a bare tag+attribute selector: without it, this
- * rule's higher specificity ((0,1,1) vs .quiet's (0,1,0)) always won
- * regardless of source order, filling a quiet submit button (e.g. Delete)
- * with the accent colour underneath whatever text colour .danger set. */
-button[type="submit"]:not(.quiet) {
+/* Prominence is opt-in via `.primary`, never implied by <button type=submit">
+ * on its own. A page should carry at most one of these — it is the single
+ * action the page wants a visitor to take (Sign in, Save snippet) — so a
+ * new form's submit button starts out neutral instead of accidentally
+ * shouting the loudest thing on the page. */
+.primary {
 	background: var(--c-accent);
 	border-color: var(--c-accent);
 	color: #fff;
 	font-weight: 600;
 }
 
-:root[data-theme="dark"] button[type="submit"]:not(.quiet) { color: #10141a; }
+.primary:hover { background: var(--c-accent); border-color: var(--c-accent); filter: brightness(1.1); }
+
+:root[data-theme="dark"] .primary { color: #10141a; }
 
 /* ---- Notices ----------------------------------------------------------- */
 

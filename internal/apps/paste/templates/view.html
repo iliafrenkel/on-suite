@@ -19,18 +19,18 @@
 		{{if $s.Shared}}
 		<form method="post" action="/paste/{{$s.ID}}/unshare">
 			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
-			<button type="submit" class="quiet">Stop sharing</button>
+			<button type="submit">Stop sharing</button>
 		</form>
 		{{else}}
 		<form method="post" action="/paste/{{$s.ID}}/share">
 			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
-			<button type="submit" class="quiet">Share</button>
+			<button type="submit">Share</button>
 		</form>
 		{{end}}
 
 		<form method="post" action="/paste/{{$s.ID}}/delete">
 			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
-			<button type="submit" class="quiet danger">Delete</button>
+			<button type="submit" class="danger">Delete</button>
 		</form>
 	</div>
 
