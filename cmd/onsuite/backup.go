@@ -36,8 +36,12 @@ func backupCmd(args []string, getenv func(string) string, out, errOut io.Writer)
 	outPath := fs.String("out", "", "write the snapshot here instead of the backups directory")
 	keep := fs.Int("keep", 0, "prune the backups directory to this many snapshots; 0 keeps everything")
 
-	if _, err := parseInterspersed(fs, args); err != nil {
+	positional, err := parseInterspersed(fs, args)
+	if err != nil {
 		return err
+	}
+	if len(positional) != 0 {
+		return fmt.Errorf("backup: unexpected argument(s): %s", strings.Join(positional, " "))
 	}
 
 	cfg := config.Config{DataDir: *dataDir}

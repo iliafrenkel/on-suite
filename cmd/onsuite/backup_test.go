@@ -133,6 +133,25 @@ func TestBackupCmdOutFlag(t *testing.T) {
 	}
 }
 
+// TestBackupCmdRejectsStrayArguments guards against a likely typo — e.g.
+// `onsuite backup /srv/out.db` meant as `--out /srv/out.db` — silently
+// writing to the default location and reporting success instead of erroring.
+func TestBackupCmdRejectsStrayArguments(t *testing.T) {
+	dir := seedDatabase(t)
+
+	if err := backupCmd([]string{"--data-dir", dir, "/srv/out.db"}, nil, io.Discard, io.Discard); err == nil {
+		t.Fatal("backupCmd with a stray positional argument succeeded, want an error")
+	}
+
+	entries, err := os.ReadDir(filepath.Join(dir, "backups"))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a rejected backup still wrote %d file(s)", len(entries))
+	}
+}
+
 func TestPruneSnapshotsKeepsTheNewest(t *testing.T) {
 	dir := t.TempDir()
 
