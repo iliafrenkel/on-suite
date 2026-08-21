@@ -132,9 +132,23 @@
 		});
 	}
 
+	// A generic confirmation gate for any destructive form — data-confirm
+	// carries the message, so a new destructive action anywhere in the
+	// suite gets this for free instead of needing its own JS.
+	function initConfirm() {
+		document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+			form.addEventListener("submit", function (e) {
+				if (!window.confirm(form.getAttribute("data-confirm"))) {
+					e.preventDefault();
+				}
+			});
+		});
+	}
+
 	initThemeSwitch();
 	initFontSwitch();
 	initSidebarToggle();
 	initCopyLink();
 	initRelativeTimes();
+	initConfirm();
 })();

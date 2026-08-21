@@ -29,7 +29,8 @@
 		</form>
 		{{end}}
 
-		<form method="post" action="/paste/{{$s.ID}}/delete">
+		<form method="post" action="/paste/{{$s.ID}}/delete"
+		      data-confirm="Delete “{{$s.DisplayTitle}}”? This cannot be undone.">
 			<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
 			<button type="submit" class="danger">Delete</button>
 		</form>
