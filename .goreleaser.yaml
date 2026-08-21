@@ -39,6 +39,30 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# Signs checksums.txt rather than every individual archive: the checksum file
+# already covers each archive's integrity, so one signature over it
+# authenticates all of them. Keyless (Sigstore): the signing identity comes
+# from this workflow's GitHub Actions OIDC token, not a private key this
+# project would otherwise have to generate, store and rotate. The signing
+# event is recorded in the public Rekor transparency log.
+#
+# Verify a release with:
+#   cosign verify-blob --certificate checksums.txt.pem --signature checksums.txt.sig \
+#     --certificate-identity-regexp 'https://github.com/iliafrenkel/on-suite/.*' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     checksums.txt
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--yes"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+    artifacts: checksum
+
 changelog:
   use: git
   sort: asc
