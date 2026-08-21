@@ -41,8 +41,11 @@ jobs:
       - name: staticcheck
         # Run rather than installed as a module dependency: this project caps
         # its dependencies deliberately, and a linter is not part of the
-        # program. The cost is that the version floats.
-        run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+        # program. Pinned rather than @latest, so a new staticcheck release
+        # that doesn't yet understand a newer go.mod Go directive (as has
+        # happened historically) can't turn CI red with no code change here;
+        # bump this deliberately instead.
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.0 ./...
 
       - name: go mod tidy is clean
         run: |
