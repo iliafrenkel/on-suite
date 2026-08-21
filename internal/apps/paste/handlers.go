@@ -257,14 +257,12 @@ func (a *App) share(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slug, err := a.store.Share(r.Context(), userID, id)
-	if err != nil {
+	if _, err := a.store.Share(r.Context(), userID, id); err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	// The slug itself is a credential, so it is not written to the log.
 	a.deps.Log.Info("snippet shared", "app", ID, "user_id", userID, "snippet_id", id)
-	_ = slug
 
 	http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
