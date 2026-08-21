@@ -49,7 +49,10 @@
 	--border: 1px solid var(--c-border);
 	--ring: 2px solid var(--c-accent);
 
-	--measure: 68ch; /* comfortable reading width */
+	--measure: 68ch; /* comfortable reading width, for prose and forms */
+	--content-max: 75rem; /* main's own cap — wider, since a snippet list or
+	                          a wide code block has no comfortable-line-length
+	                          reason to stay prose-narrow */
 }
 
 /* Runtime font switcher. data-font is set on <html> from a cookie, read
@@ -291,7 +294,7 @@ kbd {
 	text-align: center;
 }
 
-main { padding: var(--s-6) var(--s-5); max-width: var(--measure); margin: 0 auto; width: 100%; }
+main { padding: var(--s-6) var(--s-5); max-width: var(--content-max); margin: 0 auto; width: 100%; }
 .measure { max-width: var(--measure); }
 
 /* ---- Forms and buttons ------------------------------------------------- */
