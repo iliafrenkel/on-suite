@@ -697,6 +697,10 @@ func TestRawIsPlainTextForOwnerAndShared(t *testing.T) {
 			if ct := rec.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
 				t.Errorf("Content-Type = %q, want text/plain; charset=utf-8", ct)
 			}
+			wantDisposition := `inline; filename="paste-` + itoa(id) + `.txt"`
+			if cd := rec.Header().Get("Content-Disposition"); cd != wantDisposition {
+				t.Errorf("Content-Disposition = %q, want %q", cd, wantDisposition)
+			}
 			// No HTML anywhere: this is the response a terminal consumes.
 			if strings.Contains(rec.Body.String(), "<html") {
 				t.Error("the raw response contains markup")
