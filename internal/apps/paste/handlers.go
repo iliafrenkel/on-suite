@@ -343,10 +343,12 @@ func (a *App) rawShared(w http.ResponseWriter, r *http.Request) {
 // text/plain plus the platform's global nosniff header means a snippet that
 // happens to contain HTML cannot be coaxed into executing as a page on this
 // origin. Content-Disposition names the download without forcing one, so a
-// browser still shows it and curl still prints it.
+// browser still shows it and curl still prints it. The filename is built
+// from the snippet id rather than its title, which is arbitrary user text
+// that would need escaping to go safely into a header value.
 func (a *App) writeRaw(w http.ResponseWriter, r *http.Request, s Snippet) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", "inline")
+	w.Header().Set("Content-Disposition", `inline; filename="paste-`+strconv.FormatInt(s.ID, 10)+`.txt"`)
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 
