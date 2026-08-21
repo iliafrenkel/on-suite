@@ -339,16 +339,21 @@ func TestSnippetHelpers(t *testing.T) {
 	tests := []struct {
 		body      string
 		wantLines int
+		wantLabel string
 	}{
-		{"", 0},
-		{"one\n", 1},
-		{"one", 1},
-		{"one\ntwo\n", 2},
-		{"one\ntwo\nthree", 3},
+		{"", 0, "0 lines"},
+		{"one\n", 1, "1 line"},
+		{"one", 1, "1 line"},
+		{"one\ntwo\n", 2, "2 lines"},
+		{"one\ntwo\nthree", 3, "3 lines"},
 	}
 	for _, tt := range tests {
-		if got := (paste.Snippet{Body: tt.body}).Lines(); got != tt.wantLines {
+		s := paste.Snippet{Body: tt.body}
+		if got := s.Lines(); got != tt.wantLines {
 			t.Errorf("Lines(%q) = %d, want %d", tt.body, got, tt.wantLines)
+		}
+		if got := s.LinesLabel(); got != tt.wantLabel {
+			t.Errorf("LinesLabel(%q) = %q, want %q", tt.body, got, tt.wantLabel)
 		}
 	}
 
