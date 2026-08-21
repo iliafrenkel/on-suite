@@ -433,8 +433,10 @@ button:hover, .button:hover { background: var(--c-border); }
 
 .app-card-icon { width: 2.5rem; height: 2.5rem; }
 
-.app-card-disabled { opacity: 0.55; cursor: default; }
-.app-card-disabled:hover { border-color: var(--c-border); }
+/* Equal card area for a shipped app and three that don't exist yet reads as
+ * "this is a mockup." One muted line carries the same information without
+ * competing with ON Paste for attention. */
+.home-coming-soon { margin-top: var(--s-2); }
 
 /* ---- Snippets ---------------------------------------------------------- */
 

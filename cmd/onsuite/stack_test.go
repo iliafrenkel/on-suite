@@ -45,7 +45,7 @@ func testHomeHandler(t *testing.T) http.Handler {
 	return homeHandler(deps, rend, errs)
 }
 
-func TestHomePageShowsRealAndComingSoonCards(t *testing.T) {
+func TestHomePageShowsRealCardAndNamesComingSoonApps(t *testing.T) {
 	rec := httptest.NewRecorder()
 	testHomeHandler(t).ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 
@@ -62,12 +62,17 @@ func TestHomePageShowsRealAndComingSoonCards(t *testing.T) {
 		t.Error("the real app's card has no href")
 	}
 
-	disabled := doc.QueryAll("div.app-card")
-	if len(disabled) != len(comingSoonApps) {
-		t.Fatalf("got %d coming-soon cards, want %d", len(disabled), len(comingSoonApps))
+	// Coming-soon apps get no card of their own — equal card area for a
+	// shipped app and three that don't exist yet reads as a mockup — just a
+	// single muted line naming them.
+	if cards := doc.QueryAll(".app-card"); len(cards) != 1 {
+		t.Errorf("got %d app cards, want exactly 1 (the real app)", len(cards))
 	}
-	if _, ok := htmlassert.Attr(disabled[0], "href"); ok {
-		t.Error("a coming-soon card must not be a link")
+	text := doc.Text()
+	for _, name := range []string{"ON Notes", "ON Reader", "ON Flash"} {
+		if !strings.Contains(text, name) {
+			t.Errorf("coming-soon app %q is not named anywhere on the page", name)
+		}
 	}
 }
 
