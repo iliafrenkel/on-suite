@@ -93,15 +93,37 @@
 		return Promise.resolve();
 	}
 
+	function flashCopied(btn) {
+		var original = btn.textContent;
+		btn.textContent = "Copied";
+		setTimeout(function () { btn.textContent = original; }, 1500);
+	}
+
 	function initCopyLink() {
 		document.querySelectorAll("[data-copy-link]").forEach(function (btn) {
 			btn.addEventListener("click", function () {
 				var url = location.origin + btn.getAttribute("data-copy-link");
-				copyText(url).then(function () {
-					var original = btn.textContent;
-					btn.textContent = "Copied";
-					setTimeout(function () { btn.textContent = original; }, 1500);
-				});
+				copyText(url).then(function () { flashCopied(btn); });
+			});
+		});
+	}
+
+	// The snippet's own content, not just its share link — fetched from the
+	// same raw endpoint the "Raw" link points to rather than duplicating the
+	// body into the page, so this works from the copy verbatim (no
+	// highlighting markup) with no risk of drifting from what "Raw" shows.
+	function initCopyRaw() {
+		document.querySelectorAll("[data-copy-raw]").forEach(function (btn) {
+			btn.addEventListener("click", function () {
+				fetch(btn.getAttribute("data-copy-raw"))
+					.then(function (res) { return res.text(); })
+					.then(function (text) { return copyText(text); })
+					.then(function () { flashCopied(btn); })
+					.catch(function () {
+						var original = btn.textContent;
+						btn.textContent = "Copy failed";
+						setTimeout(function () { btn.textContent = original; }, 1500);
+					});
 			});
 		});
 	}
@@ -149,6 +171,7 @@
 	initFontSwitch();
 	initSidebarToggle();
 	initCopyLink();
+	initCopyRaw();
 	initRelativeTimes();
 	initConfirm();
 })();
