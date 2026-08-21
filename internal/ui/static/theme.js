@@ -66,7 +66,48 @@
 		});
 	}
 
+	// The server has no reliable notion of its own origin (it may sit behind
+	// a reverse proxy), so the absolute share URL is built here from
+	// location.origin instead of being rendered server-side.
+	//
+	// navigator.clipboard can still reject (e.g. no permission, or a
+	// document that never received focus), so there is always a fallback
+	// rather than leaving the click silently do nothing.
+	function legacyCopy(text) {
+		var input = document.createElement("textarea");
+		input.className = "visually-hidden";
+		input.value = text;
+		document.body.appendChild(input);
+		input.select();
+		document.execCommand("copy");
+		document.body.removeChild(input);
+	}
+
+	function copyText(text) {
+		if (navigator.clipboard && window.isSecureContext) {
+			return navigator.clipboard.writeText(text).catch(function () {
+				legacyCopy(text);
+			});
+		}
+		legacyCopy(text);
+		return Promise.resolve();
+	}
+
+	function initCopyLink() {
+		document.querySelectorAll("[data-copy-link]").forEach(function (btn) {
+			btn.addEventListener("click", function () {
+				var url = location.origin + btn.getAttribute("data-copy-link");
+				copyText(url).then(function () {
+					var original = btn.textContent;
+					btn.textContent = "Copied";
+					setTimeout(function () { btn.textContent = original; }, 1500);
+				});
+			});
+		});
+	}
+
 	initThemeSwitch();
 	initFontSwitch();
 	initSidebarToggle();
+	initCopyLink();
 })();

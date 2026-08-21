@@ -369,6 +369,18 @@ button[type="submit"] {
 .faint { color: var(--c-text-faint); font-size: var(--fs-sm); }
 .centered { max-width: 22rem; margin: var(--s-6) auto; }
 
+/* Off-screen but still selectable, for JS that needs a real textarea to copy
+ * from (document.execCommand's fallback path). display:none would make
+ * .select() a no-op, so this clips instead of hiding. */
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
 /* Wide content scrolls inside its own box rather than making the page
  * scroll sideways. */
 .scroll-x { overflow-x: auto; }
@@ -428,6 +440,17 @@ button.danger:hover { background: var(--c-danger-bg); }
 	background: var(--c-bg-inset);
 	padding: 1px var(--s-1);
 	border-radius: var(--radius);
+}
+
+.notice.row {
+	flex-wrap: wrap;
+	justify-content: space-between;
+}
+
+.notice.row span {
+	flex: 1 1 auto;
+	min-width: 0;
+	word-break: break-all;
 }
 
 /* ---- Snippet list ------------------------------------------------------ */
