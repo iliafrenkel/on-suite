@@ -16,7 +16,8 @@
 			</div>
 			<p class="snippet-preview">{{.Preview}}</p>
 			<p class="snippet-meta">
-				{{.Language}} · {{$s.LinesLabel}} · {{$s.CreatedAt.Format "2 Jan 2006 15:04"}}
+				{{.Language}} · {{$s.LinesLabel}} ·
+				<time datetime="{{$s.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{$s.CreatedAt.Format "2 Jan 2006 15:04"}}">{{$s.CreatedAt.Format "2 Jan 2006 15:04"}}</time>
 			</p>
 		</li>
 		{{end}}

@@ -106,8 +106,35 @@
 		});
 	}
 
+	// The server renders an absolute timestamp so the page is correct with
+	// JS disabled; this replaces it with a relative one for anything recent
+	// enough that "how long ago" is more useful than a clock reading. The
+	// absolute time survives in the title attribute either way, for hover.
+	function relativeTime(then, now) {
+		var seconds = Math.round((now - then) / 1000);
+		if (seconds < 5) return "just now";
+		if (seconds < 60) return seconds + " seconds ago";
+		var minutes = Math.round(seconds / 60);
+		if (minutes < 60) return minutes + (minutes === 1 ? " minute ago" : " minutes ago");
+		var hours = Math.round(minutes / 60);
+		if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago");
+		var days = Math.round(hours / 24);
+		if (days < 7) return days + (days === 1 ? " day ago" : " days ago");
+		return null; // further back reads more clearly as an absolute date
+	}
+
+	function initRelativeTimes() {
+		document.querySelectorAll("time[datetime]").forEach(function (el) {
+			var then = new Date(el.getAttribute("datetime"));
+			if (isNaN(then.getTime())) return;
+			var label = relativeTime(then, new Date());
+			if (label) el.textContent = label;
+		});
+	}
+
 	initThemeSwitch();
 	initFontSwitch();
 	initSidebarToggle();
 	initCopyLink();
+	initRelativeTimes();
 })();
