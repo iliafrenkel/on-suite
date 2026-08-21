@@ -224,7 +224,7 @@ kbd {
 
 .app-shell {
 	display: flex;
-	align-items: flex-start;
+	align-items: stretch;
 	min-height: calc(100vh - 8rem);
 }
 
