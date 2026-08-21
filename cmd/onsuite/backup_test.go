@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -234,5 +236,54 @@ func TestWriteSnapshotPrunesAsItGoes(t *testing.T) {
 	}
 	if len(entries) != 3 {
 		t.Errorf("%d snapshots retained, want 3", len(entries))
+	}
+}
+
+// TestLogSnapshotResultDistinguishesPruneFromSnapshotFailure guards against
+// an operator reading "snapshot failed" in the log on a night where a
+// snapshot was actually written and only the retention cleanup afterward
+// failed.
+func TestLogSnapshotResultDistinguishesPruneFromSnapshotFailure(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		err      error
+		wantText string
+	}{
+		{
+			name:     "snapshot itself failed",
+			path:     "",
+			err:      errors.New("vacuum into: disk full"),
+			wantText: "snapshot failed",
+		},
+		{
+			name:     "snapshot succeeded, only pruning failed",
+			path:     "/data/backups/onsuite-20260818T030000Z.db",
+			err:      errors.New("backup: wrote /data/backups/onsuite-20260818T030000Z.db but pruning failed: remove old.db: permission denied"),
+			wantText: "snapshot written but pruning old snapshots failed",
+		},
+		{
+			name:     "success",
+			path:     "/data/backups/onsuite-20260818T030000Z.db",
+			err:      nil,
+			wantText: "snapshot written",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			log := slog.New(slog.NewTextHandler(&buf, nil))
+
+			logSnapshotResult(log, tt.path, tt.err)
+
+			got := buf.String()
+			if !strings.Contains(got, tt.wantText) {
+				t.Errorf("log = %q, want it to contain %q", got, tt.wantText)
+			}
+			if tt.err != nil && strings.Contains(got, "level=INFO") {
+				t.Errorf("log = %q, a failure must not be logged at Info", got)
+			}
+		})
 	}
 }
