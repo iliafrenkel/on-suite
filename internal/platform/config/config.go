@@ -56,15 +56,30 @@ func Parse(args []string, getenv func(string) string, errOut io.Writer) (Config,
 		"obtain a Let's Encrypt certificate for this domain and serve HTTPS directly")
 	fs.StringVar(&level, "log-level", envOr(getenv, "ONSUITE_LOG_LEVEL", "info"),
 		"debug, info, warn or error")
-	fs.DurationVar(&c.BackupInterval, "backup-interval",
-		envDuration(getenv, "ONSUITE_BACKUP_INTERVAL", 24*time.Hour),
+	backupIntervalDefault, err := envDuration(getenv, "ONSUITE_BACKUP_INTERVAL", 24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	backupKeepDefault, err := envInt(getenv, "ONSUITE_BACKUP_KEEP", 7)
+	if err != nil {
+		return Config{}, err
+	}
+	// Cookie security silently doing nothing on a typo (e.g. "1" or "TRUE")
+	// is worse than refusing to start: an operator who thinks they set this
+	// would otherwise get non-Secure cookies with no indication anything was
+	// wrong.
+	secureCookiesDefault, err := envBool(getenv, "ONSUITE_SECURE_COOKIES", false)
+	if err != nil {
+		return Config{}, err
+	}
+
+	fs.DurationVar(&c.BackupInterval, "backup-interval", backupIntervalDefault,
 		"how often to snapshot the database; 0 disables the internal schedule")
-	fs.IntVar(&c.BackupKeep, "backup-keep",
-		envInt(getenv, "ONSUITE_BACKUP_KEEP", 7),
+	fs.IntVar(&c.BackupKeep, "backup-keep", backupKeepDefault,
 		"how many snapshots to keep")
 	fs.StringVar(&c.TLSHTTPAddr, "tls-http-addr", envOr(getenv, "ONSUITE_TLS_HTTP_ADDR", ":80"),
 		"plain-HTTP address for ACME challenges and HTTPS redirects; empty to disable")
-	secureCookies := fs.Bool("secure-cookies", envOr(getenv, "ONSUITE_SECURE_COOKIES", "") == "true",
+	secureCookies := fs.Bool("secure-cookies", secureCookiesDefault,
 		"mark cookies Secure; implied by -tls-domain, set this behind an HTTPS proxy")
 
 	if err := fs.Parse(args); err != nil {
@@ -145,28 +160,42 @@ func parseLevel(s string) (slog.Level, error) {
 	return 0, fmt.Errorf("invalid log level %q: want debug, info, warn or error", s)
 }
 
-func envDuration(getenv func(string) string, key string, def time.Duration) time.Duration {
+func envDuration(getenv func(string) string, key string, def time.Duration) (time.Duration, error) {
 	v := envOr(getenv, key, "")
 	if v == "" {
-		return def
+		return def, nil
 	}
 	d, err := time.ParseDuration(v)
 	if err != nil {
-		// An unparseable value falls back to the default; the flag equivalent
-		// still reports a parse error, which is where a typo will be noticed.
-		return def
+		return 0, fmt.Errorf("invalid %s %q: %w", key, v, err)
 	}
-	return d
+	return d, nil
 }
 
-func envInt(getenv func(string) string, key string, def int) int {
+func envInt(getenv func(string) string, key string, def int) (int, error) {
 	v := envOr(getenv, key, "")
 	if v == "" {
-		return def
+		return def, nil
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		return def
+		return 0, fmt.Errorf("invalid %s %q: %w", key, v, err)
 	}
-	return n
+	return n, nil
+}
+
+// envBool parses a boolean environment variable with strconv.ParseBool,
+// which accepts 1/t/T/TRUE/true/True and 0/f/F/FALSE/false/False — unlike a
+// bare == "true" comparison, an unrecognised value is an error rather than a
+// silent no-op.
+func envBool(getenv func(string) string, key string, def bool) (bool, error) {
+	v := envOr(getenv, key, "")
+	if v == "" {
+		return def, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("invalid %s %q: want a boolean (true/false/1/0/t/f/...)", key, v)
+	}
+	return b, nil
 }
