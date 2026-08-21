@@ -315,6 +315,12 @@ textarea { font-family: var(--font-mono); resize: vertical; }
 
 .field { margin-bottom: var(--s-4); }
 
+/* Title and Language side by side rather than full-width stacked fields —
+ * a single-line text input and a short dropdown don't need a whole row to
+ * themselves the way the snippet body textarea does. */
+.field-row { align-items: flex-start; }
+.field-row .field { flex: 1; margin-bottom: 0; }
+
 button, .button {
 	padding: var(--s-2) var(--s-4);
 	background: var(--c-bg-inset);
