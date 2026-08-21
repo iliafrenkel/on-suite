@@ -7,7 +7,11 @@ Wants=network-online.target
 
 [Service]
 Type=exec
-ExecStart=/usr/local/bin/onsuite serve --data-dir /var/lib/onsuite --addr 127.0.0.1:8080
+# --secure-cookies marks session/CSRF cookies Secure even though this process
+# only sees plain HTTP — the proxy in front of it terminates TLS. Unnecessary
+# (but harmless) if adapting this unit for the built-in-TLS variant
+# (--tls-domain instead of --addr), which sets it automatically.
+ExecStart=/usr/local/bin/onsuite serve --data-dir /var/lib/onsuite --addr 127.0.0.1:8080 --secure-cookies
 
 # DynamicUser gives the service its own transient account, and StateDirectory
 # creates /var/lib/onsuite owned by it. Neither needs a user to be created by
