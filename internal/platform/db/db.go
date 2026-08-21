@@ -82,6 +82,14 @@ func BackupTo(ctx context.Context, handle *sql.DB, dest string) error {
 		return fmt.Errorf("create backup directory: %w", err)
 	}
 	if _, err := handle.ExecContext(ctx, "VACUUM INTO ?", dest); err != nil {
+		// VACUUM INTO can fail partway (e.g. the process is killed mid-write),
+		// leaving a truncated file at dest that looks like a real snapshot to
+		// anything that just checks for the name. Remove it rather than let a
+		// broken backup masquerade as a good one.
+		if rmErr := os.Remove(dest); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+			return errors.Join(fmt.Errorf("vacuum into %s: %w", dest, err),
+				fmt.Errorf("remove partial %s: %w", dest, rmErr))
+		}
 		return fmt.Errorf("vacuum into %s: %w", dest, err)
 	}
 	return nil
