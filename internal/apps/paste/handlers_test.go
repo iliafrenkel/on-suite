@@ -90,7 +90,7 @@ func newServer(t *testing.T) *server {
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
 
 	s := &server{
-		handler: web.Chain(mux, csrf.Middleware, authn.LoadUser),
+		handler: web.Stack(mux, log, errs, csrf, authn),
 		store:   paste.NewStore(handle),
 	}
 

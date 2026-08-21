@@ -19,6 +19,22 @@ func Chain(h http.Handler, mw ...Middleware) http.Handler {
 	return h
 }
 
+// Stack wraps h in the platform's standard middleware chain: panic recovery,
+// request logging, security headers, a body-size cap, CSRF, and session
+// loading. This is the exact chain the real server runs, so anything built
+// on top of Stack — including test harnesses — exercises the same behavior
+// production traffic does.
+func Stack(h http.Handler, log *slog.Logger, errs *Errors, csrf *CSRF, authn *Auth) http.Handler {
+	return Chain(h,
+		Recover(log, errs),
+		RequestLog(log),
+		SecurityHeaders(),
+		LimitBody(DefaultMaxBodyBytes),
+		csrf.Middleware,
+		authn.LoadUser,
+	)
+}
+
 // statusRecorder captures the status code so the request log can report it.
 type statusRecorder struct {
 	http.ResponseWriter
