@@ -3,8 +3,12 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 // open is the helper every test in this package uses. A real file in a real
@@ -127,6 +131,39 @@ func TestBackupToProducesAReadableCopy(t *testing.T) {
 	// VACUUM INTO over a file copy is that it does not take the DB offline.
 	if _, err := handle.Exec("INSERT INTO t (s) VALUES ('after backup')"); err != nil {
 		t.Errorf("source not writable after backup: %v", err)
+	}
+}
+
+// TestBackupToCleansUpOnFailure guards against a snapshot interrupted
+// partway through VACUUM INTO leaving a truncated file that looks, by name
+// alone, like a good backup.
+func TestBackupToCleansUpOnFailure(t *testing.T) {
+	handle, _ := open(t)
+	if _, err := handle.Exec(`CREATE TABLE t (id INTEGER PRIMARY KEY, s TEXT NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := handle.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 200000; i++ {
+		if _, err := tx.Exec("INSERT INTO t (s) VALUES (?)", strings.Repeat("x", 64)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(t.TempDir(), "backup.db")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+
+	if err := BackupTo(ctx, handle, dest); err == nil {
+		t.Fatal("BackupTo with an expired context succeeded, want an error")
+	}
+	if _, err := os.Stat(dest); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("partial snapshot left behind at %s: stat err = %v, want os.ErrNotExist", dest, err)
 	}
 }
 
