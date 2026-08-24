@@ -75,11 +75,13 @@ func NewAuth(opts AuthOptions) *Auth {
 // SetClock replaces the time source, so expiry can be tested without waiting.
 func (a *Auth) SetClock(now func() time.Time) { a.now = now }
 
-// Routes registers the endpoints that must exist outside any app.
-func (a *Auth) Routes(mux *http.ServeMux) {
-	mux.Handle("GET /login", http.HandlerFunc(a.loginForm))
-	mux.Handle("POST /login", http.HandlerFunc(a.loginSubmit))
-	mux.Handle("POST /logout", http.HandlerFunc(a.logout))
+// Routes registers the endpoints that must exist outside any app. rec may be
+// nil; when it is not, these routes appear on the admin page's route map
+// alongside every other route in the process.
+func (a *Auth) Routes(mux *http.ServeMux, rec *Recorder) {
+	rec.Handle(mux, "GET /login", true, http.HandlerFunc(a.loginForm))
+	rec.Handle(mux, "POST /login", true, http.HandlerFunc(a.loginSubmit))
+	rec.Handle(mux, "POST /logout", true, http.HandlerFunc(a.logout))
 }
 
 // LoadUser puts the current user in the request context when the session
@@ -143,6 +145,25 @@ func (a *Auth) RequireUser(next http.Handler) http.Handler {
 		}
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	})
+}
+
+// RequireAdmin blocks everyone except administrators.
+//
+// It composes RequireUser, so an anonymous request is still redirected to the
+// login page. A signed-in non-admin gets the same 404 as any address that
+// does not exist: the alternative, 403, confirms that the page is there. That
+// matches how login already behaves, where a wrong password and an unknown
+// username produce identical responses so that failures cannot be used to
+// enumerate accounts.
+func (a *Auth) RequireAdmin(next http.Handler) http.Handler {
+	return a.RequireUser(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, ok := UserFrom(r.Context())
+		if !ok || !u.IsAdmin {
+			a.errs.NotFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	}))
 }
 
 func (a *Auth) loginForm(w http.ResponseWriter, r *http.Request) {

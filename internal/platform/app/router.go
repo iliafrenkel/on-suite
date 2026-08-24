@@ -8,13 +8,10 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
-// Route records one registration, for tests and for introspection.
-type Route struct {
-	// Pattern is the full pattern as registered, e.g. "GET /paste/{slug}".
-	Pattern string
-	// Public is true only when the app called Public explicitly.
-	Public bool
-}
+// Route records one registration. It is an alias of web.Route so that app
+// routes and the platform's own routes land in the same recorder and can be
+// shown as one map.
+type Route = web.Route
 
 // Router registers an app's routes under its own prefix.
 //
@@ -27,14 +24,16 @@ type Router struct {
 	prefix string
 	guard  web.Middleware
 	routes []Route
+	rec    *web.Recorder
 }
 
-func newRouter(mux *http.ServeMux, appID string, guard web.Middleware) *Router {
+func newRouter(mux *http.ServeMux, appID string, guard web.Middleware, rec *web.Recorder) *Router {
 	return &Router{
 		mux:    mux,
 		appID:  appID,
 		prefix: "/" + appID,
 		guard:  guard,
+		rec:    rec,
 	}
 }
 
@@ -84,7 +83,9 @@ func (r *Router) register(pattern string, h http.Handler, public bool) {
 	}
 
 	r.mux.Handle(full, handler)
-	r.routes = append(r.routes, Route{Pattern: full, Public: public})
+	rt := Route{Pattern: full, Public: public, Owner: r.appID}
+	r.routes = append(r.routes, rt)
+	r.rec.Add(rt)
 }
 
 func (r *Router) withActiveApp(next http.Handler) http.Handler {

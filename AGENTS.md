@@ -113,8 +113,19 @@ Templates are Go `html/template`, composed by `internal/platform/render`.
 **Optional app capabilities are discovered by type assertion, not interface
 bloat**: an app implementing `Templates() fs.FS` gets its templates mounted;
 one implementing `Exporter` (`Export(ctx, db, userID) (any, error)`)
-participates in `onsuite export` automatically. Apps that don't implement
-these are silently skipped — that's a design choice.
+participates in `onsuite export` automatically; one implementing `Stater`
+(`Stats(ctx, db) ([]app.Stat, error)`) gets a card on the admin page. Apps
+that don't implement these are silently skipped — that's a design choice.
+
+**Two platform packages exist only for operations.**
+[internal/platform/jobs](internal/platform/jobs/jobs.go) is a generic interval
+scheduler that remembers how each run went; it takes closures and imports
+nothing else in the module, so it never learns what a backup is.
+[internal/platform/admin](internal/platform/admin/admin.go) is the read-only
+admin page at `/admin/`, guarded by `Auth.RequireAdmin` — a signed-in
+non-admin gets the same 404 as a URL that does not exist. It is a platform
+page rather than an app because it reports *on* the platform. Its design is in
+[docs/superpowers/specs/2026-08-24-admin-page-design.md](docs/superpowers/specs/2026-08-24-admin-page-design.md).
 
 ## Constraints (from CONTRIBUTING.md)
 

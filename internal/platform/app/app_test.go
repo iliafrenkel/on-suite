@@ -1,6 +1,9 @@
 package app_test
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -308,5 +311,86 @@ func TestMountRejectsAnAppWithNoTemplates(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Templates()") {
 		t.Errorf("error %q does not explain what is missing", err)
+	}
+}
+
+type statingApp struct {
+	id    string
+	stats []app.Stat
+	err   error
+}
+
+func (s statingApp) Meta() app.Meta {
+	return app.Meta{ID: s.id, Name: "ON " + strings.ToUpper(s.id[:1]) + s.id[1:], Summary: "x", Order: 0}
+}
+func (s statingApp) Migrations() fs.FS { return fstest.MapFS{} }
+func (s statingApp) Templates() fs.FS  { return fstest.MapFS{"x.html": &fstest.MapFile{}} }
+func (s statingApp) Mount(r *app.Router, d app.Deps) {
+	r.HandleFunc("GET /{$}", func(http.ResponseWriter, *http.Request) {})
+}
+func (s statingApp) Stats(context.Context, *sql.DB) ([]app.Stat, error) {
+	return s.stats, s.err
+}
+
+type silentApp struct {
+	id string
+}
+
+func (s silentApp) Meta() app.Meta {
+	return app.Meta{ID: s.id, Name: "ON " + strings.ToUpper(s.id[:1]) + s.id[1:], Summary: "x", Order: 0}
+}
+func (s silentApp) Migrations() fs.FS { return fstest.MapFS{} }
+func (s silentApp) Templates() fs.FS  { return fstest.MapFS{"x.html": &fstest.MapFile{}} }
+func (s silentApp) Mount(r *app.Router, d app.Deps) {
+	r.HandleFunc("GET /{$}", func(http.ResponseWriter, *http.Request) {})
+}
+
+func TestStatsCollectsFromAppsThatImplementStater(t *testing.T) {
+	reg, err := app.NewRegistry(
+		statingApp{id: "paste", stats: []app.Stat{{Label: "Snippets", Value: "3"}}},
+		silentApp{id: "notes"}, // an app with no Stats method
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := reg.Stats(context.Background(), nil)
+	if len(got) != 1 {
+		t.Fatalf("Stats() returned %d entries, want 1: an app without the method is skipped", len(got))
+	}
+	if got[0].ID != "paste" || len(got[0].Stats) != 1 || got[0].Stats[0].Value != "3" {
+		t.Errorf("Stats()[0] = %+v", got[0])
+	}
+	if got[0].Err != "" {
+		t.Errorf("Err = %q on a successful app", got[0].Err)
+	}
+}
+
+func TestOneAppsStatsFailureDoesNotHideTheOthers(t *testing.T) {
+	reg, err := app.NewRegistry(
+		statingApp{id: "paste", err: errors.New("no such table")},
+		statingApp{id: "notes", stats: []app.Stat{{Label: "Notes", Value: "7"}}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := reg.Stats(context.Background(), nil)
+	if len(got) != 2 {
+		t.Fatalf("Stats() returned %d entries, want 2", len(got))
+	}
+	var failed, ok app.AppStats
+	for _, s := range got {
+		if s.ID == "paste" {
+			failed = s
+		} else {
+			ok = s
+		}
+	}
+	if failed.Err != "no such table" {
+		t.Errorf("the failing app's Err = %q", failed.Err)
+	}
+	if len(ok.Stats) != 1 {
+		t.Errorf("the healthy app returned %d stats; one app's failure must not hide another's", len(ok.Stats))
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
@@ -152,5 +153,90 @@ func TestCountUsers(t *testing.T) {
 	}
 	if n, err = s.CountUsers(ctx); err != nil || n != 1 {
 		t.Errorf("CountUsers = %d (err %v), want 1", n, err)
+	}
+}
+
+func TestListAccountsReturnsEveryUserOldestFirstWithSessionCounts(t *testing.T) {
+	store, _ := newStore(t)
+	ctx := context.Background()
+
+	hash, err := HashPassword("a-sufficiently-long-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := store.CreateUser(ctx, "root", hash, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateUser(ctx, "ilia", hash, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateSession(ctx, root.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.ListAccounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("ListAccounts() returned %d accounts, want 2", len(got))
+	}
+	if got[0].Username != "root" || !got[0].IsAdmin {
+		t.Errorf("ListAccounts()[0] = %+v, want root as an admin first", got[0])
+	}
+	if got[0].Sessions != 1 {
+		t.Errorf("root has %d live sessions, want 1", got[0].Sessions)
+	}
+	if got[1].Username != "ilia" || got[1].IsAdmin {
+		t.Errorf("ListAccounts()[1] = %+v", got[1])
+	}
+	if got[1].Sessions != 0 {
+		t.Errorf("ilia has %d live sessions, want 0", got[1].Sessions)
+	}
+	if got[0].CreatedAt.IsZero() {
+		t.Error("CreatedAt is zero")
+	}
+}
+
+func TestSessionCountsSeparatesLiveFromExpired(t *testing.T) {
+	store, _ := newStore(t)
+	ctx := context.Background()
+
+	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	store.SetClock(func() time.Time { return now })
+
+	hash, err := HashPassword("a-sufficiently-long-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := store.CreateUser(ctx, "ilia", hash, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateSession(ctx, u.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Move well past the 30-day session lifetime without sweeping.
+	store.SetClock(func() time.Time { return now.AddDate(0, 0, 60) })
+
+	live, expired, err := store.SessionCounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if live != 0 || expired != 1 {
+		t.Errorf("SessionCounts() = live %d, expired %d; want 0 and 1", live, expired)
+	}
+}
+
+func TestSessionCountsOnAnEmptyTableIsZeroNotAnError(t *testing.T) {
+	store, _ := newStore(t)
+	live, expired, err := store.SessionCounts(context.Background())
+	if err != nil {
+		t.Fatalf("SessionCounts() on an empty table: %v", err)
+	}
+	if live != 0 || expired != 0 {
+		t.Errorf("SessionCounts() = %d, %d, want 0, 0", live, expired)
 	}
 }

@@ -364,3 +364,58 @@ func TestSnippetHelpers(t *testing.T) {
 		t.Errorf("DisplayTitle = %q", got)
 	}
 }
+
+func TestStatsOnAnEmptyDatabase(t *testing.T) {
+	f := newFixture(t)
+
+	got, err := f.store.Stats(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("Stats() returned %d stats, want 5", len(got))
+	}
+	if got[0].Label != "Snippets" || got[0].Value != "0" {
+		t.Errorf("Stats()[0] = %+v, want Snippets 0", got[0])
+	}
+	if got[4].Label != "Newest" || got[4].Value != "never" {
+		t.Errorf("Stats()[4] = %+v; an empty table must not render a zero timestamp", got[4])
+	}
+}
+
+func TestStatsCountsSnippetsAndShares(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	first, err := f.store.Create(ctx, f.alice.ID, "one", "go", "package main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Create(ctx, f.bob.ID, "two", "go", "package main // longer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Share(ctx, f.alice.ID, first.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Stats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]string{}
+	for _, s := range got {
+		by[s.Label] = s.Value
+	}
+	if by["Snippets"] != "2" {
+		t.Errorf("Snippets = %q, want 2", by["Snippets"])
+	}
+	if by["Shared"] != "1" {
+		t.Errorf("Shared = %q, want 1", by["Shared"])
+	}
+	if by["Newest"] == "never" {
+		t.Error("Newest is 'never' with two snippets stored")
+	}
+	if by["Total size"] == "" || by["Largest"] == "" {
+		t.Errorf("size stats are empty: %v", by)
+	}
+}

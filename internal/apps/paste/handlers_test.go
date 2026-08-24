@@ -81,7 +81,7 @@ func newServer(t *testing.T) *server {
 	})
 
 	mux := http.NewServeMux()
-	authn.Routes(mux)
+	authn.Routes(mux, nil)
 	if err := registry.Mount(mux, app.Deps{
 		DB: handle, Render: rend, Users: users, Errors: errs, Log: log,
 	}, authn.RequireUser); err != nil {

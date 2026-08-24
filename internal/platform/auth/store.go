@@ -135,6 +135,73 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	return n, nil
 }
 
+// Account is one row of the admin page's user table.
+//
+// It deliberately omits PasswordHash. User carries the hash because the login
+// path must verify it; nothing that renders a list of accounts has any reason
+// to hold one.
+type Account struct {
+	ID        int64
+	Username  string
+	IsAdmin   bool
+	CreatedAt time.Time
+	// Sessions is how many unexpired sessions this account has right now.
+	Sessions int
+}
+
+// ListAccounts returns every account, oldest first, each with a count of its
+// live sessions. It is read-only and exists for the admin page.
+func (s *Store) ListAccounts(ctx context.Context) ([]Account, error) {
+	now := formatTime(s.now())
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT u.id, u.username, u.is_admin, u.created_at,
+		        (SELECT count(*) FROM sessions se
+		          WHERE se.user_id = u.id AND se.expires_at > ?)
+		   FROM users u
+		  ORDER BY u.id`, now)
+	if err != nil {
+		return nil, fmt.Errorf("auth: list accounts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Account
+	for rows.Next() {
+		var (
+			a         Account
+			isAdmin   int
+			createdAt string
+		)
+		if err := rows.Scan(&a.ID, &a.Username, &isAdmin, &createdAt, &a.Sessions); err != nil {
+			return nil, fmt.Errorf("auth: scan account: %w", err)
+		}
+		a.IsAdmin = isAdmin == 1
+		if a.CreatedAt, err = parseTime(createdAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("auth: list accounts: %w", err)
+	}
+	return out, nil
+}
+
+// SessionCounts reports how many sessions are live and how many are past
+// their expiry but not yet swept. A growing expired count means the sweep job
+// is not running, which is exactly what the admin page is for.
+func (s *Store) SessionCounts(ctx context.Context) (live, expired int, err error) {
+	var total int
+	// coalesce because sum() over an empty table is NULL, not 0.
+	err = s.db.QueryRowContext(ctx,
+		`SELECT count(*),
+		        coalesce(sum(CASE WHEN expires_at > ? THEN 1 ELSE 0 END), 0)
+		   FROM sessions`, formatTime(s.now())).Scan(&total, &live)
+	if err != nil {
+		return 0, 0, fmt.Errorf("auth: count sessions: %w", err)
+	}
+	return live, total - live, nil
+}
+
 func (s *Store) scanUser(row *sql.Row) (User, error) {
 	var (
 		u         User

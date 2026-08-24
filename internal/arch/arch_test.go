@@ -150,6 +150,12 @@ func TestLayering(t *testing.T) {
 		"internal/platform/db":     {"internal/platform/web", "internal/platform/app", "internal/platform/render", "internal/platform/auth"},
 		"internal/platform/config": {"internal/platform/web", "internal/platform/app", "internal/platform/render", "internal/platform/auth", "internal/platform/db"},
 		"internal/platform/web":    {"internal/platform/app"},
+		// jobs takes closures and nothing else. If it ever imports a platform
+		// package, someone has taught the scheduler what a backup is.
+		"internal/platform/jobs": {
+			"internal/platform/web", "internal/platform/app", "internal/platform/render",
+			"internal/platform/auth", "internal/platform/db", "internal/platform/config",
+		},
 	}
 
 	imports := scan(t)
@@ -199,6 +205,8 @@ func TestScanSeesTheRealTree(t *testing.T) {
 		"internal/platform/app",
 		"internal/platform/render",
 		"internal/platform/auth",
+		"internal/platform/jobs",
+		"internal/platform/admin",
 	} {
 		if _, ok := imports.prod[want]; !ok {
 			t.Errorf("package %q was not scanned; known packages: %d", want, len(imports.prod))

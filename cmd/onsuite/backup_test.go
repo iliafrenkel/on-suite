@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"log/slog"
@@ -12,8 +13,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/auth"
+	"github.com/iliafrenkel/on-suite/internal/platform/config"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
+	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
 )
+
+// testDB opens a migrated database in dir.
+func testDB(t *testing.T, dir string) *sql.DB {
+	t.Helper()
+	handle, _, _, err := openDatabase(context.Background(), config.Config{DataDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = handle.Close() })
+	return handle
+}
 
 func TestSnapshotNameSortsChronologically(t *testing.T) {
 	early := snapshotName(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
@@ -70,9 +85,9 @@ func TestBackupCmdWritesARestorableSnapshot(t *testing.T) {
 
 // TestBackupCmdSweepsExpiredSessions guards against the gap where
 // --backup-interval 0 (the cron-driven setup documented in
-// docs/deploy/README.md) disables runMaintenance entirely, leaving nothing to
-// sweep expired sessions. backupCmd is what such a deployment actually runs
-// on a schedule, so it must do the sweep itself.
+// docs/deploy/README.md) disables registerMaintenance's jobs entirely,
+// leaving nothing to sweep expired sessions. backupCmd is what such a
+// deployment actually runs on a schedule, so it must do the sweep itself.
 func TestBackupCmdSweepsExpiredSessions(t *testing.T) {
 	dir := seedDatabase(t)
 
@@ -304,5 +319,69 @@ func TestLogSnapshotResultDistinguishesPruneFromSnapshotFailure(t *testing.T) {
 				t.Errorf("log = %q, a failure must not be logged at Info", got)
 			}
 		})
+	}
+}
+
+func TestRegisterMaintenanceRegistersBothJobsEnabled(t *testing.T) {
+	dir := t.TempDir()
+	handle := testDB(t, dir)
+
+	reg := jobs.NewRegistry()
+	registerMaintenance(reg, handle, auth.NewStore(handle),
+		config.Config{DataDir: dir, BackupInterval: time.Hour, BackupKeep: 3},
+		slog.New(slog.DiscardHandler))
+
+	got := reg.Snapshot()
+	if len(got) != 2 {
+		t.Fatalf("registered %d jobs, want 2", len(got))
+	}
+	for _, s := range got {
+		if !s.Enabled || s.Interval != time.Hour {
+			t.Errorf("job %q: Enabled = %v, Interval = %s; want enabled at 1h", s.Name, s.Enabled, s.Interval)
+		}
+	}
+	if got[0].Name != "sweep expired sessions" || got[1].Name != "database snapshot" {
+		t.Errorf("job names = %q, %q", got[0].Name, got[1].Name)
+	}
+}
+
+// A zero interval disabled runMaintenance entirely, including the session
+// sweep, which `onsuite backup` then takes over. Splitting maintenance into
+// two jobs must not quietly give the sweep a schedule of its own.
+func TestRegisterMaintenanceDisablesBothJobsWhenTheIntervalIsZero(t *testing.T) {
+	dir := t.TempDir()
+	handle := testDB(t, dir)
+
+	reg := jobs.NewRegistry()
+	registerMaintenance(reg, handle, auth.NewStore(handle),
+		config.Config{DataDir: dir, BackupInterval: 0, BackupKeep: 3},
+		slog.New(slog.DiscardHandler))
+
+	for _, s := range reg.Snapshot() {
+		if s.Enabled {
+			t.Errorf("job %q is enabled with --backup-interval 0", s.Name)
+		}
+	}
+}
+
+func TestTheSnapshotJobWritesASnapshot(t *testing.T) {
+	dir := t.TempDir()
+	handle := testDB(t, dir)
+
+	reg := jobs.NewRegistry()
+	registerMaintenance(reg, handle, auth.NewStore(handle),
+		config.Config{DataDir: dir, BackupInterval: time.Hour, BackupKeep: 3},
+		slog.New(slog.DiscardHandler))
+	reg.RunOnceForTest(context.Background(), "database snapshot")
+
+	entries, err := os.ReadDir(filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("backups directory holds %d files, want 1", len(entries))
+	}
+	if s := reg.Snapshot()[1]; s.LastErr != "" {
+		t.Errorf("LastErr = %q after a good snapshot", s.LastErr)
 	}
 }

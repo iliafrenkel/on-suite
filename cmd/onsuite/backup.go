@@ -18,6 +18,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
+	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
 )
 
 // snapshotPrefix and snapshotSuffix bracket a generated snapshot name. Only
@@ -53,8 +54,8 @@ func backupCmd(args []string, getenv func(string) string, out, errOut io.Writer)
 	defer func() { _ = handle.Close() }()
 
 	// A deployment that drives backups from an external cron job runs with
-	// --backup-interval 0, which disables runMaintenance (and the session
-	// sweep it does) entirely. This command is what such a deployment
+	// --backup-interval 0, which disables registerMaintenance's session
+	// sweep entirely. This command is what such a deployment
 	// actually invokes on a schedule, so it takes over session hygiene in
 	// that case too: without it, the sessions table would grow forever.
 	if swept, err := auth.NewStore(handle).DeleteExpiredSessions(ctx); err != nil {
@@ -154,57 +155,57 @@ func pruneSnapshots(dir string, keep int) (int, error) {
 	return removed, nil
 }
 
-// runMaintenance snapshots the database and sweeps expired sessions on a
-// timer, until ctx is cancelled.
+// registerMaintenance registers the server's two housekeeping jobs.
 //
-// It runs one interval after startup rather than immediately, so restarting the
-// server repeatedly does not fill the backups directory.
-func runMaintenance(
-	ctx context.Context,
+// Both take cfg.BackupInterval, so --backup-interval 0 disables both, exactly
+// as the single runMaintenance ticker did before: a deployment that drives
+// snapshots from cron or a systemd timer runs `onsuite backup`, which sweeps
+// sessions itself (see backupCmd). Giving the sweep a schedule of its own
+// would be a behaviour change, not a refactor.
+//
+// Naming the two halves is the point of the split: the admin page can say
+// which one last failed, which a single "maintenance" ticker could not.
+func registerMaintenance(
+	reg *jobs.Registry,
 	handle *sql.DB,
 	users *auth.Store,
 	cfg config.Config,
 	log *slog.Logger,
 ) {
 	if cfg.BackupInterval <= 0 {
-		log.Info("internal backup schedule disabled")
-		return
+		log.Info("internal maintenance schedule disabled")
+	} else {
+		log.Info("maintenance scheduled",
+			"interval", cfg.BackupInterval.String(), "keep", cfg.BackupKeep)
 	}
 
-	ticker := time.NewTicker(cfg.BackupInterval)
-	defer ticker.Stop()
+	reg.Register(
+		"sweep expired sessions",
+		"Deletes sessions past their expiry, so the sessions table does not grow forever.",
+		cfg.BackupInterval,
+		func(ctx context.Context) error {
+			swept, err := users.DeleteExpiredSessions(ctx)
+			if err != nil {
+				log.Error("sweeping expired sessions failed", "error", err)
+				return err
+			}
+			if swept > 0 {
+				log.Info("expired sessions swept", "count", swept)
+			}
+			return nil
+		},
+	)
 
-	log.Info("maintenance scheduled",
-		"interval", cfg.BackupInterval.String(), "keep", cfg.BackupKeep)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			maintain(ctx, handle, users, cfg, log)
-		}
-	}
-}
-
-// maintain is one maintenance pass. Every failure is logged and swallowed: a
-// backup problem must not take the server down while it is serving requests.
-func maintain(
-	ctx context.Context,
-	handle *sql.DB,
-	users *auth.Store,
-	cfg config.Config,
-	log *slog.Logger,
-) {
-	swept, err := users.DeleteExpiredSessions(ctx)
-	if err != nil {
-		log.Error("sweeping expired sessions failed", "error", err)
-	} else if swept > 0 {
-		log.Info("expired sessions swept", "count", swept)
-	}
-
-	path, err := writeSnapshot(ctx, handle, cfg.BackupDir(), cfg.BackupKeep, time.Now().UTC())
-	logSnapshotResult(log, path, err)
+	reg.Register(
+		"database snapshot",
+		"Writes a consistent copy of the database into the backups directory and prunes old snapshots.",
+		cfg.BackupInterval,
+		func(ctx context.Context) error {
+			path, err := writeSnapshot(ctx, handle, cfg.BackupDir(), cfg.BackupKeep, time.Now().UTC())
+			logSnapshotResult(log, path, err)
+			return err
+		},
+	)
 }
 
 // logSnapshotResult reports the outcome of writeSnapshot. path is only set

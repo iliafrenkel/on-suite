@@ -1,0 +1,188 @@
+{{define "content"}}
+<div class="stack">
+	<h1>Admin</h1>
+	<p class="faint">A read-only view of this server. Reload for current numbers.</p>
+
+	<nav class="admin-nav" aria-label="Sections">
+		<a href="#runtime">Build &amp; runtime</a>
+		<a href="#database">Database</a>
+		<a href="#settings">Settings</a>
+		<a href="#jobs">Jobs</a>
+		<a href="#apps">Apps</a>
+		<a href="#users">Users &amp; sessions</a>
+		<a href="#routes">Routes</a>
+	</nav>
+
+	<section class="admin-section" id="runtime">
+		<h2>Build &amp; runtime</h2>
+		<dl class="admin-facts">
+			<div class="admin-fact"><dt>Version</dt><dd class="small">{{.Data.Runtime.Version}}</dd></div>
+			<div class="admin-fact"><dt>Go</dt><dd class="small">{{.Data.Runtime.Go}}</dd></div>
+			<div class="admin-fact"><dt>Platform</dt><dd class="small">{{.Data.Runtime.OS}}/{{.Data.Runtime.Arch}}</dd></div>
+			<div class="admin-fact"><dt>CPUs</dt><dd>{{.Data.Runtime.CPUs}}</dd></div>
+			<div class="admin-fact"><dt>Uptime</dt><dd class="small">{{.Data.Runtime.Uptime}}</dd></div>
+			<div class="admin-fact"><dt>Goroutines</dt><dd>{{.Data.Runtime.Goroutines}}</dd></div>
+			<div class="admin-fact"><dt>Heap in use</dt><dd class="small">{{.Data.Runtime.HeapInUse}}</dd></div>
+			<div class="admin-fact"><dt>Started</dt><dd class="small">{{.Data.Runtime.StartedAt.Format "2006-01-02 15:04 MST"}}</dd></div>
+		</dl>
+	</section>
+
+	<section class="admin-section" id="database">
+		<h2>Database</h2>
+		{{with .Data.DatabaseErr}}<p class="notice notice-error">Could not read the database: {{.}}</p>{{end}}
+		<dl class="admin-facts">
+			<div class="admin-fact"><dt>File</dt><dd class="small">{{.Data.Database.FileSize}}</dd></div>
+			<div class="admin-fact"><dt>WAL</dt><dd class="small">{{.Data.Database.WALSize}}</dd></div>
+			<div class="admin-fact"><dt>Shared memory</dt><dd class="small">{{.Data.Database.SHMSize}}</dd></div>
+			<div class="admin-fact"><dt>Journal mode</dt><dd class="small">{{.Data.Database.JournalMode}}</dd></div>
+			<div class="admin-fact"><dt>Pages</dt><dd>{{.Data.Database.PageCount}}</dd></div>
+			<div class="admin-fact"><dt>Page size</dt><dd class="small">{{.Data.Database.PageSize}} B</dd></div>
+		</dl>
+		<p class="faint">{{.Data.Database.Path}}</p>
+
+		<div class="scroll-x">
+			<table class="admin-table">
+				<caption class="visually-hidden">Applied migrations</caption>
+				<thead><tr><th>Migration</th><th>Name</th><th>Applied</th></tr></thead>
+				<tbody>
+				{{range .Data.Database.Migrations}}
+					<tr><td><code>{{.Key}}</code></td><td>{{.Name}}</td><td>{{.AppliedAt}}</td></tr>
+				{{else}}
+					<tr><td colspan="3" class="dim">No migrations recorded.</td></tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<section class="admin-section" id="settings">
+		<h2>Settings</h2>
+		<p class="faint">Every value this server is running with, and where it came from.</p>
+		<div class="scroll-x">
+			<table class="admin-table">
+				<thead><tr><th>Flag</th><th>Value</th><th>Source</th><th>Default</th><th>Environment</th><th>What it does</th></tr></thead>
+				<tbody>
+				{{range .Data.Settings}}
+					<tr>
+						<td><code>-{{.Flag}}</code></td>
+						<td><code>{{if .Value}}{{.Value}}{{else}}(empty){{end}}</code></td>
+						<td><span class="admin-tag admin-tag-{{.Source}}">{{.Source}}</span></td>
+						<td class="dim"><code>{{if .Default}}{{.Default}}{{else}}(empty){{end}}</code></td>
+						<td class="dim"><code>{{.Env}}</code></td>
+						<td class="dim">{{.Doc}}</td>
+					</tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<section class="admin-section" id="jobs">
+		<h2>Jobs</h2>
+		<p class="faint">Background work this process runs on a timer. Status is in memory and resets when the server restarts.</p>
+		<div class="scroll-x">
+			<table class="admin-table">
+				<thead><tr><th>Job</th><th>Every</th><th>Last run</th><th>Took</th><th>Outcome</th><th>Next run</th><th>Runs</th></tr></thead>
+				<tbody>
+				{{range .Data.Jobs}}
+					<tr>
+						<td>{{.Name}}<br><span class="faint">{{.Description}}</span></td>
+						<td>{{if .Enabled}}{{.Interval}}{{else}}<span class="admin-tag admin-tag-off">disabled</span>{{end}}</td>
+						<td>{{if .LastRun.IsZero}}<span class="dim">never</span>{{else}}{{.LastRun.Format "2006-01-02 15:04:05 MST"}}{{end}}</td>
+						<td class="dim">{{if .LastRun.IsZero}}—{{else}}{{.LastDuration}}{{end}}</td>
+						<td>
+							{{if .LastRun.IsZero}}<span class="dim">—</span>
+							{{else if .LastErr}}<span class="admin-tag admin-tag-failed">failed</span> <span class="faint">{{.LastErr}}</span>
+							{{else}}<span class="admin-tag admin-tag-ok">ok</span>{{end}}
+						</td>
+						<td class="dim">{{if .NextRun.IsZero}}—{{else}}{{.NextRun.Format "2006-01-02 15:04:05 MST"}}{{end}}</td>
+						<td>{{.Runs}}</td>
+					</tr>
+				{{else}}
+					<tr><td colspan="7" class="dim">No jobs are registered.</td></tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<section class="admin-section" id="apps">
+		<h2>Apps</h2>
+		<p class="faint">Numbers reported by each app in this build. An app that reports nothing does not appear.</p>
+		{{range .Data.Apps}}
+		<h3>{{.Name}}</h3>
+		{{if .Err}}
+		<p class="notice notice-error">{{.Name}} could not report: {{.Err}}</p>
+		{{else}}
+		<dl class="admin-facts">
+			{{range .Stats}}
+			<div class="admin-fact">
+				<dt>{{.Label}}</dt>
+				<dd class="small">{{.Value}}</dd>
+				{{with .Hint}}<dd class="faint">{{.}}</dd>{{end}}
+			</div>
+			{{end}}
+		</dl>
+		{{end}}
+		{{else}}
+		<p class="dim">No app in this build reports any statistics.</p>
+		{{end}}
+	</section>
+
+	<section class="admin-section" id="users">
+		<h2>Users &amp; sessions</h2>
+		{{with .Data.SessionsErr}}<p class="notice notice-error">Could not count sessions: {{.}}</p>{{end}}
+		<dl class="admin-facts">
+			<div class="admin-fact"><dt>Accounts</dt><dd>{{len .Data.Accounts}}</dd></div>
+			<div class="admin-fact"><dt>Live sessions</dt><dd>{{.Data.Sessions.Live}}</dd></div>
+			<div class="admin-fact"><dt>Expired, not swept</dt><dd>{{.Data.Sessions.Expired}}</dd></div>
+		</dl>
+
+		{{with .Data.AccountsErr}}<p class="notice notice-error">Could not list accounts: {{.}}</p>{{end}}
+		<div class="scroll-x">
+			<table class="admin-table">
+				<thead><tr><th>User</th><th>Role</th><th>Created</th><th>Live sessions</th></tr></thead>
+				<tbody>
+				{{range .Data.Accounts}}
+					<tr>
+						<td>{{.Username}}</td>
+						<td>{{if .IsAdmin}}Administrator{{else}}<span class="dim">User</span>{{end}}</td>
+						<td class="dim">{{.CreatedAt.Format "2006-01-02"}}</td>
+						<td>{{.Sessions}}</td>
+					</tr>
+				{{else}}
+					<tr><td colspan="4" class="dim">No accounts exist.</td></tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<section class="admin-section" id="routes">
+		<h2>Routes</h2>
+		<p class="faint">
+			Every route this build serves. {{.Data.PublicRoutes}} of {{len .Data.Routes}}
+			are reachable without signing in; everything else requires a session.
+		</p>
+		<div class="scroll-x">
+			<table class="admin-table">
+				<thead><tr><th>Pattern</th><th>Access</th><th>Owner</th></tr></thead>
+				<tbody>
+				{{range .Data.Routes}}
+					<tr>
+						<td><code>{{.Pattern}}</code></td>
+						<td>
+							{{if .Public}}<span class="admin-tag admin-tag-public">public</span>
+							{{else}}<span class="dim">signed in</span>{{end}}
+						</td>
+						<td class="dim">{{.Owner}}</td>
+					</tr>
+				{{else}}
+					<tr><td colspan="3" class="dim">No routes recorded.</td></tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</section>
+</div>
+{{end}}

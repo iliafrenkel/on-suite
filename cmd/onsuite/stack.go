@@ -5,9 +5,13 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/admin"
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
+	"github.com/iliafrenkel/on-suite/internal/platform/config"
+	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 	"github.com/iliafrenkel/on-suite/internal/ui"
@@ -20,6 +24,12 @@ type stackDeps struct {
 	Log      *slog.Logger
 	Version  string
 	Secure   bool
+	// Config, Jobs and Started exist for the admin page. serve.go is the
+	// only production caller of buildStack, and it is the one that
+	// populates them from the real config, job registry and start time.
+	Config  config.Config
+	Jobs    *jobs.Registry
+	Started time.Time
 }
 
 func buildStack(deps stackDeps) (http.Handler, error) {
@@ -48,10 +58,13 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		Version: deps.Version,
 	})
 
+	routes := web.NewRecorder()
+	deps.Registry.RecordRoutes(routes)
+
 	mux := http.NewServeMux()
-	mux.Handle("GET /healthz", healthzHandler(deps.Version, deps.DB))
-	mux.Handle("GET /static/", http.StripPrefix("/static", assets.Handler()))
-	authn.Routes(mux)
+	routes.Handle(mux, "GET /healthz", true, healthzHandler(deps.Version, deps.DB))
+	routes.Handle(mux, "GET /static/", true, http.StripPrefix("/static", assets.Handler()))
+	authn.Routes(mux, routes)
 
 	if err := deps.Registry.Mount(mux, app.Deps{
 		DB:      deps.DB,
@@ -64,8 +77,32 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		return nil, err
 	}
 
-	mux.Handle("GET /{$}", authn.RequireUser(homeHandler(deps, rend, errs)))
-	mux.Handle("/", http.HandlerFunc(errs.NotFound))
+	// The admin page is guarded, and RequireAdmin returns 404 (not 403) so a
+	// non-admin cannot tell it apart from a route that does not exist at
+	// all. ServeMux would undermine that on its own: registering only the
+	// subtree pattern "GET /admin/" makes the mux synthesize an *unguarded*
+	// 307 redirect from "/admin" to "/admin/", which lets anyone distinguish
+	// /admin from a genuine 404 before RequireAdmin ever runs. So both the
+	// exact "/admin" and the "/admin/{$}" forms are registered explicitly,
+	// behind the same guard, and the subtree pattern is narrowed to "{$}" so
+	// it no longer matches "/admin/anything".
+	adminHandler := authn.RequireAdmin(admin.Handler(admin.Deps{
+		Config:  deps.Config,
+		DB:      deps.DB,
+		Users:   deps.Users,
+		Apps:    deps.Registry,
+		Jobs:    deps.Jobs,
+		Routes:  routes,
+		Render:  rend,
+		Errors:  errs,
+		Nav:     deps.Registry.NavItems(),
+		Version: deps.Version,
+		Started: deps.Started,
+	}))
+	routes.Handle(mux, "GET /admin", false, adminHandler)
+	routes.Handle(mux, "GET /admin/{$}", false, adminHandler)
+	routes.Handle(mux, "GET /{$}", false, authn.RequireUser(homeHandler(deps, rend, errs)))
+	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
 
 	return web.Stack(mux, deps.Log, errs, csrf, authn), nil
 }
