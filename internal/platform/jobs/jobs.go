@@ -84,7 +84,9 @@ func (r *Registry) Register(name, description string, every time.Duration, fn fu
 	r.jobs = append(r.jobs, &job{fn: fn, status: status})
 }
 
-// Run starts one goroutine per enabled job and blocks until ctx is done.
+// Run starts one goroutine per enabled job and blocks until every goroutine
+// has stopped. If no jobs are enabled, there is nothing to start and Run
+// returns immediately without waiting on ctx.
 //
 // Each job first runs one interval after Run is called, never immediately, so
 // restarting the server repeatedly does not trigger a burst of work.
@@ -108,10 +110,21 @@ func (r *Registry) Run(ctx context.Context) {
 		wg.Add(1)
 		go func(j *job, every time.Duration) {
 			defer wg.Done()
+			r.scheduleFirstRun(j, every)
 			r.loop(ctx, j, every)
 		}(e.j, e.every)
 	}
 	wg.Wait()
+}
+
+// scheduleFirstRun corrects NextRun to be relative to when Run actually
+// started rather than when Register was called. The two can drift apart at
+// startup, and a NextRun computed at Register time would then be stale
+// before the job has ever run.
+func (r *Registry) scheduleFirstRun(j *job, every time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	j.status.NextRun = r.now().Add(every)
 }
 
 func (r *Registry) loop(ctx context.Context, j *job, every time.Duration) {

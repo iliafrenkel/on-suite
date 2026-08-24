@@ -116,6 +116,59 @@ func TestRunRecordsSuccessDurationAndNextRun(t *testing.T) {
 	}
 }
 
+// controllableClock lets a test move time forward between two points it
+// controls precisely, unlike stepClock which always advances by a fixed
+// step on every read.
+type controllableClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func (c *controllableClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *controllableClock) Set(t time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = t
+}
+
+func TestNextRunReflectsWhenRunActuallyStartsNotWhenRegisterWasCalled(t *testing.T) {
+	clock := &controllableClock{now: time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)}
+	reg := jobs.NewRegistry()
+	reg.SetClock(clock.Now)
+
+	reg.Register("sweep", "removes old rows", time.Hour, func(context.Context) error { return nil })
+	atRegister := reg.Snapshot()[0].NextRun
+
+	// A real gap between Register and Run: a deployment builds its job
+	// registry well before the server starts serving background work.
+	clock.Set(clock.Now().Add(30 * time.Minute))
+	want := clock.Now().Add(time.Hour)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go reg.Run(ctx)
+
+	var got time.Time
+	for i := 0; i < 200; i++ {
+		got = reg.Snapshot()[0].NextRun
+		if got.Equal(want) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !got.Equal(want) {
+		t.Fatalf("NextRun = %v once Run started, want %v (the register-time value was %v)", got, want, atRegister)
+	}
+	if got.Equal(atRegister) {
+		t.Error("NextRun still holds the register-time value; Run never corrected it")
+	}
+}
+
 func TestAFailingJobIsRecordedAndTheRegistryKeepsGoing(t *testing.T) {
 	reg := jobs.NewRegistry()
 	reg.Register("sweep", "removes old rows", time.Hour, func(context.Context) error {
