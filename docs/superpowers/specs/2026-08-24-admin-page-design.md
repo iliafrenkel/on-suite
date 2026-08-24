@@ -103,7 +103,7 @@ honestly.
 about how it got there. `Settings()` makes that byproduct available:
 
 ```go
-type Source int // SourceDefault, SourceEnv, SourceFlag
+type Source int // SourceDefault, SourceEnv, SourceFlag, SourceDerived
 
 type Setting struct {
     Flag    string // "backup-interval"
@@ -121,6 +121,13 @@ Source is derived the way `Parse` already resolves precedence: an explicitly
 passed flag wins, then a non-empty environment variable, then the default.
 "Why is this `:443`?" is the question an operator actually asks, and nothing in
 the system answers it today.
+
+A fourth source, `SourceDerived`, covers the two values the server computes
+rather than reads: enabling `-tls-domain` moves the listen address to `:443`
+and forces `-secure-cookies` on, so neither comes from a flag, the
+environment, or the default. Reporting those as "default" beside a printed
+default of `:8080` would manufacture exactly the confusion this section exists
+to remove.
 
 **`Default` must be the true compile-time default.** Today `envOr` folds the
 environment value into the default *before* the flag is defined, so
