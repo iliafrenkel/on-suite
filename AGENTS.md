@@ -14,6 +14,11 @@ with no code yet.
 Full rationale for every design choice below lives in
 [docs/superpowers/specs/2026-08-18-on-suite-platform-design.md](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md).
 
+## Workflow
+
+`main` is protected — always work on a branch and open a PR, never commit or
+push directly to `main`.
+
 ## Commands
 
 Build:
