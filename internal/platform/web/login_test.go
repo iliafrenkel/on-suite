@@ -27,6 +27,7 @@ type authFixture struct {
 	auth    *web.Auth
 	users   *auth.Store
 	user    auth.User
+	plain   auth.User
 }
 
 func newAuthFixture(t *testing.T) *authFixture {
@@ -52,6 +53,10 @@ func newAuthFixture(t *testing.T) *authFixture {
 		t.Fatal(err)
 	}
 	user, err := users.CreateUser(context.Background(), "ilia", hash, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := users.CreateUser(context.Background(), "plain", hash, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +86,9 @@ func newAuthFixture(t *testing.T) *authFixture {
 		}
 		_, _ = w.Write([]byte("private for " + u.Username))
 	})))
+	mux.Handle("GET /adminonly", a.RequireAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("admin only"))
+	})))
 	mux.Handle("GET /open", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if u, ok := web.UserFrom(r.Context()); ok {
 			_, _ = w.Write([]byte("open for " + u.Username))
@@ -90,7 +98,7 @@ func newAuthFixture(t *testing.T) *authFixture {
 	}))
 
 	handler := web.Chain(mux, a.LoadUser, csrf.Middleware)
-	return &authFixture{handler: handler, auth: a, users: users, user: user}
+	return &authFixture{handler: handler, auth: a, users: users, user: user, plain: plain}
 }
 
 // get issues a GET carrying the given cookies.
@@ -518,5 +526,49 @@ func TestLoginNextIsRestrictedToLocalPaths(t *testing.T) {
 				t.Errorf("open redirect: Location = %q", loc)
 			}
 		})
+	}
+}
+
+func TestRequireAdminRedirectsAnonymousToLogin(t *testing.T) {
+	f := newAuthFixture(t)
+
+	rec := f.do(t, httptest.NewRequest("GET", "/adminonly", nil))
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); !strings.HasPrefix(got, "/login") {
+		t.Errorf("Location = %q, want the login page", got)
+	}
+}
+
+// A non-admin must not be able to tell the page apart from one that is not
+// there, the same way a failed login cannot be told apart from an unknown
+// account.
+func TestRequireAdminGives404ToANonAdmin(t *testing.T) {
+	f := newAuthFixture(t)
+	cookies := f.logIn(t, "plain", testPassword)
+
+	rec := f.do(t, httptest.NewRequest("GET", "/adminonly", nil), cookies...)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "admin only") {
+		t.Error("the guarded handler ran for a non-admin")
+	}
+}
+
+func TestRequireAdminAdmitsAnAdmin(t *testing.T) {
+	f := newAuthFixture(t)
+	cookies := f.logIn(t, f.user.Username, testPassword)
+
+	rec := f.do(t, httptest.NewRequest("GET", "/adminonly", nil), cookies...)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if rec.Body.String() != "admin only" {
+		t.Errorf("body = %q, want the guarded handler's output", rec.Body.String())
 	}
 }
