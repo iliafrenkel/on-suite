@@ -140,12 +140,14 @@ func newServerWith(t *testing.T, reg *jobs.Registry) *server {
 	}, authn.RequireUser); err != nil {
 		t.Fatal(err)
 	}
-	routes.Handle(mux, "GET /admin/", false, authn.RequireAdmin(admin.Handler(admin.Deps{
+	adminHandler := authn.RequireAdmin(admin.Handler(admin.Deps{
 		Config: cfg, DB: handle, Users: users, Apps: registry,
 		Jobs: reg, Routes: routes,
 		Render: rend, Errors: errs, Nav: registry.NavItems(),
 		Version: "v9.9.9", Started: time.Now().Add(-90 * time.Second),
-	})))
+	}))
+	routes.Handle(mux, "GET /admin", false, adminHandler)
+	routes.Handle(mux, "GET /admin/{$}", false, adminHandler)
 	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
 
 	s := &server{handler: web.Stack(mux, log, errs, csrf, authn), cfg: cfg, rend: rend, errs: errs}
@@ -228,6 +230,36 @@ func TestANonAdminGetsExactlyTheSameResponseAsAMissingPage(t *testing.T) {
 	}
 	if admin.Body.String() != missing.Body.String() {
 		t.Error("/admin/ and a missing page render differently for a non-admin")
+	}
+}
+
+// Without an explicit "GET /admin" registration, ServeMux would synthesize
+// its own unguarded 307 redirect from "/admin" to "/admin/" for the
+// no-trailing-slash subtree request, before RequireAdmin ever runs — letting
+// a non-admin tell /admin apart from a genuine 404 by status code alone.
+func TestANonAdminGetsExactlyTheSameResponseAtAdminWithoutSlashAsAMissingPage(t *testing.T) {
+	s := newServer(t)
+	admin := s.get(t, s.plain, "/admin")
+	missing := s.get(t, s.plain, "/no-such-page")
+
+	if admin.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", admin.Code)
+	}
+	if admin.Code == http.StatusTemporaryRedirect || admin.Code == http.StatusMovedPermanently {
+		t.Fatalf("status = %d; /admin must not redirect, that reveals it exists", admin.Code)
+	}
+	if admin.Body.String() != missing.Body.String() {
+		t.Error("/admin and a missing page render differently for a non-admin")
+	}
+}
+
+// The admin route must be an exact match, not a subtree: "/admin/{$}" (not
+// "/admin/"), so it does not serve the page at arbitrary nested paths.
+func TestAdminSubpathIsNotServedByTheAdminRoute(t *testing.T) {
+	s := newServer(t)
+	rec := s.get(t, s.admin, "/admin/some/subpath")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for a subpath of /admin/", rec.Code)
 	}
 }
 

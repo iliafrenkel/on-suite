@@ -8,7 +8,7 @@ import (
 )
 
 func TestIconForKnownApps(t *testing.T) {
-	for _, id := range []string{"paste", "notes", "reader", "flash"} {
+	for _, id := range []string{"paste", "notes", "reader", "flash", "admin"} {
 		got := string(ui.IconFor(id))
 		if !strings.Contains(got, "<svg") {
 			t.Errorf("IconFor(%q) = %q, want it to contain <svg", id, got)
@@ -32,7 +32,7 @@ func TestIconForUnknownAppFallsBackToTile(t *testing.T) {
 
 func TestIconForIsDistinctPerApp(t *testing.T) {
 	seen := map[string]bool{}
-	for _, id := range []string{"paste", "notes", "reader", "flash"} {
+	for _, id := range []string{"paste", "notes", "reader", "flash", "admin"} {
 		svg := string(ui.IconFor(id))
 		if seen[svg] {
 			t.Errorf("icon for %q duplicates an earlier icon", id)

@@ -24,8 +24,9 @@ type stackDeps struct {
 	Log      *slog.Logger
 	Version  string
 	Secure   bool
-	// Config, Jobs and Started exist for the admin page. They are zero in
-	// tests that only care about routing, which the page tolerates.
+	// Config, Jobs and Started exist for the admin page. serve.go is the
+	// only production caller of buildStack, and it is the one that
+	// populates them from the real config, job registry and start time.
 	Config  config.Config
 	Jobs    *jobs.Registry
 	Started time.Time
@@ -76,7 +77,16 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		return nil, err
 	}
 
-	routes.Handle(mux, "GET /admin/", false, authn.RequireAdmin(admin.Handler(admin.Deps{
+	// The admin page is guarded, and RequireAdmin returns 404 (not 403) so a
+	// non-admin cannot tell it apart from a route that does not exist at
+	// all. ServeMux would undermine that on its own: registering only the
+	// subtree pattern "GET /admin/" makes the mux synthesize an *unguarded*
+	// 307 redirect from "/admin" to "/admin/", which lets anyone distinguish
+	// /admin from a genuine 404 before RequireAdmin ever runs. So both the
+	// exact "/admin" and the "/admin/{$}" forms are registered explicitly,
+	// behind the same guard, and the subtree pattern is narrowed to "{$}" so
+	// it no longer matches "/admin/anything".
+	adminHandler := authn.RequireAdmin(admin.Handler(admin.Deps{
 		Config:  deps.Config,
 		DB:      deps.DB,
 		Users:   deps.Users,
@@ -88,7 +98,9 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		Nav:     deps.Registry.NavItems(),
 		Version: deps.Version,
 		Started: deps.Started,
-	})))
+	}))
+	routes.Handle(mux, "GET /admin", false, adminHandler)
+	routes.Handle(mux, "GET /admin/{$}", false, adminHandler)
 	routes.Handle(mux, "GET /{$}", false, authn.RequireUser(homeHandler(deps, rend, errs)))
 	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
 
