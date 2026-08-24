@@ -34,7 +34,8 @@ archives:
     files:
       - README.md
       - LICENSE
-      - docs/deploy/**
+      - docs/DEPLOYING.md
+      - docs/onsuite.service
 
 checksum:
   name_template: checksums.txt

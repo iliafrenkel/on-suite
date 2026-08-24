@@ -1,5 +1,8 @@
 # Deploying ON Suite
 
+> New here? Start with the [main README](../README.md) for what ON Suite is
+> and how to build it. This guide covers running it somewhere real.
+
 ON Suite is one static binary plus one data directory. The data directory holds
 the database, the backups and, if you use built-in TLS, the certificates —
 copying it is a complete backup of the system.
@@ -20,7 +23,7 @@ dynamic library dependencies and runs on any kernel of the right architecture.
 ```bash
 scp onsuite server:/tmp/onsuite
 ssh server 'sudo install -m 0755 /tmp/onsuite /usr/local/bin/onsuite'
-scp docs/deploy/onsuite.service server:/tmp/
+scp docs/onsuite.service server:/tmp/
 ssh server 'sudo install -m 0644 /tmp/onsuite.service /etc/systemd/system/ && sudo systemctl daemon-reload'
 ```
 

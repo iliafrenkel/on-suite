@@ -9,24 +9,77 @@ family and friends, invite-only, no public sign-up, no multi-tenant hardening.
 If you're looking for a SaaS-scale platform this isn't it — it's the opposite
 bet, optimised for "one binary, one data directory, nothing else to run."
 
-## Status
-
-The three planned build phases are complete.
-
-| Plan | Delivers | Status |
-|---|---|---|
-| 1 — Platform core | Config, SQLite + migrations, Argon2id auth, sessions, `onsuite user add` | **Done** |
-| 2 — Web plumbing and app framework | Templates, middleware, CSRF, login, the `App` interface and router | **Done** |
-| 3 — ON Paste and operations | The first real app, backup, TLS, packaging, CI | **Done** |
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="ON Suite dashboard with the ON Paste app tile" width="49%">
+  <img src="docs/images/paste-snippet.png" alt="An ON Paste snippet with syntax highlighting" width="49%">
+</p>
 
 Of the four apps the "ON" prefix is reserved for, only **ON Paste** is built
-and registered today. ON Notes, ON Reader, and ON Flash are future work — the
+and registered today — snippets of code or text, with syntax highlighting and
+shareable links. ON Notes, ON Reader, and ON Flash are future work: the
 platform and app framework are ready for them, but no code exists yet.
 
-See [`docs/superpowers/plans/2026-08-18-on-suite-00-roadmap.md`](docs/superpowers/plans/2026-08-18-on-suite-00-roadmap.md)
-for the full task list and [`docs/superpowers/specs/2026-08-18-on-suite-platform-design.md`](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md)
-for the design this project is being built against. Plan-by-plan write-ups
-live under [`docs/superpowers/plans/`](docs/superpowers/plans/).
+## Is this for you?
+
+- **You want to self-host something small for yourself and a few people you
+  trust**, and you'd rather manage one binary and one SQLite file than a pile
+  of Docker Compose services. → Read [Getting started](#getting-started)
+  below, then [Deploying](docs/DEPLOYING.md).
+- **You want to run it, and maybe also change it or add an app.** → Same
+  starting point, then [Contributing](CONTRIBUTING.md) for the ground rules
+  (no CGO, no Node, the platform/app boundary) before you dive into the code.
+- **You're just browsing.** → The rest of this README explains what it is and
+  why it's built this way; no need to go further unless something here is
+  useful to you.
+
+## Getting started
+
+Requirements: Go 1.26 or newer, and nothing else — no Docker, no Node, no
+database server to install. SQLite is a pure-Go dependency
+(`modernc.org/sqlite`), so `CGO_ENABLED=0` always holds.
+
+```bash
+git clone https://github.com/iliafrenkel/on-suite.git
+cd on-suite
+go build ./cmd/onsuite
+```
+
+Create the first account (prompts for a password, twice, without echoing it):
+
+```bash
+./onsuite user add ilia --admin --data-dir ./data
+```
+
+Start the server:
+
+```bash
+./onsuite serve --data-dir ./data
+```
+
+Every flag has an `ONSUITE_*` environment variable equivalent (e.g.
+`--addr` / `ONSUITE_ADDR`, `--data-dir` / `ONSUITE_DATA_DIR`). Run
+`./onsuite serve -h` for the full list, or `./onsuite help` for all commands.
+
+Confirm it's up, then open `http://localhost:8080/` in a browser:
+
+```bash
+curl -s localhost:8080/healthz
+```
+
+You'll be redirected to `/login`; sign in with the account you just created
+and you'll land on the dashboard, with your username and a working log-out
+button in the top bar, and ON Paste in the app switcher.
+
+Cross-compiling for a Linux server from any machine needs nothing extra,
+since there's no CGO to worry about:
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o onsuite ./cmd/onsuite
+```
+
+**Running this somewhere real?** See [Deploying ON Suite](docs/DEPLOYING.md)
+for a systemd unit, choosing between a reverse proxy and built-in TLS,
+backups and restores, upgrades, and a Docker option.
 
 ## Why
 
@@ -70,7 +123,7 @@ result runs the same way on a Raspberry Pi as it does on a laptop.
 
 The full rationale for these choices — including what's deliberately left
 out (multi-tenancy, metrics, a job scheduler, full-text search) and why — is
-in the design spec linked above.
+in the [design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md).
 
 ## Repository layout
 
@@ -89,13 +142,16 @@ on-suite/
 │   │   └── app/                # the App interface, default-deny Router, registry
 │   ├── ui/                    # go:embed'd CSS, vendored HTMX, HTML templates (a leaf package)
 │   ├── htmlassert/             # test-only HTML structure assertions
-│   └── arch/                  # one test enforcing the import-boundary rules below
+│   └── arch/                  # one test enforcing the import-boundary rules above
 ├── docs/
-│   ├── deploy/                 # systemd unit and the deployment guide
+│   ├── DEPLOYING.md            # running it somewhere real
 │   ├── RELEASING.md            # how to cut a tagged release
+│   ├── onsuite.service         # systemd unit
+│   ├── images/                 # screenshots used in this README
 │   └── superpowers/
 │       ├── specs/              # the design document
 │       └── plans/              # task-by-task implementation plans
+├── CONTRIBUTING.md             # ground rules for contributing or forking
 ├── Dockerfile / .dockerignore  # scratch-based container image, optional
 └── .goreleaser.yaml            # cross-compiled release builds
 ```
@@ -103,64 +159,23 @@ on-suite/
 Adding an app (ON Notes, ON Reader, ON Flash, or anything else) means writing
 a package under `internal/apps/` that implements the `App` interface and
 adding one line to `registeredApps()` in `cmd/onsuite/main.go` — nothing else
-in the platform changes.
+in the platform changes. See [Contributing](CONTRIBUTING.md) for the rest of
+the ground rules.
 
-## Requirements
+## Status
 
-- Go 1.26 or newer.
-- No other tools, runtimes, or services. No Docker, no Node, no database
-  server to install — SQLite is a pure-Go dependency
-  (`modernc.org/sqlite`), so `CGO_ENABLED=0` always holds.
-- A browser, once you get past the CLI — HTMX is vendored into the binary,
-  so nothing is fetched from a CDN and the server renders a working page
-  with no outbound internet access.
+The three planned build phases are complete.
 
-## Building and running
+| Plan | Delivers | Status |
+|---|---|---|
+| 1 — Platform core | Config, SQLite + migrations, Argon2id auth, sessions, `onsuite user add` | **Done** |
+| 2 — Web plumbing and app framework | Templates, middleware, CSRF, login, the `App` interface and router | **Done** |
+| 3 — ON Paste and operations | The first real app, backup, TLS, packaging, CI | **Done** |
 
-```bash
-git clone https://github.com/iliafrenkel/on-suite.git
-cd on-suite
-go build ./cmd/onsuite
-```
-
-Create the first account (prompts for a password, twice, without echoing it):
-
-```bash
-./onsuite user add ilia --admin --data-dir ./data
-```
-
-Start the server:
-
-```bash
-./onsuite serve --data-dir ./data
-```
-
-Every flag has an `ONSUITE_*` environment variable equivalent (e.g.
-`--addr` / `ONSUITE_ADDR`, `--data-dir` / `ONSUITE_DATA_DIR`). Run
-`./onsuite serve -h` for the full list, or `./onsuite help` for all commands.
-
-Confirm it's up:
-
-```bash
-curl -s localhost:8080/healthz
-```
-
-Then open `http://localhost:8080/` in a browser. You'll be redirected to
-`/login`; sign in with the account you just created and you'll land on the
-dashboard, with your username and a working log-out button in the top bar,
-and ON Paste in the app switcher.
-
-Cross-compiling for a Linux server from any machine needs nothing extra,
-since there's no CGO to worry about:
-
-```bash
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o onsuite ./cmd/onsuite
-```
-
-For running this somewhere real — a systemd unit, choosing between a reverse
-proxy and built-in TLS, backups and restores, upgrades, and a Docker option —
-see [`docs/deploy/README.md`](docs/deploy/README.md). For cutting a new
-release, see [`docs/RELEASING.md`](docs/RELEASING.md).
+See [the roadmap](docs/superpowers/plans/2026-08-18-on-suite-00-roadmap.md)
+for the full task list and the [design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md)
+for the design this project is being built against. Plan-by-plan write-ups
+live under [`docs/superpowers/plans/`](docs/superpowers/plans/).
 
 ## Testing
 
@@ -173,31 +188,14 @@ against a real SQLite file in a temp directory rather than a mock or
 `:memory:` database, because the interesting bugs live in the SQL and in WAL
 behaviour that `:memory:` doesn't reproduce.
 
-## Contributing
+## Documentation
 
-This is a personal project built to a fairly specific, opinionated design —
-contributions are welcome, but please open an issue or discussion before
-sending a large PR, especially anything that would add a dependency, a build
-step, or touch the platform/app boundary. Small fixes, bug reports, and
-questions are always welcome without any of that ceremony.
-
-A few constraints worth knowing before you dive in, all explained in more
-depth in the design spec:
-
-- No CGO, ever — every dependency must be pure Go.
-- No Node, no npm, no JavaScript build step. HTMX is the one piece of
-  front-end JavaScript, vendored into the repo and embedded — never loaded
-  from a CDN.
-- Platform dependencies are capped by design (currently `modernc.org/sqlite`,
-  `golang.org/x/crypto`, `golang.org/x/term`, `golang.org/x/net`); adding a
-  new one is a spec change, not just an implementation detail.
-- Migrations are forward-only — no down migrations.
-- Apps never import other apps, and the platform never imports an app —
-  enforced by a test, not just a convention.
-- No inline `<script>` or `style=` attributes; the CSP forbids them.
-
-If you want to fork this for your own use rather than contribute back, go
-right ahead — that's exactly what the MIT license is for.
+| Doc | For |
+|---|---|
+| [Deploying ON Suite](docs/DEPLOYING.md) | Running it on a real server: systemd, TLS, backups, upgrades, Docker |
+| [Releasing](docs/RELEASING.md) | Cutting and verifying a tagged release (maintainers) |
+| [Contributing](CONTRIBUTING.md) | Ground rules for contributing or forking |
+| [Design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md) | The full architecture and rationale |
 
 ## License
 
