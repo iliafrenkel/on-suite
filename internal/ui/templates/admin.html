@@ -8,6 +8,8 @@
 		<a href="#database">Database</a>
 		<a href="#settings">Settings</a>
 		<a href="#jobs">Jobs</a>
+		<a href="#apps">Apps</a>
+		<a href="#users">Users &amp; sessions</a>
 	</nav>
 
 	<section class="admin-section" id="runtime">
@@ -97,6 +99,58 @@
 					</tr>
 				{{else}}
 					<tr><td colspan="7" class="dim">No jobs are registered.</td></tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<section class="admin-section" id="apps">
+		<h2>Apps</h2>
+		<p class="faint">Numbers reported by each app in this build. An app that reports nothing does not appear.</p>
+		{{range .Data.Apps}}
+		<h3>{{.Name}}</h3>
+		{{if .Err}}
+		<p class="notice notice-error">{{.Name}} could not report: {{.Err}}</p>
+		{{else}}
+		<dl class="admin-facts">
+			{{range .Stats}}
+			<div class="admin-fact">
+				<dt>{{.Label}}</dt>
+				<dd class="small">{{.Value}}</dd>
+				{{with .Hint}}<dd class="faint">{{.}}</dd>{{end}}
+			</div>
+			{{end}}
+		</dl>
+		{{end}}
+		{{else}}
+		<p class="dim">No app in this build reports any statistics.</p>
+		{{end}}
+	</section>
+
+	<section class="admin-section" id="users">
+		<h2>Users &amp; sessions</h2>
+		{{with .Data.SessionsErr}}<p class="notice notice-error">Could not count sessions: {{.}}</p>{{end}}
+		<dl class="admin-facts">
+			<div class="admin-fact"><dt>Accounts</dt><dd>{{len .Data.Accounts}}</dd></div>
+			<div class="admin-fact"><dt>Live sessions</dt><dd>{{.Data.Sessions.Live}}</dd></div>
+			<div class="admin-fact"><dt>Expired, not swept</dt><dd>{{.Data.Sessions.Expired}}</dd></div>
+		</dl>
+
+		{{with .Data.AccountsErr}}<p class="notice notice-error">Could not list accounts: {{.}}</p>{{end}}
+		<div class="scroll-x">
+			<table class="admin-table">
+				<thead><tr><th>User</th><th>Role</th><th>Created</th><th>Live sessions</th></tr></thead>
+				<tbody>
+				{{range .Data.Accounts}}
+					<tr>
+						<td>{{.Username}}</td>
+						<td>{{if .IsAdmin}}Administrator{{else}}<span class="dim">User</span>{{end}}</td>
+						<td class="dim">{{.CreatedAt.Format "2006-01-02"}}</td>
+						<td>{{.Sessions}}</td>
+					</tr>
+				{{else}}
+					<tr><td colspan="4" class="dim">No accounts exist.</td></tr>
 				{{end}}
 				</tbody>
 			</table>

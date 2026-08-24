@@ -2,14 +2,17 @@ package admin_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
@@ -26,10 +29,43 @@ import (
 
 const testPassword = "a-sufficiently-long-password"
 
+// statApp is a stub app that implements Stater, so the apps section has
+// something to render.
+type statApp struct{}
+
+func (statApp) Meta() app.Meta {
+	return app.Meta{ID: "demo", Name: "ON Demo", Summary: "a stub", Order: 0}
+}
+func (statApp) Migrations() fs.FS { return fstest.MapFS{} }
+func (statApp) Templates() fs.FS {
+	return fstest.MapFS{"demo.html": &fstest.MapFile{Data: []byte(`{{define "content"}}x{{end}}`)}}
+}
+func (statApp) Mount(r *app.Router, d app.Deps) {
+	r.HandleFunc("GET /{$}", func(http.ResponseWriter, *http.Request) {})
+	r.PublicFunc("GET /s/{slug}", func(http.ResponseWriter, *http.Request) {})
+}
+func (statApp) Stats(context.Context, *sql.DB) ([]app.Stat, error) {
+	return []app.Stat{{Label: "Widgets", Value: "42", Hint: "for testing"}}, nil
+}
+
+// brokenStatApp is a second stub app whose Stats always fails, to prove one
+// app's failing collector does not hide another section entirely.
+type brokenStatApp struct{ statApp }
+
+func (brokenStatApp) Meta() app.Meta {
+	return app.Meta{ID: "broken", Name: "ON Broken", Summary: "a stub", Order: 1}
+}
+func (brokenStatApp) Stats(context.Context, *sql.DB) ([]app.Stat, error) {
+	return nil, errors.New("no such table: widgets")
+}
+
 type server struct {
 	handler http.Handler
 	admin   []*http.Cookie
 	plain   []*http.Cookie
+	cfg     config.Config
+	rend    *render.Renderer
+	errs    *web.Errors
 }
 
 func newServer(t *testing.T) *server {
@@ -65,7 +101,7 @@ func newServerWith(t *testing.T, reg *jobs.Registry) *server {
 	}
 	t.Cleanup(func() { _ = handle.Close() })
 
-	registry, err := app.NewRegistry()
+	registry, err := app.NewRegistry(statApp{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,6 +135,11 @@ func newServerWith(t *testing.T, reg *jobs.Registry) *server {
 
 	mux := http.NewServeMux()
 	authn.Routes(mux, routes)
+	if err := registry.Mount(mux, app.Deps{
+		DB: handle, Render: rend, Users: users, Errors: errs, Log: log,
+	}, authn.RequireUser); err != nil {
+		t.Fatal(err)
+	}
 	routes.Handle(mux, "GET /admin/", false, authn.RequireAdmin(admin.Handler(admin.Deps{
 		Config: cfg, DB: handle, Users: users, Apps: registry,
 		Jobs: reg, Routes: routes,
@@ -107,7 +148,7 @@ func newServerWith(t *testing.T, reg *jobs.Registry) *server {
 	})))
 	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
 
-	s := &server{handler: web.Stack(mux, log, errs, csrf, authn)}
+	s := &server{handler: web.Stack(mux, log, errs, csrf, authn), cfg: cfg, rend: rend, errs: errs}
 
 	hash, err := auth.HashPassword(testPassword)
 	if err != nil {
@@ -289,5 +330,243 @@ func TestTheJobsSectionShowsOutcomesForJobsThatHaveRun(t *testing.T) {
 	failed := doc.MustHave(".admin-tag-failed")
 	if got := htmlassert.Text(failed); got != "failed" {
 		t.Errorf("failed job's outcome tag text = %q, want %q", got, "failed")
+	}
+}
+
+func TestTheAppsSectionShowsEachAppsNumbers(t *testing.T) {
+	s := newServer(t)
+	doc := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
+	doc.MustHave("#apps")
+
+	body := doc.Text()
+	for _, want := range []string{"ON Demo", "Widgets", "42"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the apps section does not mention %q", want)
+		}
+	}
+}
+
+// TestTheAppsSectionShowsAFallbackWhenNoAppReportsStats exercises the outer
+// {{else}} of the apps range, which none of the other apps tests reach
+// because newServer always registers an app that implements Stater.
+func TestTheAppsSectionShowsAFallbackWhenNoAppReportsStats(t *testing.T) {
+	s := newServer(t)
+
+	empty, err := app.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	admin.Handler(admin.Deps{
+		Config:  s.cfg,
+		Apps:    empty,
+		Render:  s.rend,
+		Errors:  s.errs,
+		Version: "v9.9.9",
+		Started: time.Now().UTC(),
+	}).ServeHTTP(rec, httptest.NewRequest("GET", "/admin/", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#apps")
+	if !strings.Contains(doc.Text(), "No app in this build reports any statistics.") {
+		t.Error("an empty apps list does not show the fallback message")
+	}
+}
+
+func TestTheUsersSectionListsAccountsAndSessionCounts(t *testing.T) {
+	s := newServer(t)
+	doc := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
+	doc.MustHave("#users")
+
+	body := doc.Text()
+	for _, want := range []string{"root", "ilia", "Administrator"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the users section does not mention %q", want)
+		}
+	}
+}
+
+// TestNonAdminAccountsAreMarkedAsUserNotAdministrator pins the IsAdmin=false
+// branch of the role cell, which the happy-path test above cannot tell apart
+// from the heading "Users & sessions" (which itself contains the substring
+// "User"). It scopes the assertion to the account's own row.
+func TestNonAdminAccountsAreMarkedAsUserNotAdministrator(t *testing.T) {
+	s := newServer(t)
+	doc := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
+
+	var found bool
+	for _, row := range doc.QueryAll("#users tbody tr") {
+		text := htmlassert.Text(row)
+		if !strings.Contains(text, "ilia") {
+			continue
+		}
+		found = true
+		if !strings.Contains(text, "User") {
+			t.Errorf("ilia's row = %q, want it to say User", text)
+		}
+		if strings.Contains(text, "Administrator") {
+			t.Errorf("ilia's row = %q, a non-admin must not say Administrator", text)
+		}
+	}
+	if !found {
+		t.Fatal("no row for ilia in the users table")
+	}
+}
+
+// TestTheUsersSectionShowsNoAccountsRow exercises the accounts table's
+// {{else}} branch, which no other test reaches because the harness always
+// creates two users so it can log in as an admin.
+func TestTheUsersSectionShowsNoAccountsRow(t *testing.T) {
+	ctx := context.Background()
+	s := newServer(t)
+
+	dir := t.TempDir()
+	cfg, err := config.Parse([]string{"-data-dir", dir}, nil, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, err := db.Open(cfg.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = handle.Close() })
+	migrations, err := db.Collect(auth.Namespace, auth.Migrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Apply(ctx, handle, migrations); err != nil {
+		t.Fatal(err)
+	}
+	users := auth.NewStore(handle)
+
+	rec := httptest.NewRecorder()
+	admin.Handler(admin.Deps{
+		Config:  cfg,
+		DB:      handle,
+		Users:   users,
+		Render:  s.rend,
+		Errors:  s.errs,
+		Version: "v9.9.9",
+		Started: time.Now().UTC(),
+	}).ServeHTTP(rec, httptest.NewRequest("GET", "/admin/", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#users")
+	if !strings.Contains(doc.Text(), "No accounts exist.") {
+		t.Error("zero accounts does not show the empty-table message")
+	}
+}
+
+// TestAccountsAndSessionsSectionsShowTheirOwnErrorsWhenTheStoreFails
+// exercises AccountsErr and the SessionsErr branch reached through a real
+// query failure rather than a nil *auth.Store, which
+// TestABrokenCollectorRendersInItsOwnCardWithA200 exercises instead.
+func TestAccountsAndSessionsSectionsShowTheirOwnErrorsWhenTheStoreFails(t *testing.T) {
+	ctx := context.Background()
+	s := newServer(t)
+
+	dir := t.TempDir()
+	cfg, err := config.Parse([]string{"-data-dir", dir}, nil, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle, err := db.Open(cfg.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	migrations, err := db.Collect(auth.Namespace, auth.Migrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Apply(ctx, handle, migrations); err != nil {
+		t.Fatal(err)
+	}
+	users := auth.NewStore(handle)
+	// Closing the handle makes every subsequent query on this store fail,
+	// without the nil-store special case that sessionInfo already handles.
+	if err := handle.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	admin.Handler(admin.Deps{
+		Config:  cfg,
+		Users:   users,
+		Render:  s.rend,
+		Errors:  s.errs,
+		Version: "v9.9.9",
+		Started: time.Now().UTC(),
+	}).ServeHTTP(rec, httptest.NewRequest("GET", "/admin/", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#users")
+	body := doc.Text()
+	if !strings.Contains(body, "Could not list accounts") {
+		t.Error("a failing ListAccounts is not reported in the users section")
+	}
+	if !strings.Contains(body, "Could not count sessions") {
+		t.Error("a failing SessionCounts is not reported in the users section")
+	}
+}
+
+// Two collectors fail at once and the page must still be a page: a broken
+// PRAGMA must not hide the job status, and one app's bad query must not hide
+// another section entirely.
+func TestABrokenCollectorRendersInItsOwnCardWithA200(t *testing.T) {
+	s := newServer(t)
+
+	failing, err := app.NewRegistry(brokenStatApp{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	admin.Handler(admin.Deps{
+		Config:  s.cfg,
+		DB:      nil,     // the database section cannot be collected at all
+		Apps:    failing, // and this app's query fails
+		Render:  s.rend,
+		Errors:  s.errs,
+		Version: "v9.9.9",
+		Started: time.Now(),
+	}).ServeHTTP(rec, httptest.NewRequest("GET", "/admin/", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d; a failing collector must not become a 500", rec.Code)
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#runtime")
+	doc.MustHave("#database")
+	doc.MustHave("#apps")
+
+	body := doc.Text()
+	if !strings.Contains(body, "Could not read the database") {
+		t.Error("the database failure is not reported in its own section")
+	}
+	if !strings.Contains(body, "no such table: widgets") {
+		t.Error("the failing app's error is not shown on that app's card")
+	}
+	if !strings.Contains(body, "v9.9.9") {
+		t.Error("the healthy runtime section did not render alongside two broken ones")
+	}
+	// d.Users is unset here (nil), which sessionInfo treats as its own
+	// error rather than a panic, and the accounts table falls back to its
+	// empty-state row instead of disappearing.
+	if !strings.Contains(body, "Could not count sessions") {
+		t.Error("a nil user store's session error is not reported")
+	}
+	if !strings.Contains(body, "No accounts exist.") {
+		t.Error("a nil user store should leave the accounts table in its empty state, not hide it")
 	}
 }

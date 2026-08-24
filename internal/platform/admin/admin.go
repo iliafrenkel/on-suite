@@ -48,6 +48,11 @@ type Report struct {
 	Runtime     RuntimeInfo
 	Settings    []config.Setting
 	Jobs        []jobs.Status
+	Apps        []app.AppStats
+	Accounts    []auth.Account
+	AccountsErr string
+	Sessions    SessionInfo
+	SessionsErr string
 	Database    DatabaseInfo
 	DatabaseErr string
 }
@@ -61,10 +66,27 @@ func (d Deps) collect(ctx context.Context, now time.Time) Report {
 		rep.Jobs = d.Jobs.Snapshot()
 	}
 
-	database, err := d.databaseInfo(ctx)
-	rep.Database = database
+	if d.Apps != nil {
+		rep.Apps = d.Apps.Stats(ctx, d.DB)
+	}
+	if d.Users != nil {
+		accounts, err := d.Users.ListAccounts(ctx)
+		if err != nil {
+			rep.AccountsErr = err.Error()
+		} else {
+			rep.Accounts = accounts
+		}
+	}
+	sessions, err := d.sessionInfo(ctx)
+	rep.Sessions = sessions
 	if err != nil {
-		rep.DatabaseErr = err.Error()
+		rep.SessionsErr = err.Error()
+	}
+
+	database, dbErr := d.databaseInfo(ctx)
+	rep.Database = database
+	if dbErr != nil {
+		rep.DatabaseErr = dbErr.Error()
 	}
 	return rep
 }

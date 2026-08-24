@@ -109,6 +109,25 @@ func (d Deps) databaseInfo(ctx context.Context) (DatabaseInfo, error) {
 	return info, nil
 }
 
+// SessionInfo is the state of the sessions table. A growing Expired count
+// means the sweep job is not running.
+type SessionInfo struct {
+	Live    int
+	Expired int
+}
+
+// sessionInfo counts live and expired sessions.
+func (d Deps) sessionInfo(ctx context.Context) (SessionInfo, error) {
+	if d.Users == nil {
+		return SessionInfo{}, fmt.Errorf("no user store")
+	}
+	live, expired, err := d.Users.SessionCounts(ctx)
+	if err != nil {
+		return SessionInfo{}, err
+	}
+	return SessionInfo{Live: live, Expired: expired}, nil
+}
+
 // fileSize reports a file's size, or "—" if it is not there. A missing -wal
 // file is normal, not an error: SQLite removes it on a clean shutdown.
 func fileSize(path string) string {
