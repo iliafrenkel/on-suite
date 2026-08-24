@@ -75,6 +75,9 @@
 			<a class="sidebar-item" href="{{.Path}}"{{if eq .ID $.Shell.ActiveApp}} aria-current="page"{{end}}>{{icon .ID}}<span class="sidebar-label">{{.Name}}</span></a>
 			{{end}}
 			{{end}}
+			{{if .Shell.IsAdmin}}
+			<a class="sidebar-item sidebar-admin" href="/admin/"{{if eq "admin" $.Shell.ActiveApp}} aria-current="page"{{end}}>{{icon "admin"}}<span class="sidebar-label">Admin</span></a>
+			{{end}}
 		</nav>
 	</aside>
 	{{end}}

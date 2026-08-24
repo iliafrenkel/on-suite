@@ -206,6 +206,7 @@ func TestScanSeesTheRealTree(t *testing.T) {
 		"internal/platform/render",
 		"internal/platform/auth",
 		"internal/platform/jobs",
+		"internal/platform/admin",
 	} {
 		if _, ok := imports.prod[want]; !ok {
 			t.Errorf("package %q was not scanned; known packages: %d", want, len(imports.prod))

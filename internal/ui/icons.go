@@ -24,6 +24,10 @@ var icons = map[string]template.HTML{
 		<path d="M7 12.5a4.5 4.5 0 0 1 4.5 4.5" stroke="var(--c-accent)" stroke-width="1.8" fill="none" stroke-linecap="round"/>
 		<path d="M7 8a9 9 0 0 1 9 9" stroke="var(--c-accent)" stroke-width="1.8" fill="none" stroke-linecap="round"/>
 	</svg>`,
+	"admin": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+		<rect x="2" y="2" width="20" height="20" rx="5" fill="var(--c-accent-bg)"/>
+		<path d="M12 6l5 2.2v3.4c0 3-2.1 5.2-5 6.4-2.9-1.2-5-3.4-5-6.4V8.2L12 6z" fill="none" stroke="var(--c-accent)" stroke-width="1.8" stroke-linejoin="round"/>
+	</svg>`,
 	"flash": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
 		<rect x="2" y="2" width="20" height="20" rx="5" fill="var(--c-accent-bg)"/>
 		<path d="M13 6 8 13h4l-1 5 6-8h-4l1-4z" fill="var(--c-accent)"/>

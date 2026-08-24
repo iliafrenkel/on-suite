@@ -522,6 +522,79 @@ button.danger:hover { background: var(--c-danger-bg); }
 	font-size: var(--fs-sm);
 }
 
+/* ---- Admin --------------------------------------------------------------- */
+
+/* Sticky, because the page is long and the section list is how you move
+ * around it. */
+.admin-nav {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--s-2);
+	padding: var(--s-2) 0;
+	background: var(--c-bg);
+}
+
+.admin-nav a {
+	padding: var(--s-1) var(--s-2);
+	border: var(--border);
+	border-radius: var(--radius);
+	color: var(--c-text-dim);
+	font-size: var(--fs-sm);
+	text-decoration: none;
+}
+
+.admin-nav a:hover { color: var(--c-accent); border-color: var(--c-border-firm); }
+
+.admin-section { margin-top: var(--s-6); }
+.admin-section > p.faint { margin: 0 0 var(--s-3); }
+
+.admin-facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+	gap: var(--s-3);
+	margin: 0 0 var(--s-4);
+}
+
+.admin-fact {
+	padding: var(--s-3);
+	background: var(--c-bg-subtle);
+	border-radius: var(--radius);
+}
+
+.admin-fact dt {
+	color: var(--c-text-dim);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.admin-fact dd { margin: var(--s-1) 0 0; font-size: var(--fs-lg); font-weight: 600; }
+.admin-fact dd.small { font-size: var(--fs-base); font-weight: 500; }
+
+.admin-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+
+.admin-table th,
+.admin-table td {
+	padding: var(--s-2) var(--s-3);
+	border-bottom: var(--border);
+	text-align: left;
+	vertical-align: top;
+}
+
+.admin-table th { color: var(--c-text-dim); font-weight: 600; white-space: nowrap; }
+.admin-table tr:last-child td { border-bottom: none; }
+
+/* The admin entry is not an app, so it is separated from the app list rather
+ * than sitting in it. */
+.sidebar-admin {
+	margin-top: var(--s-3);
+	padding-top: var(--s-3);
+	border-top: var(--border);
+}
+
 /* ---- Narrow viewports --------------------------------------------------- */
 
 @media (max-width: 640px) {

@@ -5,9 +5,13 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/admin"
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
+	"github.com/iliafrenkel/on-suite/internal/platform/config"
+	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 	"github.com/iliafrenkel/on-suite/internal/ui"
@@ -20,6 +24,11 @@ type stackDeps struct {
 	Log      *slog.Logger
 	Version  string
 	Secure   bool
+	// Config, Jobs and Started exist for the admin page. They are zero in
+	// tests that only care about routing, which the page tolerates.
+	Config  config.Config
+	Jobs    *jobs.Registry
+	Started time.Time
 }
 
 func buildStack(deps stackDeps) (http.Handler, error) {
@@ -67,6 +76,19 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		return nil, err
 	}
 
+	routes.Handle(mux, "GET /admin/", false, authn.RequireAdmin(admin.Handler(admin.Deps{
+		Config:  deps.Config,
+		DB:      deps.DB,
+		Users:   deps.Users,
+		Apps:    deps.Registry,
+		Jobs:    deps.Jobs,
+		Routes:  routes,
+		Render:  rend,
+		Errors:  errs,
+		Nav:     deps.Registry.NavItems(),
+		Version: deps.Version,
+		Started: deps.Started,
+	})))
 	routes.Handle(mux, "GET /{$}", false, authn.RequireUser(homeHandler(deps, rend, errs)))
 	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
 

@@ -19,6 +19,7 @@ import (
 )
 
 func serve(args []string, getenv func(string) string, errOut io.Writer) error {
+	started := time.Now().UTC()
 	cfg, err := config.Parse(args, getenv, errOut)
 	if err != nil {
 		return err
@@ -58,6 +59,11 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 			"data_dir", cfg.DataDir)
 	}
 
+	// Jobs are registered before the server is built so the admin page can
+	// list them from the very first request.
+	maintenance := jobs.NewRegistry()
+	registerMaintenance(maintenance, handle, users, cfg, log)
+
 	handler, err := buildStack(stackDeps{
 		DB:       handle,
 		Users:    users,
@@ -65,6 +71,9 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 		Log:      log,
 		Version:  version,
 		Secure:   cfg.SecureCookies,
+		Config:   cfg,
+		Jobs:     maintenance,
+		Started:  started,
 	})
 	if err != nil {
 		return err
@@ -77,8 +86,6 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	maintenance := jobs.NewRegistry()
-	registerMaintenance(maintenance, handle, users, cfg, log)
 	jobsCtx, stopJobs := context.WithCancel(context.Background())
 	defer stopJobs()
 	go maintenance.Run(jobsCtx)

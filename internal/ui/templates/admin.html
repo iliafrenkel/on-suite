@@ -1,0 +1,53 @@
+{{define "content"}}
+<div class="stack">
+	<h1>Admin</h1>
+	<p class="faint">A read-only view of this server. Reload for current numbers.</p>
+
+	<nav class="admin-nav" aria-label="Sections">
+		<a href="#runtime">Build &amp; runtime</a>
+		<a href="#database">Database</a>
+	</nav>
+
+	<section class="admin-section" id="runtime">
+		<h2>Build &amp; runtime</h2>
+		<dl class="admin-facts">
+			<div class="admin-fact"><dt>Version</dt><dd class="small">{{.Data.Runtime.Version}}</dd></div>
+			<div class="admin-fact"><dt>Go</dt><dd class="small">{{.Data.Runtime.Go}}</dd></div>
+			<div class="admin-fact"><dt>Platform</dt><dd class="small">{{.Data.Runtime.OS}}/{{.Data.Runtime.Arch}}</dd></div>
+			<div class="admin-fact"><dt>CPUs</dt><dd>{{.Data.Runtime.CPUs}}</dd></div>
+			<div class="admin-fact"><dt>Uptime</dt><dd class="small">{{.Data.Runtime.Uptime}}</dd></div>
+			<div class="admin-fact"><dt>Goroutines</dt><dd>{{.Data.Runtime.Goroutines}}</dd></div>
+			<div class="admin-fact"><dt>Heap in use</dt><dd class="small">{{.Data.Runtime.HeapInUse}}</dd></div>
+			<div class="admin-fact"><dt>Started</dt><dd class="small">{{.Data.Runtime.StartedAt.Format "2006-01-02 15:04 MST"}}</dd></div>
+		</dl>
+	</section>
+
+	<section class="admin-section" id="database">
+		<h2>Database</h2>
+		{{with .Data.DatabaseErr}}<p class="notice notice-error">Could not read the database: {{.}}</p>{{end}}
+		<dl class="admin-facts">
+			<div class="admin-fact"><dt>File</dt><dd class="small">{{.Data.Database.FileSize}}</dd></div>
+			<div class="admin-fact"><dt>WAL</dt><dd class="small">{{.Data.Database.WALSize}}</dd></div>
+			<div class="admin-fact"><dt>Shared memory</dt><dd class="small">{{.Data.Database.SHMSize}}</dd></div>
+			<div class="admin-fact"><dt>Journal mode</dt><dd class="small">{{.Data.Database.JournalMode}}</dd></div>
+			<div class="admin-fact"><dt>Pages</dt><dd>{{.Data.Database.PageCount}}</dd></div>
+			<div class="admin-fact"><dt>Page size</dt><dd class="small">{{.Data.Database.PageSize}} B</dd></div>
+		</dl>
+		<p class="faint">{{.Data.Database.Path}}</p>
+
+		<div class="scroll-x">
+			<table class="admin-table">
+				<caption class="visually-hidden">Applied migrations</caption>
+				<thead><tr><th>Migration</th><th>Name</th><th>Applied</th></tr></thead>
+				<tbody>
+				{{range .Data.Database.Migrations}}
+					<tr><td><code>{{.Key}}</code></td><td>{{.Name}}</td><td>{{.AppliedAt}}</td></tr>
+				{{else}}
+					<tr><td colspan="3" class="dim">No migrations recorded.</td></tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</section>
+</div>
+{{end}}
