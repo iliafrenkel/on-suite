@@ -263,3 +263,60 @@ func (reg *Registry) Export(ctx context.Context, handle *sql.DB, userID int64) (
 	}
 	return out, nil
 }
+
+// Stat is one number an app wants shown on the admin page.
+//
+// Value is a preformatted string because only the app knows whether 1234567
+// should read as "1.2 MB" or "1,234,567". The platform renders label and
+// value and formats nothing.
+type Stat struct {
+	Label string // "Snippets"
+	Value string // "1204"
+	Hint  string // optional one-liner; may be empty
+}
+
+// Stater is implemented by apps that describe themselves on the admin page.
+// Like Exporter it is optional and discovered by type assertion, so an app
+// with nothing to say does not have to stub out a method.
+//
+// It takes the database rather than Mount's Deps for the same reason Export
+// does: it depends on data, not on an HTTP stack having been built.
+type Stater interface {
+	Stats(ctx context.Context, handle *sql.DB) ([]Stat, error)
+}
+
+// AppStats is one app's contribution to the admin page.
+type AppStats struct {
+	ID    string
+	Name  string
+	Stats []Stat
+	// Err is this app's collector failing, recorded rather than returned.
+	Err string
+}
+
+// Stats collects every registered app's numbers. Apps that do not implement
+// Stater are skipped silently, exactly as they are for Export.
+//
+// Unlike Export, one app's failure does not fail the call: the error is
+// recorded on that app's entry and the rest are still returned. An export
+// missing an app is corrupt; a dashboard missing one card is a dashboard
+// missing one card.
+func (reg *Registry) Stats(ctx context.Context, handle *sql.DB) []AppStats {
+	var out []AppStats
+	for _, a := range reg.apps {
+		s, ok := a.(Stater)
+		if !ok {
+			continue
+		}
+		m := a.Meta()
+		entry := AppStats{ID: m.ID, Name: m.Name}
+		stats, err := s.Stats(ctx, handle)
+		if err != nil {
+			entry.Err = err.Error()
+		} else {
+			entry.Stats = stats
+		}
+		out = append(out, entry)
+	}
+	return out
+}
