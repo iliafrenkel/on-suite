@@ -2,11 +2,18 @@
 
 ## ON Paste
 
+Features:
+
+- Implement keyboard shortcuts
 - Expiration on paste snippets
 - Password protection for shared paste snippets
 - Search and filter on paste snippets
 - Ability to create pastes from the command line
 
+Layout:
+
+For wider screens, consider having two columns - one with the list of snippets
+and another one for the snippet content.
 
 ## ON Notes
 
