@@ -73,7 +73,7 @@ func newAuthFixture(t *testing.T) *authFixture {
 	})
 
 	mux := http.NewServeMux()
-	a.Routes(mux)
+	a.Routes(mux, nil)
 	mux.Handle("GET /private", a.RequireUser(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, ok := web.UserFrom(r.Context())
 		if !ok {

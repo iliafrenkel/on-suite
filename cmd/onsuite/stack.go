@@ -48,10 +48,13 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		Version: deps.Version,
 	})
 
+	routes := web.NewRecorder()
+	deps.Registry.RecordRoutes(routes)
+
 	mux := http.NewServeMux()
-	mux.Handle("GET /healthz", healthzHandler(deps.Version, deps.DB))
-	mux.Handle("GET /static/", http.StripPrefix("/static", assets.Handler()))
-	authn.Routes(mux)
+	routes.Handle(mux, "GET /healthz", true, healthzHandler(deps.Version, deps.DB))
+	routes.Handle(mux, "GET /static/", true, http.StripPrefix("/static", assets.Handler()))
+	authn.Routes(mux, routes)
 
 	if err := deps.Registry.Mount(mux, app.Deps{
 		DB:      deps.DB,
@@ -64,8 +67,8 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		return nil, err
 	}
 
-	mux.Handle("GET /{$}", authn.RequireUser(homeHandler(deps, rend, errs)))
-	mux.Handle("/", http.HandlerFunc(errs.NotFound))
+	routes.Handle(mux, "GET /{$}", false, authn.RequireUser(homeHandler(deps, rend, errs)))
+	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
 
 	return web.Stack(mux, deps.Log, errs, csrf, authn), nil
 }

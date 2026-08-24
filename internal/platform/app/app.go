@@ -126,7 +126,13 @@ func NewPage(r *http.Request, title string, nav []render.NavItem) render.Page {
 // Registry is the set of apps compiled into this binary.
 type Registry struct {
 	apps []App
+	rec  *web.Recorder
 }
+
+// RecordRoutes tells the registry where to record each app's routes, so the
+// admin page can show one complete map. It is optional: without a recorder,
+// routes are still available from Router.Routes().
+func (reg *Registry) RecordRoutes(rec *web.Recorder) { reg.rec = rec }
 
 // NewRegistry validates the apps and orders them for display. Called once,
 // from main, with an explicit slice: the contents of the binary are always
@@ -206,7 +212,7 @@ func (reg *Registry) Mount(mux *http.ServeMux, deps Deps, guard web.Middleware, 
 		if err := deps.Render.AddApp(m.ID, templates); err != nil {
 			return err
 		}
-		r := newRouter(mux, m.ID, guard)
+		r := newRouter(mux, m.ID, guard, reg.rec)
 		a.Mount(r, deps)
 		if len(r.Routes()) == 0 {
 			return fmt.Errorf("app: %q mounted no routes", m.ID)

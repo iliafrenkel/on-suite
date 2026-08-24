@@ -108,9 +108,9 @@ func TestRouterPrefixesPatterns(t *testing.T) {
 	})
 
 	want := []app.Route{
-		{Pattern: "GET /paste/{$}", Public: false},
-		{Pattern: "GET /paste/new", Public: false},
-		{Pattern: "GET /paste/s/{slug}", Public: true},
+		{Pattern: "GET /paste/{$}", Public: false, Owner: "paste"},
+		{Pattern: "GET /paste/new", Public: false, Owner: "paste"},
+		{Pattern: "GET /paste/s/{slug}", Public: true, Owner: "paste"},
 	}
 	if len(recorded) != len(want) {
 		t.Fatalf("recorded %d routes, want %d: %+v", len(recorded), len(want), recorded)

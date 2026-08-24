@@ -75,11 +75,13 @@ func NewAuth(opts AuthOptions) *Auth {
 // SetClock replaces the time source, so expiry can be tested without waiting.
 func (a *Auth) SetClock(now func() time.Time) { a.now = now }
 
-// Routes registers the endpoints that must exist outside any app.
-func (a *Auth) Routes(mux *http.ServeMux) {
-	mux.Handle("GET /login", http.HandlerFunc(a.loginForm))
-	mux.Handle("POST /login", http.HandlerFunc(a.loginSubmit))
-	mux.Handle("POST /logout", http.HandlerFunc(a.logout))
+// Routes registers the endpoints that must exist outside any app. rec may be
+// nil; when it is not, these routes appear on the admin page's route map
+// alongside every other route in the process.
+func (a *Auth) Routes(mux *http.ServeMux, rec *Recorder) {
+	rec.Handle(mux, "GET /login", true, http.HandlerFunc(a.loginForm))
+	rec.Handle(mux, "POST /login", true, http.HandlerFunc(a.loginSubmit))
+	rec.Handle(mux, "POST /logout", true, http.HandlerFunc(a.logout))
 }
 
 // LoadUser puts the current user in the request context when the session
