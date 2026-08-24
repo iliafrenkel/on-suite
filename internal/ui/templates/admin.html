@@ -6,6 +6,8 @@
 	<nav class="admin-nav" aria-label="Sections">
 		<a href="#runtime">Build &amp; runtime</a>
 		<a href="#database">Database</a>
+		<a href="#settings">Settings</a>
+		<a href="#jobs">Jobs</a>
 	</nav>
 
 	<section class="admin-section" id="runtime">
@@ -44,6 +46,57 @@
 					<tr><td><code>{{.Key}}</code></td><td>{{.Name}}</td><td>{{.AppliedAt}}</td></tr>
 				{{else}}
 					<tr><td colspan="3" class="dim">No migrations recorded.</td></tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<section class="admin-section" id="settings">
+		<h2>Settings</h2>
+		<p class="faint">Every value this server is running with, and where it came from.</p>
+		<div class="scroll-x">
+			<table class="admin-table">
+				<thead><tr><th>Flag</th><th>Value</th><th>Source</th><th>Default</th><th>Environment</th><th>What it does</th></tr></thead>
+				<tbody>
+				{{range .Data.Settings}}
+					<tr>
+						<td><code>-{{.Flag}}</code></td>
+						<td><code>{{if .Value}}{{.Value}}{{else}}(empty){{end}}</code></td>
+						<td><span class="admin-tag admin-tag-{{.Source}}">{{.Source}}</span></td>
+						<td class="dim"><code>{{if .Default}}{{.Default}}{{else}}(empty){{end}}</code></td>
+						<td class="dim"><code>{{.Env}}</code></td>
+						<td class="dim">{{.Doc}}</td>
+					</tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<section class="admin-section" id="jobs">
+		<h2>Jobs</h2>
+		<p class="faint">Background work this process runs on a timer. Status is in memory and resets when the server restarts.</p>
+		<div class="scroll-x">
+			<table class="admin-table">
+				<thead><tr><th>Job</th><th>Every</th><th>Last run</th><th>Took</th><th>Outcome</th><th>Next run</th><th>Runs</th></tr></thead>
+				<tbody>
+				{{range .Data.Jobs}}
+					<tr>
+						<td>{{.Name}}<br><span class="faint">{{.Description}}</span></td>
+						<td>{{if .Enabled}}{{.Interval}}{{else}}<span class="admin-tag admin-tag-off">disabled</span>{{end}}</td>
+						<td>{{if .LastRun.IsZero}}<span class="dim">never</span>{{else}}{{.LastRun.Format "2006-01-02 15:04:05 MST"}}{{end}}</td>
+						<td class="dim">{{if .LastRun.IsZero}}—{{else}}{{.LastDuration}}{{end}}</td>
+						<td>
+							{{if .LastRun.IsZero}}<span class="dim">—</span>
+							{{else if .LastErr}}<span class="admin-tag admin-tag-failed">failed</span> <span class="faint">{{.LastErr}}</span>
+							{{else}}<span class="admin-tag admin-tag-ok">ok</span>{{end}}
+						</td>
+						<td class="dim">{{if .NextRun.IsZero}}—{{else}}{{.NextRun.Format "2006-01-02 15:04:05 MST"}}{{end}}</td>
+						<td>{{.Runs}}</td>
+					</tr>
+				{{else}}
+					<tr><td colspan="7" class="dim">No jobs are registered.</td></tr>
 				{{end}}
 				</tbody>
 			</table>

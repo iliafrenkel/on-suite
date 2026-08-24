@@ -46,6 +46,8 @@ type Deps struct {
 // whole page with a 500 — a broken PRAGMA must not hide the job status.
 type Report struct {
 	Runtime     RuntimeInfo
+	Settings    []config.Setting
+	Jobs        []jobs.Status
 	Database    DatabaseInfo
 	DatabaseErr string
 }
@@ -54,6 +56,10 @@ type Report struct {
 // value on the section it belongs to.
 func (d Deps) collect(ctx context.Context, now time.Time) Report {
 	rep := Report{Runtime: d.runtimeInfo(now)}
+	rep.Settings = d.Config.Settings()
+	if d.Jobs != nil {
+		rep.Jobs = d.Jobs.Snapshot()
+	}
 
 	database, err := d.databaseInfo(ctx)
 	rep.Database = database

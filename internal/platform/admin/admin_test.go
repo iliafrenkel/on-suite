@@ -33,6 +33,21 @@ type server struct {
 
 func newServer(t *testing.T) *server {
 	t.Helper()
+	return newServerWith(t, jobs.NewRegistry())
+}
+
+// newServerWithJobs sets up a registry with jobs whose state the jobs
+// section can render: one enabled and never run, one disabled.
+func newServerWithJobs(t *testing.T) *server {
+	t.Helper()
+	reg := jobs.NewRegistry()
+	reg.Register("nightly thing", "does a nightly thing", time.Hour, func(context.Context) error { return nil })
+	reg.Register("disabled thing", "would do a thing", 0, func(context.Context) error { return nil })
+	return newServerWith(t, reg)
+}
+
+func newServerWith(t *testing.T, reg *jobs.Registry) *server {
+	t.Helper()
 	ctx := context.Background()
 
 	dir := t.TempDir()
@@ -85,7 +100,7 @@ func newServer(t *testing.T) *server {
 	authn.Routes(mux, routes)
 	routes.Handle(mux, "GET /admin/", false, authn.RequireAdmin(admin.Handler(admin.Deps{
 		Config: cfg, DB: handle, Users: users, Apps: registry,
-		Jobs: jobs.NewRegistry(), Routes: routes,
+		Jobs: reg, Routes: routes,
 		Render: rend, Errors: errs, Nav: registry.NavItems(),
 		Version: "v9.9.9", Started: time.Now().Add(-90 * time.Second),
 	})))
@@ -209,4 +224,34 @@ func TestTheSidebarLinksAdminsToTheAdminPageAndNobodyElse(t *testing.T) {
 	// A non-admin's own pages must not advertise it either.
 	plainPage := htmlassert.Parse(t, s.get(t, s.plain, "/login").Body.String())
 	plainPage.MustNotHave(`a[href="/admin/"]`)
+}
+
+func TestTheSettingsSectionShowsValuesDefaultsAndSources(t *testing.T) {
+	s := newServer(t)
+	doc := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
+	doc.MustHave("#settings")
+
+	body := doc.Text()
+	for _, want := range []string{"backup-interval", "ONSUITE_BACKUP_INTERVAL", "24h0m0s", "default"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the settings section does not mention %q", want)
+		}
+	}
+	// The usage string is the "docs" half of the section.
+	if !strings.Contains(body, "how often to snapshot the database") {
+		t.Error("the settings section shows no documentation for a setting")
+	}
+}
+
+func TestTheJobsSectionListsRegisteredJobsAndTheirState(t *testing.T) {
+	s := newServerWithJobs(t)
+	doc := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
+	doc.MustHave("#jobs")
+
+	body := doc.Text()
+	for _, want := range []string{"nightly thing", "disabled thing", "never"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the jobs section does not mention %q", want)
+		}
+	}
 }

@@ -587,6 +587,26 @@ button.danger:hover { background: var(--c-danger-bg); }
 .admin-table th { color: var(--c-text-dim); font-weight: 600; white-space: nowrap; }
 .admin-table tr:last-child td { border-bottom: none; }
 
+.admin-tag {
+	display: inline-block;
+	padding: 0 var(--s-2);
+	border-radius: var(--radius);
+	font-size: var(--fs-xs);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+/* Loud for anything an operator should look at twice — a failing job, and
+ * later a route reachable without signing in. Quiet for the normal case. */
+.admin-tag-public,
+.admin-tag-failed { background: var(--c-danger-bg); color: var(--c-danger); }
+.admin-tag-ok,
+.admin-tag-flag { background: var(--c-accent-bg); color: var(--c-accent); }
+.admin-tag-off,
+.admin-tag-default,
+.admin-tag-environment,
+.admin-tag-derived { background: var(--c-bg-inset); color: var(--c-text-dim); }
+
 /* The admin entry is not an app, so it is separated from the app list rather
  * than sitting in it. */
 .sidebar-admin {
