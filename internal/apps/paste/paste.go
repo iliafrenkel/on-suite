@@ -1,13 +1,23 @@
 package paste
 
 import (
+	"context"
 	"crypto/sha256"
+	"database/sql"
 	"embed"
 	"encoding/hex"
 	"io/fs"
 	"net/http"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
+)
+
+// ON Paste implements both optional capabilities. A compile-time assertion,
+// because the platform discovers them by type assertion and a typo'd method
+// name would otherwise fail silently as "this app has nothing to report".
+var (
+	_ app.Exporter = (*App)(nil)
+	_ app.Stater   = (*App)(nil)
 )
 
 //go:embed templates/*.html
@@ -95,4 +105,11 @@ func (a *App) highlightCSS(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write(a.css); err != nil {
 		a.deps.Log.Error("writing the highlight stylesheet failed", "error", err)
 	}
+}
+
+// Stats implements app.Stater, so ON Paste appears on the admin page. Like
+// Export it takes the database rather than using a.store, so it works on a
+// handle the platform already has without depending on Mount having run.
+func (a *App) Stats(ctx context.Context, handle *sql.DB) ([]app.Stat, error) {
+	return NewStore(handle).Stats(ctx)
 }

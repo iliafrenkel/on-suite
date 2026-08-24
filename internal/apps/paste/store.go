@@ -15,9 +15,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
 
 // ID is the app id: the URL prefix, the migration namespace, and the prefix on
@@ -357,4 +360,60 @@ func parseTime(s string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("paste: parse timestamp %q: %w", s, err)
 	}
 	return t.UTC(), nil
+}
+
+// Stats is the whole app in five numbers, for the admin page. It implements
+// the data half of app.Stater; App.Stats is the thin wrapper the platform
+// type-asserts for.
+//
+// Every value is formatted here rather than by the platform: only this
+// package knows that a body length is bytes and should read as "1.2 MB".
+func (st *Store) Stats(ctx context.Context) ([]app.Stat, error) {
+	var (
+		count, shared, totalBytes, largest int64
+		newest                             sql.NullString
+	)
+	err := st.db.QueryRowContext(ctx,
+		`SELECT count(*),
+		        coalesce(sum(CASE WHEN share_slug IS NOT NULL THEN 1 ELSE 0 END), 0),
+		        coalesce(sum(length(body)), 0),
+		        coalesce(max(length(body)), 0),
+		        max(created_at)
+		   FROM paste_snippets`).
+		Scan(&count, &shared, &totalBytes, &largest, &newest)
+	if err != nil {
+		return nil, fmt.Errorf("paste: stats: %w", err)
+	}
+
+	newestLabel := "never"
+	if newest.Valid {
+		t, err := parseTime(newest.String)
+		if err != nil {
+			return nil, err
+		}
+		newestLabel = t.Format("2006-01-02 15:04 MST")
+	}
+
+	return []app.Stat{
+		{Label: "Snippets", Value: strconv.FormatInt(count, 10)},
+		{Label: "Shared", Value: strconv.FormatInt(shared, 10),
+			Hint: "readable by anyone holding the link"},
+		{Label: "Total size", Value: humanBytes(totalBytes), Hint: "snippet bodies only"},
+		{Label: "Largest", Value: humanBytes(largest)},
+		{Label: "Newest", Value: newestLabel},
+	}, nil
+}
+
+// humanBytes renders a byte count the way a person reads one.
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return strconv.FormatInt(n, 10) + " B"
+	}
+	div, exp := int64(unit), 0
+	for n/div >= unit && exp < 3 {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGT"[exp])
 }
