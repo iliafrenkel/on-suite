@@ -48,6 +48,17 @@ decision.
 | Sharing | Public read-only link to a subtree, mirroring ON Paste. | Account-to-account sharing (permission checks on every read, write, move and search — the most expensive feature in the app). |
 | Portability | Markdown export and import, plus the JSON `Exporter`. | Export-only. Markdown-only (would leave ON Notes out of `onsuite export`). |
 
+## 3a. Identity
+
+```go
+app.Meta{
+    ID:      "notes",                       // URL prefix, migration namespace, table prefix
+    Name:    "ON Notes",
+    Summary: "Organise notes and tasks in one outline.",
+    Order:   10,                            // ahead of ON Paste's 20 in the switcher
+}
+```
+
 ## 4. Data model
 
 One table. `done_at`, `due_on`, `archived_at` and `share_slug` arrive in later
@@ -149,6 +160,11 @@ There is no lazy-loading-on-expand and no arbitrary node limit. Expanding a
 node is a normal request that re-renders the outline with one more level
 visible.
 
+**An empty outline renders one empty bullet**, focused and ready to type into,
+rather than an empty-state panel with a "create your first note" button. A new
+user's first keystroke should land in the outline, and a zoomed-into node with
+no children needs exactly the same affordance.
+
 ## 7. The client/server contract
 
 **The server is complete before any JS exists.** Chunk N2 (§18) delivers every
@@ -192,8 +208,10 @@ spread across handlers, because it is the part most likely to need revisiting.
 | `/` (when not editing) | Focus search |
 | Click the bullet dot | Zoom in |
 
-`Cmd` is `Ctrl` off macOS. Bindings are fixed in this version; making them
-configurable is out of scope (§20).
+`Cmd` is `Ctrl` off macOS. Each binding lands with the chunk that adds the
+operation behind it — `Cmd+Enter` with N5, `/` with N6 — not all at once in N3.
+Bindings are fixed in this version; making them configurable is out of scope
+(§20).
 
 ## 9. Routes
 
@@ -212,6 +230,7 @@ outrank `{id}`, so `/notes/search` and a node with id 42 coexist.
 | `POST /notes/{id}/text` | N2 |
 | `POST /notes/{id}/indent`, `/outdent`, `/move`, `/delete`, `/collapse` | N2 |
 | `POST /notes/{id}/done`, `POST /notes/{id}/due` | N5 |
+| `POST /notes/prefs` — the show-completed toggle | N5 |
 | `GET /notes/due` | N5 |
 | `GET /notes/search?q=` | N6 |
 | `POST /notes/{id}/archive`, `GET /notes/archive` | N7 |
@@ -247,10 +266,12 @@ does **not** complete its children — hiding them is a display decision, and
 recording them as finished would destroy information that cannot be recovered
 when the parent is un-completed.
 
-"Show completed" is a preference cookie written by `notes.js` and read by the
-handlers, following the pattern the theme and font switchers already use
-([theme.js](../../../internal/ui/static/theme.js)) — the server only reads it,
-so there is no endpoint and no CSRF surface.
+"Show completed" is a preference cookie, but unlike the platform's theme and
+font cookies it is **set server-side** by `POST /notes/prefs`. Those are written
+by [theme.js](../../../internal/ui/static/theme.js) because a theme flip is a
+page-level enhancement; this one changes what the server queries, and §7's rule
+is that every behaviour works with JavaScript off. A toggle form is the way to
+honour that, and it picks up the platform's CSRF protection for free.
 
 **Due** sets `due_on`, a date rather than an instant, rendered as a chip on the
 bullet that turns red once the date is past. `/notes/due` lists every node with
@@ -389,6 +410,11 @@ and the app usable. Sizes are context budget, not effort.
 | **N8** | Export + import | Markdown serializer and parser, the JSON `Exporter`, paste-multiline-makes-a-subtree. | M |
 | **N9** | Public sharing | `share_slug`, share and unshare, the one public route. | S |
 | **N10** | Polish | `Stater` admin card, drag-to-move with a mouse, mobile layout, empty states. | M |
+
+This spec is the master plan. Each chunk gets its own implementation plan
+under [docs/superpowers/plans/](../plans/), written when that chunk is picked
+up rather than all ten up front — a plan written now for N8 would be planning
+against a codebase that does not exist yet.
 
 **N1–N3 are the irreducible core.** There is no useful stopping point between
 "the store works" and "the keyboard works" — a half-built outliner is not a
