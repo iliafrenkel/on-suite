@@ -214,3 +214,125 @@ func TestDerivedPaths(t *testing.T) {
 		t.Errorf("BackupDir() = %q, want %q", got, want)
 	}
 }
+
+func settingFor(t *testing.T, c Config, flag string) Setting {
+	t.Helper()
+	for _, s := range c.Settings() {
+		if s.Flag == flag {
+			return s
+		}
+	}
+	t.Fatalf("Settings() has no entry for -%s", flag)
+	return Setting{}
+}
+
+func TestSettingsReportDefaultsWhenNothingIsSet(t *testing.T) {
+	c, err := Parse(nil, nil, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := settingFor(t, c, "addr")
+	if s.Value != ":8080" || s.Default != ":8080" {
+		t.Errorf("addr Value/Default = %q/%q, want :8080/:8080", s.Value, s.Default)
+	}
+	if s.Source != SourceDefault {
+		t.Errorf("addr Source = %v, want SourceDefault", s.Source)
+	}
+	if s.Env != "ONSUITE_ADDR" {
+		t.Errorf("addr Env = %q", s.Env)
+	}
+	if s.Doc == "" {
+		t.Error("addr Doc is empty; the flag's usage string should be carried through")
+	}
+}
+
+func TestSettingsReportTheEnvironmentAsTheSource(t *testing.T) {
+	env := func(k string) string {
+		if k == "ONSUITE_ADDR" {
+			return ":9999"
+		}
+		return ""
+	}
+	c, err := Parse(nil, env, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := settingFor(t, c, "addr")
+	if s.Value != ":9999" {
+		t.Errorf("addr Value = %q, want :9999", s.Value)
+	}
+	if s.Default != ":8080" {
+		t.Errorf("addr Default = %q; the default must survive the environment overriding it", s.Default)
+	}
+	if s.Source != SourceEnv {
+		t.Errorf("addr Source = %v, want SourceEnv", s.Source)
+	}
+}
+
+func TestAnExplicitFlagBeatsTheEnvironmentInTheReportedSource(t *testing.T) {
+	env := func(k string) string {
+		if k == "ONSUITE_ADDR" {
+			return ":9999"
+		}
+		return ""
+	}
+	c, err := Parse([]string{"-addr", ":7777"}, env, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := settingFor(t, c, "addr")
+	if s.Value != ":7777" || s.Source != SourceFlag {
+		t.Errorf("addr = %q from %v, want :7777 from SourceFlag", s.Value, s.Source)
+	}
+}
+
+func TestTLSDerivedValuesAreReportedAsDerived(t *testing.T) {
+	c, err := Parse([]string{"-tls-domain", "example.com"}, nil, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addr := settingFor(t, c, "addr")
+	if addr.Value != ":443" || addr.Source != SourceDerived {
+		t.Errorf("addr = %q from %v, want :443 from SourceDerived", addr.Value, addr.Source)
+	}
+	secure := settingFor(t, c, "secure-cookies")
+	if secure.Value != "true" || secure.Source != SourceDerived {
+		t.Errorf("secure-cookies = %q from %v, want true from SourceDerived", secure.Value, secure.Source)
+	}
+}
+
+func TestEverySettingIsDescribed(t *testing.T) {
+	c, err := Parse(nil, nil, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"addr", "data-dir", "tls-domain", "log-level",
+		"backup-interval", "backup-keep", "tls-http-addr", "secure-cookies",
+	}
+	got := c.Settings()
+	if len(got) != len(want) {
+		t.Fatalf("Settings() has %d entries, want %d", len(got), len(want))
+	}
+	for i, flag := range want {
+		if got[i].Flag != flag {
+			t.Errorf("Settings()[%d].Flag = %q, want %q", i, got[i].Flag, flag)
+		}
+		if got[i].Doc == "" {
+			t.Errorf("-%s has no Doc", flag)
+		}
+	}
+}
+
+func TestSettingsOnAHandBuiltConfigIsEmptyRatherThanWrong(t *testing.T) {
+	// Commands like `onsuite backup` build a Config literal without parsing
+	// flags. Reporting made-up settings for one would be worse than none.
+	if got := (Config{DataDir: "./data"}).Settings(); len(got) != 0 {
+		t.Errorf("Settings() on a literal Config returned %d entries, want 0", len(got))
+	}
+}
