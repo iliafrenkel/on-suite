@@ -45,16 +45,18 @@ type Deps struct {
 // failed collector renders as a note in its own card instead of replacing the
 // whole page with a 500 — a broken PRAGMA must not hide the job status.
 type Report struct {
-	Runtime     RuntimeInfo
-	Settings    []config.Setting
-	Jobs        []jobs.Status
-	Apps        []app.AppStats
-	Accounts    []auth.Account
-	AccountsErr string
-	Sessions    SessionInfo
-	SessionsErr string
-	Database    DatabaseInfo
-	DatabaseErr string
+	Runtime      RuntimeInfo
+	Settings     []config.Setting
+	Jobs         []jobs.Status
+	Apps         []app.AppStats
+	Accounts     []auth.Account
+	AccountsErr  string
+	Sessions     SessionInfo
+	SessionsErr  string
+	Database     DatabaseInfo
+	DatabaseErr  string
+	Routes       []web.Route
+	PublicRoutes int
 }
 
 // collect gathers every section. It never returns an error: an error is a
@@ -87,6 +89,13 @@ func (d Deps) collect(ctx context.Context, now time.Time) Report {
 	rep.Database = database
 	if dbErr != nil {
 		rep.DatabaseErr = dbErr.Error()
+	}
+
+	rep.Routes = d.Routes.Routes()
+	for _, rt := range rep.Routes {
+		if rt.Public {
+			rep.PublicRoutes++
+		}
 	}
 	return rep
 }

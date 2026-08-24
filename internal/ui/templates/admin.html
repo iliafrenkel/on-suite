@@ -10,6 +10,7 @@
 		<a href="#jobs">Jobs</a>
 		<a href="#apps">Apps</a>
 		<a href="#users">Users &amp; sessions</a>
+		<a href="#routes">Routes</a>
 	</nav>
 
 	<section class="admin-section" id="runtime">
@@ -151,6 +152,33 @@
 					</tr>
 				{{else}}
 					<tr><td colspan="4" class="dim">No accounts exist.</td></tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<section class="admin-section" id="routes">
+		<h2>Routes</h2>
+		<p class="faint">
+			Every route this build serves. {{.Data.PublicRoutes}} of {{len .Data.Routes}}
+			are reachable without signing in; everything else requires a session.
+		</p>
+		<div class="scroll-x">
+			<table class="admin-table">
+				<thead><tr><th>Pattern</th><th>Access</th><th>Owner</th></tr></thead>
+				<tbody>
+				{{range .Data.Routes}}
+					<tr>
+						<td><code>{{.Pattern}}</code></td>
+						<td>
+							{{if .Public}}<span class="admin-tag admin-tag-public">public</span>
+							{{else}}<span class="dim">signed in</span>{{end}}
+						</td>
+						<td class="dim">{{.Owner}}</td>
+					</tr>
+				{{else}}
+					<tr><td colspan="3" class="dim">No routes recorded.</td></tr>
 				{{end}}
 				</tbody>
 			</table>

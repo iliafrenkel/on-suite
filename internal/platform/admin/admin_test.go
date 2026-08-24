@@ -570,3 +570,118 @@ func TestABrokenCollectorRendersInItsOwnCardWithA200(t *testing.T) {
 		t.Error("a nil user store should leave the accounts table in its empty state, not hide it")
 	}
 }
+
+func TestTheRouteMapIncludesPlatformAndAppRoutesWithGuardStatus(t *testing.T) {
+	s := newServer(t)
+	doc := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
+	doc.MustHave("#routes")
+
+	body := doc.Text()
+	// A map that quietly omitted the platform's own routes would be worse
+	// than no map: /login and /static/ are the first two an auditor checks.
+	for _, want := range []string{"GET /login", "GET /admin/", "GET /demo/{$}", "GET /demo/s/{slug}"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the route map does not list %q", want)
+		}
+	}
+
+	// Public and guarded must be distinguishable, not just listed.
+	public := doc.QueryAll(".admin-tag-public")
+	if len(public) == 0 {
+		t.Fatal("no route is marked public; the section cannot show default-deny working")
+	}
+}
+
+func TestTheRouteMapCountsPublicRoutes(t *testing.T) {
+	s := newServer(t)
+	body := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String()).Text()
+	if !strings.Contains(body, "reachable without signing in") {
+		t.Error("the route map does not summarise how many routes are public")
+	}
+}
+
+// routeRow returns the concatenated text of the single "#routes tbody tr"
+// row whose text contains pattern, or fails the test. Rows are looked up by
+// their rendered pattern text rather than a selector, since the table
+// carries no per-row id.
+func routeRow(t *testing.T, doc *htmlassert.Doc, pattern string) string {
+	t.Helper()
+	for _, tr := range doc.QueryAll("tbody tr") {
+		text := htmlassert.Text(tr)
+		if strings.Contains(text, pattern) {
+			return text
+		}
+	}
+	t.Fatalf("no row found for pattern %q", pattern)
+	return ""
+}
+
+func TestTheRouteMapMarksOnlyPublicRoutesAsPublic(t *testing.T) {
+	s := newServer(t)
+	doc := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
+
+	// GET /demo/s/{slug} is mounted with r.PublicFunc: public, so its row
+	// must carry the "public" tag.
+	public := routeRow(t, doc, "GET /demo/s/{slug}")
+	if !strings.Contains(public, "public") {
+		t.Errorf("public route row = %q; want it tagged public", public)
+	}
+
+	// GET /demo/{$} is mounted with r.HandleFunc: authenticated, so its row
+	// must say "signed in" and must not carry the public tag's text.
+	authenticated := routeRow(t, doc, "GET /demo/{$}")
+	if !strings.Contains(authenticated, "signed in") {
+		t.Errorf("authenticated route row = %q; want it marked signed in", authenticated)
+	}
+	if strings.Contains(authenticated, "public") {
+		t.Errorf("authenticated route row = %q; must not be tagged public", authenticated)
+	}
+}
+
+func TestTheRouteMapShowsPlatformAndAppOwners(t *testing.T) {
+	s := newServer(t)
+	doc := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
+
+	platform := routeRow(t, doc, "GET /login")
+	if !strings.Contains(platform, web.PlatformOwner) {
+		t.Errorf("platform route row = %q; want owner %q", platform, web.PlatformOwner)
+	}
+
+	appOwned := routeRow(t, doc, "GET /demo/{$}")
+	if !strings.Contains(appOwned, "demo") {
+		t.Errorf("app route row = %q; want owner %q", appOwned, "demo")
+	}
+}
+
+func TestTheRouteMapShowsAnEmptyStateWithNoRoutesRecorded(t *testing.T) {
+	s := newServer(t)
+
+	rec := httptest.NewRecorder()
+	admin.Handler(admin.Deps{
+		Config:  s.cfg,
+		Render:  s.rend,
+		Errors:  s.errs,
+		Version: "v9.9.9",
+		Started: time.Now(),
+		// Routes is left nil: Recorder.Routes on a nil receiver returns
+		// nil, so the section must fall back to its empty-state row
+		// instead of panicking or rendering an empty table silently.
+	}).ServeHTTP(rec, httptest.NewRequest("GET", "/admin/", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d; a nil route recorder must not become a 500", rec.Code)
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#routes")
+	body := doc.Text()
+	if !strings.Contains(body, "No routes recorded.") {
+		t.Error("an empty route map does not show its empty-state row")
+	}
+	if !strings.Contains(body, "0 of 0") {
+		t.Error("an empty route map does not summarise as 0 of 0 public routes")
+	}
+	if len(doc.QueryAll(".admin-tag-public")) != 0 {
+		t.Error("an empty route map must not render any public tag")
+	}
+}
