@@ -15,6 +15,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
+	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
 )
 
 func serve(args []string, getenv func(string) string, errOut io.Writer) error {
@@ -76,9 +77,11 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	maintenanceCtx, stopMaintenance := context.WithCancel(context.Background())
-	defer stopMaintenance()
-	go runMaintenance(maintenanceCtx, handle, users, cfg, log)
+	maintenance := jobs.NewRegistry()
+	registerMaintenance(maintenance, handle, users, cfg, log)
+	jobsCtx, stopJobs := context.WithCancel(context.Background())
+	defer stopJobs()
+	go maintenance.Run(jobsCtx)
 
 	if cfg.TLSEnabled() {
 		return serveAutocert(context.Background(), cfg, srv, log)
