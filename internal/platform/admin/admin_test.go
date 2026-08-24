@@ -197,7 +197,14 @@ func TestTheSidebarLinksAdminsToTheAdminPageAndNobodyElse(t *testing.T) {
 	s := newServer(t)
 
 	adminPage := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
-	adminPage.MustHave(`nav.shell-nav a[href="/admin/"]`)
+	link := adminPage.MustHave(`nav.shell-nav a[href="/admin/"]`)
+
+	// The admin link must be marked current when the admin page itself is
+	// rendering, exactly like every other sidebar item is when its app is
+	// active.
+	if got, ok := htmlassert.Attr(link, "aria-current"); !ok || got != "page" {
+		t.Errorf(`admin sidebar link aria-current = %q, %v, want "page", true`, got, ok)
+	}
 
 	// A non-admin's own pages must not advertise it either.
 	plainPage := htmlassert.Parse(t, s.get(t, s.plain, "/login").Body.String())

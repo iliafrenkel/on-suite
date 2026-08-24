@@ -67,6 +67,7 @@ func (d Deps) collect(ctx context.Context, now time.Time) Report {
 // does no authorization of its own, exactly like every app handler.
 func Handler(d Deps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(web.WithActiveApp(r.Context(), "admin"))
 		page := app.NewPage(r, "Admin", d.Nav)
 		page.Shell.Version = d.Version
 		page.Data = d.collect(r.Context(), time.Now().UTC())
