@@ -1,5 +1,8 @@
 # Releasing
 
+> This is for maintainers cutting a new version of ON Suite itself. If you
+> just want to deploy an existing release, see [`docs/DEPLOYING.md`](DEPLOYING.md).
+
 Releases are just a git tag. Pushing a tag matching `v*` triggers
 [`.github/workflows/release.yml`](../.github/workflows/release.yml), which
 runs [goreleaser](https://goreleaser.com) to build, package, and publish a
@@ -31,7 +34,7 @@ GitHub Release — there's no separate release script or manual build step.
      `darwin/arm64` with `CGO_ENABLED=0`, stamping the tag into
      `main.version`,
    - package each binary into a `.tar.gz` alongside `README.md`, `LICENSE`,
-     and `docs/deploy/`, plus a `checksums.txt`,
+     `docs/DEPLOYING.md`, and `docs/onsuite.service`, plus a `checksums.txt`,
    - sign `checksums.txt` with [cosign](https://docs.sigstore.dev/cosign/overview/)
      using keyless (Sigstore) signing, producing `checksums.txt.sig` and
      `checksums.txt.pem`,
@@ -87,5 +90,4 @@ re-pushing the tag, or goreleaser will fail on the name collision.
   docker build --build-arg VERSION=v0.4.0 -t onsuite:v0.4.0 .
   ```
 
-- **Deploying a release to a server** — see
-  [`docs/deploy/README.md`](deploy/README.md).
+- **Deploying a release to a server** — see [`docs/DEPLOYING.md`](DEPLOYING.md).
