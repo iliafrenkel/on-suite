@@ -146,6 +146,12 @@ curl -s localhost:8080/healthz          # version and a database ping
 journalctl -u onsuite -f                # structured JSON logs
 ```
 
+Once the server is up, an administrator can open `/admin/` to see which
+settings this process actually resolved (and whether each came from a flag,
+the environment, or a default), when the last snapshot ran, how large the
+database and its write-ahead log have grown, and which routes are reachable
+without signing in. It is read-only — nothing on it changes state.
+
 ## Docker, if you prefer
 
 ```bash
