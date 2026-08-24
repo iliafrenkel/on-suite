@@ -2,6 +2,7 @@ package admin_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -253,5 +254,40 @@ func TestTheJobsSectionListsRegisteredJobsAndTheirState(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("the jobs section does not mention %q", want)
 		}
+	}
+}
+
+// TestTheJobsSectionShowsOutcomesForJobsThatHaveRun exercises both branches
+// of the outcome cell that a never-run job cannot reach: a successful run
+// and a failed one. In particular it pins the template's
+// "admin-tag-failed" class and "failed" text, which is the exact branch a
+// review found the plan had specified incorrectly (as "admin-tag-public").
+func TestTheJobsSectionShowsOutcomesForJobsThatHaveRun(t *testing.T) {
+	ctx := context.Background()
+	reg := jobs.NewRegistry()
+	reg.Register("successful thing", "always works", time.Hour, func(context.Context) error { return nil })
+	reg.Register("failed thing", "always fails", time.Hour, func(context.Context) error { return errors.New("boom") })
+	reg.RunOnceForTest(ctx, "successful thing")
+	reg.RunOnceForTest(ctx, "failed thing")
+
+	s := newServerWith(t, reg)
+	doc := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
+	doc.MustHave("#jobs")
+
+	body := doc.Text()
+	for _, want := range []string{"successful thing", "failed thing", "boom"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the jobs section does not mention %q", want)
+		}
+	}
+
+	ok := doc.MustHave(".admin-tag-ok")
+	if got := htmlassert.Text(ok); got != "ok" {
+		t.Errorf("successful job's outcome tag text = %q, want %q", got, "ok")
+	}
+
+	failed := doc.MustHave(".admin-tag-failed")
+	if got := htmlassert.Text(failed); got != "failed" {
+		t.Errorf("failed job's outcome tag text = %q, want %q", got, "failed")
 	}
 }
