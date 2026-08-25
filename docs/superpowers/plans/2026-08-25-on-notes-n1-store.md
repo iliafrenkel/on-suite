@@ -2091,6 +2091,82 @@ func TestMoveRejectsAnotherUsersNodeOrParent(t *testing.T) {
 	checkInvariants(t, f.db)
 }
 
+func TestMoveCarriesTheSubtree(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "a")
+	x := f.mk(t, a.ID, "x")
+	f.mk(t, x.ID, "x1")
+	f.mk(t, x.ID, "x2")
+	b := f.mk(t, notes.RootID, "b")
+
+	if err := f.store.Move(ctx, f.alice.ID, x.ID, b.ID, 0); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatalf("Outline: %v", err)
+	}
+	// "taking its subtree with it" is the method's headline promise, and it
+	// is the only path on which heightOf returns anything but zero.
+	want := "- a\n- b [+]\n  - x [+]\n    - x1\n    - x2\n"
+	if outlineShape(got) != want {
+		t.Fatalf("after moving a subtree:\n%s\nwant\n%s", outlineShape(got), want)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestMoveDoesNotRenumberAnotherUsersTopLevel(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// A top-level bullet has parent_id NULL for every user alike, so the
+	// user_id filter on the two renumbering statements is the only thing
+	// keeping alice's move out of bob's outline. A leak there would leave
+	// bob's positions contiguous but wrong — exactly the corruption
+	// treeViolations is unable to see.
+	for _, title := range []string{"bob 0", "bob 1", "bob 2"} {
+		if _, err := f.store.Create(ctx, f.bob.ID, notes.RootID, 1<<30, title, ""); err != nil {
+			t.Fatalf("Create for bob: %v", err)
+		}
+	}
+	a := f.mk(t, notes.RootID, "alice 0")
+	f.mk(t, notes.RootID, "alice 1")
+	f.mk(t, notes.RootID, "alice 2")
+
+	if err := f.store.Move(ctx, f.alice.ID, a.ID, notes.RootID, 2); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"alice 1", "alice 2", "alice 0"}) {
+		t.Errorf("alice's top level = %v; want [alice 1 alice 2 alice 0]", got)
+	}
+	if got := f.childTitles(t, f.bob.ID, notes.RootID); !slices.Equal(got, []string{"bob 0", "bob 1", "bob 2"}) {
+		t.Errorf("bob's top level = %v; want [bob 0 bob 1 bob 2] untouched", got)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestMoveAllowsLandingExactlyAtMaxDepth(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// A chain whose deepest bullet sits at MaxDepth-1, so a leaf moved under
+	// it lands at exactly MaxDepth — the deepest permitted depth. This pins
+	// the permitting side of the guard: with >= in place of >, it would fail.
+	parent := int64(notes.RootID)
+	for i := 0; i < notes.MaxDepth; i++ {
+		parent = f.mk(t, parent, fmt.Sprintf("level %d", i)).ID
+	}
+	leaf := f.mk(t, notes.RootID, "leaf")
+
+	if err := f.store.Move(ctx, f.alice.ID, leaf.ID, parent, 0); err != nil {
+		t.Fatalf("Move landing at exactly MaxDepth = %v; want nil", err)
+	}
+	checkInvariants(t, f.db)
+}
+
 func TestMoveRefusesToPassMaxDepth(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -2174,9 +2250,14 @@ func (st *Store) Move(ctx context.Context, userID, id, newParentID int64, newPos
 			}
 		}
 
-		// Close the gap the bullet leaves behind. It is excluded from both
-		// shifts by id, because a move within one parent would otherwise drag
-		// the bullet along with its own siblings.
+		// Close the gap the bullet leaves behind.
+		//
+		// The "id != ?" on this shift and the next is belt and braces rather
+		// than load-bearing. This predicate cannot match the moving row in
+		// any case, since its position is exactly oldPos; and any increment
+		// the next shift applied to it would be overwritten by the final
+		// update below. They stay because a future change to either
+		// predicate would make them matter, and they cost one comparison.
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE notes_nodes SET position = position - 1
 			  WHERE user_id = ? AND parent_id IS ? AND position > ? AND id != ?`,

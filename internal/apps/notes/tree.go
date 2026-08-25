@@ -271,9 +271,14 @@ func (st *Store) Move(ctx context.Context, userID, id, newParentID int64, newPos
 			}
 		}
 
-		// Close the gap the bullet leaves behind. It is excluded from both
-		// shifts by id, because a move within one parent would otherwise drag
-		// the bullet along with its own siblings.
+		// Close the gap the bullet leaves behind.
+		//
+		// The "id != ?" on this shift and the next is belt and braces rather
+		// than load-bearing. This predicate cannot match the moving row in
+		// any case, since its position is exactly oldPos; and any increment
+		// the next shift applied to it would be overwritten by the final
+		// update below. They stay because a future change to either
+		// predicate would make them matter, and they cost one comparison.
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE notes_nodes SET position = position - 1
 			  WHERE user_id = ? AND parent_id IS ? AND position > ? AND id != ?`,
