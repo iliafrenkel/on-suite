@@ -211,3 +211,36 @@ func TestTreeViolationsCatchesCorruption(t *testing.T) {
 		})
 	}
 }
+
+// chain builds a straight line of nodes, each the child of the one before, so
+// the deepest sits at depth len(nodes)-1.
+func chain(length int) []rawNode {
+	var out []rawNode
+	for i := int64(1); i <= int64(length); i++ {
+		n := rawNode{ID: i, UserID: 1, Position: 0}
+		if i > 1 {
+			n.ParentID = sql.NullInt64{Int64: i - 1, Valid: true}
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+func TestTreeViolationsCatchesExcessiveDepth(t *testing.T) {
+	// One level past what MaxDepth permits.
+	got := treeViolations(chain(notes.MaxDepth + 2))
+	if len(got) == 0 {
+		t.Fatal("treeViolations found nothing; want an I4 violation")
+	}
+	if !strings.Contains(strings.Join(got, "\n"), "I4") {
+		t.Fatalf("treeViolations = %v; want an I4 violation", got)
+	}
+}
+
+func TestTreeViolationsAcceptsAChainAtExactlyMaxDepth(t *testing.T) {
+	// The boundary, so the test above cannot be passing for the wrong reason:
+	// MaxDepth+1 nodes put the deepest at exactly MaxDepth, which is legal.
+	if v := treeViolations(chain(notes.MaxDepth + 1)); len(v) > 0 {
+		t.Fatalf("treeViolations on a chain at exactly MaxDepth = %v; want none", v)
+	}
+}
