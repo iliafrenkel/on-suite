@@ -141,6 +141,12 @@ func (st *Store) Create(ctx context.Context, userID, parentID int64, afterPos in
 //
 // The walk is capped at MaxDepth so that a tree which has somehow acquired a
 // cycle returns an answer instead of running forever.
+//
+// Like heightOf, the recursive join below carries no user_id predicate, and
+// that is harmless rather than deliberate: the anchor row is already scoped
+// to userID, and every way this walk could be wrong under a broken I2 comes
+// out fail-safe, since the only thing either function hands back is an int
+// that at worst trips ErrTooDeep.
 func depthOf(ctx context.Context, tx *sql.Tx, userID, id int64) (int, error) {
 	var depth sql.NullInt64
 	err := tx.QueryRowContext(ctx,
@@ -374,7 +380,8 @@ func (st *Store) Move(ctx context.Context, userID, id, newParentID int64, newPos
 }
 
 // heightOf reports how many levels of descendants a node has: 0 for a leaf.
-// It returns ErrNotFound on the same terms as depthOf.
+// It returns ErrNotFound on the same terms as depthOf, and its recursive join
+// is unfiltered for the same fail-safe reason: see the note on depthOf.
 func heightOf(ctx context.Context, tx *sql.Tx, userID, id int64) (int, error) {
 	var height sql.NullInt64
 	err := tx.QueryRowContext(ctx,
@@ -398,6 +405,15 @@ func heightOf(ctx context.Context, tx *sql.Tx, userID, id int64) (int, error) {
 // isDescendant reports whether candidate sits anywhere inside root's subtree,
 // by walking up from candidate and looking for root. Walking up is bounded by
 // MaxDepth; walking down would be bounded only by the size of the subtree.
+//
+// The recursive join below is deliberately unfiltered by user_id, and adding
+// one would be a regression, not a cleanup. This walk exists to refuse a move
+// that would create a cycle; ownership is already enforced at the anchor row
+// (WHERE id = ? AND user_id = ?), and the join's only remaining job is to
+// travel far enough to actually reach root if root is there. Stopping the
+// join at an ownership boundary would make the walk return false for a
+// candidate that genuinely is inside root's subtree — which is to say, it
+// would let through the exact cycle this check exists to prevent.
 func isDescendant(ctx context.Context, tx *sql.Tx, userID, candidate, root int64) (bool, error) {
 	var found int
 	err := tx.QueryRowContext(ctx,

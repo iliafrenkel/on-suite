@@ -630,10 +630,14 @@ func TestMoveDoesNotRenumberAnotherUsersTopLevel(t *testing.T) {
 
 	// A top-level bullet has parent_id NULL for every user alike, so the
 	// user_id filter on the two renumbering statements is the only thing
-	// scoping alice's move to her own outline. Asserting on bob's titles
-	// names such a leak at its source: it would also trip checkInvariants,
-	// but as an I1 failure on rows this test never moved, which says
-	// nothing about where the bug is.
+	// scoping alice's move to her own outline. Both statements shift a
+	// contiguous suffix of positions, and a suffix shifted wholesale keeps
+	// its relative order — so a leak onto bob would leave his titles
+	// reading exactly as they already did, and only his positions would
+	// give it away. The assertion is therefore on childTitlesAndPositions:
+	// asserting on titles alone would let a leak here surface only as
+	// checkInvariants tripping on a duplicated position among rows this
+	// test never moved, which says nothing about where the bug is.
 	for _, title := range []string{"bob 0", "bob 1", "bob 2"} {
 		if _, err := f.store.Create(ctx, f.bob.ID, notes.RootID, 1<<30, title, ""); err != nil {
 			t.Fatalf("Create for bob: %v", err)
@@ -647,11 +651,13 @@ func TestMoveDoesNotRenumberAnotherUsersTopLevel(t *testing.T) {
 		t.Fatalf("Move: %v", err)
 	}
 
-	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"alice 1", "alice 2", "alice 0"}) {
-		t.Errorf("alice's top level = %v; want [alice 1 alice 2 alice 0]", got)
+	want := []string{"alice 1@0", "alice 2@1", "alice 0@2"}
+	if got := f.childTitlesAndPositions(t, f.alice.ID, notes.RootID); !slices.Equal(got, want) {
+		t.Errorf("alice's top level = %v; want %v", got, want)
 	}
-	if got := f.childTitles(t, f.bob.ID, notes.RootID); !slices.Equal(got, []string{"bob 0", "bob 1", "bob 2"}) {
-		t.Errorf("bob's top level = %v; want [bob 0 bob 1 bob 2] untouched", got)
+	want = []string{"bob 0@0", "bob 1@1", "bob 2@2"}
+	if got := f.childTitlesAndPositions(t, f.bob.ID, notes.RootID); !slices.Equal(got, want) {
+		t.Errorf("bob's top level = %v; want %v untouched", got, want)
 	}
 	checkInvariants(t, f.db)
 }

@@ -26,6 +26,8 @@ func (st *Store) SetClock(now func() time.Time) { st.now = now }
 // nodeColumns is every column a Node is scanned from, in scan order. It lives
 // in one place because half a dozen queries select exactly this list, and a
 // column added to one of them and not the others is a silent scan error.
+//
+// aliasNodeColumns below parses this by splitting on ", " — that separator must stay exactly ", ".
 const nodeColumns = `id, user_id, parent_id, position, title, note, collapsed, created_at, updated_at`
 
 // The recursive CTEs below need the same list qualified by a table alias, in
@@ -140,7 +142,9 @@ func parseTime(s string) (time.Time, error) {
 }
 
 // Children returns a parent's direct children in position order. parentID may
-// be RootID for the top level.
+// be RootID for the top level. It is empty both for a parent with no
+// children and for a parent that does not exist or is not userID's: a caller
+// that needs to tell those apart calls ByID.
 //
 // Calling it from inside a Do closure waits for the connection that
 // transaction is holding, and waits for ever, so a render belongs after Do has
@@ -205,7 +209,10 @@ func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
 }
 
 // Outline returns everything visible under rootID, in document order, with
-// Depth relative to rootID and HasChildren set. rootID may be RootID.
+// Depth relative to rootID and HasChildren set. rootID may be RootID. It is
+// empty both for a root with nothing visible under it and for a root that
+// does not exist or is not userID's: a caller that needs to tell those apart
+// calls ByID.
 //
 // The result is flat rather than nested: the caller renders indentation from
 // Depth, which keeps rendering non-recursive and makes this method's output
