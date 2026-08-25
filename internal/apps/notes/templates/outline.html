@@ -1,3 +1,10 @@
+{{/* notes.js is served by the app itself, behind the same sign-in requirement
+     as the outline (see App.script) — spec §17. defer, like base.html's own
+     scripts, so htmx is present and the DOM is parsed before it runs. */}}
+{{define "head"}}
+<script src="/notes/notes.js" defer></script>
+{{end}}
+
 {{define "content"}}
 <div class="stack notes">
 	{{if .Data.Zoomed}}
