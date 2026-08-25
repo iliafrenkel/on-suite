@@ -17,6 +17,16 @@ a long randomised sequence.
 CGO), SQLite recursive CTEs, `math/rand/v2` for the sequence test. No new
 dependencies.
 
+**Verified before writing:** every SQL statement in this plan — the schema, the
+`Outline` and `Ancestors` recursive CTEs, `depthOf`, `heightOf`,
+`isDescendant`, and the position arithmetic in `Create` and `Move` — was run
+against `modernc.org/sqlite v1.56.0`, the version in `go.mod`. The pre-order
+`path` ordering, the collapse cutoff, the cross-user isolation, the cycle and
+depth guards, the indent/outdent/reorder traces and the `ON DELETE CASCADE`
+subtree delete all produce the results asserted in the tests below. If one of
+them fails during implementation, the bug is in the Go around the query, not
+in the query.
+
 **Spec:** [docs/superpowers/specs/2026-08-25-on-notes-design.md](../specs/2026-08-25-on-notes-design.md).
 This plan implements chunk **N1** of §18. Read spec §4 (data model), §5 (tree
 operations) and §17 (testing) before starting.
@@ -650,38 +660,6 @@ func newFixture(t *testing.T) *fixture {
 	return &fixture{store: notes.NewStore(handle), db: handle, alice: alice, bob: bob}
 }
 
-// childTitles reads a parent's children straight from the table, in position
-// order. Structural assertions deliberately bypass the store, so a test of
-// Create cannot be fooled by a matching bug in a read method.
-func childTitles(t *testing.T, handle *sql.DB, userID, parentID int64) []string {
-	t.Helper()
-
-	var parent any
-	if parentID != notes.RootID {
-		parent = parentID
-	}
-	rows, err := handle.QueryContext(context.Background(),
-		`SELECT title FROM notes_nodes
-		  WHERE user_id = ? AND parent_id IS ? ORDER BY position`, userID, parent)
-	if err != nil {
-		t.Fatalf("reading child titles: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var out []string
-	for rows.Next() {
-		var title string
-		if err := rows.Scan(&title); err != nil {
-			t.Fatalf("scanning title: %v", err)
-		}
-		out = append(out, title)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("reading child titles: %v", err)
-	}
-	return out
-}
-
 func TestAFreshDatabaseHasNoViolations(t *testing.T) {
 	f := newFixture(t)
 	checkInvariants(t, f.db)
@@ -818,15 +796,52 @@ git commit -m "feat(notes): add the store, ByID, and the tree invariant checker"
 
 **Files:**
 - Create: `internal/apps/notes/tree.go`
-- Test: `internal/apps/notes/tree_test.go`
+- Test: `internal/apps/notes/tree_test.go`, `internal/apps/notes/store_test.go` (one helper)
 
 **Interfaces:**
 - Consumes: everything from Tasks 1 and 2.
-- Produces: `(*Store).Create(ctx, userID, parentID int64, afterPos int, title, note string) (Node, error)`; package-private `(*Store).tx`, `parentArg(int64) any`, `depthOf(ctx, *sql.Tx, userID, id int64) (int, error)`, `heightOf(...) (int, error)`, `countChildren(ctx, *sql.Tx, userID, parentID int64) (int, error)`, `clamp(v, lo, hi int) int`, `formatTime(time.Time) string`. In tests: `(*fixture).mk(*testing.T, parentID int64, title string) notes.Node`.
+- Produces: `(*Store).Create(ctx, userID, parentID int64, afterPos int, title, note string) (Node, error)`; package-private `(*Store).tx`, `parentArg(int64) any`, `depthOf(ctx, *sql.Tx, userID, id int64) (int, error)`, `countChildren(ctx, *sql.Tx, userID, parentID int64) (int, error)`, `clamp(v, lo, hi int) int`, `formatTime(time.Time) string`. In tests: `(*fixture).mk(*testing.T, parentID int64, title string) notes.Node` and `(*fixture).childTitles(*testing.T, userID, parentID int64) []string`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `internal/apps/notes/tree_test.go`:
+Append this helper to `internal/apps/notes/store_test.go` — it belongs beside
+the fixture it hangs off:
+
+```go
+// childTitles reads a parent's children straight from the table, in position
+// order. Structural assertions deliberately bypass the store, so a test of
+// Create cannot be fooled by a matching bug in a read method.
+func (f *fixture) childTitles(t *testing.T, userID, parentID int64) []string {
+	t.Helper()
+
+	var parent any
+	if parentID != notes.RootID {
+		parent = parentID
+	}
+	rows, err := f.db.QueryContext(context.Background(),
+		`SELECT title FROM notes_nodes
+		  WHERE user_id = ? AND parent_id IS ? ORDER BY position`, userID, parent)
+	if err != nil {
+		t.Fatalf("reading child titles: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []string
+	for rows.Next() {
+		var title string
+		if err := rows.Scan(&title); err != nil {
+			t.Fatalf("scanning title: %v", err)
+		}
+		out = append(out, title)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("reading child titles: %v", err)
+	}
+	return out
+}
+```
+
+Then create `internal/apps/notes/tree_test.go`:
 
 ```go
 package notes_test
@@ -859,7 +874,7 @@ func TestCreateAppendsInOrder(t *testing.T) {
 	f.mk(t, notes.RootID, "second")
 	f.mk(t, notes.RootID, "third")
 
-	got := childTitles(t, f.db, f.alice.ID, notes.RootID)
+	got := f.childTitles(t, f.alice.ID, notes.RootID)
 	want := []string{"first", "second", "third"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("top level = %v; want %v", got, want)
@@ -877,7 +892,7 @@ func TestCreateInsertsBetweenSiblings(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	got := childTitles(t, f.db, f.alice.ID, notes.RootID)
+	got := f.childTitles(t, f.alice.ID, notes.RootID)
 	want := []string{"first", "second", "third"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("top level = %v; want %v", got, want)
@@ -893,7 +908,7 @@ func TestCreateInsertsFirstWithAfterPosMinusOne(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	got := childTitles(t, f.db, f.alice.ID, notes.RootID)
+	got := f.childTitles(t, f.alice.ID, notes.RootID)
 	want := []string{"first", "second"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("top level = %v; want %v", got, want)
@@ -912,7 +927,7 @@ func TestCreateUnderAParent(t *testing.T) {
 	if child.Position != 0 {
 		t.Errorf("child.Position = %d; want 0", child.Position)
 	}
-	if got := childTitles(t, f.db, f.alice.ID, parent.ID); !slices.Equal(got, []string{"child"}) {
+	if got := f.childTitles(t, f.alice.ID, parent.ID); !slices.Equal(got, []string{"child"}) {
 		t.Errorf("children of parent = %v; want [child]", got)
 	}
 	checkInvariants(t, f.db)
@@ -977,7 +992,6 @@ package notes
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -1100,28 +1114,6 @@ func depthOf(ctx context.Context, tx *sql.Tx, userID, id int64) (int, error) {
 	return int(depth.Int64), nil
 }
 
-// heightOf reports how many levels of descendants a node has: 0 for a leaf.
-// It returns ErrNotFound on the same terms as depthOf.
-func heightOf(ctx context.Context, tx *sql.Tx, userID, id int64) (int, error) {
-	var height sql.NullInt64
-	err := tx.QueryRowContext(ctx,
-		`WITH RECURSIVE down(id, d) AS (
-		     SELECT id, 0 FROM notes_nodes WHERE id = ? AND user_id = ?
-		   UNION ALL
-		     SELECT c.id, n.d + 1
-		       FROM notes_nodes c JOIN down n ON c.parent_id = n.id
-		      WHERE n.d < ?
-		 )
-		 SELECT max(d) FROM down`, id, userID, MaxDepth).Scan(&height)
-	if err != nil {
-		return 0, fmt.Errorf("notes: height of %d: %w", id, err)
-	}
-	if !height.Valid {
-		return 0, ErrNotFound
-	}
-	return int(height.Int64), nil
-}
-
 // countChildren counts a parent's direct children.
 func countChildren(ctx context.Context, tx *sql.Tx, userID, parentID int64) (int, error) {
 	var n int
@@ -1138,14 +1130,10 @@ func countChildren(ctx context.Context, tx *sql.Tx, userID, parentID int64) (int
 func clamp(v, lo, hi int) int { return min(max(v, lo), hi) }
 
 func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
-
-// errors is imported for the sentinels used by later operations in this file.
-var _ = errors.Is
 ```
 
-**Note on that last line:** delete `var _ = errors.Is` and the `errors` import
-if `go vet` complains at this point — Task 6 onward uses `errors.Is` in this
-file for real. It is simpler to omit the import now and add it in Task 6.
+`errors` is not imported yet: Task 7 is the first operation in this file that
+needs `errors.Is`, and an import added before its first use fails `go vet`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1161,9 +1149,7 @@ Expected: PASS, all seven `TestCreate*` tests.
 gofmt -l . && go vet ./... && go run honnef.co/go/tools/cmd/staticcheck@v0.8.0 ./... && go test ./... -race -count=1
 ```
 
-Expected: PASS, and `gofmt -l .` prints nothing. `heightOf` is unused until
-Task 8; if staticcheck flags it (U1000), move its definition into Task 8
-rather than suppressing the warning.
+Expected: PASS, and `gofmt -l .` prints nothing.
 
 - [ ] **Step 6: Commit**
 
@@ -1285,6 +1271,8 @@ func TestAncestorsOfAnotherUsersNodeIsEmpty(t *testing.T) {
 }
 ```
 
+Add `"slices"` to the imports of `store_test.go`.
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
@@ -1370,14 +1358,18 @@ git commit -m "feat(notes): read a parent's children and a node's breadcrumb"
 
 ---
 
-### Task 5: Outline
+### Task 5: Outline and SetCollapsed
 
 **Files:**
-- Modify: `internal/apps/notes/store.go`
-- Test: `internal/apps/notes/store_test.go`
+- Modify: `internal/apps/notes/store.go`, `internal/apps/notes/tree.go`
+- Test: `internal/apps/notes/store_test.go`, `internal/apps/notes/tree_test.go`
 
 **Interfaces:**
-- Produces: `(*Store).Outline(ctx, userID, rootID int64) ([]Node, error)` — a flat slice in document order, with `Depth` relative to `rootID` and `HasChildren` set.
+- Produces: `(*Store).Outline(ctx, userID, rootID int64) ([]Node, error)` — a flat slice in document order, with `Depth` relative to `rootID` and `HasChildren` set — and `(*Store).SetCollapsed(ctx, userID, id int64, collapsed bool) error`; package-private `(*Store).update(ctx, query string, args ...any) error`.
+
+`SetCollapsed` lands here rather than with the other text edits in Task 6
+because `Outline` is not testable without it: the whole point of the collapse
+flag is that it decides where the outline query stops descending.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1495,6 +1487,44 @@ func TestOutlineOfAnotherUsersNodeIsEmpty(t *testing.T) {
 
 Add `"strings"` to the imports of `store_test.go`.
 
+And append the `SetCollapsed` tests to `internal/apps/notes/tree_test.go`:
+
+```go
+func TestSetCollapsedRoundTrips(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "parent")
+
+	if err := f.store.SetCollapsed(ctx, f.alice.ID, n.ID, true); err != nil {
+		t.Fatalf("SetCollapsed(true): %v", err)
+	}
+	got, err := f.store.ByID(ctx, f.alice.ID, n.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if !got.Collapsed {
+		t.Fatal("Collapsed = false after SetCollapsed(true)")
+	}
+
+	if err := f.store.SetCollapsed(ctx, f.alice.ID, n.ID, false); err != nil {
+		t.Fatalf("SetCollapsed(false): %v", err)
+	}
+	if got, _ = f.store.ByID(ctx, f.alice.ID, n.ID); got.Collapsed {
+		t.Fatal("Collapsed = true after SetCollapsed(false)")
+	}
+}
+
+func TestSetCollapsedRejectsAnotherUsersNode(t *testing.T) {
+	f := newFixture(t)
+	n := f.mk(t, notes.RootID, "alice's")
+
+	err := f.store.SetCollapsed(context.Background(), f.bob.ID, n.ID, true)
+	if !errors.Is(err, notes.ErrNotFound) {
+		t.Fatalf("SetCollapsed on another user's node = %v; want ErrNotFound", err)
+	}
+}
+```
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
@@ -1504,13 +1534,7 @@ go test ./internal/apps/notes/... -count=1 -run TestOutline
 Expected: FAIL to build, with `f.store.Outline undefined` and
 `f.store.SetCollapsed undefined`.
 
-`SetCollapsed` is Task 6. To keep this task independently runnable, write
-`SetCollapsed` here as part of Step 3 and delete the duplicate from Task 6 —
-or run this task's tests after Task 6. **Recommended:** implement
-`SetCollapsed` in this step, and have Task 6 add only `SetText` and the shared
-`update` helper. The task order in this plan assumes that choice.
-
-- [ ] **Step 3: Implement Outline (and SetCollapsed)**
+- [ ] **Step 3: Implement Outline and SetCollapsed**
 
 Append to `internal/apps/notes/store.go`:
 
@@ -1609,10 +1633,10 @@ func (st *Store) update(ctx context.Context, query string, args ...any) error {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-go test ./internal/apps/notes/... -count=1 -run TestOutline -v
+go test ./internal/apps/notes/... -count=1 -run 'TestOutline|TestSetCollapsed' -v
 ```
 
-Expected: PASS, all five tests. If `TestOutlineIsFlatDocumentOrder` fails with
+Expected: PASS, all seven tests. If `TestOutlineIsFlatDocumentOrder` fails with
 the right nodes in the wrong order, the `path` expression is wrong — every
 segment must be the same width, or lexicographic order stops matching numeric
 order.
@@ -1633,7 +1657,7 @@ git commit -m "feat(notes): render a flat, collapse-aware outline with zoom"
 - Test: `internal/apps/notes/tree_test.go`
 
 **Interfaces:**
-- Produces: `(*Store).SetText(ctx, userID, id int64, title, note string) error`.
+- Produces: `(*Store).SetText(ctx, userID, id int64, title, note string) error`. Reuses the `update` helper from Task 5.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1681,50 +1705,15 @@ func TestSetTextRejectsInvalidText(t *testing.T) {
 		t.Fatalf("SetText with invalid UTF-8 = %v; want ErrInvalid", err)
 	}
 }
-
-func TestSetCollapsedRoundTrips(t *testing.T) {
-	f := newFixture(t)
-	ctx := context.Background()
-	n := f.mk(t, notes.RootID, "parent")
-
-	if err := f.store.SetCollapsed(ctx, f.alice.ID, n.ID, true); err != nil {
-		t.Fatalf("SetCollapsed(true): %v", err)
-	}
-	got, err := f.store.ByID(ctx, f.alice.ID, n.ID)
-	if err != nil {
-		t.Fatalf("ByID: %v", err)
-	}
-	if !got.Collapsed {
-		t.Fatal("Collapsed = false after SetCollapsed(true)")
-	}
-
-	if err := f.store.SetCollapsed(ctx, f.alice.ID, n.ID, false); err != nil {
-		t.Fatalf("SetCollapsed(false): %v", err)
-	}
-	if got, _ = f.store.ByID(ctx, f.alice.ID, n.ID); got.Collapsed {
-		t.Fatal("Collapsed = true after SetCollapsed(false)")
-	}
-}
-
-func TestSetCollapsedRejectsAnotherUsersNode(t *testing.T) {
-	f := newFixture(t)
-	n := f.mk(t, notes.RootID, "alice's")
-
-	err := f.store.SetCollapsed(context.Background(), f.bob.ID, n.ID, true)
-	if !errors.Is(err, notes.ErrNotFound) {
-		t.Fatalf("SetCollapsed on another user's node = %v; want ErrNotFound", err)
-	}
-}
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-go test ./internal/apps/notes/... -count=1 -run 'TestSetText|TestSetCollapsed'
+go test ./internal/apps/notes/... -count=1 -run TestSetText
 ```
 
-Expected: FAIL to build, with `f.store.SetText undefined`. The
-`TestSetCollapsed*` tests should already pass, since Task 5 implemented it.
+Expected: FAIL to build, with `f.store.SetText undefined`.
 
 - [ ] **Step 3: Implement SetText**
 
@@ -1751,10 +1740,10 @@ func (st *Store) SetText(ctx context.Context, userID, id int64, title, note stri
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-go test ./internal/apps/notes/... -count=1 -run 'TestSetText|TestSetCollapsed' -v
+go test ./internal/apps/notes/... -count=1 -run TestSetText -v
 ```
 
-Expected: PASS, all five tests.
+Expected: PASS, all three tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1800,7 +1789,7 @@ func TestDeleteClosesTheGap(t *testing.T) {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	got := childTitles(t, f.db, f.alice.ID, notes.RootID)
+	got := f.childTitles(t, f.alice.ID, notes.RootID)
 	if want := []string{"a", "c"}; !slices.Equal(got, want) {
 		t.Fatalf("top level = %v; want %v", got, want)
 	}
@@ -1920,7 +1909,7 @@ git commit -m "feat(notes): delete a bullet and its subtree"
 - Test: `internal/apps/notes/tree_test.go`
 
 **Interfaces:**
-- Produces: `(*Store).Move(ctx, userID, id, newParentID int64, newPos int) error`; package-private `isDescendant(ctx, *sql.Tx, userID, candidate, root int64) (bool, error)`.
+- Produces: `(*Store).Move(ctx, userID, id, newParentID int64, newPos int) error`; package-private `heightOf(ctx, *sql.Tx, userID, id int64) (int, error)` and `isDescendant(ctx, *sql.Tx, userID, candidate, root int64) (bool, error)`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1937,10 +1926,10 @@ func TestMoveToAnotherParent(t *testing.T) {
 		t.Fatalf("Move: %v", err)
 	}
 
-	if got := childTitles(t, f.db, f.alice.ID, a.ID); len(got) != 0 {
+	if got := f.childTitles(t, f.alice.ID, a.ID); len(got) != 0 {
 		t.Errorf("a still has %v", got)
 	}
-	if got := childTitles(t, f.db, f.alice.ID, b.ID); !slices.Equal(got, []string{"x"}) {
+	if got := f.childTitles(t, f.alice.ID, b.ID); !slices.Equal(got, []string{"x"}) {
 		t.Errorf("b has %v; want [x]", got)
 	}
 	checkInvariants(t, f.db)
@@ -1957,7 +1946,7 @@ func TestMoveWithinAParent(t *testing.T) {
 	if err := f.store.Move(ctx, f.alice.ID, b.ID, notes.RootID, 2); err != nil {
 		t.Fatalf("Move down: %v", err)
 	}
-	if got := childTitles(t, f.db, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a", "c", "b"}) {
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a", "c", "b"}) {
 		t.Fatalf("after moving b down: %v; want [a c b]", got)
 	}
 	checkInvariants(t, f.db)
@@ -1966,7 +1955,7 @@ func TestMoveWithinAParent(t *testing.T) {
 	if err := f.store.Move(ctx, f.alice.ID, c.ID, notes.RootID, 0); err != nil {
 		t.Fatalf("Move up: %v", err)
 	}
-	if got := childTitles(t, f.db, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"c", "a", "b"}) {
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"c", "a", "b"}) {
 		t.Fatalf("after moving c up: %v; want [c a b]", got)
 	}
 	checkInvariants(t, f.db)
@@ -1980,7 +1969,7 @@ func TestMoveClampsAnOutOfRangePosition(t *testing.T) {
 	if err := f.store.Move(context.Background(), f.alice.ID, a.ID, notes.RootID, 99); err != nil {
 		t.Fatalf("Move: %v", err)
 	}
-	if got := childTitles(t, f.db, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"b", "a"}) {
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"b", "a"}) {
 		t.Fatalf("top level = %v; want [b a]", got)
 	}
 	checkInvariants(t, f.db)
@@ -2148,6 +2137,28 @@ func (st *Store) Move(ctx context.Context, userID, id, newParentID int64, newPos
 	})
 }
 
+// heightOf reports how many levels of descendants a node has: 0 for a leaf.
+// It returns ErrNotFound on the same terms as depthOf.
+func heightOf(ctx context.Context, tx *sql.Tx, userID, id int64) (int, error) {
+	var height sql.NullInt64
+	err := tx.QueryRowContext(ctx,
+		`WITH RECURSIVE down(id, d) AS (
+		     SELECT id, 0 FROM notes_nodes WHERE id = ? AND user_id = ?
+		   UNION ALL
+		     SELECT c.id, n.d + 1
+		       FROM notes_nodes c JOIN down n ON c.parent_id = n.id
+		      WHERE n.d < ?
+		 )
+		 SELECT max(d) FROM down`, id, userID, MaxDepth).Scan(&height)
+	if err != nil {
+		return 0, fmt.Errorf("notes: height of %d: %w", id, err)
+	}
+	if !height.Valid {
+		return 0, ErrNotFound
+	}
+	return int(height.Int64), nil
+}
+
 // isDescendant reports whether candidate sits anywhere inside root's subtree,
 // by walking up from candidate and looking for root. Walking up is bounded by
 // MaxDepth; walking down would be bounded only by the size of the subtree.
@@ -2242,7 +2253,7 @@ func TestIndentTheFirstSiblingDoesNothing(t *testing.T) {
 	if err := f.store.Indent(ctx, f.alice.ID, a.ID); err != nil {
 		t.Fatalf("Indent of the first sibling = %v; want nil", err)
 	}
-	if got := childTitles(t, f.db, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a", "b"}) {
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a", "b"}) {
 		t.Fatalf("top level = %v; want [a b]", got)
 	}
 	checkInvariants(t, f.db)
@@ -2292,14 +2303,14 @@ func TestMoveUpAndMoveDown(t *testing.T) {
 	if err := f.store.MoveDown(ctx, f.alice.ID, a.ID); err != nil {
 		t.Fatalf("MoveDown: %v", err)
 	}
-	if got := childTitles(t, f.db, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"b", "a", "c"}) {
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"b", "a", "c"}) {
 		t.Fatalf("after MoveDown: %v; want [b a c]", got)
 	}
 
 	if err := f.store.MoveUp(ctx, f.alice.ID, c.ID); err != nil {
 		t.Fatalf("MoveUp: %v", err)
 	}
-	if got := childTitles(t, f.db, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"b", "c", "a"}) {
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"b", "c", "a"}) {
 		t.Fatalf("after MoveUp: %v; want [b c a]", got)
 	}
 	checkInvariants(t, f.db)
@@ -2317,7 +2328,7 @@ func TestMoveUpAndDownAtTheEndsDoNothing(t *testing.T) {
 	if err := f.store.MoveDown(ctx, f.alice.ID, b.ID); err != nil {
 		t.Fatalf("MoveDown of the last bullet = %v; want nil", err)
 	}
-	if got := childTitles(t, f.db, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a", "b"}) {
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a", "b"}) {
 		t.Fatalf("top level = %v; want [a b] unchanged", got)
 	}
 	checkInvariants(t, f.db)
@@ -2326,7 +2337,7 @@ func TestMoveUpAndDownAtTheEndsDoNothing(t *testing.T) {
 func TestKeyboardMovesRejectAnotherUsersNode(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	a := f.mk(t, notes.RootID, "a")
+	f.mk(t, notes.RootID, "a")
 	b := f.mk(t, notes.RootID, "b")
 
 	for name, op := range map[string]func(context.Context, int64, int64) error{
@@ -2339,7 +2350,6 @@ func TestKeyboardMovesRejectAnotherUsersNode(t *testing.T) {
 			t.Errorf("%s on another user's node = %v; want ErrNotFound", name, err)
 		}
 	}
-	_ = a
 	checkInvariants(t, f.db)
 }
 ```
@@ -2492,7 +2502,7 @@ func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
 
 	f := newFixture(t)
 	ctx := context.Background()
-	rng := rand.New(rand.NewPCG(0x0175, 0x5ee d)) // any fixed pair; reproducibility is the point
+	rng := rand.New(rand.NewPCG(0x0175, 0x5eed)) // any fixed pair; reproducibility is the point
 
 	owned := map[int64][]int64{f.alice.ID: nil, f.bob.ID: nil}
 	users := []int64{f.alice.ID, f.bob.ID}
@@ -2577,13 +2587,6 @@ func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
 		t.Fatalf("the sequence left only %d nodes; the generator is not exercising the store", n)
 	}
 }
-```
-
-**Fix before running:** the seed literal above is deliberately broken —
-`0x5ee d` is not valid Go. Replace the `rng` line with:
-
-```go
-	rng := rand.New(rand.NewPCG(0x0175, 0x5eed))
 ```
 
 Add these imports to `tree_test.go`:
