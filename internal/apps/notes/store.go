@@ -138,3 +138,61 @@ func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
 	}
 	return out, nil
 }
+
+// Outline returns everything visible under rootID, in document order, with
+// Depth relative to rootID and HasChildren set. rootID may be RootID.
+//
+// The result is flat rather than nested: the caller renders indentation from
+// Depth, which keeps rendering non-recursive and makes this method's output
+// trivial to assert in a test.
+//
+// The walk stops at any collapsed node, so the result is always exactly what
+// is on screen — that is why collapsed is stored rather than kept in the
+// browser. It is additionally capped at MaxDepth, so a tree that has somehow
+// acquired a cycle returns a truncated outline instead of hanging.
+//
+// The ordering trick is the path column: each row carries its ancestors'
+// positions as fixed-width text, so plain lexicographic ORDER BY produces
+// pre-order — a parent immediately before its subtree, siblings by position.
+func (st *Store) Outline(ctx context.Context, userID, rootID int64) ([]Node, error) {
+	rows, err := st.db.QueryContext(ctx,
+		`WITH RECURSIVE tree AS (
+		     SELECT `+nodeColumns+`, 0 AS depth, printf('%08d', position) AS path
+		       FROM notes_nodes
+		      WHERE user_id = ? AND parent_id IS ?
+		   UNION ALL
+		     SELECT c.id, c.user_id, c.parent_id, c.position, c.title, c.note,
+		            c.collapsed, c.created_at, c.updated_at,
+		            t.depth + 1, t.path || '/' || printf('%08d', c.position)
+		       FROM notes_nodes c JOIN tree t ON c.parent_id = t.id
+		      WHERE t.collapsed = 0 AND t.depth + 1 <= ?
+		 )
+		 SELECT `+nodeColumns+`, depth,
+		        EXISTS (SELECT 1 FROM notes_nodes k WHERE k.parent_id = tree.id)
+		   FROM tree ORDER BY path`,
+		userID, parentArg(rootID), MaxDepth)
+	if err != nil {
+		return nil, fmt.Errorf("notes: outline of %d: %w", rootID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Node
+	for rows.Next() {
+		// The EXISTS subquery needs no user_id filter: a child always has the
+		// same owner as its parent (invariant I2).
+		var (
+			depth       int
+			hasChildren bool
+		)
+		n, err := scanNode(rows, &depth, &hasChildren)
+		if err != nil {
+			return nil, err
+		}
+		n.Depth, n.HasChildren = depth, hasChildren
+		out = append(out, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("notes: outline: %w", err)
+	}
+	return out, nil
+}

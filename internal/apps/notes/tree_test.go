@@ -164,3 +164,37 @@ func TestCreateRefusesToPassMaxDepth(t *testing.T) {
 	}
 	checkInvariants(t, f.db)
 }
+
+func TestSetCollapsedRoundTrips(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "parent")
+
+	if err := f.store.SetCollapsed(ctx, f.alice.ID, n.ID, true); err != nil {
+		t.Fatalf("SetCollapsed(true): %v", err)
+	}
+	got, err := f.store.ByID(ctx, f.alice.ID, n.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if !got.Collapsed {
+		t.Fatal("Collapsed = false after SetCollapsed(true)")
+	}
+
+	if err := f.store.SetCollapsed(ctx, f.alice.ID, n.ID, false); err != nil {
+		t.Fatalf("SetCollapsed(false): %v", err)
+	}
+	if got, _ = f.store.ByID(ctx, f.alice.ID, n.ID); got.Collapsed {
+		t.Fatal("Collapsed = true after SetCollapsed(false)")
+	}
+}
+
+func TestSetCollapsedRejectsAnotherUsersNode(t *testing.T) {
+	f := newFixture(t)
+	n := f.mk(t, notes.RootID, "alice's")
+
+	err := f.store.SetCollapsed(context.Background(), f.bob.ID, n.ID, true)
+	if !errors.Is(err, notes.ErrNotFound) {
+		t.Fatalf("SetCollapsed on another user's node = %v; want ErrNotFound", err)
+	}
+}

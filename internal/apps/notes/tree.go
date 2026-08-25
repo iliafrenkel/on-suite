@@ -141,3 +141,31 @@ func countChildren(ctx context.Context, tx *sql.Tx, userID, parentID int64) (int
 func clamp(v, lo, hi int) int { return min(max(v, lo), hi) }
 
 func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+
+// SetCollapsed records whether a bullet's children are hidden. It is stored
+// rather than kept in the browser because Outline stops descending at a
+// collapsed node: the flag decides what the server sends, not just what the
+// page shows.
+func (st *Store) SetCollapsed(ctx context.Context, userID, id int64, collapsed bool) error {
+	return st.update(ctx,
+		`UPDATE notes_nodes SET collapsed = ?, updated_at = ?
+		  WHERE id = ? AND user_id = ?`,
+		collapsed, formatTime(st.now()), id, userID)
+}
+
+// update runs a single-row UPDATE and turns "nothing matched" into
+// ErrNotFound, which covers both "no such node" and "not yours".
+func (st *Store) update(ctx context.Context, query string, args ...any) error {
+	res, err := st.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("notes: update: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("notes: update: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

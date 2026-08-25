@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
@@ -199,5 +200,113 @@ func TestAncestorsOfAnotherUsersNodeIsEmpty(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("bob sees ancestors %v; want nothing", titles(got))
+	}
+}
+
+// outlineShape renders an outline the way a person reads one, so a failing
+// assertion prints a tree instead of a wall of structs.
+func outlineShape(ns []notes.Node) string {
+	var b strings.Builder
+	for _, n := range ns {
+		b.WriteString(strings.Repeat("  ", n.Depth))
+		b.WriteString("- ")
+		b.WriteString(n.Title)
+		if n.HasChildren {
+			b.WriteString(" [+]")
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// sample builds the tree every Outline test works from:
+//
+//   - a [+]
+//   - a1
+//   - a2 [+]
+//   - a2x
+//   - b
+func (f *fixture) sample(t *testing.T) (a, a1, a2, a2x, b notes.Node) {
+	t.Helper()
+	a = f.mk(t, notes.RootID, "a")
+	a1 = f.mk(t, a.ID, "a1")
+	a2 = f.mk(t, a.ID, "a2")
+	a2x = f.mk(t, a2.ID, "a2x")
+	b = f.mk(t, notes.RootID, "b")
+	return a, a1, a2, a2x, b
+}
+
+func TestOutlineIsFlatDocumentOrder(t *testing.T) {
+	f := newFixture(t)
+	f.sample(t)
+
+	got, err := f.store.Outline(context.Background(), f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatalf("Outline: %v", err)
+	}
+	want := "- a [+]\n  - a1\n  - a2 [+]\n    - a2x\n- b\n"
+	if outlineShape(got) != want {
+		t.Fatalf("Outline =\n%s\nwant\n%s", outlineShape(got), want)
+	}
+}
+
+func TestOutlineStopsAtACollapsedNode(t *testing.T) {
+	f := newFixture(t)
+	_, _, a2, _, _ := f.sample(t)
+
+	if err := f.store.SetCollapsed(context.Background(), f.alice.ID, a2.ID, true); err != nil {
+		t.Fatalf("SetCollapsed: %v", err)
+	}
+
+	got, err := f.store.Outline(context.Background(), f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatalf("Outline: %v", err)
+	}
+	// a2x is gone, but a2 still advertises that it has children so the
+	// expand arrow can be drawn.
+	want := "- a [+]\n  - a1\n  - a2 [+]\n- b\n"
+	if outlineShape(got) != want {
+		t.Fatalf("Outline =\n%s\nwant\n%s", outlineShape(got), want)
+	}
+}
+
+func TestOutlineZoomsIntoANode(t *testing.T) {
+	f := newFixture(t)
+	a, _, _, _, _ := f.sample(t)
+
+	got, err := f.store.Outline(context.Background(), f.alice.ID, a.ID)
+	if err != nil {
+		t.Fatalf("Outline: %v", err)
+	}
+	// The zoom root's direct children are at depth 0, and b is not in view.
+	want := "- a1\n- a2 [+]\n  - a2x\n"
+	if outlineShape(got) != want {
+		t.Fatalf("Outline(zoomed) =\n%s\nwant\n%s", outlineShape(got), want)
+	}
+}
+
+func TestOutlineExcludesAnotherUser(t *testing.T) {
+	f := newFixture(t)
+	f.sample(t)
+
+	got, err := f.store.Outline(context.Background(), f.bob.ID, notes.RootID)
+	if err != nil {
+		t.Fatalf("Outline: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("bob's outline =\n%s\nwant nothing", outlineShape(got))
+	}
+}
+
+func TestOutlineOfAnotherUsersNodeIsEmpty(t *testing.T) {
+	f := newFixture(t)
+	a, _, _, _, _ := f.sample(t)
+
+	got, err := f.store.Outline(context.Background(), f.bob.ID, a.ID)
+	if err != nil {
+		t.Fatalf("Outline: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("bob zoomed into alice's node and saw\n%s\nwant nothing", outlineShape(got))
 	}
 }
