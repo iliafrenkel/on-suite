@@ -7,7 +7,8 @@
 // one line in cmd/onsuite/main.go.
 //
 // The design is in docs/superpowers/specs/2026-08-25-on-notes-design.md. This
-// package is chunk N1 of that spec: schema and store, with no HTTP.
+// package spans chunk N1 (schema and store) and N2 (the HTTP outliner: app.App,
+// routes, templates, handlers).
 package notes
 
 import (

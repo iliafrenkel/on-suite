@@ -93,7 +93,7 @@ keystrokes that landed after the last save — in N3, after the last debounce.
 | Field | Meaning |
 |---|---|
 | `csrf_token` | the platform's token, on every POST |
-| `root` | the id of the zoom root the request was issued from; absent or `0` means the top level. It is the redirect target and nothing else. |
+| `root` | the id of the zoom root the request was issued from; absent or `0` means the top level. It is the redirect target, and — for `POST /notes/new` with no `focus_id` — the parent a new bullet is appended under. |
 | `focus_id` | the bullet the caret was in. Absent means "no text to save". Present-but-not-a-positive-integer is a malformed request (400). |
 | `title`, `note` | the focused bullet's text, saved to `focus_id` before the structural operation |
 

@@ -261,9 +261,10 @@ func equalStrings(a, b []string) bool {
 
 // ---- tests ----------------------------------------------------------------
 
-// TestNotesRequiresSignIn confirms the default-deny router covers every route
-// this chunk adds. A route accidentally registered with Public would show up
-// here as a 200 instead of a redirect to the login page.
+// TestNotesRequiresSignIn confirms the default-deny router covers this
+// chunk's GET routes. A route accidentally registered with Public would show
+// up here as a 200 instead of a redirect to the login page. The POST routes
+// are covered separately by TestEveryMutationRequiresSignIn.
 func TestNotesRequiresSignIn(t *testing.T) {
 	s := newServer(t)
 

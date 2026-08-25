@@ -125,6 +125,23 @@ func TestNestDropsARowWithNoParent(t *testing.T) {
 	}
 }
 
+// TestNestResetsTheOpenChainAtEachTopLevelRow is the case open = open[:0]
+// exists for: without it, a child of a second top-level root would still find
+// the first root's chain sitting in open and attach to it instead.
+func TestNestResetsTheOpenChainAtEachTopLevelRow(t *testing.T) {
+	rows := nest(flat(
+		lvl{0, "a"},
+		lvl{1, "a1"},
+		lvl{0, "b"},
+		lvl{1, "b1"},
+	), RootID, "tok")
+
+	want := "a\n  a1*\nb*\n  b1*\n"
+	if got := draw(rows); got != want {
+		t.Errorf("nest built\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestNestOfNothingIsNothing(t *testing.T) {
 	if rows := nest(nil, RootID, "tok"); len(rows) != 0 {
 		t.Errorf("nest(nil) returned %d rows", len(rows))

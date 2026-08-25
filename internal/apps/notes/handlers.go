@@ -137,8 +137,9 @@ type mutation struct {
 	// because each row is its own form, but from N3 a click on one bullet's
 	// control while the caret is in another makes them differ.
 	FocusID int64
-	// Root is the zoom the request was issued from, and is used for nothing
-	// but the redirect.
+	// Root is the zoom the request was issued from: the redirect target, and
+	// also — see create — the parent a focus-less new bullet is appended
+	// under.
 	Root int64
 }
 

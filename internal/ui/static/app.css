@@ -712,8 +712,8 @@ input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
 
 /* The underline moves to the whole text column so the title and its note read
  * as one bullet while either is being edited. */
-.outline-title:focus,
-.outline-note:focus { outline: none; }
+input.outline-title:focus,
+input.outline-note:focus { outline: none; }
 .outline-text:focus-within { box-shadow: inset 0 -1px 0 var(--c-accent); }
 
 /* opacity, not visibility: a visibility:hidden control cannot take focus, so
