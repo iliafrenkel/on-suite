@@ -240,3 +240,66 @@ func TestSetTextRejectsInvalidText(t *testing.T) {
 		t.Fatalf("SetText with invalid UTF-8 = %v; want ErrInvalid", err)
 	}
 }
+
+// countRows is the total number of nodes in the table, for cascade tests.
+func countRows(t *testing.T, f *fixture) int {
+	t.Helper()
+	var n int
+	if err := f.db.QueryRowContext(context.Background(),
+		`SELECT count(*) FROM notes_nodes`).Scan(&n); err != nil {
+		t.Fatalf("counting rows: %v", err)
+	}
+	return n
+}
+
+func TestDeleteClosesTheGap(t *testing.T) {
+	f := newFixture(t)
+	f.mk(t, notes.RootID, "a")
+	b := f.mk(t, notes.RootID, "b")
+	f.mk(t, notes.RootID, "c")
+
+	if err := f.store.Delete(context.Background(), f.alice.ID, b.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	got := f.childTitles(t, f.alice.ID, notes.RootID)
+	if want := []string{"a", "c"}; !slices.Equal(got, want) {
+		t.Fatalf("top level = %v; want %v", got, want)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestDeleteTakesTheSubtreeWithIt(t *testing.T) {
+	f := newFixture(t)
+	a, _, _, _, _ := f.sample(t) // a has three descendants; b is separate
+
+	if err := f.store.Delete(context.Background(), f.alice.ID, a.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	if n := countRows(t, f); n != 1 {
+		t.Fatalf("%d nodes remain; want 1 (only b) — the cascade did not fire", n)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestDeleteRejectsAnotherUsersNode(t *testing.T) {
+	f := newFixture(t)
+	n := f.mk(t, notes.RootID, "alice's")
+
+	err := f.store.Delete(context.Background(), f.bob.ID, n.ID)
+	if !errors.Is(err, notes.ErrNotFound) {
+		t.Fatalf("Delete of another user's node = %v; want ErrNotFound", err)
+	}
+	if countRows(t, f) != 1 {
+		t.Fatal("bob's delete went through")
+	}
+}
+
+func TestDeleteOfAMissingNode(t *testing.T) {
+	f := newFixture(t)
+	err := f.store.Delete(context.Background(), f.alice.ID, 4242)
+	if !errors.Is(err, notes.ErrNotFound) {
+		t.Fatalf("Delete of a missing node = %v; want ErrNotFound", err)
+	}
+}

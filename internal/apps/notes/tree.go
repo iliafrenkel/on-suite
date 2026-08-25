@@ -3,6 +3,7 @@ package notes
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -184,4 +185,38 @@ func (st *Store) update(ctx context.Context, query string, args ...any) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// Delete removes a bullet and everything under it, then closes the gap it
+// left among its siblings.
+func (st *Store) Delete(ctx context.Context, userID, id int64) error {
+	return st.tx(ctx, func(tx *sql.Tx) error {
+		var (
+			parent sql.NullInt64
+			pos    int
+		)
+		err := tx.QueryRowContext(ctx,
+			`SELECT parent_id, position FROM notes_nodes WHERE id = ? AND user_id = ?`,
+			id, userID).Scan(&parent, &pos)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("notes: delete: %w", err)
+		}
+
+		// The subtree goes with it: notes_nodes.parent_id is ON DELETE
+		// CASCADE, and the platform opens SQLite with foreign_keys=ON.
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM notes_nodes WHERE id = ? AND user_id = ?`, id, userID); err != nil {
+			return fmt.Errorf("notes: delete: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE notes_nodes SET position = position - 1
+			  WHERE user_id = ? AND parent_id IS ? AND position > ?`,
+			userID, parentArg(parent.Int64), pos); err != nil {
+			return fmt.Errorf("notes: delete: close the gap: %w", err)
+		}
+		return nil
+	})
 }
