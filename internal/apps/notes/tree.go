@@ -15,9 +15,16 @@ import (
 //
 // Every method on Store that changes anything is a thin wrapper around the
 // method of the same name here, so the two are never allowed to drift.
+//
+// It deliberately holds no *Store. The clock is copied in rather than reached
+// through one, so that no code inside the write API can touch st.db while the
+// transaction is open — the deadlock described on Do is then a compile error
+// here rather than a rule to remember.
 type Ops struct {
-	st *Store
 	tx *sql.Tx
+	// now is the store's clock, copied at Do time so that tests can replace
+	// it. See Store.SetClock.
+	now func() time.Time
 }
 
 // Do runs fn inside one transaction, committing if it returns nil and rolling
@@ -30,7 +37,9 @@ type Ops struct {
 // fn must reach the database only through the Ops it is handed. The platform
 // opens SQLite with SetMaxOpenConns(1), so a closure that calls a Store method
 // instead waits for a connection the transaction is holding, and waits for
-// ever.
+// ever. Ops itself cannot make that mistake — it holds no *Store — but a
+// closure that captures one still can, which is why a render belongs after Do
+// has returned rather than inside fn.
 func (st *Store) Do(ctx context.Context, fn func(*Ops) error) error {
 	handle, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -38,7 +47,7 @@ func (st *Store) Do(ctx context.Context, fn func(*Ops) error) error {
 	}
 	defer func() { _ = handle.Rollback() }() // a no-op after a successful Commit
 
-	if err := fn(&Ops{st: st, tx: handle}); err != nil {
+	if err := fn(&Ops{tx: handle, now: st.now}); err != nil {
 		return err
 	}
 	if err := handle.Commit(); err != nil {
@@ -46,9 +55,6 @@ func (st *Store) Do(ctx context.Context, fn func(*Ops) error) error {
 	}
 	return nil
 }
-
-// now is the store's clock, which tests replace.
-func (o *Ops) now() time.Time { return o.st.now() }
 
 // ByID fetches one of userID's own nodes, through the transaction, so that a
 // write decided from what it read cannot be reading a stale tree.
@@ -67,6 +73,8 @@ func (o *Ops) siblingAt(ctx context.Context, userID, parentID int64, pos int) (N
 // and anything at or past the last sibling appends. Out-of-range values are
 // clamped rather than rejected, because "after the bullet I am looking at" is
 // still the caller's intent when the tree has moved underneath them.
+//
+// The title is trimmed on the right only, for the reason given on SetText.
 func (o *Ops) Create(ctx context.Context, userID, parentID int64, afterPos int, title, note string) (Node, error) {
 	title = strings.TrimRight(title, " \t")
 	if err := Validate(title, note); err != nil {
@@ -176,7 +184,7 @@ func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 // collapsed node: the flag decides what the server sends, not just what the
 // page shows.
 func (o *Ops) SetCollapsed(ctx context.Context, userID, id int64, collapsed bool) error {
-	return o.update(ctx,
+	return o.update(ctx, "set collapsed",
 		`UPDATE notes_nodes SET collapsed = ?, updated_at = ?
 		  WHERE id = ? AND user_id = ?`,
 		collapsed, formatTime(o.now()), id, userID)
@@ -198,7 +206,7 @@ func (o *Ops) SetText(ctx context.Context, userID, id int64, title, note string)
 	if err := Validate(title, note); err != nil {
 		return err
 	}
-	return o.update(ctx,
+	return o.update(ctx, "set text",
 		`UPDATE notes_nodes SET title = ?, note = ?, updated_at = ?
 		  WHERE id = ? AND user_id = ?`,
 		title, note, formatTime(o.now()), id, userID)
@@ -213,14 +221,18 @@ func (st *Store) SetText(ctx context.Context, userID, id int64, title, note stri
 
 // update runs a single-row UPDATE and turns "nothing matched" into
 // ErrNotFound, which covers both "no such node" and "not yours".
-func (o *Ops) update(ctx context.Context, query string, args ...any) error {
+//
+// op names the calling operation, so that a database failure here reads like
+// every other write in this package — "notes: set text: ..." rather than a
+// "notes: update: ..." that two callers share and a log cannot tell apart.
+func (o *Ops) update(ctx context.Context, op, query string, args ...any) error {
 	res, err := o.tx.ExecContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("notes: update: %w", err)
+		return fmt.Errorf("notes: %s: %w", op, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("notes: update: %w", err)
+		return fmt.Errorf("notes: %s: %w", op, err)
 	}
 	if n == 0 {
 		return ErrNotFound
@@ -439,9 +451,13 @@ func (st *Store) Indent(ctx context.Context, userID, id int64) error {
 
 // Outdent makes a bullet the next sibling of its own parent.
 //
-// Its former following siblings stay where they are. Some outliners instead
-// adopt them as children of the outdented bullet; this is the simpler rule and
-// the one that never moves a bullet the user was not looking at.
+// Its former following siblings stay under that parent, closing the gap it
+// leaves behind. Some outliners instead adopt them as children of the
+// outdented bullet; this is the simpler rule and the one that never reparents
+// a bullet the user was not looking at.
+//
+// Both reads and the move happen in the one transaction, so the parent it
+// reads is the parent it moves the bullet out from under.
 func (o *Ops) Outdent(ctx context.Context, userID, id int64) error {
 	n, err := o.ByID(ctx, userID, id)
 	if err != nil {

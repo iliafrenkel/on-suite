@@ -43,9 +43,11 @@ const (
 )
 
 // parentArg converts the RootID sentinel to the NULL the column actually
-// stores. It is always paired with "parent_id IS ?", which SQLite treats as =
-// for a non-NULL value and as a NULL test otherwise — so one query shape
-// covers both top-level and nested nodes, with no branching anywhere.
+// stores, both for the value an INSERT or UPDATE writes and for the one a
+// WHERE clause matches on. In a WHERE clause it is always paired with
+// "parent_id IS ?", which SQLite treats as = for a non-NULL value and as a
+// NULL test otherwise — so one query shape covers both top-level and nested
+// nodes, with no branching anywhere.
 //
 // It sits beside RootID, rather than in store.go or tree.go, because reads and
 // writes both need it and neither owns it.

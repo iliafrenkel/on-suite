@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -27,18 +28,41 @@ func (st *Store) SetClock(now func() time.Time) { st.now = now }
 // column added to one of them and not the others is a silent scan error.
 const nodeColumns = `id, user_id, parent_id, position, title, note, collapsed, created_at, updated_at`
 
+// The recursive CTEs below need the same list qualified by a table alias, in
+// the same order. Writing it out again would put the column order in three
+// places, and every later chunk that adds a column — done_at, due_on,
+// archived_at, share_slug — would have to edit all three in step, with a
+// runtime scan error as the only warning if it missed one.
+var (
+	// parentColumns is the list as the "p" row of Ancestors' upward walk.
+	parentColumns = aliasNodeColumns("p")
+	// childColumns is the list as the "c" row of Outline's descent.
+	childColumns = aliasNodeColumns("c")
+)
+
+// aliasNodeColumns prefixes each of nodeColumns with a table alias.
+func aliasNodeColumns(alias string) string {
+	cols := strings.Split(nodeColumns, ", ")
+	for i, col := range cols {
+		cols[i] = alias + "." + col
+	}
+	return strings.Join(cols, ", ")
+}
+
 // ByID fetches one of userID's own nodes.
 //
 // A write that decides what to do from what it read calls Ops.ByID instead, so
-// that the read and the write are the same transaction.
+// that the read and the write are the same transaction. Calling this from
+// inside a Do closure waits for the connection that transaction is holding,
+// and waits for ever.
 func (st *Store) ByID(ctx context.Context, userID, id int64) (Node, error) {
 	return nodeByID(ctx, st.db, userID, id)
 }
 
-// querier is the read surface shared by *sql.DB and *sql.Tx, so that the two
-// single-node reads below have one implementation each rather than one per
-// caller. Nothing else needs it: Ops is the only reason a read runs against a
-// transaction.
+// querier is the read surface shared by *sql.DB and *sql.Tx, so that nodeByID
+// has one implementation rather than one per caller. It exists for that read
+// alone: every other read against a transaction takes a *sql.Tx outright, so
+// that the compiler keeps it out of reach of the connection pool.
 type querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
@@ -53,10 +77,11 @@ func nodeByID(ctx context.Context, q querier, userID, id int64) (Node, error) {
 	return n, err
 }
 
-// siblingAt fetches the child of parentID sitting at a given position. It is
-// reached through Ops.siblingAt, which supplies the transaction.
-func siblingAt(ctx context.Context, q querier, userID, parentID int64, pos int) (Node, error) {
-	n, err := scanNode(q.QueryRowContext(ctx,
+// siblingAt fetches the child of parentID sitting at a given position. Only
+// Ops.siblingAt reaches it, so it takes the transaction directly, alongside
+// depthOf, heightOf, countChildren and isDescendant.
+func siblingAt(ctx context.Context, tx *sql.Tx, userID, parentID int64, pos int) (Node, error) {
+	n, err := scanNode(tx.QueryRowContext(ctx,
 		`SELECT `+nodeColumns+`
 		   FROM notes_nodes WHERE user_id = ? AND parent_id IS ? AND position = ?`,
 		userID, parentArg(parentID), pos))
@@ -116,6 +141,10 @@ func parseTime(s string) (time.Time, error) {
 
 // Children returns a parent's direct children in position order. parentID may
 // be RootID for the top level.
+//
+// Calling it from inside a Do closure waits for the connection that
+// transaction is holding, and waits for ever, so a render belongs after Do has
+// returned rather than inside it.
 func (st *Store) Children(ctx context.Context, userID, parentID int64) ([]Node, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`SELECT `+nodeColumns+`
@@ -131,16 +160,23 @@ func (st *Store) Children(ctx context.Context, userID, parentID int64) ([]Node, 
 // breadcrumb above a zoomed outline — outermost first. It is empty for a
 // top-level node, and empty for a node that does not exist or is not userID's:
 // a caller that needs to tell those apart calls ByID.
+//
+// The walk up is filtered by user_id at every step, for the reason given on
+// Outline: a breadcrumb must not be able to display another household's text,
+// even if invariant I2 has been broken.
+//
+// Calling it from inside a Do closure waits for the connection that
+// transaction is holding, and waits for ever, so a render belongs after Do has
+// returned rather than inside it.
 func (st *Store) Ancestors(ctx context.Context, userID, id int64) ([]Node, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`WITH RECURSIVE up AS (
 		     SELECT `+nodeColumns+`, 0 AS d
 		       FROM notes_nodes WHERE id = ? AND user_id = ?
 		   UNION ALL
-		     SELECT p.id, p.user_id, p.parent_id, p.position, p.title, p.note,
-		            p.collapsed, p.created_at, p.updated_at, u.d + 1
+		     SELECT `+parentColumns+`, u.d + 1
 		       FROM notes_nodes p JOIN up u ON p.id = u.parent_id
-		      WHERE u.d < ?
+		      WHERE p.user_id = u.user_id AND u.d < ?
 		 )
 		 SELECT `+nodeColumns+` FROM up WHERE d > 0 ORDER BY d DESC`,
 		id, userID, MaxDepth)
@@ -183,6 +219,20 @@ func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
 // The ordering trick is the path column: each row carries its ancestors'
 // positions as fixed-width text, so plain lexicographic ORDER BY produces
 // pre-order — a parent immediately before its subtree, siblings by position.
+//
+// Both the descent and the has_children test match on the owner as well as on
+// the parent, rather than leaning on invariant I2 to supply it. I2 is an
+// application invariant and not a schema constraint — parent_id is a plain
+// foreign key, not a composite (parent_id, user_id) one — so a bug, a manual
+// repair or a later import path could break it, and an unfiltered join would
+// then put another household's bullets on this user's screen. Matching on
+// user_id turns that into a subtree that simply does not render. It is also
+// what makes both of them index seeks: parent_id alone is not a prefix of
+// notes_nodes_user_parent_pos_idx.
+//
+// Calling it from inside a Do closure waits for the connection that
+// transaction is holding, and waits for ever, so a render belongs after Do has
+// returned rather than inside it.
 func (st *Store) Outline(ctx context.Context, userID, rootID int64) ([]Node, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`WITH RECURSIVE tree AS (
@@ -190,14 +240,14 @@ func (st *Store) Outline(ctx context.Context, userID, rootID int64) ([]Node, err
 		       FROM notes_nodes
 		      WHERE user_id = ? AND parent_id IS ?
 		   UNION ALL
-		     SELECT c.id, c.user_id, c.parent_id, c.position, c.title, c.note,
-		            c.collapsed, c.created_at, c.updated_at,
+		     SELECT `+childColumns+`,
 		            t.depth + 1, t.path || '/' || printf('%08d', c.position)
 		       FROM notes_nodes c JOIN tree t ON c.parent_id = t.id
-		      WHERE t.collapsed = 0 AND t.depth + 1 <= ?
+		      WHERE c.user_id = t.user_id AND t.collapsed = 0 AND t.depth + 1 <= ?
 		 )
 		 SELECT `+nodeColumns+`, depth,
-		        EXISTS (SELECT 1 FROM notes_nodes k WHERE k.parent_id = tree.id)
+		        EXISTS (SELECT 1 FROM notes_nodes k
+		                 WHERE k.user_id = tree.user_id AND k.parent_id = tree.id)
 		   FROM tree ORDER BY path`,
 		userID, parentArg(rootID), MaxDepth)
 	if err != nil {
@@ -207,8 +257,6 @@ func (st *Store) Outline(ctx context.Context, userID, rootID int64) ([]Node, err
 
 	var out []Node
 	for rows.Next() {
-		// The EXISTS subquery needs no user_id filter: a child always has the
-		// same owner as its parent (invariant I2).
 		var (
 			depth       int
 			hasChildren bool
