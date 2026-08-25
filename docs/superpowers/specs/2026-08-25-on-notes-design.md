@@ -86,13 +86,24 @@ CREATE TABLE notes_nodes (
     due_on      TEXT,           -- 'YYYY-MM-DD', a date not an instant
     -- N7
     archived_at TEXT,
-    -- N9. UNIQUE permits many NULLs: SQLite treats NULLs as distinct.
-    share_slug  TEXT UNIQUE
+    -- N9. Declared bare here and made unique by a separate index, because
+    -- SQLite refuses UNIQUE on a column added by ALTER TABLE and every
+    -- column below created_at arrives that way. The index permits many
+    -- NULLs either way: SQLite treats NULLs as distinct.
+    share_slug  TEXT
 ) STRICT;
 
 CREATE INDEX notes_nodes_user_parent_pos_idx
     ON notes_nodes (user_id, parent_id, position);
+
+-- N9, in that chunk's own migration:
+CREATE UNIQUE INDEX notes_nodes_share_slug_idx ON notes_nodes (share_slug);
 ```
+
+**Verified against SQLite, not assumed:** `done_at`, `due_on` and `archived_at`
+apply cleanly to the `STRICT` table as `ALTER TABLE ... ADD COLUMN`.
+`share_slug` does not if declared `UNIQUE` inline — SQLite rejects it with
+"Cannot add a UNIQUE column" — which is why the uniqueness is an index.
 
 **`user_id` is on every node, not only on roots.** Every query filters by
 owner directly, so ownership is never established by walking up a tree — a
