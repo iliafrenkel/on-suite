@@ -42,6 +42,20 @@ const (
 	RootID = 0
 )
 
+// parentArg converts the RootID sentinel to the NULL the column actually
+// stores. It is always paired with "parent_id IS ?", which SQLite treats as =
+// for a non-NULL value and as a NULL test otherwise — so one query shape
+// covers both top-level and nested nodes, with no branching anywhere.
+//
+// It sits beside RootID, rather than in store.go or tree.go, because reads and
+// writes both need it and neither owns it.
+func parentArg(parentID int64) any {
+	if parentID == RootID {
+		return nil
+	}
+	return parentID
+}
+
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 

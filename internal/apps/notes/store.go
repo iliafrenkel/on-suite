@@ -28,9 +28,38 @@ func (st *Store) SetClock(now func() time.Time) { st.now = now }
 const nodeColumns = `id, user_id, parent_id, position, title, note, collapsed, created_at, updated_at`
 
 // ByID fetches one of userID's own nodes.
+//
+// A write that decides what to do from what it read calls Ops.ByID instead, so
+// that the read and the write are the same transaction.
 func (st *Store) ByID(ctx context.Context, userID, id int64) (Node, error) {
-	n, err := scanNode(st.db.QueryRowContext(ctx,
+	return nodeByID(ctx, st.db, userID, id)
+}
+
+// querier is the read surface shared by *sql.DB and *sql.Tx, so that the two
+// single-node reads below have one implementation each rather than one per
+// caller. Nothing else needs it: Ops is the only reason a read runs against a
+// transaction.
+type querier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// nodeByID is the SQL behind Store.ByID and Ops.ByID.
+func nodeByID(ctx context.Context, q querier, userID, id int64) (Node, error) {
+	n, err := scanNode(q.QueryRowContext(ctx,
 		`SELECT `+nodeColumns+` FROM notes_nodes WHERE id = ? AND user_id = ?`, id, userID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Node{}, ErrNotFound
+	}
+	return n, err
+}
+
+// siblingAt fetches the child of parentID sitting at a given position. It is
+// reached through Ops.siblingAt, which supplies the transaction.
+func siblingAt(ctx context.Context, q querier, userID, parentID int64, pos int) (Node, error) {
+	n, err := scanNode(q.QueryRowContext(ctx,
+		`SELECT `+nodeColumns+`
+		   FROM notes_nodes WHERE user_id = ? AND parent_id IS ? AND position = ?`,
+		userID, parentArg(parentID), pos))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Node{}, ErrNotFound
 	}

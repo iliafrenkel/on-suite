@@ -9,19 +9,36 @@ import (
 	"time"
 )
 
-// tx runs fn inside a transaction, rolling back unless fn returns nil.
+// Ops is the store's write API bound to a single transaction. It exists so a
+// caller can save a bullet's text and restructure the tree as one write —
+// spec §7 — rather than as two that another tab can interleave with.
+//
+// Every method on Store that changes anything is a thin wrapper around the
+// method of the same name here, so the two are never allowed to drift.
+type Ops struct {
+	st *Store
+	tx *sql.Tx
+}
+
+// Do runs fn inside one transaction, committing if it returns nil and rolling
+// back otherwise.
 //
 // Every mutation goes through it. A tree operation that half-applies leaves an
 // outline that no later operation can repair: positions with a gap in them
 // make every subsequent clamp land one place off, silently.
-func (st *Store) tx(ctx context.Context, fn func(*sql.Tx) error) error {
+//
+// fn must reach the database only through the Ops it is handed. The platform
+// opens SQLite with SetMaxOpenConns(1), so a closure that calls a Store method
+// instead waits for a connection the transaction is holding, and waits for
+// ever.
+func (st *Store) Do(ctx context.Context, fn func(*Ops) error) error {
 	handle, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("notes: begin transaction: %w", err)
 	}
 	defer func() { _ = handle.Rollback() }() // a no-op after a successful Commit
 
-	if err := fn(handle); err != nil {
+	if err := fn(&Ops{st: st, tx: handle}); err != nil {
 		return err
 	}
 	if err := handle.Commit(); err != nil {
@@ -30,15 +47,18 @@ func (st *Store) tx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return nil
 }
 
-// parentArg converts the RootID sentinel to the NULL the column actually
-// stores. It is always paired with "parent_id IS ?", which SQLite treats as =
-// for a non-NULL value and as a NULL test otherwise — so one query shape
-// covers both top-level and nested nodes, with no branching anywhere.
-func parentArg(parentID int64) any {
-	if parentID == RootID {
-		return nil
-	}
-	return parentID
+// now is the store's clock, which tests replace.
+func (o *Ops) now() time.Time { return o.st.now() }
+
+// ByID fetches one of userID's own nodes, through the transaction, so that a
+// write decided from what it read cannot be reading a stale tree.
+func (o *Ops) ByID(ctx context.Context, userID, id int64) (Node, error) {
+	return nodeByID(ctx, o.tx, userID, id)
+}
+
+// siblingAt fetches the child of parentID sitting at a given position.
+func (o *Ops) siblingAt(ctx context.Context, userID, parentID int64, pos int) (Node, error) {
+	return siblingAt(ctx, o.tx, userID, parentID, pos)
 }
 
 // Create inserts a new bullet as a child of parentID, which may be RootID.
@@ -47,52 +67,60 @@ func parentArg(parentID int64) any {
 // and anything at or past the last sibling appends. Out-of-range values are
 // clamped rather than rejected, because "after the bullet I am looking at" is
 // still the caller's intent when the tree has moved underneath them.
-func (st *Store) Create(ctx context.Context, userID, parentID int64, afterPos int, title, note string) (Node, error) {
+func (o *Ops) Create(ctx context.Context, userID, parentID int64, afterPos int, title, note string) (Node, error) {
 	title = strings.TrimRight(title, " \t")
 	if err := Validate(title, note); err != nil {
 		return Node{}, err
 	}
 
 	out := Node{UserID: userID, ParentID: parentID, Title: title, Note: note}
-	err := st.tx(ctx, func(tx *sql.Tx) error {
-		if parentID != RootID {
-			// depthOf also answers "does this parent exist and is it yours",
-			// so there is no separate ownership query.
-			depth, err := depthOf(ctx, tx, userID, parentID)
-			if err != nil {
-				return err
-			}
-			if depth+1 > MaxDepth {
-				return ErrTooDeep
-			}
-		}
-
-		n, err := countChildren(ctx, tx, userID, parentID)
+	if parentID != RootID {
+		// depthOf also answers "does this parent exist and is it yours", so
+		// there is no separate ownership query.
+		depth, err := depthOf(ctx, o.tx, userID, parentID)
 		if err != nil {
-			return err
+			return Node{}, err
 		}
-		idx := clamp(afterPos+1, 0, n)
+		if depth+1 > MaxDepth {
+			return Node{}, ErrTooDeep
+		}
+	}
 
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE notes_nodes SET position = position + 1
-			  WHERE user_id = ? AND parent_id IS ? AND position >= ?`,
-			userID, parentArg(parentID), idx); err != nil {
-			return fmt.Errorf("notes: create: shift siblings: %w", err)
-		}
+	n, err := countChildren(ctx, o.tx, userID, parentID)
+	if err != nil {
+		return Node{}, err
+	}
+	idx := clamp(afterPos+1, 0, n)
 
-		now := st.now()
-		out.Position, out.CreatedAt, out.UpdatedAt = idx, now, now
-		err = tx.QueryRowContext(ctx,
-			`INSERT INTO notes_nodes
-			     (user_id, parent_id, position, title, note, collapsed, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, 0, ?, ?)
-			 RETURNING id`,
-			userID, parentArg(parentID), idx, title, note,
-			formatTime(now), formatTime(now)).Scan(&out.ID)
-		if err != nil {
-			return fmt.Errorf("notes: create: %w", err)
-		}
-		return nil
+	if _, err := o.tx.ExecContext(ctx,
+		`UPDATE notes_nodes SET position = position + 1
+		  WHERE user_id = ? AND parent_id IS ? AND position >= ?`,
+		userID, parentArg(parentID), idx); err != nil {
+		return Node{}, fmt.Errorf("notes: create: shift siblings: %w", err)
+	}
+
+	now := o.now()
+	out.Position, out.CreatedAt, out.UpdatedAt = idx, now, now
+	err = o.tx.QueryRowContext(ctx,
+		`INSERT INTO notes_nodes
+		     (user_id, parent_id, position, title, note, collapsed, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+		 RETURNING id`,
+		userID, parentArg(parentID), idx, title, note,
+		formatTime(now), formatTime(now)).Scan(&out.ID)
+	if err != nil {
+		return Node{}, fmt.Errorf("notes: create: %w", err)
+	}
+	return out, nil
+}
+
+// Create inserts a new bullet in a transaction of its own. See Ops.Create.
+func (st *Store) Create(ctx context.Context, userID, parentID int64, afterPos int, title, note string) (Node, error) {
+	var out Node
+	err := st.Do(ctx, func(o *Ops) error {
+		var err error
+		out, err = o.Create(ctx, userID, parentID, afterPos, title, note)
+		return err
 	})
 	if err != nil {
 		return Node{}, err
@@ -147,11 +175,17 @@ func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 // rather than kept in the browser because Outline stops descending at a
 // collapsed node: the flag decides what the server sends, not just what the
 // page shows.
-func (st *Store) SetCollapsed(ctx context.Context, userID, id int64, collapsed bool) error {
-	return st.update(ctx,
+func (o *Ops) SetCollapsed(ctx context.Context, userID, id int64, collapsed bool) error {
+	return o.update(ctx,
 		`UPDATE notes_nodes SET collapsed = ?, updated_at = ?
 		  WHERE id = ? AND user_id = ?`,
-		collapsed, formatTime(st.now()), id, userID)
+		collapsed, formatTime(o.now()), id, userID)
+}
+
+// SetCollapsed records a bullet's collapse state in a transaction of its own.
+// See Ops.SetCollapsed.
+func (st *Store) SetCollapsed(ctx context.Context, userID, id int64, collapsed bool) error {
+	return st.Do(ctx, func(o *Ops) error { return o.SetCollapsed(ctx, userID, id, collapsed) })
 }
 
 // SetText replaces a bullet's title and note.
@@ -159,21 +193,28 @@ func (st *Store) SetCollapsed(ctx context.Context, userID, id int64, collapsed b
 // Trailing spaces are stripped but leading ones are not: an outline is written
 // in prose, and a leading space is sometimes deliberate, while a trailing one
 // never is.
-func (st *Store) SetText(ctx context.Context, userID, id int64, title, note string) error {
+func (o *Ops) SetText(ctx context.Context, userID, id int64, title, note string) error {
 	title = strings.TrimRight(title, " \t")
 	if err := Validate(title, note); err != nil {
 		return err
 	}
-	return st.update(ctx,
+	return o.update(ctx,
 		`UPDATE notes_nodes SET title = ?, note = ?, updated_at = ?
 		  WHERE id = ? AND user_id = ?`,
-		title, note, formatTime(st.now()), id, userID)
+		title, note, formatTime(o.now()), id, userID)
+}
+
+// SetText replaces a bullet's text in a transaction of its own. A handler
+// saving text alongside a structural operation calls Do and uses Ops.SetText
+// instead, so that the two land as one write. See Ops.SetText.
+func (st *Store) SetText(ctx context.Context, userID, id int64, title, note string) error {
+	return st.Do(ctx, func(o *Ops) error { return o.SetText(ctx, userID, id, title, note) })
 }
 
 // update runs a single-row UPDATE and turns "nothing matched" into
 // ErrNotFound, which covers both "no such node" and "not yours".
-func (st *Store) update(ctx context.Context, query string, args ...any) error {
-	res, err := st.db.ExecContext(ctx, query, args...)
+func (o *Ops) update(ctx context.Context, query string, args ...any) error {
+	res, err := o.tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("notes: update: %w", err)
 	}
@@ -189,36 +230,40 @@ func (st *Store) update(ctx context.Context, query string, args ...any) error {
 
 // Delete removes a bullet and everything under it, then closes the gap it
 // left among its siblings.
-func (st *Store) Delete(ctx context.Context, userID, id int64) error {
-	return st.tx(ctx, func(tx *sql.Tx) error {
-		var (
-			parent sql.NullInt64
-			pos    int
-		)
-		err := tx.QueryRowContext(ctx,
-			`SELECT parent_id, position FROM notes_nodes WHERE id = ? AND user_id = ?`,
-			id, userID).Scan(&parent, &pos)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("notes: delete: %w", err)
-		}
+func (o *Ops) Delete(ctx context.Context, userID, id int64) error {
+	var (
+		parent sql.NullInt64
+		pos    int
+	)
+	err := o.tx.QueryRowContext(ctx,
+		`SELECT parent_id, position FROM notes_nodes WHERE id = ? AND user_id = ?`,
+		id, userID).Scan(&parent, &pos)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("notes: delete: %w", err)
+	}
 
-		// The subtree goes with it: notes_nodes.parent_id is ON DELETE
-		// CASCADE, and the platform opens SQLite with foreign_keys=ON.
-		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM notes_nodes WHERE id = ? AND user_id = ?`, id, userID); err != nil {
-			return fmt.Errorf("notes: delete: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE notes_nodes SET position = position - 1
-			  WHERE user_id = ? AND parent_id IS ? AND position > ?`,
-			userID, parentArg(parent.Int64), pos); err != nil {
-			return fmt.Errorf("notes: delete: close the gap: %w", err)
-		}
-		return nil
-	})
+	// The subtree goes with it: notes_nodes.parent_id is ON DELETE CASCADE,
+	// and the platform opens SQLite with foreign_keys=ON.
+	if _, err := o.tx.ExecContext(ctx,
+		`DELETE FROM notes_nodes WHERE id = ? AND user_id = ?`, id, userID); err != nil {
+		return fmt.Errorf("notes: delete: %w", err)
+	}
+	if _, err := o.tx.ExecContext(ctx,
+		`UPDATE notes_nodes SET position = position - 1
+		  WHERE user_id = ? AND parent_id IS ? AND position > ?`,
+		userID, parentArg(parent.Int64), pos); err != nil {
+		return fmt.Errorf("notes: delete: close the gap: %w", err)
+	}
+	return nil
+}
+
+// Delete removes a bullet and its subtree in a transaction of its own. See
+// Ops.Delete.
+func (st *Store) Delete(ctx context.Context, userID, id int64) error {
+	return st.Do(ctx, func(o *Ops) error { return o.Delete(ctx, userID, id) })
 }
 
 // Move reparents a bullet, taking its subtree with it, and places it at newPos
@@ -230,86 +275,90 @@ func (st *Store) Delete(ctx context.Context, userID, id int64) error {
 // still in the table but gone from the app, and nothing in the UI can undo it.
 // Both guards below therefore run inside the same transaction as the move,
 // not before it.
-func (st *Store) Move(ctx context.Context, userID, id, newParentID int64, newPos int) error {
+func (o *Ops) Move(ctx context.Context, userID, id, newParentID int64, newPos int) error {
 	if id == newParentID {
 		return ErrCycle
 	}
-	return st.tx(ctx, func(tx *sql.Tx) error {
-		var (
-			oldParent sql.NullInt64
-			oldPos    int
-		)
-		err := tx.QueryRowContext(ctx,
-			`SELECT parent_id, position FROM notes_nodes WHERE id = ? AND user_id = ?`,
-			id, userID).Scan(&oldParent, &oldPos)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("notes: move: %w", err)
-		}
 
-		if newParentID != RootID {
-			inside, err := isDescendant(ctx, tx, userID, newParentID, id)
-			if err != nil {
-				return err
-			}
-			if inside {
-				return ErrCycle
-			}
-			// depthOf doubles as the ownership check on the new parent.
-			parentDepth, err := depthOf(ctx, tx, userID, newParentID)
-			if err != nil {
-				return err
-			}
-			height, err := heightOf(ctx, tx, userID, id)
-			if err != nil {
-				return err
-			}
-			if parentDepth+1+height > MaxDepth {
-				return ErrTooDeep
-			}
-		}
+	var (
+		oldParent sql.NullInt64
+		oldPos    int
+	)
+	err := o.tx.QueryRowContext(ctx,
+		`SELECT parent_id, position FROM notes_nodes WHERE id = ? AND user_id = ?`,
+		id, userID).Scan(&oldParent, &oldPos)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("notes: move: %w", err)
+	}
 
-		// Close the gap the bullet leaves behind.
-		//
-		// The "id != ?" on this shift and the next is belt and braces rather
-		// than load-bearing. This predicate cannot match the moving row in
-		// any case, since its position is exactly oldPos; and any increment
-		// the next shift applied to it would be overwritten by the final
-		// update below. They stay because a future change to either
-		// predicate would make them matter, and they cost one comparison.
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE notes_nodes SET position = position - 1
-			  WHERE user_id = ? AND parent_id IS ? AND position > ? AND id != ?`,
-			userID, parentArg(oldParent.Int64), oldPos, id); err != nil {
-			return fmt.Errorf("notes: move: close the gap: %w", err)
-		}
-
-		n, err := countChildren(ctx, tx, userID, newParentID)
+	if newParentID != RootID {
+		inside, err := isDescendant(ctx, o.tx, userID, newParentID, id)
 		if err != nil {
 			return err
 		}
-		if newParentID == oldParent.Int64 {
-			n-- // the bullet is still counted among its own new siblings
+		if inside {
+			return ErrCycle
 		}
-		idx := clamp(newPos, 0, n)
+		// depthOf doubles as the ownership check on the new parent.
+		parentDepth, err := depthOf(ctx, o.tx, userID, newParentID)
+		if err != nil {
+			return err
+		}
+		height, err := heightOf(ctx, o.tx, userID, id)
+		if err != nil {
+			return err
+		}
+		if parentDepth+1+height > MaxDepth {
+			return ErrTooDeep
+		}
+	}
 
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE notes_nodes SET position = position + 1
-			  WHERE user_id = ? AND parent_id IS ? AND position >= ? AND id != ?`,
-			userID, parentArg(newParentID), idx, id); err != nil {
-			return fmt.Errorf("notes: move: open a gap: %w", err)
-		}
+	// Close the gap the bullet leaves behind.
+	//
+	// The "id != ?" on this shift and the next is belt and braces rather
+	// than load-bearing. This predicate cannot match the moving row in
+	// any case, since its position is exactly oldPos; and any increment
+	// the next shift applied to it would be overwritten by the final
+	// update below. They stay because a future change to either
+	// predicate would make them matter, and they cost one comparison.
+	if _, err := o.tx.ExecContext(ctx,
+		`UPDATE notes_nodes SET position = position - 1
+		  WHERE user_id = ? AND parent_id IS ? AND position > ? AND id != ?`,
+		userID, parentArg(oldParent.Int64), oldPos, id); err != nil {
+		return fmt.Errorf("notes: move: close the gap: %w", err)
+	}
 
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE notes_nodes SET parent_id = ?, position = ?, updated_at = ?
-			  WHERE id = ? AND user_id = ?`,
-			parentArg(newParentID), idx, formatTime(st.now()), id, userID); err != nil {
-			return fmt.Errorf("notes: move: %w", err)
-		}
-		return nil
-	})
+	n, err := countChildren(ctx, o.tx, userID, newParentID)
+	if err != nil {
+		return err
+	}
+	if newParentID == oldParent.Int64 {
+		n-- // the bullet is still counted among its own new siblings
+	}
+	idx := clamp(newPos, 0, n)
+
+	if _, err := o.tx.ExecContext(ctx,
+		`UPDATE notes_nodes SET position = position + 1
+		  WHERE user_id = ? AND parent_id IS ? AND position >= ? AND id != ?`,
+		userID, parentArg(newParentID), idx, id); err != nil {
+		return fmt.Errorf("notes: move: open a gap: %w", err)
+	}
+
+	if _, err := o.tx.ExecContext(ctx,
+		`UPDATE notes_nodes SET parent_id = ?, position = ?, updated_at = ?
+		  WHERE id = ? AND user_id = ?`,
+		parentArg(newParentID), idx, formatTime(o.now()), id, userID); err != nil {
+		return fmt.Errorf("notes: move: %w", err)
+	}
+	return nil
+}
+
+// Move reparents a bullet in a transaction of its own. See Ops.Move.
+func (st *Store) Move(ctx context.Context, userID, id, newParentID int64, newPos int) error {
+	return st.Do(ctx, func(o *Ops) error { return o.Move(ctx, userID, id, newParentID, newPos) })
 }
 
 // heightOf reports how many levels of descendants a node has: 0 for a leaf.
@@ -365,23 +414,27 @@ const maxPosition = 1 << 30
 // that is not an error: the caller is a keypress, not a command, and Tab on
 // the first line of an outline should do nothing rather than complain.
 //
-// Reading the bullet and moving it are two transactions. Between them another
-// tab could move the tree, in which case Move clamps to a position that is
-// merely surprising — the invariants still hold, because Move re-derives
-// everything it changes inside its own transaction.
-func (st *Store) Indent(ctx context.Context, userID, id int64) error {
-	n, err := st.ByID(ctx, userID, id)
+// Reading the bullet and moving it happen in the one transaction, so the tree
+// cannot change underneath the decision of which sibling to move it under.
+func (o *Ops) Indent(ctx context.Context, userID, id int64) error {
+	n, err := o.ByID(ctx, userID, id)
 	if err != nil {
 		return err
 	}
 	if n.Position == 0 {
 		return nil
 	}
-	prev, err := st.siblingAt(ctx, userID, n.ParentID, n.Position-1)
+	prev, err := o.siblingAt(ctx, userID, n.ParentID, n.Position-1)
 	if err != nil {
 		return err
 	}
-	return st.Move(ctx, userID, id, prev.ID, maxPosition)
+	return o.Move(ctx, userID, id, prev.ID, maxPosition)
+}
+
+// Indent makes a bullet the last child of the sibling above it, in a
+// transaction of its own. See Ops.Indent.
+func (st *Store) Indent(ctx context.Context, userID, id int64) error {
+	return st.Do(ctx, func(o *Ops) error { return o.Indent(ctx, userID, id) })
 }
 
 // Outdent makes a bullet the next sibling of its own parent.
@@ -389,53 +442,59 @@ func (st *Store) Indent(ctx context.Context, userID, id int64) error {
 // Its former following siblings stay where they are. Some outliners instead
 // adopt them as children of the outdented bullet; this is the simpler rule and
 // the one that never moves a bullet the user was not looking at.
-func (st *Store) Outdent(ctx context.Context, userID, id int64) error {
-	n, err := st.ByID(ctx, userID, id)
+func (o *Ops) Outdent(ctx context.Context, userID, id int64) error {
+	n, err := o.ByID(ctx, userID, id)
 	if err != nil {
 		return err
 	}
 	if n.ParentID == RootID {
 		return nil
 	}
-	parent, err := st.ByID(ctx, userID, n.ParentID)
+	parent, err := o.ByID(ctx, userID, n.ParentID)
 	if err != nil {
 		return err
 	}
-	return st.Move(ctx, userID, id, parent.ParentID, parent.Position+1)
+	return o.Move(ctx, userID, id, parent.ParentID, parent.Position+1)
+}
+
+// Outdent makes a bullet the next sibling of its own parent, in a transaction
+// of its own. See Ops.Outdent.
+func (st *Store) Outdent(ctx context.Context, userID, id int64) error {
+	return st.Do(ctx, func(o *Ops) error { return o.Outdent(ctx, userID, id) })
 }
 
 // MoveUp swaps a bullet with the sibling above it, or does nothing if it is
 // already first.
-func (st *Store) MoveUp(ctx context.Context, userID, id int64) error {
-	n, err := st.ByID(ctx, userID, id)
+func (o *Ops) MoveUp(ctx context.Context, userID, id int64) error {
+	n, err := o.ByID(ctx, userID, id)
 	if err != nil {
 		return err
 	}
 	if n.Position == 0 {
 		return nil
 	}
-	return st.Move(ctx, userID, id, n.ParentID, n.Position-1)
+	return o.Move(ctx, userID, id, n.ParentID, n.Position-1)
+}
+
+// MoveUp swaps a bullet with the sibling above it, in a transaction of its
+// own. See Ops.MoveUp.
+func (st *Store) MoveUp(ctx context.Context, userID, id int64) error {
+	return st.Do(ctx, func(o *Ops) error { return o.MoveUp(ctx, userID, id) })
 }
 
 // MoveDown swaps a bullet with the sibling below it. A bullet that is already
 // last needs no special case: Move clamps the target position back to where
 // the bullet already is.
-func (st *Store) MoveDown(ctx context.Context, userID, id int64) error {
-	n, err := st.ByID(ctx, userID, id)
+func (o *Ops) MoveDown(ctx context.Context, userID, id int64) error {
+	n, err := o.ByID(ctx, userID, id)
 	if err != nil {
 		return err
 	}
-	return st.Move(ctx, userID, id, n.ParentID, n.Position+1)
+	return o.Move(ctx, userID, id, n.ParentID, n.Position+1)
 }
 
-// siblingAt fetches the child of parentID sitting at a given position.
-func (st *Store) siblingAt(ctx context.Context, userID, parentID int64, pos int) (Node, error) {
-	n, err := scanNode(st.db.QueryRowContext(ctx,
-		`SELECT `+nodeColumns+`
-		   FROM notes_nodes WHERE user_id = ? AND parent_id IS ? AND position = ?`,
-		userID, parentArg(parentID), pos))
-	if errors.Is(err, sql.ErrNoRows) {
-		return Node{}, ErrNotFound
-	}
-	return n, err
+// MoveDown swaps a bullet with the sibling below it, in a transaction of its
+// own. See Ops.MoveDown.
+func (st *Store) MoveDown(ctx context.Context, userID, id int64) error {
+	return st.Do(ctx, func(o *Ops) error { return o.MoveDown(ctx, userID, id) })
 }

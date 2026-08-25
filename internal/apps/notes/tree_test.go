@@ -636,6 +636,131 @@ func TestKeyboardMovesRejectAnotherUsersNode(t *testing.T) {
 	checkInvariants(t, f.db)
 }
 
+// TestDoSavesTextAndRestructuresAsOneWrite is the reason Ops exists. A
+// structural request carries the focused bullet's text (spec §7), and the
+// server applies both in one transaction so that a debounced autosave racing
+// the structural operation cannot lose the last keystrokes.
+func TestDoSavesTextAndRestructuresAsOneWrite(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "a")
+	b := f.mk(t, notes.RootID, "b")
+
+	err := f.store.Do(ctx, func(o *notes.Ops) error {
+		if err := o.SetText(ctx, f.alice.ID, b.ID, "b edited", "the note"); err != nil {
+			return err
+		}
+		return o.Indent(ctx, f.alice.ID, b.ID)
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+
+	// The structural half.
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a"}) {
+		t.Fatalf("top level = %v; want [a]", got)
+	}
+	if got := f.childTitles(t, f.alice.ID, a.ID); !slices.Equal(got, []string{"b edited"}) {
+		t.Fatalf("under a = %v; want [b edited]", got)
+	}
+	// The text half, including the note, which childTitles cannot see.
+	n, err := f.store.ByID(ctx, f.alice.ID, b.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if n.Title != "b edited" || n.Note != "the note" {
+		t.Fatalf("b = %q / %q; want \"b edited\" / \"the note\"", n.Title, n.Note)
+	}
+	checkInvariants(t, f.db)
+}
+
+// TestDoRollsBackEverythingWhenTheClosureFails is what makes the seam worth
+// having: two operations that succeeded individually must both disappear when
+// the transaction does not commit.
+func TestDoRollsBackEverythingWhenTheClosureFails(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "a")
+	b := f.mk(t, notes.RootID, "b")
+
+	boom := errors.New("the handler changed its mind")
+	err := f.store.Do(ctx, func(o *notes.Ops) error {
+		if err := o.SetText(ctx, f.alice.ID, b.ID, "b edited", "the note"); err != nil {
+			return err
+		}
+		if err := o.Indent(ctx, f.alice.ID, b.ID); err != nil {
+			return err
+		}
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("Do = %v; want the closure's own error back", err)
+	}
+
+	// The structure is exactly as it was.
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("top level = %v; want [a b] unchanged", got)
+	}
+	if got := f.childTitles(t, f.alice.ID, a.ID); len(got) != 0 {
+		t.Fatalf("a has children %v; want none — the indent was rolled back", got)
+	}
+	// And so is the text: a rollback that kept the edit would be the lost
+	// update in reverse.
+	n, err := f.store.ByID(ctx, f.alice.ID, b.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if n.Title != "b" || n.Note != "" {
+		t.Fatalf("b = %q / %q; want %q / %q unchanged", n.Title, n.Note, "b", "")
+	}
+	checkInvariants(t, f.db)
+}
+
+// TestDoKeepsInvariantsAcrossAMultiOperationTransaction runs a whole sequence
+// of structural operations inside one Do, including moving a bullet that was
+// created in the same transaction and has therefore never been committed.
+// I1-I4 are checked once at the end, which is the only point at which the
+// database is observable from outside.
+func TestDoKeepsInvariantsAcrossAMultiOperationTransaction(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "a")
+	f.mk(t, notes.RootID, "b")
+	c := f.mk(t, notes.RootID, "c")
+
+	err := f.store.Do(ctx, func(o *notes.Ops) error {
+		d, err := o.Create(ctx, f.alice.ID, notes.RootID, 1<<30, "d", "")
+		if err != nil {
+			return err
+		}
+		// Ops.ByID reads through the transaction, so each of these sees the
+		// uncommitted result of the one before it.
+		if err := o.Indent(ctx, f.alice.ID, d.ID); err != nil { // d under c
+			return err
+		}
+		if err := o.Indent(ctx, f.alice.ID, c.ID); err != nil { // c, with d, under b
+			return err
+		}
+		if err := o.Outdent(ctx, f.alice.ID, d.ID); err != nil { // d beside c
+			return err
+		}
+		return o.Delete(ctx, f.alice.ID, a.ID)
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatalf("Outline: %v", err)
+	}
+	want := "- b [+]\n  - c\n  - d\n"
+	if outlineShape(got) != want {
+		t.Fatalf("after the transaction:\n%s\nwant\n%s", outlineShape(got), want)
+	}
+	checkInvariants(t, f.db)
+}
+
 // TestRandomOperationSequencesPreserveInvariants applies a long, deterministic
 // sequence of random operations across two users and checks I1-I4 after every
 // single one.
