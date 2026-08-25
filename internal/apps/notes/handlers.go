@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -112,4 +113,148 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 	page := a.deps.Page(r, title)
 	page.Data = view
 	a.render(w, r, http.StatusOK, "notes/outline", page)
+}
+
+// outlinePath is the zoom URL for a root, and the only place in this package
+// where a path is built from an id. It is always "/notes/" followed by
+// decimal digits, so a redirect through it can never leave the site.
+func outlinePath(root int64) string {
+	if root == RootID {
+		return "/notes/"
+	}
+	return "/notes/" + strconv.FormatInt(root, 10)
+}
+
+// mutation is a structural request already parsed: the fields spec §7 defines,
+// plus the ids the route supplies.
+type mutation struct {
+	UserID int64
+	// NodeID is the {id} in the path — the bullet the operation acts on. It
+	// is RootID on POST /notes/new, which has no {id}.
+	NodeID int64
+	// FocusID is the bullet the caret was in, or RootID for "none". It is
+	// deliberately independent of NodeID: in this chunk they always coincide,
+	// because each row is its own form, but from N3 a click on one bullet's
+	// control while the caret is in another makes them differ.
+	FocusID int64
+	// Root is the zoom the request was issued from, and is used for nothing
+	// but the redirect.
+	Root int64
+}
+
+// mutate is spec §7's single write.
+//
+// It saves the focused bullet's text and performs the structural operation
+// inside one transaction, so the two cannot interleave with anything and
+// cannot half-apply. Without it there are two writes, and a user who types and
+// then presses Tab loses whatever landed after the last save.
+//
+// op must reach the database only through the *Ops it is handed. The platform
+// opens SQLite with SetMaxOpenConns(1): a closure that calls a *Store method —
+// a.store.Outline, a.store.Indent, anything — waits for the connection its own
+// transaction is holding, and waits for ever. There is no write timeout in the
+// server, so that is a frozen process rather than a failed request. Rendering
+// and redirecting therefore happen out here, after Do has returned.
+func (a *App) mutate(w http.ResponseWriter, r *http.Request, op func(context.Context, *Ops, mutation) error) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+
+	// Everything the request carries is read up front, before the transaction
+	// opens, so nothing inside it depends on parsing that might fail.
+	root, ok := formID(r, "root")
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	focusID, ok := formID(r, "focus_id")
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	title, note := r.PostFormValue("title"), r.PostFormValue("note")
+
+	// A path with no {id} — POST /notes/new — leaves NodeID at RootID. Every
+	// other route's pattern guarantees the wildcard is there, and a value that
+	// is present but not a positive integer is a 404, as it is for a GET.
+	// RootID is an untyped constant, so the type is written out: := would
+	// infer int here, and mutation.NodeID is an int64.
+	var nodeID int64 = RootID
+	if raw := r.PathValue("id"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id <= 0 {
+			a.deps.Errors.Status(w, r, http.StatusNotFound)
+			return
+		}
+		nodeID = id
+	}
+
+	m := mutation{UserID: userID, NodeID: nodeID, FocusID: focusID, Root: root}
+	ctx := r.Context()
+
+	err := a.store.Do(ctx, func(o *Ops) error {
+		if m.FocusID != RootID {
+			if err := o.SetText(ctx, m.UserID, m.FocusID, title, note); err != nil {
+				return err
+			}
+		}
+		return op(ctx, o, m)
+	})
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+
+	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
+}
+
+// formID reads a form field as a node id.
+//
+// An absent or empty field is RootID, which every caller reads as "none", and
+// so is a literal RootID: the row form renders its hidden root field from the
+// zoom it was drawn at, which is RootID at the top level, so "0" is the
+// commonest value this ever sees and rejecting it would 400 every mutation
+// made from the top-level outline. A field that is present but is neither of
+// those nor a positive integer is a malformed request, reported rather than
+// silently treated as absent: for focus_id, treating it as absent would drop
+// the user's text on the floor without saying so.
+func formID(r *http.Request, name string) (int64, bool) {
+	raw := r.PostFormValue(name)
+	if raw == "" {
+		return RootID, true
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id < 0 {
+		return RootID, false
+	}
+	return id, true
+}
+
+// setText saves one bullet's text.
+//
+// It is the one route that does not go through mutate, and the one that
+// ignores focus_id: its subject is the path id, so target and focus cannot
+// differ, and there is only one write to make. The row form still sends the
+// hidden focus_id field, because the same form's other buttons need it.
+func (a *App) setText(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.nodeID(w, r)
+	if !ok {
+		return
+	}
+	root, ok := formID(r, "root")
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.store.SetText(r.Context(), userID, id, r.PostFormValue("title"), r.PostFormValue("note")); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
 }

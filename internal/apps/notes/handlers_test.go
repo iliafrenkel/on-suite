@@ -473,3 +473,98 @@ func TestBulletDotZoomsIn(t *testing.T) {
 		t.Errorf("the bullet dot points at %q, want /notes/%d", href, id)
 	}
 }
+
+func TestSetTextSavesTheBullet(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "old")
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
+		"root": {"0"}, "focus_id": {itoa(id)},
+		"title": {"new"}, "note": {"a note"},
+	}, "/notes/")
+
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Title != "new" || n.Note != "a note" {
+		t.Errorf("saved %q / %q, want new / a note", n.Title, n.Note)
+	}
+}
+
+func TestSetTextReturnsToTheZoomItCameFrom(t *testing.T) {
+	s := newServer(t)
+	root := s.seed(t, s.alice, notes.RootID, "Projects")
+	child := s.seed(t, s.alice, root, "AtBudget")
+
+	s.submit(t, s.alice, "/notes/"+itoa(child)+"/text", url.Values{
+		"root": {itoa(root)}, "title": {"renamed"}, "note": {""},
+	}, "/notes/"+itoa(root))
+}
+
+func TestSetTextOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
+		"root": {"0"}, "title": {"stolen"}, "note": {""},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+
+	n, err := s.store.ByID(context.Background(), s.bob.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Title != "bob's" {
+		t.Errorf("bob's bullet is now %q", n.Title)
+	}
+}
+
+func TestMutationsWithoutACSRFTokenAreRejected(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "Projects")
+
+	form := url.Values{"root": {"0"}, "title": {"changed"}, "note": {""}}
+	req := httptest.NewRequest("POST", "/notes/"+itoa(id)+"/text", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := s.do(t, s.alice, req)
+
+	if rec.Code == http.StatusSeeOther {
+		t.Fatal("a POST with no CSRF token succeeded")
+	}
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Title != "Projects" {
+		t.Errorf("the bullet was changed to %q", n.Title)
+	}
+}
+
+func TestMalformedRootIsRejected(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "Projects")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
+		"root": {"not-a-number"}, "title": {"changed"}, "note": {""},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+// TestOversizeTextIsRejected: unreachable from a browser, because the inputs
+// carry maxlength. This is the backstop for anything that is not a browser.
+func TestOversizeTextIsRejected(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "Projects")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
+		"root": {"0"}, "title": {strings.Repeat("a", notes.MaxTitleRunes+1)}, "note": {""},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
