@@ -1,6 +1,71 @@
 {{define "content"}}
 <div class="stack notes">
 	<h1>Notes</h1>
-	<div id="outline" class="outline"></div>
+
+	{{/* #outline is the swap target N3 will replace on every structural
+	     response, which is why the rows live in a block of their own. */}}
+	<div id="outline" class="outline">
+		{{with .Data.Rows}}{{template "outline-rows" .}}{{end}}
+	</div>
 </div>
+{{end}}
+
+{{/* outline-rows renders one sibling list and calls itself for each row's
+     children. Its argument is the slice, and nothing else — which is why each
+     row carries its own Root and CSRFToken. */}}
+{{define "outline-rows"}}
+<ul class="outline-list">
+	{{range .}}
+	<li class="outline-item">
+		<div class="outline-row">
+			<form method="post" action="/notes/{{.ID}}/text" class="outline-main">
+				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<input type="hidden" name="root" value="{{.RootID}}">
+				<input type="hidden" name="focus_id" value="{{.ID}}">
+
+				{{if .HasChildren}}
+				<button type="submit" class="outline-chevron quiet"
+				        formaction="/notes/{{.ID}}/collapse"
+				        name="collapsed" value="{{if .Collapsed}}0{{else}}1{{end}}"
+				        aria-expanded="{{if .Collapsed}}false{{else}}true{{end}}"
+				        aria-label="{{if .Collapsed}}Expand{{else}}Collapse{{end}}">{{if .Collapsed}}&#9656;{{else}}&#9662;{{end}}</button>
+				{{else}}
+				<span class="outline-chevron" aria-hidden="true"></span>
+				{{end}}
+
+				<a class="outline-dot{{if .Collapsed}} outline-dot-full{{end}}"
+				   href="/notes/{{.ID}}"
+				   aria-label="Zoom in to {{.DisplayTitle}}">&bull;</a>
+
+				<span class="outline-text">
+					<input class="outline-title" type="text" name="title"
+					       value="{{.Title}}" maxlength="2000" aria-label="Bullet">
+					<input class="outline-note" type="text" name="note"
+					       value="{{.Note}}" maxlength="10000"
+					       placeholder="note" aria-label="Note">
+				</span>
+
+				<span class="outline-actions">
+					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
+					        name="dir" value="up" aria-label="Move up"
+					        {{if eq .Position 0}}disabled{{end}}>&uarr;</button>
+					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
+					        name="dir" value="down" aria-label="Move down"
+					        {{if .Last}}disabled{{end}}>&darr;</button>
+					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/indent"
+					        aria-label="Indent"
+					        {{if eq .Position 0}}disabled{{end}}>&#8677;</button>
+					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/outdent"
+					        aria-label="Outdent"
+					        {{if eq .Depth 0}}disabled{{end}}>&#8676;</button>
+					<button type="submit" class="quiet" formaction="/notes/new"
+					        aria-label="Add a bullet below">+</button>
+				</span>
+			</form>
+		</div>
+
+		{{with .Children}}{{template "outline-rows" .}}{{end}}
+	</li>
+	{{end}}
+</ul>
 {{end}}

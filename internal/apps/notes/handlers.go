@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
@@ -24,11 +25,67 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, status int, name st
 	}
 }
 
-// outline renders the top-level outline. Task 3 gives it something to draw.
+// fail maps a store error onto a response.
+//
+// ErrNotFound is a 404 whether the bullet is missing or simply someone
+// else's: a 403 would confirm that it exists. ErrCycle and ErrTooDeep are
+// requests that are well-formed but not satisfiable against this tree, which
+// is what 400 means here.
+func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		a.deps.Errors.Status(w, r, http.StatusNotFound)
+	case errors.Is(err, ErrInvalid), errors.Is(err, ErrCycle), errors.Is(err, ErrTooDeep):
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+	default:
+		a.deps.Errors.Internal(w, r, err)
+	}
+}
+
+// outline renders the top-level outline.
 func (a *App) outline(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.userID(w, r); !ok {
+	a.renderOutline(w, r, RootID)
+}
+
+// renderOutline draws the outline rooted at rootID: the breadcrumb, the
+// visible rows, and nothing else. RootID means the top level.
+//
+// Every query here runs on the pool, outside any transaction, which is the
+// only safe place for them — see the warning on mutate.
+func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64) {
+	userID, ok := a.userID(w, r)
+	if !ok {
 		return
 	}
-	page := a.deps.Page(r, "")
+
+	view := outlineView{CSRFToken: web.CSRFToken(r.Context())}
+
+	// An empty title leaves the shell's breadcrumb reading "Home / ON Notes",
+	// which is what the top level is. A zoomed outline names its root.
+	title := ""
+	if rootID != RootID {
+		root, err := a.store.ByID(r.Context(), userID, rootID)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		crumbs, err := a.store.Ancestors(r.Context(), userID, rootID)
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
+		view.Root, view.Zoomed, view.Crumbs = root, true, crumbs
+		title = root.DisplayTitle()
+	}
+
+	flat, err := a.store.Outline(r.Context(), userID, rootID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	view.Rows = nest(flat, rootID, view.CSRFToken)
+
+	page := a.deps.Page(r, title)
+	page.Data = view
 	a.render(w, r, http.StatusOK, "notes/outline", page)
 }

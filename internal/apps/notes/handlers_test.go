@@ -244,3 +244,134 @@ func TestOutlineRendersInsideTheShell(t *testing.T) {
 		t.Errorf("the marked nav item is %q, want ON Notes", got)
 	}
 }
+
+func TestOutlineRendersTheTreeNested(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.alice, notes.RootID, "Projects")
+	s.seed(t, s.alice, parent, "AtBudget")
+	s.seed(t, s.alice, notes.RootID, "Reading")
+
+	doc := s.get(t, s.alice, "/notes/")
+
+	// Two top-level bullets, and one of them has a nested list under it.
+	// htmlassert has descendant selectors but no child combinator, so
+	// "top level" is expressed as "every bullet, less the nested ones".
+	all := doc.QueryAll(".outline-item")
+	nested := doc.QueryAll(".outline-item .outline-item")
+	if len(all)-len(nested) != 2 {
+		t.Errorf("got %d top-level bullets, want 2", len(all)-len(nested))
+	}
+	if len(nested) != 1 {
+		t.Fatalf("got %d nested bullets, want 1", len(nested))
+	}
+
+	// Every bullet's text is an input, so the page is already editable.
+	titles := doc.QueryAll("input.outline-title")
+	if len(titles) != 3 {
+		t.Fatalf("got %d title inputs, want 3", len(titles))
+	}
+	var got []string
+	for _, in := range titles {
+		v, _ := htmlassert.Attr(in, "value")
+		got = append(got, v)
+	}
+	want := []string{"Projects", "AtBudget", "Reading"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("bullet %d is %q, want %q (pre-order: %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+func TestOutlineRendersAnotherUsersTreeNowhere(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.bob, notes.RootID, "bob's secret")
+
+	doc := s.get(t, s.alice, "/notes/")
+	if strings.Contains(doc.Text(), "bob's secret") {
+		t.Error("another user's bullet is on the page")
+	}
+	if n := len(doc.QueryAll("input.outline-title")); n != 0 {
+		t.Errorf("alice's empty outline rendered %d bullets", n)
+	}
+}
+
+// TestCollapsedBulletHidesItsChildren is spec §6: the payload is bounded by
+// collapse state, so a collapsed subtree is not merely hidden by CSS — it is
+// not in the response at all.
+func TestCollapsedBulletHidesItsChildren(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.alice, notes.RootID, "Projects")
+	s.seed(t, s.alice, parent, "AtBudget")
+
+	if err := s.store.SetCollapsed(context.Background(), s.alice.user.ID, parent, true); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/")
+	if strings.Contains(doc.Text(), "AtBudget") {
+		t.Error("a collapsed bullet's child is in the response")
+	}
+	if _, ok := htmlassert.Attr(doc.MustHave(".outline-chevron"), "aria-expanded"); !ok {
+		t.Error("a collapsed bullet renders no expand control")
+	}
+}
+
+// TestBulletControlsAreDisabledWhereTheOperationIsANoOp. The store treats all
+// four as no-ops rather than errors, so this is honesty rather than
+// enforcement: a button that cannot do anything should not look like it can.
+func TestBulletControlsAreDisabledAtTheEdges(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "first")
+	s.seed(t, s.alice, notes.RootID, "second")
+
+	doc := s.get(t, s.alice, "/notes/")
+
+	// Two flat bullets, so document order is outline order: [0] is first,
+	// [1] is second.
+	ups := doc.QueryAll(`button[value=up]`)
+	downs := doc.QueryAll(`button[value=down]`)
+	if len(ups) != 2 || len(downs) != 2 {
+		t.Fatalf("got %d move-up and %d move-down buttons, want 2 of each", len(ups), len(downs))
+	}
+	if _, ok := htmlassert.Attr(ups[0], "disabled"); !ok {
+		t.Error("the first bullet's move-up is not disabled")
+	}
+	if _, ok := htmlassert.Attr(downs[0], "disabled"); ok {
+		t.Error("the first bullet's move-down is disabled but a sibling follows it")
+	}
+	if _, ok := htmlassert.Attr(ups[1], "disabled"); ok {
+		t.Error("the second bullet's move-up is disabled but a sibling precedes it")
+	}
+	if _, ok := htmlassert.Attr(downs[1], "disabled"); !ok {
+		t.Error("the last bullet's move-down is not disabled")
+	}
+}
+
+// TestOutlineUsesNoInlineStyles. The CSP has no unsafe-inline: a style
+// attribute would simply not apply, so indentation must come from nesting.
+func TestOutlineUsesNoInlineStyles(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.alice, notes.RootID, "Projects")
+	s.seed(t, s.alice, parent, "AtBudget")
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	if strings.Contains(rec.Body.String(), "style=") {
+		t.Error("the outline contains an inline style attribute, which the CSP blocks")
+	}
+}
+
+func TestOutlineEscapesBulletText(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, `<script>alert(1)</script>`)
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	if strings.Contains(rec.Body.String(), "<script>alert(1)</script>") {
+		t.Error("bullet text reached the page unescaped")
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	v, _ := htmlassert.Attr(doc.MustHave("input.outline-title"), "value")
+	if v != `<script>alert(1)</script>` {
+		t.Errorf("the round-tripped title is %q", v)
+	}
+}
