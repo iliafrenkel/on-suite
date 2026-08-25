@@ -19,7 +19,11 @@
 	{{/* #outline is the swap target N3 will replace on every structural
 	     response, which is why the rows live in a block of their own. */}}
 	<div id="outline" class="outline">
-		{{with .Data.Rows}}{{template "outline-rows" .}}{{end}}
+		{{if .Data.Rows}}
+		{{template "outline-rows" .Data.Rows}}
+		{{else}}
+		{{template "outline-first" .Data}}
+		{{end}}
 	</div>
 </div>
 {{end}}
@@ -81,5 +85,33 @@
 		{{with .Children}}{{template "outline-rows" .}}{{end}}
 	</li>
 	{{end}}
+</ul>
+{{end}}
+
+{{/* An outline with nothing in it renders one empty bullet rather than an
+     empty-state panel — spec §6. A new user's first keystroke should land in
+     the outline, and a zoomed-in bullet with no children needs exactly the
+     same affordance. It posts to /notes/new with no focus_id, so the bullet
+     is appended to whichever root is on screen. */}}
+{{define "outline-first"}}
+<ul class="outline-list">
+	<li class="outline-item">
+		<div class="outline-row">
+			<form method="post" action="/notes/new" class="outline-main">
+				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<input type="hidden" name="root" value="{{.Root.ID}}">
+				<span class="outline-chevron" aria-hidden="true"></span>
+				<span class="outline-dot" aria-hidden="true">&bull;</span>
+				<span class="outline-text">
+					<input class="outline-title" type="text" name="new_title"
+					       maxlength="2000" autofocus
+					       placeholder="Start typing…" aria-label="New bullet">
+				</span>
+				<span class="outline-actions">
+					<button type="submit" class="quiet" aria-label="Add bullet">+</button>
+				</span>
+			</form>
+		</div>
+	</li>
 </ul>
 {{end}}

@@ -231,6 +231,38 @@ func formID(r *http.Request, name string) (int64, bool) {
 	return id, true
 }
 
+// create adds a bullet.
+//
+// It is Enter, written before the keyboard that will press it: title is what
+// stays on the focused bullet, new_title is what moves to the new one, and
+// both happen in the one transaction, so a split can never lose half of a
+// line. N2's "+" button is the same request with new_title empty.
+//
+// Placement follows from the focus. With one, the bullet becomes the focused
+// one's next sibling — Enter puts a line below the line you are on, not at the
+// bottom of the document. Without one, which is the empty outline's form, it
+// is appended to the zoom root the request came from.
+func (a *App) create(w http.ResponseWriter, r *http.Request) {
+	newTitle := r.PostFormValue("new_title")
+
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		parentID, afterPos := m.Root, maxPosition
+
+		if m.FocusID != RootID {
+			// Read through the transaction, so the sibling list this lands in
+			// is the one mutate's text update has already touched.
+			focus, err := o.ByID(ctx, m.UserID, m.FocusID)
+			if err != nil {
+				return err
+			}
+			parentID, afterPos = focus.ParentID, focus.Position
+		}
+
+		_, err := o.Create(ctx, m.UserID, parentID, afterPos, newTitle, "")
+		return err
+	})
+}
+
 // setText saves one bullet's text.
 //
 // It is the one route that does not go through mutate, and the one that

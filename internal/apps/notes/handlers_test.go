@@ -215,6 +215,33 @@ func (s *server) seed(t *testing.T, sess *session, parentID int64, title string)
 
 func itoa(id int64) string { return strconv.FormatInt(id, 10) }
 
+// titlesAt reads a sibling list's titles in order, which is what almost every
+// assertion about creating, moving and deleting is really about.
+func (s *server) titlesAt(t *testing.T, sess *session, parentID int64) []string {
+	t.Helper()
+	children, err := s.store.Children(context.Background(), sess.user.ID, parentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]string, 0, len(children))
+	for _, c := range children {
+		out = append(out, c.Title)
+	}
+	return out
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // ---- tests ----------------------------------------------------------------
 
 // TestNotesRequiresSignIn confirms the default-deny router covers every route
@@ -291,7 +318,10 @@ func TestOutlineRendersAnotherUsersTreeNowhere(t *testing.T) {
 	if strings.Contains(doc.Text(), "bob's secret") {
 		t.Error("another user's bullet is on the page")
 	}
-	if n := len(doc.QueryAll("input.outline-title")); n != 0 {
+	// input.outline-title also matches the empty-outline's new_title field
+	// (both share the class for styling), so a real bullet is identified by
+	// name=title specifically.
+	if n := len(doc.QueryAll("input[name=title]")); n != 0 {
 		t.Errorf("alice's empty outline rendered %d bullets", n)
 	}
 }
@@ -566,5 +596,138 @@ func TestOversizeTextIsRejected(t *testing.T) {
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+// TestEmptyOutlineOffersOneBullet is spec §6: a new user's first keystroke
+// lands in the outline, not on a "create your first note" button.
+func TestEmptyOutlineOffersOneBullet(t *testing.T) {
+	s := newServer(t)
+	doc := s.get(t, s.alice, "/notes/")
+
+	form := doc.MustHave(`form[action=/notes/new]`)
+	if _, ok := htmlassert.Attr(form, "action"); !ok {
+		t.Fatal("the empty outline offers no way to start")
+	}
+	in := doc.MustHave(`input[name=new_title]`)
+	if _, ok := htmlassert.Attr(in, "autofocus"); !ok {
+		t.Error("the first bullet is not focused")
+	}
+	doc.MustNotHave(`input[name=title]`)
+}
+
+func TestCreateFromTheEmptyOutline(t *testing.T) {
+	s := newServer(t)
+
+	s.submit(t, s.alice, "/notes/new", url.Values{
+		"root": {"0"}, "new_title": {"first"},
+	}, "/notes/")
+
+	children, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(children) != 1 || children[0].Title != "first" {
+		t.Fatalf("children = %+v, want one bullet titled first", children)
+	}
+}
+
+// TestCreateWithNoFocusAppendsToTheZoomRoot: the empty-outline form carries a
+// root and no focus, and the bullet has to land inside the zoom the user is
+// looking at, not at the top level.
+func TestCreateWithNoFocusAppendsToTheZoomRoot(t *testing.T) {
+	s := newServer(t)
+	root := s.seed(t, s.alice, notes.RootID, "Projects")
+
+	s.submit(t, s.alice, "/notes/new", url.Values{
+		"root": {itoa(root)}, "new_title": {"AtBudget"},
+	}, "/notes/"+itoa(root))
+
+	children, err := s.store.Children(context.Background(), s.alice.user.ID, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(children) != 1 || children[0].Title != "AtBudget" {
+		t.Fatalf("children of the zoom root = %+v", children)
+	}
+}
+
+// TestCreateAfterTheFocusedBullet is Enter: the new bullet is the focused
+// one's next sibling, not the last child of anything.
+func TestCreateAfterTheFocusedBullet(t *testing.T) {
+	s := newServer(t)
+	first := s.seed(t, s.alice, notes.RootID, "first")
+	s.seed(t, s.alice, notes.RootID, "third")
+
+	s.submit(t, s.alice, "/notes/new", url.Values{
+		"root": {"0"}, "focus_id": {itoa(first)},
+		"title": {"first"}, "note": {""},
+		"new_title": {"second"},
+	}, "/notes/")
+
+	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"first", "second", "third"}) {
+		t.Fatalf("children = %v, want [first second third]", got)
+	}
+}
+
+// TestCreateSplitsTheFocusedBulletsText is spec §8's Enter, ahead of the
+// keyboard that will send it: what stays and what moves are one write.
+func TestCreateSplitsTheFocusedBulletsText(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "hello world")
+
+	s.submit(t, s.alice, "/notes/new", url.Values{
+		"root": {"0"}, "focus_id": {itoa(id)},
+		"title": {"hello"}, "note": {""},
+		"new_title": {"world"},
+	}, "/notes/")
+
+	children, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(children) != 2 || children[0].Title != "hello" || children[1].Title != "world" {
+		t.Fatalf("children = %+v, want hello then world", children)
+	}
+}
+
+func TestCreateUnderAnotherUsersFocusIs404(t *testing.T) {
+	s := newServer(t)
+	bobs := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	rec := s.post(t, s.alice, "/notes/new", url.Values{
+		"root": {"0"}, "focus_id": {itoa(bobs)},
+		"title": {"stolen"}, "note": {""}, "new_title": {"x"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+
+	// Nothing was created for alice, and nothing was changed for bob: the
+	// whole transaction rolled back.
+	alices, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(alices) != 0 {
+		t.Errorf("alice gained %d bullets", len(alices))
+	}
+	n, err := s.store.ByID(context.Background(), s.bob.user.ID, bobs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Title != "bob's" {
+		t.Errorf("bob's bullet is now %q", n.Title)
+	}
+}
+
+func TestPlusButtonAddsAnEmptyBulletBelow(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "Projects")
+
+	doc := s.get(t, s.alice, "/notes/")
+	btn := doc.MustHave(`button[formaction=/notes/new]`)
+	if btn == nil {
+		t.Fatal("a bullet offers no way to add one below it")
 	}
 }
