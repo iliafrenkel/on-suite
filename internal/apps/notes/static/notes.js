@@ -57,6 +57,20 @@
 		}
 		if (!lastFocus) return;
 
+		// A row's own text autosave (hx-trigger="input changed delay:600ms,
+		// blur changed" on .outline-title/.outline-note) must never be
+		// rewritten with another row's text. setText ignores focus_id and
+		// writes to the path id, so a stale debounce timer firing after
+		// focus has already moved would save the newly-focused row's text
+		// onto the row the request is actually about. Such a request needs
+		// no override at all: it already carries its own field's current
+		// value and targets its own id. Only a structural request from a
+		// different row needs the focused row's live text substituted in.
+		var eltRow = rowOf(e.detail.elt);
+		if (isOutlineField(e.detail.elt) && (!eltRow || eltRow.getAttribute("data-id") !== lastFocus.id)) {
+			return;
+		}
+
 		var row = document.querySelector('.outline-row[data-id="' + lastFocus.id + '"]');
 		var input = row && row.querySelector('input[name="' + lastFocus.field + '"]');
 		if (!row || !input) return;
