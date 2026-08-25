@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
@@ -632,4 +634,106 @@ func TestKeyboardMovesRejectAnotherUsersNode(t *testing.T) {
 		}
 	}
 	checkInvariants(t, f.db)
+}
+
+// TestRandomOperationSequencesPreserveInvariants applies a long, deterministic
+// sequence of random operations across two users and checks I1-I4 after every
+// single one.
+//
+// The tests above cover one operation on a known tree. Tree bugs are not like
+// that: an indent that leaves a gap in position is invisible until the third
+// move after it, when a clamp lands one place off and two bullets quietly swap.
+// This test exists to catch the sequences nobody would think to write down.
+//
+// The seed is fixed so that a failure is reproducible, and the operation log is
+// printed on failure so the sequence can be replayed by hand.
+func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
+	const steps = 500
+
+	f := newFixture(t)
+	ctx := context.Background()
+	rng := rand.New(rand.NewPCG(0x0175, 0x5eed)) // any fixed pair; reproducibility is the point
+
+	owned := map[int64][]int64{f.alice.ID: nil, f.bob.ID: nil}
+	users := []int64{f.alice.ID, f.bob.ID}
+
+	var opLog []string
+	fail := func(format string, args ...any) {
+		t.Fatalf("%s\n\noperations so far:\n  %s",
+			fmt.Sprintf(format, args...), strings.Join(opLog, "\n  "))
+	}
+	// expected outcomes: nil, or one of the four sentinels. Anything else is
+	// a real failure, not a rejected operation.
+	record := func(op string, err error) {
+		opLog = append(opLog, fmt.Sprintf("%s -> %v", op, err))
+		switch {
+		case err == nil,
+			errors.Is(err, notes.ErrNotFound),
+			errors.Is(err, notes.ErrCycle),
+			errors.Is(err, notes.ErrTooDeep),
+			errors.Is(err, notes.ErrInvalid):
+		default:
+			fail("%s returned an unexpected error: %v", op, err)
+		}
+	}
+
+	for step := range steps {
+		userID := users[rng.IntN(len(users))]
+		mine := owned[userID]
+
+		// A quarter of the time, act at the top level; otherwise pick one of
+		// this user's bullets. Deleted ids stay in the slice on purpose, so
+		// the ErrNotFound paths get exercised too.
+		pick := func() int64 {
+			if len(mine) == 0 || rng.IntN(4) == 0 {
+				return notes.RootID
+			}
+			return mine[rng.IntN(len(mine))]
+		}
+
+		switch rng.IntN(9) {
+		case 0, 1, 2: // weighted, so the tree grows faster than it shrinks
+			parent := pick()
+			n, err := f.store.Create(ctx, userID, parent, rng.IntN(6)-1,
+				fmt.Sprintf("n%d", step), "")
+			record(fmt.Sprintf("Create(user=%d, parent=%d)", userID, parent), err)
+			if err == nil {
+				owned[userID] = append(owned[userID], n.ID)
+			}
+		case 3:
+			id := pick()
+			record(fmt.Sprintf("Indent(user=%d, id=%d)", userID, id),
+				f.store.Indent(ctx, userID, id))
+		case 4:
+			id := pick()
+			record(fmt.Sprintf("Outdent(user=%d, id=%d)", userID, id),
+				f.store.Outdent(ctx, userID, id))
+		case 5:
+			id := pick()
+			record(fmt.Sprintf("MoveUp(user=%d, id=%d)", userID, id),
+				f.store.MoveUp(ctx, userID, id))
+		case 6:
+			id := pick()
+			record(fmt.Sprintf("MoveDown(user=%d, id=%d)", userID, id),
+				f.store.MoveDown(ctx, userID, id))
+		case 7:
+			id, parent := pick(), pick()
+			record(fmt.Sprintf("Move(user=%d, id=%d, parent=%d)", userID, id, parent),
+				f.store.Move(ctx, userID, id, parent, rng.IntN(6)-1))
+		case 8:
+			id := pick()
+			record(fmt.Sprintf("Delete(user=%d, id=%d)", userID, id),
+				f.store.Delete(ctx, userID, id))
+		}
+
+		if v := treeViolations(loadRawNodes(t, f.db)); len(v) > 0 {
+			fail("after step %d: %s", step, strings.Join(v, "; "))
+		}
+	}
+
+	// A sanity check on the test itself: a run that produced nothing would
+	// pass every assertion above while proving nothing.
+	if n := len(loadRawNodes(t, f.db)); n < 20 {
+		t.Fatalf("the sequence left only %d nodes; the generator is not exercising the store", n)
+	}
 }
