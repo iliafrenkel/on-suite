@@ -80,6 +80,18 @@
 					        aria-label="Add a bullet below">+</button>
 				</span>
 			</form>
+
+			{{/* Its own form so data-confirm — a form-level attribute the
+			     platform's theme.js already handles — guards this one button
+			     rather than every button in the row. It therefore carries no
+			     focus_id: there is nothing worth saving on a bullet that is
+			     about to stop existing. */}}
+			<form method="post" action="/notes/{{.ID}}/delete" class="outline-delete"
+			      data-confirm="Delete “{{.DisplayTitle}}” and everything under it? This cannot be undone.">
+				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<input type="hidden" name="root" value="{{.RootID}}">
+				<button type="submit" class="quiet" aria-label="Delete">&times;</button>
+			</form>
 		</div>
 
 		{{with .Children}}{{template "outline-rows" .}}{{end}}

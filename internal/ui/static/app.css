@@ -714,12 +714,15 @@ button.outline-chevron {
  * :focus-within would never fire and these would be unreachable from the
  * keyboard. */
 .outline-chevron,
-.outline-actions { opacity: 0; }
+.outline-actions,
+.outline-delete { opacity: 0; }
 
 .outline-row:hover .outline-chevron,
 .outline-row:hover .outline-actions,
+.outline-row:hover .outline-delete,
 .outline-row:focus-within .outline-chevron,
-.outline-row:focus-within .outline-actions { opacity: 1; }
+.outline-row:focus-within .outline-actions,
+.outline-row:focus-within .outline-delete { opacity: 1; }
 
 .outline-actions { display: flex; flex: none; }
 
@@ -737,6 +740,18 @@ button.outline-chevron {
 }
 
 .outline-actions button[disabled] { opacity: 0.3; cursor: default; }
+
+.outline-delete { flex: none; }
+
+.outline-delete button {
+	padding: 0 var(--s-1);
+	border: none;
+	background: none;
+	color: var(--c-text-faint);
+	line-height: 1.7;
+}
+
+.outline-delete button:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 
 /* ---- Narrow viewports --------------------------------------------------- */
 

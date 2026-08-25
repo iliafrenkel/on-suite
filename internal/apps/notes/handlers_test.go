@@ -1021,3 +1021,87 @@ func TestMovingAnotherUsersBulletIs404(t *testing.T) {
 		t.Errorf("bob's outline is now %v", got)
 	}
 }
+
+func TestDeleteRemovesTheBulletAndItsSubtree(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "parent")
+	child := s.seed(t, s.alice, parent, "child")
+	s.seed(t, s.alice, notes.RootID, "survivor")
+
+	s.submit(t, s.alice, "/notes/"+itoa(parent)+"/delete", url.Values{
+		"root": {"0"},
+	}, "/notes/")
+
+	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"survivor"}) {
+		t.Fatalf("top level = %v, want [survivor]", got)
+	}
+	if _, err := s.store.ByID(ctx, s.alice.user.ID, child); err == nil {
+		t.Error("the child outlived its parent")
+	}
+}
+
+// TestDeleteRenumbersTheSurvivors: I1 says sibling positions are contiguous
+// from zero, and a delete that leaves a gap makes every later clamp land one
+// place off — silently, three moves later.
+func TestDeleteRenumbersTheSurvivors(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "a")
+	b := s.seed(t, s.alice, notes.RootID, "b")
+	s.seed(t, s.alice, notes.RootID, "c")
+
+	s.submit(t, s.alice, "/notes/"+itoa(b)+"/delete", url.Values{"root": {"0"}}, "/notes/")
+
+	children, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range children {
+		if c.Position != i {
+			t.Errorf("%q is at position %d, want %d", c.Title, c.Position, i)
+		}
+	}
+}
+
+func TestDeleteReturnsToTheZoomItCameFrom(t *testing.T) {
+	s := newServer(t)
+	root := s.seed(t, s.alice, notes.RootID, "Projects")
+	child := s.seed(t, s.alice, root, "AtBudget")
+
+	s.submit(t, s.alice, "/notes/"+itoa(child)+"/delete", url.Values{
+		"root": {itoa(root)},
+	}, "/notes/"+itoa(root))
+}
+
+func TestDeletingAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/delete", url.Values{"root": {"0"}})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if _, err := s.store.ByID(context.Background(), s.bob.user.ID, id); err != nil {
+		t.Errorf("bob's bullet was deleted by alice: %v", err)
+	}
+}
+
+// TestDeleteIsItsOwnFormWithAConfirmation. data-confirm is a form-level
+// attribute the platform's theme.js already handles; on the row's main form it
+// would confirm every button in the row, so delete gets a form of its own.
+func TestDeleteIsItsOwnConfirmedForm(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "Projects")
+
+	doc := s.get(t, s.alice, "/notes/")
+	form := doc.MustHave(`form[action=/notes/` + itoa(id) + `/delete]`)
+	if _, ok := htmlassert.Attr(form, "data-confirm"); !ok {
+		t.Error("the delete form asks for no confirmation")
+	}
+	// It must not be the row's main form, or every button would be confirmed.
+	if cls, _ := htmlassert.Attr(form, "class"); !strings.Contains(cls, "outline-delete") {
+		t.Errorf("the delete form's class is %q", cls)
+	}
+	doc.MustHave(`form.outline-delete input[name=csrf_token]`)
+	doc.MustHave(`form.outline-delete input[name=root]`)
+}

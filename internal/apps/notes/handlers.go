@@ -348,3 +348,27 @@ func (a *App) collapse(w http.ResponseWriter, r *http.Request) {
 		return o.SetCollapsed(ctx, m.UserID, m.NodeID, collapsed)
 	})
 }
+
+// remove deletes a bullet and everything under it.
+//
+// Named remove rather than delete because delete is a builtin, and shadowing a
+// builtin in a method name reads worse than the one-word mismatch with the
+// route.
+//
+// The subtree goes with it through ON DELETE CASCADE. It is the only
+// irreversible thing in this chunk, which is why the template gives it a form
+// of its own with data-confirm on it.
+//
+// Deleting the bullet the page is zoomed to would redirect to a URL that no
+// longer resolves, and answer 404. The outline never renders its own root as a
+// row, so that cannot be reached from the UI; a hand-made request that does it
+// gets an honest "there is nothing at that address" rather than a 500.
+func (a *App) remove(w http.ResponseWriter, r *http.Request) {
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		if err := o.Delete(ctx, m.UserID, m.NodeID); err != nil {
+			return err
+		}
+		a.deps.Log.Info("bullet deleted", "app", ID, "user_id", m.UserID, "node_id", m.NodeID)
+		return nil
+	})
+}
