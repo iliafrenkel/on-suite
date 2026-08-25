@@ -290,3 +290,23 @@ func (a *App) setText(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
 }
+
+// indent makes a bullet the last child of the sibling above it. Being already
+// first is a no-op in the store, not an error — see Ops.Indent.
+func (a *App) indent(w http.ResponseWriter, r *http.Request) {
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		return o.Indent(ctx, m.UserID, m.NodeID)
+	})
+}
+
+// outdent makes a bullet the next sibling of its own parent.
+//
+// The template disables this on a direct child of the zoom root, because the
+// result would be a bullet that is still there and no longer on screen. The
+// handler does not enforce that: it is a UI courtesy, not a rule about the
+// tree, and the store's answer is correct either way.
+func (a *App) outdent(w http.ResponseWriter, r *http.Request) {
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		return o.Outdent(ctx, m.UserID, m.NodeID)
+	})
+}

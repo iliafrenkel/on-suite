@@ -77,4 +77,6 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /{id}", a.outlineZoomed)
 	r.HandleFunc("POST /new", a.create)
 	r.HandleFunc("POST /{id}/text", a.setText)
+	r.HandleFunc("POST /{id}/indent", a.indent)
+	r.HandleFunc("POST /{id}/outdent", a.outdent)
 }

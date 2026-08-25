@@ -731,3 +731,151 @@ func TestPlusButtonAddsAnEmptyBulletBelow(t *testing.T) {
 		t.Fatal("a bullet offers no way to add one below it")
 	}
 }
+
+func TestIndentNestsUnderThePreviousSibling(t *testing.T) {
+	s := newServer(t)
+	first := s.seed(t, s.alice, notes.RootID, "first")
+	second := s.seed(t, s.alice, notes.RootID, "second")
+
+	s.submit(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(second)},
+		"title": {"second"}, "note": {""},
+	}, "/notes/")
+
+	children, err := s.store.Children(context.Background(), s.alice.user.ID, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(children) != 1 || children[0].ID != second {
+		t.Fatalf("children of first = %+v, want just second", children)
+	}
+
+	// And the page now shows it nested.
+	doc := s.get(t, s.alice, "/notes/")
+	if n := len(doc.QueryAll(".outline-item .outline-item")); n != 1 {
+		t.Errorf("got %d nested bullets on the page, want 1", n)
+	}
+}
+
+func TestIndentOfTheFirstSiblingDoesNothing(t *testing.T) {
+	s := newServer(t)
+	first := s.seed(t, s.alice, notes.RootID, "first")
+
+	// Not an error: the caller is a keypress, and Tab on the first line of an
+	// outline should do nothing rather than complain.
+	s.submit(t, s.alice, "/notes/"+itoa(first)+"/indent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(first)}, "title": {"first"}, "note": {""},
+	}, "/notes/")
+
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.ParentID != notes.RootID || n.Position != 0 {
+		t.Errorf("first moved to parent %d position %d", n.ParentID, n.Position)
+	}
+}
+
+func TestOutdentPromotesToTheParentsNextSibling(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.alice, notes.RootID, "parent")
+	child := s.seed(t, s.alice, parent, "child")
+	s.seed(t, s.alice, notes.RootID, "after")
+
+	s.submit(t, s.alice, "/notes/"+itoa(child)+"/outdent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(child)}, "title": {"child"}, "note": {""},
+	}, "/notes/")
+
+	top, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, n := range top {
+		got = append(got, n.Title)
+	}
+	if len(got) != 3 || got[0] != "parent" || got[1] != "child" || got[2] != "after" {
+		t.Fatalf("top level = %v, want [parent child after]", got)
+	}
+}
+
+func TestOutdentAtTheTopLevelDoesNothing(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "only")
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/outdent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(id)}, "title": {"only"}, "note": {""},
+	}, "/notes/")
+
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.ParentID != notes.RootID {
+		t.Errorf("a top-level bullet was reparented to %d", n.ParentID)
+	}
+}
+
+// TestIndentPastTheDepthLimitIsRejected. MaxDepth exists so that a runaway
+// import cannot produce an outline no UI can render; a hand-driven indent has
+// to hit the same wall, and hit it as a 400 rather than a 500.
+func TestIndentPastTheDepthLimitIsRejected(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	// A chain exactly MaxDepth deep: depths 0..MaxDepth.
+	var parent int64 = notes.RootID
+	var deepest int64
+	for d := 0; d <= notes.MaxDepth; d++ {
+		n, err := s.store.Create(ctx, s.alice.user.ID, parent, 1<<30, "d", "")
+		if err != nil {
+			t.Fatalf("building the chain at depth %d: %v", d, err)
+		}
+		parent, deepest = n.ID, n.ID
+	}
+	// A sibling of the deepest node; indenting it would put it one past the cap.
+	deepestNode, err := s.store.ByID(ctx, s.alice.user.ID, deepest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sibling, err := s.store.Create(ctx, s.alice.user.ID, deepestNode.ParentID, 1<<30, "sibling", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(sibling.ID)+"/indent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(sibling.ID)}, "title": {"sibling"}, "note": {""},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+
+	n, err := s.store.ByID(ctx, s.alice.user.ID, sibling.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.ParentID != deepestNode.ParentID {
+		t.Errorf("the bullet moved despite the rejection")
+	}
+}
+
+func TestIndentingAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.bob, notes.RootID, "bob's first")
+	second := s.seed(t, s.bob, notes.RootID, "bob's second")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+		"root": {"0"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+
+	n, err := s.store.ByID(context.Background(), s.bob.user.ID, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.ParentID != notes.RootID {
+		t.Error("bob's bullet was indented by alice")
+	}
+}
