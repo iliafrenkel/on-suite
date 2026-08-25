@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
@@ -105,6 +107,70 @@ func (f *fixture) childTitles(t *testing.T, userID, parentID int64) []string {
 		t.Fatalf("reading child titles: %v", err)
 	}
 	return out
+}
+
+// childTitlesAndPositions reads a parent's children straight from the table as
+// "title@position", in position order.
+//
+// childTitles alone cannot see a renumbering that leaked onto another user:
+// every statement in this package shifts a contiguous suffix of positions, and
+// a suffix shifted wholesale keeps its relative order, so the titles come back
+// looking untouched. The position is the part that moved.
+func (f *fixture) childTitlesAndPositions(t *testing.T, userID, parentID int64) []string {
+	t.Helper()
+
+	var parent any
+	if parentID != notes.RootID {
+		parent = parentID
+	}
+	rows, err := f.db.QueryContext(context.Background(),
+		`SELECT title, position FROM notes_nodes
+		  WHERE user_id = ? AND parent_id IS ? ORDER BY position`, userID, parent)
+	if err != nil {
+		t.Fatalf("reading child titles: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []string
+	for rows.Next() {
+		var (
+			title string
+			pos   int
+		)
+		if err := rows.Scan(&title, &pos); err != nil {
+			t.Fatalf("scanning title: %v", err)
+		}
+		out = append(out, fmt.Sprintf("%s@%d", title, pos))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("reading child titles: %v", err)
+	}
+	return out
+}
+
+// reparent rewrites one row's parent and position with raw SQL, bypassing the
+// store completely. It is how the tests below manufacture a table that no
+// sequence of store calls could ever produce: a broken invariant, which is
+// exactly the situation the reads' owner filters and depth caps exist for.
+func (f *fixture) reparent(t *testing.T, id, parentID int64, pos int) {
+	t.Helper()
+
+	var parent any
+	if parentID != notes.RootID {
+		parent = parentID
+	}
+	res, err := f.db.ExecContext(context.Background(),
+		`UPDATE notes_nodes SET parent_id = ?, position = ? WHERE id = ?`, parent, pos, id)
+	if err != nil {
+		t.Fatalf("reparenting node %d: %v", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		t.Fatalf("reparenting node %d: %v", id, err)
+	}
+	if n != 1 {
+		t.Fatalf("reparenting node %d changed %d rows; want 1", id, n)
+	}
 }
 
 // titles is the shape of a node slice, for assertions that care about order.
@@ -309,5 +375,216 @@ func TestOutlineOfAnotherUsersNodeIsEmpty(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("bob zoomed into alice's node and saw\n%s\nwant nothing", outlineShape(got))
+	}
+}
+
+// The titles the tests below must never let alice see. They are asserted on as
+// text because text is what would actually appear on somebody's screen: a leak
+// caught by a node id is a leak nobody would recognise as one.
+const (
+	bobsBullet = "bob's private bullet"
+	bobsChild  = "bob's private child"
+)
+
+// brokenI2 builds a tree in which invariant I2 is violated in both directions:
+// one of bob's bullets is a child of one of alice's, and one of alice's is a
+// child of bob's. It returns alice's "a" and "a2x", the two bullets the reads
+// below are pointed at.
+//
+//	a        (alice)
+//	├── a1   (alice)
+//	├── a2   (alice)
+//	└── B    (bob)    ← I2: a child whose owner is not its parent's
+//	    ├── Bc  (bob)
+//	    └── a2x (alice) ← I2, the other way round
+//	b        (alice)
+//
+// I2 is an application invariant, not a schema constraint — notes_nodes has a
+// plain foreign key on parent_id, not a composite (parent_id, user_id) one —
+// so a bug, a manual repair, or a later chunk's import path can produce this
+// table. Both recursive reads filter their walk by owner rather than leaning
+// on I2 to supply it, and that filter is what these tests pin.
+//
+// Nothing here calls checkInvariants. It would fail, correctly: this database
+// really does violate I2, deliberately and in two places. That is the premise
+// of the tests, not an accident in them.
+func (f *fixture) brokenI2(t *testing.T) (a, a2x notes.Node) {
+	t.Helper()
+
+	a, _, _, a2x, _ = f.sample(t)
+	bobsTop := f.mkFor(t, f.bob.ID, notes.RootID, bobsBullet)
+	f.mkFor(t, f.bob.ID, bobsTop.ID, bobsChild)
+
+	// bob's subtree becomes a's third child, and alice's a2x becomes a leaf
+	// inside it. Positions are chosen to keep I1 intact, so that a failure
+	// here is unambiguously about ownership.
+	f.reparent(t, bobsTop.ID, a.ID, 2)
+	f.reparent(t, a2x.ID, bobsTop.ID, 1)
+	return a, a2x
+}
+
+// leaked names any of bob's bullets that turned up in a result alice asked for.
+func leaked(ns []notes.Node, aliceID int64) []string {
+	var out []string
+	for _, n := range ns {
+		if n.UserID != aliceID {
+			out = append(out, fmt.Sprintf("%q (user %d)", n.Title, n.UserID))
+		}
+	}
+	return out
+}
+
+func TestOutlineDoesNotLeakAnotherUsersBulletsWhenI2IsBroken(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a, _ := f.brokenI2(t)
+
+	for _, tc := range []struct {
+		name string
+		root int64
+		want string
+	}{
+		// The descent stops dead at bob's bullet, so his subtree — and
+		// alice's own a2x hanging below it — simply does not render.
+		{"from the top level", notes.RootID, "- a [+]\n  - a1\n  - a2\n- b\n"},
+		{"zoomed into the grafted parent", a.ID, "- a1\n- a2\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := f.store.Outline(ctx, f.alice.ID, tc.root)
+			if err != nil {
+				t.Fatalf("Outline: %v", err)
+			}
+			if bad := leaked(got, f.alice.ID); len(bad) > 0 {
+				t.Fatalf("alice's outline contains another user's bullets: %s\nfull outline:\n%s",
+					strings.Join(bad, ", "), outlineShape(got))
+			}
+			if outlineShape(got) != tc.want {
+				t.Fatalf("Outline =\n%s\nwant\n%s", outlineShape(got), tc.want)
+			}
+		})
+	}
+}
+
+func TestAncestorsDoesNotLeakAnotherUsersBulletsWhenI2IsBroken(t *testing.T) {
+	f := newFixture(t)
+	_, a2x := f.brokenI2(t)
+
+	// a2x is alice's, so the anchor row matches and the walk starts. Its
+	// parent is bob's, so the walk stops there rather than climbing on to
+	// alice's "a": an unfiltered breadcrumb would read "a > bob's private
+	// bullet" above a bullet of her own.
+	got, err := f.store.Ancestors(context.Background(), f.alice.ID, a2x.ID)
+	if err != nil {
+		t.Fatalf("Ancestors: %v", err)
+	}
+	if bad := leaked(got, f.alice.ID); len(bad) > 0 {
+		t.Fatalf("alice's breadcrumb contains another user's bullets: %s", strings.Join(bad, ", "))
+	}
+	if len(got) != 0 {
+		t.Fatalf("Ancestors = %v; want nothing — the walk cannot climb past a parent it does not own", titles(got))
+	}
+}
+
+func TestChildrenDoesNotLeakAnotherUsersBulletsWhenI2IsBroken(t *testing.T) {
+	f := newFixture(t)
+	a, _ := f.brokenI2(t)
+
+	// Children cannot leak the way the recursive reads could: it is a single
+	// level, and its user_id predicate applies to the very rows it returns,
+	// not to a join edge that a broken I2 could route around. This test is
+	// therefore a pin rather than a discovery — it costs one query, and it
+	// stops a later rewrite of Children as a CTE from dropping the filter.
+	got, err := f.store.Children(context.Background(), f.alice.ID, a.ID)
+	if err != nil {
+		t.Fatalf("Children: %v", err)
+	}
+	if bad := leaked(got, f.alice.ID); len(bad) > 0 {
+		t.Fatalf("alice's children contain another user's bullets: %s", strings.Join(bad, ", "))
+	}
+	if want := []string{"a1", "a2"}; !slices.Equal(titles(got), want) {
+		t.Fatalf("Children = %v; want %v", titles(got), want)
+	}
+}
+
+// cycleDeadline bounds a read that is being pointed at a cycle. Without it, a
+// broken MaxDepth cap does not fail the test — it hangs, and CI reports a
+// ten-minute panic across the whole package with no test name attached to it.
+// Five seconds is thousands of times what the capped query needs.
+const cycleDeadline = 5 * time.Second
+
+func TestAncestorsTerminatesOnACycle(t *testing.T) {
+	f := newFixture(t)
+
+	top := f.mk(t, notes.RootID, "top")
+	mid := f.mk(t, top.ID, "mid")
+	leaf := f.mk(t, mid.ID, "leaf")
+
+	// Close the loop by hand: top becomes a child of its own grandchild. Every
+	// row still belongs to alice, so the owner filter on the walk lets it
+	// through and the MaxDepth cap is the only thing that ends it.
+	//
+	// checkInvariants is not called here, and must not be: this is an I3
+	// violation on purpose.
+	f.reparent(t, top.ID, leaf.ID, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cycleDeadline)
+	defer cancel()
+
+	got, err := f.store.Ancestors(ctx, f.alice.ID, leaf.ID)
+	if err != nil {
+		if ctx.Err() != nil {
+			t.Fatalf("Ancestors did not return within %s: the MaxDepth cap is not ending the walk (%v)",
+				cycleDeadline, err)
+		}
+		t.Fatalf("Ancestors: %v", err)
+	}
+	// The walk climbs one row per step and stops at MaxDepth, so the cycle
+	// yields exactly that many rows and never more.
+	if len(got) == 0 {
+		t.Fatal("Ancestors returned nothing; the walk did not start, so this proves nothing about the cap")
+	}
+	if len(got) > notes.MaxDepth {
+		t.Fatalf("Ancestors returned %d rows; want at most MaxDepth (%d)", len(got), notes.MaxDepth)
+	}
+}
+
+func TestOutlineTerminatesOnACycle(t *testing.T) {
+	f := newFixture(t)
+
+	x := f.mk(t, notes.RootID, "x")
+	y := f.mk(t, x.ID, "y")
+
+	// A cycle cannot be reached from a top-level bullet: every node has
+	// exactly one parent, so a node inside a cycle has its parent inside the
+	// cycle too, and nothing outside can point into it. A cycle left hanging
+	// off nowhere is unreachable, and an outline of it is empty — which would
+	// exercise no cap at all.
+	//
+	// A zoomed outline is the case that does reach one. Its anchor is "the
+	// children of this id" rather than "the top level", so zooming into a
+	// member of the cycle starts the descent inside it, and the descent then
+	// goes round for ever unless MaxDepth stops it.
+	//
+	// checkInvariants is not called here, and must not be: x and y are each
+	// inside their own subtree, which is an I3 violation on purpose.
+	f.reparent(t, x.ID, y.ID, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cycleDeadline)
+	defer cancel()
+
+	got, err := f.store.Outline(ctx, f.alice.ID, x.ID)
+	if err != nil {
+		if ctx.Err() != nil {
+			t.Fatalf("Outline did not return within %s: the MaxDepth cap is not ending the descent (%v)",
+				cycleDeadline, err)
+		}
+		t.Fatalf("Outline: %v", err)
+	}
+	// One row at depth 0, then one per level down to MaxDepth.
+	if len(got) == 0 {
+		t.Fatal("Outline returned nothing; the descent did not start, so this proves nothing about the cap")
+	}
+	if len(got) > notes.MaxDepth+1 {
+		t.Fatalf("Outline returned %d rows; want at most MaxDepth+1 (%d)", len(got), notes.MaxDepth+1)
 	}
 }

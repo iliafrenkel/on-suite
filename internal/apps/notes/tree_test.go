@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 )
@@ -17,9 +18,16 @@ import (
 // on Create's clamping, which therefore gets exercised by every test here.
 func (f *fixture) mk(t *testing.T, parentID int64, title string) notes.Node {
 	t.Helper()
-	n, err := f.store.Create(context.Background(), f.alice.ID, parentID, 1<<30, title, "")
+	return f.mkFor(t, f.alice.ID, parentID, title)
+}
+
+// mkFor is mk for any user. Most tests only need one tree and call mk; the
+// owner-scoping tests need bob to own bullets of his own.
+func (f *fixture) mkFor(t *testing.T, userID, parentID int64, title string) notes.Node {
+	t.Helper()
+	n, err := f.store.Create(context.Background(), userID, parentID, 1<<30, title, "")
 	if err != nil {
-		t.Fatalf("Create(%q under %d): %v", title, parentID, err)
+		t.Fatalf("Create(%q under %d for user %d): %v", title, parentID, userID, err)
 	}
 	return n
 }
@@ -150,6 +158,51 @@ func TestCreateRejectsTextThatFailsValidation(t *testing.T) {
 	}
 }
 
+// untrimmedTitle has whitespace at both ends; trimmedTitle is what the store
+// is documented to keep for it. Trailing spaces and tabs go, leading ones
+// stay: an outline is written in prose, where a leading space is sometimes
+// deliberate and a trailing one never is.
+const (
+	untrimmedTitle = "  a deliberately indented bullet \t "
+	trimmedTitle   = "  a deliberately indented bullet"
+)
+
+func TestCreateTrimsTrailingWhitespaceAndKeepsLeading(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	n, err := f.store.Create(ctx, f.alice.ID, notes.RootID, 0, untrimmedTitle, "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	// The returned node and the stored row must agree: Create builds its
+	// result from the trimmed title rather than re-reading it.
+	if n.Title != trimmedTitle {
+		t.Errorf("Create returned title %q; want %q", n.Title, trimmedTitle)
+	}
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{trimmedTitle}) {
+		t.Errorf("stored title = %q; want %q", got, []string{trimmedTitle})
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestSetTextTrimsTrailingWhitespaceAndKeepsLeading(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "before")
+
+	if err := f.store.SetText(ctx, f.alice.ID, n.ID, untrimmedTitle, ""); err != nil {
+		t.Fatalf("SetText: %v", err)
+	}
+	got, err := f.store.ByID(ctx, f.alice.ID, n.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if got.Title != trimmedTitle {
+		t.Fatalf("title after SetText = %q; want %q", got.Title, trimmedTitle)
+	}
+}
+
 func TestCreateRefusesToPassMaxDepth(t *testing.T) {
 	f := newFixture(t)
 
@@ -243,6 +296,97 @@ func TestSetTextRejectsInvalidText(t *testing.T) {
 	}
 }
 
+// TestTimestampsRecordWhenABulletChanged pins the two halves of the clock's
+// contract: a mutation advances updated_at to the moment it happened, and
+// nothing moves created_at afterwards. Without the second half, "modified"
+// and "created" are the same column with two names.
+func TestTimestampsRecordWhenABulletChanged(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	created := time.Date(2026, 8, 25, 9, 0, 0, 0, time.UTC)
+	edited := created.Add(90 * time.Minute)
+	moved := created.Add(3 * time.Hour)
+
+	f.store.SetClock(func() time.Time { return created })
+	a := f.mk(t, notes.RootID, "a")
+	b := f.mk(t, notes.RootID, "b")
+
+	// stamps asserts both columns of one bullet. time.Time is compared with
+	// Equal rather than ==, since a round trip through RFC 3339 text is not
+	// obliged to return the same monotonic reading.
+	stamps := func(what string, id int64, wantCreated, wantUpdated time.Time) {
+		t.Helper()
+		n, err := f.store.ByID(ctx, f.alice.ID, id)
+		if err != nil {
+			t.Fatalf("ByID: %v", err)
+		}
+		if !n.CreatedAt.Equal(wantCreated) {
+			t.Errorf("%s: created_at = %s; want %s", what, n.CreatedAt, wantCreated)
+		}
+		if !n.UpdatedAt.Equal(wantUpdated) {
+			t.Errorf("%s: updated_at = %s; want %s", what, n.UpdatedAt, wantUpdated)
+		}
+	}
+
+	// Create stamps both columns with the same instant.
+	stamps("after Create", b.ID, created, created)
+
+	f.store.SetClock(func() time.Time { return edited })
+	if err := f.store.SetText(ctx, f.alice.ID, b.ID, "b edited", ""); err != nil {
+		t.Fatalf("SetText: %v", err)
+	}
+	stamps("after SetText", b.ID, created, edited)
+
+	// A structural operation changes the bullet just as much as its text does:
+	// where it sits in the outline is part of what the user wrote.
+	f.store.SetClock(func() time.Time { return moved })
+	if err := f.store.Move(ctx, f.alice.ID, b.ID, a.ID, 0); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+	stamps("after Move", b.ID, created, moved)
+
+	// a was never itself the subject of an operation, so neither of its stamps
+	// moved — not even when b was moved underneath it.
+	stamps("the untouched bullet", a.ID, created, created)
+	checkInvariants(t, f.db)
+}
+
+// TestCreateDoesNotRenumberAnotherUsersTopLevel is the Create half of the
+// hazard TestMoveDoesNotRenumberAnotherUsersTopLevel names: a top-level bullet
+// has parent_id NULL for every user alike, so the user_id filter on Create's
+// sibling shift is the only thing keeping it inside alice's outline.
+//
+// The assertion is on bob's rows directly, and on their positions as well as
+// their titles: a shift that leaked onto him would move a contiguous suffix,
+// which leaves his titles in exactly the order they were already in.
+func TestCreateDoesNotRenumberAnotherUsersTopLevel(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	for _, title := range []string{"bob 0", "bob 1", "bob 2"} {
+		f.mkFor(t, f.bob.ID, notes.RootID, title)
+	}
+	f.mk(t, notes.RootID, "alice 0")
+	f.mk(t, notes.RootID, "alice 1")
+
+	// afterPos -1 inserts first, so the shift covers every top-level row from
+	// position 0 up — the widest it can be.
+	if _, err := f.store.Create(ctx, f.alice.ID, notes.RootID, -1, "alice new", ""); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	want := []string{"alice new@0", "alice 0@1", "alice 1@2"}
+	if got := f.childTitlesAndPositions(t, f.alice.ID, notes.RootID); !slices.Equal(got, want) {
+		t.Errorf("alice's top level = %v; want %v", got, want)
+	}
+	want = []string{"bob 0@0", "bob 1@1", "bob 2@2"}
+	if got := f.childTitlesAndPositions(t, f.bob.ID, notes.RootID); !slices.Equal(got, want) {
+		t.Errorf("bob's top level = %v; want %v untouched", got, want)
+	}
+	checkInvariants(t, f.db)
+}
+
 // countRows is the total number of nodes in the table, for cascade tests.
 func countRows(t *testing.T, f *fixture) int {
 	t.Helper()
@@ -300,10 +444,56 @@ func TestDeleteRejectsAnotherUsersNode(t *testing.T) {
 
 func TestDeleteOfAMissingNode(t *testing.T) {
 	f := newFixture(t)
+
+	// A bullet to be left alone. Without one, the table is empty and the error
+	// is the only thing this test can observe — which says nothing about
+	// whether the failed delete kept its hands off the tree.
+	f.mk(t, notes.RootID, "still here")
+
 	err := f.store.Delete(context.Background(), f.alice.ID, 4242)
 	if !errors.Is(err, notes.ErrNotFound) {
 		t.Fatalf("Delete of a missing node = %v; want ErrNotFound", err)
 	}
+	if got := f.childTitlesAndPositions(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"still here@0"}) {
+		t.Fatalf("top level = %v; want [still here@0] unchanged", got)
+	}
+	if n := countRows(t, f); n != 1 {
+		t.Fatalf("%d nodes in the table; want 1 — the failed delete changed something", n)
+	}
+	checkInvariants(t, f.db)
+}
+
+// TestDeleteDoesNotRenumberAnotherUsersTopLevel is the Delete half of the
+// hazard TestMoveDoesNotRenumberAnotherUsersTopLevel names. Delete's gap close
+// is scoped to alice only by its user_id filter, and a leak would pull bob's
+// positions down without disturbing the order his titles come back in — so the
+// assertion has to be on the positions.
+func TestDeleteDoesNotRenumberAnotherUsersTopLevel(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	for _, title := range []string{"bob 0", "bob 1", "bob 2"} {
+		f.mkFor(t, f.bob.ID, notes.RootID, title)
+	}
+	a := f.mk(t, notes.RootID, "alice 0")
+	f.mk(t, notes.RootID, "alice 1")
+	f.mk(t, notes.RootID, "alice 2")
+
+	// Deleting the first bullet makes the gap close cover every top-level row
+	// after position 0 — the widest it can be.
+	if err := f.store.Delete(ctx, f.alice.ID, a.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	want := []string{"alice 1@0", "alice 2@1"}
+	if got := f.childTitlesAndPositions(t, f.alice.ID, notes.RootID); !slices.Equal(got, want) {
+		t.Errorf("alice's top level = %v; want %v", got, want)
+	}
+	want = []string{"bob 0@0", "bob 1@1", "bob 2@2"}
+	if got := f.childTitlesAndPositions(t, f.bob.ID, notes.RootID); !slices.Equal(got, want) {
+		t.Errorf("bob's top level = %v; want %v untouched", got, want)
+	}
+	checkInvariants(t, f.db)
 }
 
 func TestMoveToAnotherParent(t *testing.T) {
@@ -636,13 +826,30 @@ func TestKeyboardMovesRejectAnotherUsersNode(t *testing.T) {
 	checkInvariants(t, f.db)
 }
 
+// txCtx bounds a transaction test in time.
+//
+// Everything inside a Do closure must reach the database through the Ops it is
+// handed. The platform opens SQLite with one connection, so a call that goes
+// to the pool instead waits for the connection the transaction is holding, and
+// waits for ever. These three tests are what would catch a future edit putting
+// such a call on an Ops path — and without a deadline they would catch it by
+// hanging until the package-wide test timeout, which CI reports as a ten
+// minute panic with no test name attached. Ten seconds is far more than these
+// transactions need, and turns that into a named failure.
+func txCtx(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+	return ctx
+}
+
 // TestDoSavesTextAndRestructuresAsOneWrite is the reason Ops exists. A
 // structural request carries the focused bullet's text (spec §7), and the
 // server applies both in one transaction so that a debounced autosave racing
 // the structural operation cannot lose the last keystrokes.
 func TestDoSavesTextAndRestructuresAsOneWrite(t *testing.T) {
 	f := newFixture(t)
-	ctx := context.Background()
+	ctx := txCtx(t)
 	a := f.mk(t, notes.RootID, "a")
 	b := f.mk(t, notes.RootID, "b")
 
@@ -679,7 +886,7 @@ func TestDoSavesTextAndRestructuresAsOneWrite(t *testing.T) {
 // the transaction does not commit.
 func TestDoRollsBackEverythingWhenTheClosureFails(t *testing.T) {
 	f := newFixture(t)
-	ctx := context.Background()
+	ctx := txCtx(t)
 	a := f.mk(t, notes.RootID, "a")
 	b := f.mk(t, notes.RootID, "b")
 
@@ -723,7 +930,7 @@ func TestDoRollsBackEverythingWhenTheClosureFails(t *testing.T) {
 // database is observable from outside.
 func TestDoKeepsInvariantsAcrossAMultiOperationTransaction(t *testing.T) {
 	f := newFixture(t)
-	ctx := context.Background()
+	ctx := txCtx(t)
 	a := f.mk(t, notes.RootID, "a")
 	f.mk(t, notes.RootID, "b")
 	c := f.mk(t, notes.RootID, "c")
@@ -814,6 +1021,59 @@ func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
 		}
 	}
 
+	// operations is the one place a method's name is written down. The switch
+	// this replaces spelled each name twice — once at its record call, once in
+	// the list asserting it had succeeded — so a later chunk could add an
+	// operation, forget the second copy, and get silent non-coverage of it.
+	//
+	// Each entry returns the log line for the call it made, so the description
+	// and the call cannot drift apart either.
+	type operation struct {
+		method string
+		run    func(userID int64, pick func() int64, step int) (string, error)
+	}
+	operations := []operation{
+		{"Create", func(userID int64, pick func() int64, step int) (string, error) {
+			parent, pos := pick(), rng.IntN(6)-1
+			n, err := f.store.Create(ctx, userID, parent, pos, fmt.Sprintf("n%d", step), "")
+			if err == nil {
+				owned[userID] = append(owned[userID], n.ID)
+			}
+			return fmt.Sprintf("Create(user=%d, parent=%d, pos=%d) #%d", userID, parent, pos, n.ID), err
+		}},
+		{"Indent", func(userID int64, pick func() int64, _ int) (string, error) {
+			id := pick()
+			return fmt.Sprintf("Indent(user=%d, id=%d)", userID, id), f.store.Indent(ctx, userID, id)
+		}},
+		{"Outdent", func(userID int64, pick func() int64, _ int) (string, error) {
+			id := pick()
+			return fmt.Sprintf("Outdent(user=%d, id=%d)", userID, id), f.store.Outdent(ctx, userID, id)
+		}},
+		{"MoveUp", func(userID int64, pick func() int64, _ int) (string, error) {
+			id := pick()
+			return fmt.Sprintf("MoveUp(user=%d, id=%d)", userID, id), f.store.MoveUp(ctx, userID, id)
+		}},
+		{"MoveDown", func(userID int64, pick func() int64, _ int) (string, error) {
+			id := pick()
+			return fmt.Sprintf("MoveDown(user=%d, id=%d)", userID, id), f.store.MoveDown(ctx, userID, id)
+		}},
+		{"Move", func(userID int64, pick func() int64, _ int) (string, error) {
+			id, parent, pos := pick(), pick(), rng.IntN(6)-1
+			return fmt.Sprintf("Move(user=%d, id=%d, parent=%d, pos=%d)", userID, id, parent, pos),
+				f.store.Move(ctx, userID, id, parent, pos)
+		}},
+		{"Delete", func(userID int64, pick func() int64, _ int) (string, error) {
+			id := pick()
+			return fmt.Sprintf("Delete(user=%d, id=%d)", userID, id), f.store.Delete(ctx, userID, id)
+		}},
+	}
+
+	// weighted maps one roll onto an operation. Create appears three times so
+	// the tree grows faster than it shrinks. It is nine values in the order the
+	// switch's cases used to run in, so the seed still produces the same
+	// sequence it always has.
+	weighted := []int{0, 0, 0, 1, 2, 3, 4, 5, 6}
+
 	for step := range steps {
 		userID := users[rng.IntN(len(users))]
 		mine := owned[userID]
@@ -828,52 +1088,45 @@ func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
 			return mine[rng.IntN(len(mine))]
 		}
 
-		switch rng.IntN(9) {
-		case 0, 1, 2: // weighted, so the tree grows faster than it shrinks
-			parent, pos := pick(), rng.IntN(6)-1
-			n, err := f.store.Create(ctx, userID, parent, pos, fmt.Sprintf("n%d", step), "")
-			record("Create",
-				fmt.Sprintf("Create(user=%d, parent=%d, pos=%d) #%d", userID, parent, pos, n.ID), err)
-			if err == nil {
-				owned[userID] = append(owned[userID], n.ID)
-			}
-		case 3:
-			id := pick()
-			record("Indent", fmt.Sprintf("Indent(user=%d, id=%d)", userID, id),
-				f.store.Indent(ctx, userID, id))
-		case 4:
-			id := pick()
-			record("Outdent", fmt.Sprintf("Outdent(user=%d, id=%d)", userID, id),
-				f.store.Outdent(ctx, userID, id))
-		case 5:
-			id := pick()
-			record("MoveUp", fmt.Sprintf("MoveUp(user=%d, id=%d)", userID, id),
-				f.store.MoveUp(ctx, userID, id))
-		case 6:
-			id := pick()
-			record("MoveDown", fmt.Sprintf("MoveDown(user=%d, id=%d)", userID, id),
-				f.store.MoveDown(ctx, userID, id))
-		case 7:
-			id, parent, pos := pick(), pick(), rng.IntN(6)-1
-			record("Move", fmt.Sprintf("Move(user=%d, id=%d, parent=%d, pos=%d)", userID, id, parent, pos),
-				f.store.Move(ctx, userID, id, parent, pos))
-		case 8:
-			id := pick()
-			record("Delete", fmt.Sprintf("Delete(user=%d, id=%d)", userID, id),
-				f.store.Delete(ctx, userID, id))
-		}
+		op := operations[weighted[rng.IntN(len(weighted))]]
+		desc, err := op.run(userID, pick, step)
+		record(op.method, desc, err)
 
 		if v := treeViolations(loadRawNodes(t, f.db)); len(v) > 0 {
 			fail("after step %d: %s", step, strings.Join(v, "; "))
+		}
+
+		// Give one of the store's own reads the same traffic. treeViolations
+		// reads raw rows by design, so without this Outline, Children,
+		// Ancestors and ByID only ever see the handful of deterministic trees
+		// the tests above build.
+		//
+		// The owner assertion is the point of it. 500 random operations across
+		// two users produce shapes no hand-written test reaches, and this is
+		// the only thing in the package that would notice the owner filter on
+		// Outline's descent leaking one user's bullets into the other's screen
+		// under one of them.
+		//
+		// It consumes no randomness, so the sequence is exactly the one the
+		// seed produced before this call was added.
+		out, err := f.store.Outline(ctx, userID, notes.RootID)
+		if err != nil {
+			fail("after step %d: Outline(user=%d): %v", step, userID, err)
+		}
+		for _, n := range out {
+			if n.UserID != userID {
+				fail("after step %d: user %d's outline contains node %d (%q), owned by user %d",
+					step, userID, n.ID, n.Title, n.UserID)
+			}
 		}
 	}
 
 	// Every method must actually have done something. Without this, the
 	// degenerate run described above — every mutator failing, Create alone
 	// working — would be indistinguishable from a healthy one.
-	for _, method := range []string{"Create", "Indent", "Outdent", "MoveUp", "MoveDown", "Move", "Delete"} {
-		if succeeded[method] == 0 {
-			fail("%s never succeeded in %d steps; the sequence is not exercising it", method, steps)
+	for _, op := range operations {
+		if succeeded[op.method] == 0 {
+			fail("%s never succeeded in %d steps; the sequence is not exercising it", op.method, steps)
 		}
 	}
 	t.Logf("successful operations in %d steps: %v", steps, succeeded)
