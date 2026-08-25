@@ -879,3 +879,145 @@ func TestIndentingAnotherUsersBulletIs404(t *testing.T) {
 		t.Error("bob's bullet was indented by alice")
 	}
 }
+
+func TestMoveUpAndDown(t *testing.T) {
+	s := newServer(t)
+	a := s.seed(t, s.alice, notes.RootID, "a")
+	b := s.seed(t, s.alice, notes.RootID, "b")
+	s.seed(t, s.alice, notes.RootID, "c")
+
+	s.submit(t, s.alice, "/notes/"+itoa(b)+"/move", url.Values{
+		"root": {"0"}, "focus_id": {itoa(b)}, "title": {"b"}, "note": {""},
+		"dir": {"up"},
+	}, "/notes/")
+	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"b", "a", "c"}) {
+		t.Fatalf("after move up: %v, want [b a c]", got)
+	}
+
+	s.submit(t, s.alice, "/notes/"+itoa(a)+"/move", url.Values{
+		"root": {"0"}, "focus_id": {itoa(a)}, "title": {"a"}, "note": {""},
+		"dir": {"down"},
+	}, "/notes/")
+	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"b", "c", "a"}) {
+		t.Fatalf("after move down: %v, want [b c a]", got)
+	}
+}
+
+func TestMoveAtTheEdgesDoesNothing(t *testing.T) {
+	s := newServer(t)
+	a := s.seed(t, s.alice, notes.RootID, "a")
+	b := s.seed(t, s.alice, notes.RootID, "b")
+
+	for _, tc := range []struct {
+		id  int64
+		dir string
+	}{{a, "up"}, {b, "down"}} {
+		s.submit(t, s.alice, "/notes/"+itoa(tc.id)+"/move", url.Values{
+			"root": {"0"}, "dir": {tc.dir},
+		}, "/notes/")
+	}
+	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"a", "b"}) {
+		t.Fatalf("order changed to %v", got)
+	}
+}
+
+func TestMoveRejectsAnUnknownDirection(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	for _, dir := range []string{"", "sideways", "UP", "1"} {
+		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/move", url.Values{
+			"root": {"0"}, "dir": {dir},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("dir=%q gave %d, want 400", dir, rec.Code)
+		}
+	}
+}
+
+func TestCollapseAndExpand(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "parent")
+	s.seed(t, s.alice, parent, "child")
+
+	s.submit(t, s.alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
+		"root": {"0"}, "focus_id": {itoa(parent)}, "title": {"parent"}, "note": {""},
+		"collapsed": {"1"},
+	}, "/notes/")
+
+	n, err := s.store.ByID(ctx, s.alice.user.ID, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.Collapsed {
+		t.Fatal("the bullet is not collapsed")
+	}
+	if strings.Contains(s.get(t, s.alice, "/notes/").Text(), "child") {
+		t.Error("a collapsed bullet's child is still in the response")
+	}
+
+	s.submit(t, s.alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
+		"root": {"0"}, "collapsed": {"0"},
+	}, "/notes/")
+
+	n, err = s.store.ByID(ctx, s.alice.user.ID, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Collapsed {
+		t.Error("the bullet is still collapsed")
+	}
+}
+
+// TestCollapseIsIdempotent: the field says what the state should become, not
+// "flip it", so a double submit or a stale page cannot toggle it back.
+func TestCollapseIsIdempotent(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.alice, notes.RootID, "parent")
+	s.seed(t, s.alice, parent, "child")
+
+	for range 2 {
+		s.submit(t, s.alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
+			"root": {"0"}, "collapsed": {"1"},
+		}, "/notes/")
+	}
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.Collapsed {
+		t.Error("collapsing twice left the bullet expanded")
+	}
+}
+
+func TestCollapseRejectsAnUnknownValue(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	for _, v := range []string{"", "true", "yes", "2"} {
+		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/collapse", url.Values{
+			"root": {"0"}, "collapsed": {v},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("collapsed=%q gave %d, want 400", v, rec.Code)
+		}
+	}
+}
+
+func TestMovingAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.bob, notes.RootID, "bob's a")
+	second := s.seed(t, s.bob, notes.RootID, "bob's b")
+
+	for _, path := range []string{"/move", "/collapse"} {
+		form := url.Values{"root": {"0"}, "dir": {"up"}, "collapsed": {"1"}}
+		rec := s.post(t, s.alice, "/notes/"+itoa(second)+path, form)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("POST %s = %d, want 404", path, rec.Code)
+		}
+	}
+	if got := s.titlesAt(t, s.bob, notes.RootID); !equalStrings(got, []string{"bob's a", "bob's b"}) {
+		t.Errorf("bob's outline is now %v", got)
+	}
+}

@@ -310,3 +310,41 @@ func (a *App) outdent(w http.ResponseWriter, r *http.Request) {
 		return o.Outdent(ctx, m.UserID, m.NodeID)
 	})
 }
+
+// move swaps a bullet with the sibling above or below it.
+//
+// dir is exactly "up" or "down". The general Move — arbitrary parent, arbitrary
+// position — stays out of the HTTP surface until something needs it: N10's
+// drag-to-move is the only thing in the design that does.
+func (a *App) move(w http.ResponseWriter, r *http.Request) {
+	dir := r.PostFormValue("dir")
+	if dir != "up" && dir != "down" {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		if dir == "up" {
+			return o.MoveUp(ctx, m.UserID, m.NodeID)
+		}
+		return o.MoveDown(ctx, m.UserID, m.NodeID)
+	})
+}
+
+// collapse sets a bullet's collapse state.
+//
+// The field names the state to arrive at rather than asking for a toggle, so a
+// double submit, a refresh or a stale page cannot flip it back. The rendered
+// chevron already knows the current state and sends its opposite.
+func (a *App) collapse(w http.ResponseWriter, r *http.Request) {
+	raw := r.PostFormValue("collapsed")
+	if raw != "0" && raw != "1" {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	collapsed := raw == "1"
+
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		return o.SetCollapsed(ctx, m.UserID, m.NodeID, collapsed)
+	})
+}
