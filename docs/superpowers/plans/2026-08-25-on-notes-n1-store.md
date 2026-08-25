@@ -2123,9 +2123,10 @@ func TestMoveDoesNotRenumberAnotherUsersTopLevel(t *testing.T) {
 
 	// A top-level bullet has parent_id NULL for every user alike, so the
 	// user_id filter on the two renumbering statements is the only thing
-	// keeping alice's move out of bob's outline. A leak there would leave
-	// bob's positions contiguous but wrong — exactly the corruption
-	// treeViolations is unable to see.
+	// scoping alice's move to her own outline. Asserting on bob's titles
+	// names such a leak at its source: it would also trip checkInvariants,
+	// but as an I1 failure on rows this test never moved, which says
+	// nothing about where the bug is.
 	for _, title := range []string{"bob 0", "bob 1", "bob 2"} {
 		if _, err := f.store.Create(ctx, f.bob.ID, notes.RootID, 1<<30, title, ""); err != nil {
 			t.Fatalf("Create for bob: %v", err)
