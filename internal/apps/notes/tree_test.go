@@ -303,3 +303,124 @@ func TestDeleteOfAMissingNode(t *testing.T) {
 		t.Fatalf("Delete of a missing node = %v; want ErrNotFound", err)
 	}
 }
+
+func TestMoveToAnotherParent(t *testing.T) {
+	f := newFixture(t)
+	a := f.mk(t, notes.RootID, "a")
+	b := f.mk(t, notes.RootID, "b")
+	x := f.mk(t, a.ID, "x")
+
+	if err := f.store.Move(context.Background(), f.alice.ID, x.ID, b.ID, 0); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	if got := f.childTitles(t, f.alice.ID, a.ID); len(got) != 0 {
+		t.Errorf("a still has %v", got)
+	}
+	if got := f.childTitles(t, f.alice.ID, b.ID); !slices.Equal(got, []string{"x"}) {
+		t.Errorf("b has %v; want [x]", got)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestMoveWithinAParent(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.mk(t, notes.RootID, "a")
+	b := f.mk(t, notes.RootID, "b")
+	c := f.mk(t, notes.RootID, "c")
+
+	// b down one.
+	if err := f.store.Move(ctx, f.alice.ID, b.ID, notes.RootID, 2); err != nil {
+		t.Fatalf("Move down: %v", err)
+	}
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a", "c", "b"}) {
+		t.Fatalf("after moving b down: %v; want [a c b]", got)
+	}
+	checkInvariants(t, f.db)
+
+	// c up one, from its new position 1 to 0.
+	if err := f.store.Move(ctx, f.alice.ID, c.ID, notes.RootID, 0); err != nil {
+		t.Fatalf("Move up: %v", err)
+	}
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"c", "a", "b"}) {
+		t.Fatalf("after moving c up: %v; want [c a b]", got)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestMoveClampsAnOutOfRangePosition(t *testing.T) {
+	f := newFixture(t)
+	a := f.mk(t, notes.RootID, "a")
+	f.mk(t, notes.RootID, "b")
+
+	if err := f.store.Move(context.Background(), f.alice.ID, a.ID, notes.RootID, 99); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"b", "a"}) {
+		t.Fatalf("top level = %v; want [b a]", got)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestMoveRefusesToNestANodeInsideItself(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "a")
+	child := f.mk(t, a.ID, "child")
+	grandchild := f.mk(t, child.ID, "grandchild")
+
+	for _, tc := range []struct {
+		name   string
+		target int64
+	}{
+		{"into itself", a.ID},
+		{"into its child", child.ID},
+		{"into its grandchild", grandchild.ID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := f.store.Move(ctx, f.alice.ID, a.ID, tc.target, 0)
+			if !errors.Is(err, notes.ErrCycle) {
+				t.Fatalf("Move %s = %v; want ErrCycle", tc.name, err)
+			}
+			checkInvariants(t, f.db)
+		})
+	}
+}
+
+func TestMoveRejectsAnotherUsersNodeOrParent(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "alice's a")
+	b := f.mk(t, notes.RootID, "alice's b")
+
+	if err := f.store.Move(ctx, f.bob.ID, a.ID, notes.RootID, 0); !errors.Is(err, notes.ErrNotFound) {
+		t.Errorf("bob moving alice's node = %v; want ErrNotFound", err)
+	}
+
+	// bob owns nothing, so a move of his own (nonexistent) node into alice's
+	// parent must also fail.
+	if err := f.store.Move(ctx, f.bob.ID, 999, b.ID, 0); !errors.Is(err, notes.ErrNotFound) {
+		t.Errorf("bob moving into alice's node = %v; want ErrNotFound", err)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestMoveRefusesToPassMaxDepth(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// A chain whose deepest bullet sits at exactly MaxDepth.
+	deepest := int64(notes.RootID)
+	for i := 0; i <= notes.MaxDepth; i++ {
+		deepest = f.mk(t, deepest, fmt.Sprintf("level %d", i)).ID
+	}
+	// A separate two-level subtree, so moving it needs two more levels.
+	top := f.mk(t, notes.RootID, "top")
+	f.mk(t, top.ID, "under top")
+
+	if err := f.store.Move(ctx, f.alice.ID, top.ID, deepest, 0); !errors.Is(err, notes.ErrTooDeep) {
+		t.Fatalf("Move past MaxDepth = %v; want ErrTooDeep", err)
+	}
+	checkInvariants(t, f.db)
+}

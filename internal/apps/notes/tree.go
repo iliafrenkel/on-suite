@@ -220,3 +220,132 @@ func (st *Store) Delete(ctx context.Context, userID, id int64) error {
 		return nil
 	})
 }
+
+// Move reparents a bullet, taking its subtree with it, and places it at newPos
+// among its new siblings. newPos is clamped into range. newParentID may be
+// RootID.
+//
+// This is the one operation that can corrupt the tree. Moving a bullet inside
+// its own subtree detaches a cycle that no outline can reach: the rows are
+// still in the table but gone from the app, and nothing in the UI can undo it.
+// Both guards below therefore run inside the same transaction as the move,
+// not before it.
+func (st *Store) Move(ctx context.Context, userID, id, newParentID int64, newPos int) error {
+	if id == newParentID {
+		return ErrCycle
+	}
+	return st.tx(ctx, func(tx *sql.Tx) error {
+		var (
+			oldParent sql.NullInt64
+			oldPos    int
+		)
+		err := tx.QueryRowContext(ctx,
+			`SELECT parent_id, position FROM notes_nodes WHERE id = ? AND user_id = ?`,
+			id, userID).Scan(&oldParent, &oldPos)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("notes: move: %w", err)
+		}
+
+		if newParentID != RootID {
+			inside, err := isDescendant(ctx, tx, userID, newParentID, id)
+			if err != nil {
+				return err
+			}
+			if inside {
+				return ErrCycle
+			}
+			// depthOf doubles as the ownership check on the new parent.
+			parentDepth, err := depthOf(ctx, tx, userID, newParentID)
+			if err != nil {
+				return err
+			}
+			height, err := heightOf(ctx, tx, userID, id)
+			if err != nil {
+				return err
+			}
+			if parentDepth+1+height > MaxDepth {
+				return ErrTooDeep
+			}
+		}
+
+		// Close the gap the bullet leaves behind. It is excluded from both
+		// shifts by id, because a move within one parent would otherwise drag
+		// the bullet along with its own siblings.
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE notes_nodes SET position = position - 1
+			  WHERE user_id = ? AND parent_id IS ? AND position > ? AND id != ?`,
+			userID, parentArg(oldParent.Int64), oldPos, id); err != nil {
+			return fmt.Errorf("notes: move: close the gap: %w", err)
+		}
+
+		n, err := countChildren(ctx, tx, userID, newParentID)
+		if err != nil {
+			return err
+		}
+		if newParentID == oldParent.Int64 {
+			n-- // the bullet is still counted among its own new siblings
+		}
+		idx := clamp(newPos, 0, n)
+
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE notes_nodes SET position = position + 1
+			  WHERE user_id = ? AND parent_id IS ? AND position >= ? AND id != ?`,
+			userID, parentArg(newParentID), idx, id); err != nil {
+			return fmt.Errorf("notes: move: open a gap: %w", err)
+		}
+
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE notes_nodes SET parent_id = ?, position = ?, updated_at = ?
+			  WHERE id = ? AND user_id = ?`,
+			parentArg(newParentID), idx, formatTime(st.now()), id, userID); err != nil {
+			return fmt.Errorf("notes: move: %w", err)
+		}
+		return nil
+	})
+}
+
+// heightOf reports how many levels of descendants a node has: 0 for a leaf.
+// It returns ErrNotFound on the same terms as depthOf.
+func heightOf(ctx context.Context, tx *sql.Tx, userID, id int64) (int, error) {
+	var height sql.NullInt64
+	err := tx.QueryRowContext(ctx,
+		`WITH RECURSIVE down(id, d) AS (
+		     SELECT id, 0 FROM notes_nodes WHERE id = ? AND user_id = ?
+		   UNION ALL
+		     SELECT c.id, n.d + 1
+		       FROM notes_nodes c JOIN down n ON c.parent_id = n.id
+		      WHERE n.d < ?
+		 )
+		 SELECT max(d) FROM down`, id, userID, MaxDepth).Scan(&height)
+	if err != nil {
+		return 0, fmt.Errorf("notes: height of %d: %w", id, err)
+	}
+	if !height.Valid {
+		return 0, ErrNotFound
+	}
+	return int(height.Int64), nil
+}
+
+// isDescendant reports whether candidate sits anywhere inside root's subtree,
+// by walking up from candidate and looking for root. Walking up is bounded by
+// MaxDepth; walking down would be bounded only by the size of the subtree.
+func isDescendant(ctx context.Context, tx *sql.Tx, userID, candidate, root int64) (bool, error) {
+	var found int
+	err := tx.QueryRowContext(ctx,
+		`WITH RECURSIVE up(id, parent_id, d) AS (
+		     SELECT id, parent_id, 0 FROM notes_nodes WHERE id = ? AND user_id = ?
+		   UNION ALL
+		     SELECT p.id, p.parent_id, u.d + 1
+		       FROM notes_nodes p JOIN up u ON p.id = u.parent_id
+		      WHERE u.d < ?
+		 )
+		 SELECT count(*) FROM up WHERE id = ?`,
+		candidate, userID, MaxDepth, root).Scan(&found)
+	if err != nil {
+		return false, fmt.Errorf("notes: cycle check: %w", err)
+	}
+	return found > 0, nil
+}
