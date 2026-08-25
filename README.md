@@ -10,14 +10,17 @@ If you're looking for a SaaS-scale platform this isn't it — it's the opposite
 bet, optimised for "one binary, one data directory, nothing else to run."
 
 <p align="center">
-  <img src="docs/images/dashboard.png" alt="ON Suite dashboard with the ON Paste app tile" width="49%">
+  <img src="docs/images/dashboard.png" alt="ON Suite dashboard with its app tiles" width="49%">
   <img src="docs/images/paste-snippet.png" alt="An ON Paste snippet with syntax highlighting" width="49%">
 </p>
 
-Of the four apps the "ON" prefix is reserved for, only **ON Paste** is built
-and registered today — snippets of code or text, with syntax highlighting and
-shareable links. ON Notes, ON Reader, and ON Flash are future work: the
-platform and app framework are ready for them, but no code exists yet.
+Of the four apps the "ON" prefix is reserved for, two are built and registered
+today. **ON Paste** holds snippets of code or text, with syntax highlighting
+and shareable links. **ON Notes** is a hierarchical outliner — one infinite
+tree per account, with zoom, collapse and every structural operation; the
+keyboard layer, Markdown, due dates and search are still being built out. ON
+Reader and ON Flash are future work: the platform and app framework are ready
+for them, but no code exists yet.
 
 ## Is this for you?
 
@@ -68,7 +71,7 @@ curl -s localhost:8080/healthz
 
 You'll be redirected to `/login`; sign in with the account you just created
 and you'll land on the dashboard, with your username and a working log-out
-button in the top bar, and ON Paste in the app switcher.
+button in the top bar, and ON Notes and ON Paste in the app switcher.
 
 Cross-compiling for a Linux server from any machine needs nothing extra,
 since there's no CGO to worry about:
@@ -132,6 +135,7 @@ on-suite/
 ├── cmd/onsuite/               # the single binary: command dispatch, serve, backup, export, user add
 ├── internal/
 │   ├── apps/
+│   │   ├── notes/             # ON Notes: a hierarchical outliner
 │   │   └── paste/             # ON Paste: snippets, sharing, syntax highlighting
 │   ├── platform/
 │   │   ├── config/            # flags + ONSUITE_* env -> Config
@@ -156,7 +160,7 @@ on-suite/
 └── .goreleaser.yaml            # cross-compiled release builds
 ```
 
-Adding an app (ON Notes, ON Reader, ON Flash, or anything else) means writing
+Adding an app (ON Reader, ON Flash, or anything else) means writing
 a package under `internal/apps/` that implements the `App` interface and
 adding one line to `registeredApps()` in `cmd/onsuite/main.go` — nothing else
 in the platform changes. See [Contributing](CONTRIBUTING.md) for the rest of
@@ -171,6 +175,11 @@ The three planned build phases are complete.
 | 1 — Platform core | Config, SQLite + migrations, Argon2id auth, sessions, `onsuite user add` | **Done** |
 | 2 — Web plumbing and app framework | Templates, middleware, CSRF, login, the `App` interface and router | **Done** |
 | 3 — ON Paste and operations | The first real app, backup, TLS, packaging, CI | **Done** |
+
+Work since then is per-app rather than per-phase. ON Notes is being built in
+ten small chunks under
+[`docs/superpowers/specs/2026-08-25-on-notes-design.md`](docs/superpowers/specs/2026-08-25-on-notes-design.md);
+N1 (schema and store) and N2 (the outline) are done.
 
 See [the roadmap](docs/superpowers/plans/2026-08-18-on-suite-00-roadmap.md)
 for the full task list and the [design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md)

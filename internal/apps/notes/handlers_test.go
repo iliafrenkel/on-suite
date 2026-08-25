@@ -202,6 +202,23 @@ func (s *server) logIn(t *testing.T, u auth.User) *session {
 	return &session{user: u, cookies: rec.Result().Cookies()}
 }
 
+// anonymous returns a "session" holding a valid CSRF cookie and no login
+// cookie. It is how a test gets past the CSRF middleware in order to assert on
+// the auth guard behind it, which is otherwise unreachable: a tokenless POST
+// never gets that far.
+func (s *server) anonymous(t *testing.T) *session {
+	t.Helper()
+
+	page := s.do(t, nil, httptest.NewRequest("GET", "/login", nil))
+	for _, c := range page.Result().Cookies() {
+		if c.Name == web.CSRFCookieName {
+			return &session{cookies: []*http.Cookie{c}}
+		}
+	}
+	t.Fatal("GET /login issued no CSRF cookie")
+	return nil
+}
+
 // seed creates a bullet straight through the store, for tests about reading.
 // Tests about writing go through the routes instead.
 func (s *server) seed(t *testing.T, sess *session, parentID int64, title string) int64 {
@@ -1104,4 +1121,190 @@ func TestDeleteIsItsOwnConfirmedForm(t *testing.T) {
 	}
 	doc.MustHave(`form.outline-delete input[name=csrf_token]`)
 	doc.MustHave(`form.outline-delete input[name=root]`)
+}
+
+// TestStructuralRequestSavesTheFocusedText is spec §7. Every structural POST
+// carries the focused bullet's text so the text update and the structural
+// operation are one write. Without it, a user who types and then presses Tab
+// loses whatever landed after the last save.
+func TestStructuralRequestSavesTheFocusedText(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	first := s.seed(t, s.alice, notes.RootID, "first")
+	second := s.seed(t, s.alice, notes.RootID, "second")
+
+	s.submit(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(second)},
+		"title": {"typed after the last save"}, "note": {"and a note"},
+	}, "/notes/")
+
+	n, err := s.store.ByID(ctx, s.alice.user.ID, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Title != "typed after the last save" || n.Note != "and a note" {
+		t.Errorf("the focused bullet is %q / %q; the keystrokes were lost", n.Title, n.Note)
+	}
+	if n.ParentID != first {
+		t.Errorf("the bullet was not indented (parent %d, want %d)", n.ParentID, first)
+	}
+}
+
+// TestFocusAndTargetCanDiffer is the case N2's forms never produce and N3's
+// keyboard will: the caret is in one bullet and the operation acts on another.
+func TestFocusAndTargetCanDiffer(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	focused := s.seed(t, s.alice, notes.RootID, "focused")
+	parent := s.seed(t, s.alice, notes.RootID, "parent")
+	s.seed(t, s.alice, parent, "child")
+
+	s.submit(t, s.alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
+		"root": {"0"}, "focus_id": {itoa(focused)},
+		"title": {"edited elsewhere"}, "note": {""},
+		"collapsed": {"1"},
+	}, "/notes/")
+
+	f, err := s.store.ByID(ctx, s.alice.user.ID, focused)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Title != "edited elsewhere" {
+		t.Errorf("the focused bullet is %q", f.Title)
+	}
+	p, err := s.store.ByID(ctx, s.alice.user.ID, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Collapsed {
+		t.Error("the targeted bullet was not collapsed")
+	}
+}
+
+// TestAFailedStructuralOperationSavesNoText proves the two really are one
+// transaction rather than two writes that usually both happen. The text update
+// succeeds and the structural operation then fails, so the text must be rolled
+// back with it.
+func TestAFailedStructuralOperationSavesNoText(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	mine := s.seed(t, s.alice, notes.RootID, "mine")
+	bobs := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	// Indenting bob's bullet fails; alice's own text update came first and
+	// must not survive.
+	rec := s.post(t, s.alice, "/notes/"+itoa(bobs)+"/indent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(mine)},
+		"title": {"should not be saved"}, "note": {""},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+
+	n, err := s.store.ByID(ctx, s.alice.user.ID, mine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Title != "mine" {
+		t.Errorf("the text survived a failed operation: %q", n.Title)
+	}
+}
+
+// TestAForgedFocusIsRejectedWholesale: naming someone else's bullet as the
+// focus fails the whole request rather than quietly skipping the text update.
+func TestAForgedFocusIsRejectedWholesale(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	bobs := s.seed(t, s.bob, notes.RootID, "bob's")
+	s.seed(t, s.alice, notes.RootID, "a")
+	b := s.seed(t, s.alice, notes.RootID, "b")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(b)+"/move", url.Values{
+		"root": {"0"}, "focus_id": {itoa(bobs)},
+		"title": {"overwritten"}, "note": {""}, "dir": {"up"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if n, err := s.store.ByID(ctx, s.bob.user.ID, bobs); err != nil || n.Title != "bob's" {
+		t.Errorf("bob's bullet is now %+v (err %v)", n, err)
+	}
+	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"a", "b"}) {
+		t.Errorf("the move happened anyway: %v", got)
+	}
+}
+
+func TestAMalformedFocusIsA400(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	for _, v := range []string{"abc", "-1", "0.5"} {
+		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/indent", url.Values{
+			"root": {"0"}, "focus_id": {v}, "title": {"x"}, "note": {""},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("focus_id=%q gave %d, want 400", v, rec.Code)
+		}
+	}
+}
+
+// TestEveryMutationRequiresSignIn covers the routes the first sign-in test
+// could not, because they are POSTs.
+//
+// Two layers stand between an anonymous POST and a handler, and the platform's
+// middleware order (web.Stack: csrf.Middleware, then authn.LoadUser, then the
+// router's RequireUser) makes which one answers deterministic, so both are
+// asserted exactly rather than loosely:
+//
+//   - with no CSRF token, CSRF.Middleware answers first, with a 403. It never
+//     reaches the auth guard, so on its own it says nothing about sign-in;
+//   - with a valid token taken from an anonymous GET, CSRF passes and
+//     RequireUser answers, with a 303 to /login. That is the assertion this
+//     test is named for.
+func TestEveryMutationRequiresSignIn(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	paths := []string{
+		"/notes/new",
+		"/notes/" + itoa(id) + "/text",
+		"/notes/" + itoa(id) + "/indent",
+		"/notes/" + itoa(id) + "/outdent",
+		"/notes/" + itoa(id) + "/move",
+		"/notes/" + itoa(id) + "/collapse",
+		"/notes/" + itoa(id) + "/delete",
+	}
+
+	// No CSRF token: the CSRF middleware is outermost of the two and answers.
+	for _, path := range paths {
+		req := httptest.NewRequest("POST", path, strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := s.do(t, nil, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("POST %s anonymous and tokenless = %d, want 403 from the CSRF check",
+				path, rec.Code)
+		}
+	}
+
+	// A valid token, still anonymous: CSRF is satisfied, so the auth guard is
+	// what rejects, and it sends the browser to the login page.
+	anon := s.anonymous(t)
+	for _, path := range paths {
+		rec := s.post(t, anon, path, url.Values{"root": {"0"}})
+		if rec.Code != http.StatusSeeOther {
+			t.Errorf("POST %s anonymous with a valid token = %d, want 303", path, rec.Code)
+			continue
+		}
+		if got := rec.Header().Get("Location"); got != "/login" {
+			t.Errorf("POST %s anonymous redirected to %q, not the login page", path, got)
+		}
+	}
+
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatalf("the bullet is gone: %v", err)
+	}
+	if n.Title != "a" {
+		t.Errorf("an anonymous request changed the bullet to %q", n.Title)
+	}
 }
