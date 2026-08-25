@@ -354,3 +354,88 @@ func isDescendant(ctx context.Context, tx *sql.Tx, userID, candidate, root int64
 	}
 	return found > 0, nil
 }
+
+// maxPosition means "past the last sibling". Move clamps, so this expresses
+// "append" without a second code path.
+const maxPosition = 1 << 30
+
+// Indent makes a bullet the last child of the sibling above it.
+//
+// A bullet that is already first among its siblings has nowhere to go, and
+// that is not an error: the caller is a keypress, not a command, and Tab on
+// the first line of an outline should do nothing rather than complain.
+//
+// Reading the bullet and moving it are two transactions. Between them another
+// tab could move the tree, in which case Move clamps to a position that is
+// merely surprising — the invariants still hold, because Move re-derives
+// everything it changes inside its own transaction.
+func (st *Store) Indent(ctx context.Context, userID, id int64) error {
+	n, err := st.ByID(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	if n.Position == 0 {
+		return nil
+	}
+	prev, err := st.siblingAt(ctx, userID, n.ParentID, n.Position-1)
+	if err != nil {
+		return err
+	}
+	return st.Move(ctx, userID, id, prev.ID, maxPosition)
+}
+
+// Outdent makes a bullet the next sibling of its own parent.
+//
+// Its former following siblings stay where they are. Some outliners instead
+// adopt them as children of the outdented bullet; this is the simpler rule and
+// the one that never moves a bullet the user was not looking at.
+func (st *Store) Outdent(ctx context.Context, userID, id int64) error {
+	n, err := st.ByID(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	if n.ParentID == RootID {
+		return nil
+	}
+	parent, err := st.ByID(ctx, userID, n.ParentID)
+	if err != nil {
+		return err
+	}
+	return st.Move(ctx, userID, id, parent.ParentID, parent.Position+1)
+}
+
+// MoveUp swaps a bullet with the sibling above it, or does nothing if it is
+// already first.
+func (st *Store) MoveUp(ctx context.Context, userID, id int64) error {
+	n, err := st.ByID(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	if n.Position == 0 {
+		return nil
+	}
+	return st.Move(ctx, userID, id, n.ParentID, n.Position-1)
+}
+
+// MoveDown swaps a bullet with the sibling below it. A bullet that is already
+// last needs no special case: Move clamps the target position back to where
+// the bullet already is.
+func (st *Store) MoveDown(ctx context.Context, userID, id int64) error {
+	n, err := st.ByID(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	return st.Move(ctx, userID, id, n.ParentID, n.Position+1)
+}
+
+// siblingAt fetches the child of parentID sitting at a given position.
+func (st *Store) siblingAt(ctx context.Context, userID, parentID int64, pos int) (Node, error) {
+	n, err := scanNode(st.db.QueryRowContext(ctx,
+		`SELECT `+nodeColumns+`
+		   FROM notes_nodes WHERE user_id = ? AND parent_id IS ? AND position = ?`,
+		userID, parentArg(parentID), pos))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Node{}, ErrNotFound
+	}
+	return n, err
+}

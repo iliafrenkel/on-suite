@@ -501,3 +501,135 @@ func TestMoveRefusesToPassMaxDepth(t *testing.T) {
 	}
 	checkInvariants(t, f.db)
 }
+
+func TestIndentBecomesTheLastChildOfThePreviousSibling(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "a")
+	f.mk(t, a.ID, "existing child")
+	b := f.mk(t, notes.RootID, "b")
+
+	if err := f.store.Indent(ctx, f.alice.ID, b.ID); err != nil {
+		t.Fatalf("Indent: %v", err)
+	}
+
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatalf("Outline: %v", err)
+	}
+	want := "- a [+]\n  - existing child\n  - b\n"
+	if outlineShape(got) != want {
+		t.Fatalf("after Indent:\n%s\nwant\n%s", outlineShape(got), want)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestIndentTheFirstSiblingDoesNothing(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "a")
+	f.mk(t, notes.RootID, "b")
+
+	// A keypress with nowhere to go is not an error.
+	if err := f.store.Indent(ctx, f.alice.ID, a.ID); err != nil {
+		t.Fatalf("Indent of the first sibling = %v; want nil", err)
+	}
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("top level = %v; want [a b]", got)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestOutdentBecomesTheNextSiblingOfItsParent(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "a")
+	child := f.mk(t, a.ID, "child")
+	f.mk(t, a.ID, "later sibling")
+	f.mk(t, notes.RootID, "z")
+
+	if err := f.store.Outdent(ctx, f.alice.ID, child.ID); err != nil {
+		t.Fatalf("Outdent: %v", err)
+	}
+
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatalf("Outline: %v", err)
+	}
+	// child lands directly after a; its former following sibling stays put.
+	want := "- a [+]\n  - later sibling\n- child\n- z\n"
+	if outlineShape(got) != want {
+		t.Fatalf("after Outdent:\n%s\nwant\n%s", outlineShape(got), want)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestOutdentATopLevelBulletDoesNothing(t *testing.T) {
+	f := newFixture(t)
+	a := f.mk(t, notes.RootID, "a")
+
+	if err := f.store.Outdent(context.Background(), f.alice.ID, a.ID); err != nil {
+		t.Fatalf("Outdent at the top level = %v; want nil", err)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestMoveUpAndMoveDown(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "a")
+	f.mk(t, notes.RootID, "b")
+	c := f.mk(t, notes.RootID, "c")
+
+	if err := f.store.MoveDown(ctx, f.alice.ID, a.ID); err != nil {
+		t.Fatalf("MoveDown: %v", err)
+	}
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"b", "a", "c"}) {
+		t.Fatalf("after MoveDown: %v; want [b a c]", got)
+	}
+
+	if err := f.store.MoveUp(ctx, f.alice.ID, c.ID); err != nil {
+		t.Fatalf("MoveUp: %v", err)
+	}
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"b", "c", "a"}) {
+		t.Fatalf("after MoveUp: %v; want [b c a]", got)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestMoveUpAndDownAtTheEndsDoNothing(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "a")
+	b := f.mk(t, notes.RootID, "b")
+
+	if err := f.store.MoveUp(ctx, f.alice.ID, a.ID); err != nil {
+		t.Fatalf("MoveUp of the first bullet = %v; want nil", err)
+	}
+	if err := f.store.MoveDown(ctx, f.alice.ID, b.ID); err != nil {
+		t.Fatalf("MoveDown of the last bullet = %v; want nil", err)
+	}
+	if got := f.childTitles(t, f.alice.ID, notes.RootID); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("top level = %v; want [a b] unchanged", got)
+	}
+	checkInvariants(t, f.db)
+}
+
+func TestKeyboardMovesRejectAnotherUsersNode(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.mk(t, notes.RootID, "a")
+	b := f.mk(t, notes.RootID, "b")
+
+	for name, op := range map[string]func(context.Context, int64, int64) error{
+		"Indent":   f.store.Indent,
+		"Outdent":  f.store.Outdent,
+		"MoveUp":   f.store.MoveUp,
+		"MoveDown": f.store.MoveDown,
+	} {
+		if err := op(ctx, f.bob.ID, b.ID); !errors.Is(err, notes.ErrNotFound) {
+			t.Errorf("%s on another user's node = %v; want ErrNotFound", name, err)
+		}
+	}
+	checkInvariants(t, f.db)
+}
