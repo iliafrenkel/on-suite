@@ -119,5 +119,77 @@
 		document.body.addEventListener("htmx:afterSwap", restoreFocus);
 	}
 
+	// ---- keyboard: reuse an existing button --------------------------------
+
+	function click(btn) {
+		if (btn && !btn.disabled) btn.click();
+	}
+
+	function indentButton(row) { return row.querySelector('button[formaction$="/indent"]'); }
+	function outdentButton(row) { return row.querySelector('button[formaction$="/outdent"]'); }
+	function moveButton(row, dir) { return row.querySelector('button[name="dir"][value="' + dir + '"]'); }
+	function collapseButton(row) { return row.querySelector("button.outline-chevron"); }
+
+	// handleEscape: first press leaves editing (blur); a second press,
+	// with nothing left focused in the outline, zooms out one level via the
+	// breadcrumb's last link — its own immediate parent. No extra state is
+	// needed to tell "first press" from "second": document.activeElement
+	// already tells the two apart, since the first press moves it out of
+	// the outline.
+	function handleEscape() {
+		var active = document.activeElement;
+		if (isOutlineField(active)) {
+			active.blur();
+			return;
+		}
+		var crumbs = document.querySelectorAll(".outline-crumbs a");
+		if (crumbs.length === 0) return;
+		location.href = crumbs[crumbs.length - 1].href;
+	}
+
+	function handleKeydown(e) {
+		if (e.key === "Escape") {
+			handleEscape();
+			return;
+		}
+
+		var el = e.target;
+		if (!isOutlineField(el)) return;
+		var row = rowOf(el);
+		if (!row || !row.hasAttribute("data-id")) return; // the empty-outline's bootstrap field
+
+		if (e.key === "Tab" && !e.shiftKey) {
+			e.preventDefault();
+			click(indentButton(row));
+			return;
+		}
+		if (e.key === "Tab" && e.shiftKey) {
+			e.preventDefault();
+			click(outdentButton(row));
+			return;
+		}
+		if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "ArrowUp") {
+			e.preventDefault();
+			click(moveButton(row, "up"));
+			return;
+		}
+		if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "ArrowDown") {
+			e.preventDefault();
+			click(moveButton(row, "down"));
+			return;
+		}
+		if ((e.metaKey || e.ctrlKey) && e.key === ".") {
+			e.preventDefault();
+			click(collapseButton(row));
+			return;
+		}
+	}
+
+	function initKeyboard() {
+		if (!document.getElementById("outline")) return;
+		document.addEventListener("keydown", handleKeydown);
+	}
+
 	initFocusSync();
+	initKeyboard();
 })();
