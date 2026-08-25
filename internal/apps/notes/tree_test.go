@@ -198,3 +198,45 @@ func TestSetCollapsedRejectsAnotherUsersNode(t *testing.T) {
 		t.Fatalf("SetCollapsed on another user's node = %v; want ErrNotFound", err)
 	}
 }
+
+func TestSetTextReplacesBothFields(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "before")
+
+	if err := f.store.SetText(ctx, f.alice.ID, n.ID, "after", "a note"); err != nil {
+		t.Fatalf("SetText: %v", err)
+	}
+
+	got, err := f.store.ByID(ctx, f.alice.ID, n.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if got.Title != "after" || got.Note != "a note" {
+		t.Fatalf("after SetText: title = %q, note = %q; want \"after\", \"a note\"", got.Title, got.Note)
+	}
+}
+
+func TestSetTextRejectsAnotherUsersNode(t *testing.T) {
+	f := newFixture(t)
+	n := f.mk(t, notes.RootID, "alice's")
+
+	err := f.store.SetText(context.Background(), f.bob.ID, n.ID, "bob was here", "")
+	if !errors.Is(err, notes.ErrNotFound) {
+		t.Fatalf("SetText on another user's node = %v; want ErrNotFound", err)
+	}
+	got, _ := f.store.ByID(context.Background(), f.alice.ID, n.ID)
+	if got.Title != "alice's" {
+		t.Fatalf("title = %q; bob's write went through", got.Title)
+	}
+}
+
+func TestSetTextRejectsInvalidText(t *testing.T) {
+	f := newFixture(t)
+	n := f.mk(t, notes.RootID, "fine")
+
+	err := f.store.SetText(context.Background(), f.alice.ID, n.ID, "\xff\xfe", "")
+	if !errors.Is(err, notes.ErrInvalid) {
+		t.Fatalf("SetText with invalid UTF-8 = %v; want ErrInvalid", err)
+	}
+}

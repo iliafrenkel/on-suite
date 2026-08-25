@@ -153,6 +153,22 @@ func (st *Store) SetCollapsed(ctx context.Context, userID, id int64, collapsed b
 		collapsed, formatTime(st.now()), id, userID)
 }
 
+// SetText replaces a bullet's title and note.
+//
+// Trailing spaces are stripped but leading ones are not: an outline is written
+// in prose, and a leading space is sometimes deliberate, while a trailing one
+// never is.
+func (st *Store) SetText(ctx context.Context, userID, id int64, title, note string) error {
+	title = strings.TrimRight(title, " \t")
+	if err := Validate(title, note); err != nil {
+		return err
+	}
+	return st.update(ctx,
+		`UPDATE notes_nodes SET title = ?, note = ?, updated_at = ?
+		  WHERE id = ? AND user_id = ?`,
+		title, note, formatTime(st.now()), id, userID)
+}
+
 // update runs a single-row UPDATE and turns "nothing matched" into
 // ErrNotFound, which covers both "no such node" and "not yours".
 func (st *Store) update(ctx context.Context, query string, args ...any) error {
