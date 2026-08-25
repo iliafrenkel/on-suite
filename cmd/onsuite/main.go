@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/apps/paste"
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
@@ -69,6 +70,7 @@ Run "onsuite serve -h" for serve flags.
 // this build contains.
 func registeredApps() []app.App {
 	return []app.App{
+		notes.New(),
 		paste.New(),
 	}
 }

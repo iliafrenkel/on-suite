@@ -615,6 +615,150 @@ button.danger:hover { background: var(--c-danger-bg); }
 	border-top: var(--border);
 }
 
+/* ---- Outline (ON Notes) ------------------------------------------------- */
+
+/* Spec §16: a single centred column. The suite shell already carries the
+ * navigation, so the outline gets no second sidebar. */
+.notes { max-width: 46rem; }
+
+.outline-crumbs {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2);
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+}
+
+.outline-crumbs a { color: var(--c-text-dim); text-decoration: none; }
+.outline-crumbs a:hover { color: var(--c-accent); }
+.outline-crumb-current { color: var(--c-text); font-weight: 500; }
+
+.outline-list { margin: 0; padding: 0; list-style: none; }
+
+/* The nesting is the indentation. The CSP has no unsafe-inline, so a row
+ * cannot carry its depth in a style attribute — see nest() in view.go — and
+ * a nested list is what produces both the indent and the guide line. */
+.outline-item .outline-list {
+	margin-left: var(--s-4);
+	padding-left: var(--s-3);
+	border-left: 1px solid var(--c-border);
+}
+
+.outline-row {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--s-1);
+	border-radius: var(--radius);
+}
+
+.outline-row:hover { background: var(--c-bg-subtle); }
+
+.outline-main {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--s-1);
+	flex: 1;
+	min-width: 0;
+}
+
+.outline-chevron,
+.outline-dot {
+	flex: none;
+	width: 1.1rem;
+	line-height: 1.7;
+	text-align: center;
+	color: var(--c-text-faint);
+}
+
+button.outline-chevron {
+	padding: 0;
+	border: none;
+	background: none;
+}
+
+.outline-dot { text-decoration: none; }
+.outline-dot:hover { color: var(--c-accent); }
+
+/* A collapsed bullet keeps its subtree out of the response entirely, so the
+ * dot gets a halo: the bullet is not as empty as it looks. */
+.outline-dot-full {
+	background: var(--c-bg-inset);
+	border-radius: 50%;
+}
+
+.outline-text { flex: 1; min-width: 0; }
+
+/* The two inputs are the bullet — there is no separate display mode in this
+ * chunk — so they are styled as text, not as fields.
+ *
+ * The element is written out because the platform's own field rule is
+ * `input[type="text"], …`, whose attribute selector outweighs a bare class.
+ * Without the `input` here every bullet keeps the border, the padding and the
+ * body text colour of an ordinary form field, and the note stops being
+ * quieter than its title. */
+input.outline-title,
+input.outline-note {
+	width: 100%;
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: none;
+	font: inherit;
+}
+
+input.outline-title { color: var(--c-text); line-height: 1.7; }
+input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
+
+/* The underline moves to the whole text column so the title and its note read
+ * as one bullet while either is being edited. */
+input.outline-title:focus,
+input.outline-note:focus { outline: none; }
+.outline-text:focus-within { box-shadow: inset 0 -1px 0 var(--c-accent); }
+
+/* opacity, not visibility: a visibility:hidden control cannot take focus, so
+ * :focus-within would never fire and these would be unreachable from the
+ * keyboard. */
+.outline-chevron,
+.outline-actions,
+.outline-delete { opacity: 0; }
+
+.outline-row:hover .outline-chevron,
+.outline-row:hover .outline-actions,
+.outline-row:hover .outline-delete,
+.outline-row:focus-within .outline-chevron,
+.outline-row:focus-within .outline-actions,
+.outline-row:focus-within .outline-delete { opacity: 1; }
+
+.outline-actions { display: flex; flex: none; }
+
+.outline-actions button {
+	padding: 0 var(--s-1);
+	border: none;
+	background: none;
+	color: var(--c-text-faint);
+	line-height: 1.7;
+}
+
+.outline-actions button:hover:not([disabled]) {
+	background: var(--c-bg-inset);
+	color: var(--c-text);
+}
+
+.outline-actions button[disabled] { opacity: 0.3; cursor: default; }
+
+.outline-delete { flex: none; }
+
+.outline-delete button {
+	padding: 0 var(--s-1);
+	border: none;
+	background: none;
+	color: var(--c-text-faint);
+	line-height: 1.7;
+}
+
+.outline-delete button:hover { background: var(--c-danger-bg); color: var(--c-danger); }
+
 /* ---- Narrow viewports --------------------------------------------------- */
 
 @media (max-width: 640px) {

@@ -1,0 +1,129 @@
+{{define "content"}}
+<div class="stack notes">
+	{{if .Data.Zoomed}}
+	<nav class="outline-crumbs" aria-label="Outline breadcrumb">
+		<a href="/notes/">All notes</a>
+		{{range .Data.Crumbs}}
+		<span aria-hidden="true">/</span>
+		<a href="/notes/{{.ID}}">{{.DisplayTitle}}</a>
+		{{end}}
+		<span aria-hidden="true">/</span>
+		<span class="outline-crumb-current">{{.Data.Root.DisplayTitle}}</span>
+	</nav>
+	<h1>{{.Data.Root.DisplayTitle}}</h1>
+	{{with .Data.Root.Note}}<p class="dim">{{.}}</p>{{end}}
+	{{else}}
+	<h1>Notes</h1>
+	{{end}}
+
+	{{/* #outline is the swap target N3 will replace on every structural
+	     response, which is why the rows live in a block of their own. */}}
+	<div id="outline" class="outline">
+		{{if .Data.Rows}}
+		{{template "outline-rows" .Data.Rows}}
+		{{else}}
+		{{template "outline-first" .Data}}
+		{{end}}
+	</div>
+</div>
+{{end}}
+
+{{/* outline-rows renders one sibling list and calls itself for each row's
+     children. Its argument is the slice, and nothing else — which is why each
+     row carries its own Root and CSRFToken. */}}
+{{define "outline-rows"}}
+<ul class="outline-list">
+	{{range .}}
+	<li class="outline-item">
+		<div class="outline-row">
+			<form method="post" action="/notes/{{.ID}}/text" class="outline-main">
+				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<input type="hidden" name="root" value="{{.RootID}}">
+				<input type="hidden" name="focus_id" value="{{.ID}}">
+
+				{{if .HasChildren}}
+				<button type="submit" class="outline-chevron quiet"
+				        formaction="/notes/{{.ID}}/collapse"
+				        name="collapsed" value="{{if .Collapsed}}0{{else}}1{{end}}"
+				        aria-expanded="{{if .Collapsed}}false{{else}}true{{end}}"
+				        aria-label="{{if .Collapsed}}Expand{{else}}Collapse{{end}}">{{if .Collapsed}}&#9656;{{else}}&#9662;{{end}}</button>
+				{{else}}
+				<span class="outline-chevron" aria-hidden="true"></span>
+				{{end}}
+
+				<a class="outline-dot{{if .Collapsed}} outline-dot-full{{end}}"
+				   href="/notes/{{.ID}}"
+				   aria-label="Zoom in to {{.DisplayTitle}}">&bull;</a>
+
+				<span class="outline-text">
+					<input class="outline-title" type="text" name="title"
+					       value="{{.Title}}" maxlength="2000" aria-label="Bullet">
+					<input class="outline-note" type="text" name="note"
+					       value="{{.Note}}" maxlength="10000"
+					       placeholder="note" aria-label="Note">
+				</span>
+
+				<span class="outline-actions">
+					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
+					        name="dir" value="up" aria-label="Move up"
+					        {{if eq .Position 0}}disabled{{end}}>&uarr;</button>
+					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
+					        name="dir" value="down" aria-label="Move down"
+					        {{if .Last}}disabled{{end}}>&darr;</button>
+					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/indent"
+					        aria-label="Indent"
+					        {{if eq .Position 0}}disabled{{end}}>&#8677;</button>
+					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/outdent"
+					        aria-label="Outdent"
+					        {{if eq .Depth 0}}disabled{{end}}>&#8676;</button>
+					<button type="submit" class="quiet" formaction="/notes/new"
+					        aria-label="Add a bullet below">+</button>
+				</span>
+			</form>
+
+			{{/* Its own form so data-confirm — a form-level attribute the
+			     platform's theme.js already handles — guards this one button
+			     rather than every button in the row. It therefore carries no
+			     focus_id: there is nothing worth saving on a bullet that is
+			     about to stop existing. */}}
+			<form method="post" action="/notes/{{.ID}}/delete" class="outline-delete"
+			      data-confirm="Delete “{{.DisplayTitle}}” and everything under it? This cannot be undone.">
+				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<input type="hidden" name="root" value="{{.RootID}}">
+				<button type="submit" class="quiet" aria-label="Delete">&times;</button>
+			</form>
+		</div>
+
+		{{with .Children}}{{template "outline-rows" .}}{{end}}
+	</li>
+	{{end}}
+</ul>
+{{end}}
+
+{{/* An outline with nothing in it renders one empty bullet rather than an
+     empty-state panel — spec §6. A new user's first keystroke should land in
+     the outline, and a zoomed-in bullet with no children needs exactly the
+     same affordance. It posts to /notes/new with no focus_id, so the bullet
+     is appended to whichever root is on screen. */}}
+{{define "outline-first"}}
+<ul class="outline-list">
+	<li class="outline-item">
+		<div class="outline-row">
+			<form method="post" action="/notes/new" class="outline-main">
+				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<input type="hidden" name="root" value="{{.Root.ID}}">
+				<span class="outline-chevron" aria-hidden="true"></span>
+				<span class="outline-dot" aria-hidden="true">&bull;</span>
+				<span class="outline-text">
+					<input class="outline-title" type="text" name="new_title"
+					       maxlength="2000" autofocus
+					       placeholder="Start typing…" aria-label="New bullet">
+				</span>
+				<span class="outline-actions">
+					<button type="submit" class="quiet" aria-label="Add bullet">+</button>
+				</span>
+			</form>
+		</div>
+	</li>
+</ul>
+{{end}}

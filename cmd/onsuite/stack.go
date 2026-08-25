@@ -117,7 +117,6 @@ var comingSoonApps = []struct {
 	Name    string
 	Summary string
 }{
-	{ID: "notes", Name: "ON Notes", Summary: "A hierarchical outliner for quick notes."},
 	{ID: "reader", Name: "ON Reader", Summary: "An RSS reader for the feeds you follow."},
 	{ID: "flash", Name: "ON Flash", Summary: "Flash cards for spaced repetition."},
 }
