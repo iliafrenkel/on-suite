@@ -84,3 +84,57 @@ func parseTime(s string) (time.Time, error) {
 	}
 	return t.UTC(), nil
 }
+
+// Children returns a parent's direct children in position order. parentID may
+// be RootID for the top level.
+func (st *Store) Children(ctx context.Context, userID, parentID int64) ([]Node, error) {
+	rows, err := st.db.QueryContext(ctx,
+		`SELECT `+nodeColumns+`
+		   FROM notes_nodes WHERE user_id = ? AND parent_id IS ?
+		  ORDER BY position`, userID, parentArg(parentID))
+	if err != nil {
+		return nil, fmt.Errorf("notes: children of %d: %w", parentID, err)
+	}
+	return collectNodes(rows, "children")
+}
+
+// Ancestors returns the path from the top level down to id's parent — the
+// breadcrumb above a zoomed outline — outermost first. It is empty for a
+// top-level node, and empty for a node that does not exist or is not userID's:
+// a caller that needs to tell those apart calls ByID.
+func (st *Store) Ancestors(ctx context.Context, userID, id int64) ([]Node, error) {
+	rows, err := st.db.QueryContext(ctx,
+		`WITH RECURSIVE up AS (
+		     SELECT `+nodeColumns+`, 0 AS d
+		       FROM notes_nodes WHERE id = ? AND user_id = ?
+		   UNION ALL
+		     SELECT p.id, p.user_id, p.parent_id, p.position, p.title, p.note,
+		            p.collapsed, p.created_at, p.updated_at, u.d + 1
+		       FROM notes_nodes p JOIN up u ON p.id = u.parent_id
+		      WHERE u.d < ?
+		 )
+		 SELECT `+nodeColumns+` FROM up WHERE d > 0 ORDER BY d DESC`,
+		id, userID, MaxDepth)
+	if err != nil {
+		return nil, fmt.Errorf("notes: ancestors of %d: %w", id, err)
+	}
+	return collectNodes(rows, "ancestors")
+}
+
+// collectNodes drains rows into Nodes and closes them.
+func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
+	defer func() { _ = rows.Close() }()
+
+	var out []Node
+	for rows.Next() {
+		n, err := scanNode(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("notes: %s: %w", what, err)
+	}
+	return out, nil
+}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
@@ -103,4 +104,100 @@ func (f *fixture) childTitles(t *testing.T, userID, parentID int64) []string {
 		t.Fatalf("reading child titles: %v", err)
 	}
 	return out
+}
+
+// titles is the shape of a node slice, for assertions that care about order.
+func titles(ns []notes.Node) []string {
+	out := make([]string, len(ns))
+	for i, n := range ns {
+		out[i] = n.Title
+	}
+	return out
+}
+
+func TestChildrenInPositionOrder(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	f.mk(t, parent.ID, "a")
+	f.mk(t, parent.ID, "b")
+	f.mk(t, notes.RootID, "not a child")
+
+	got, err := f.store.Children(ctx, f.alice.ID, parent.ID)
+	if err != nil {
+		t.Fatalf("Children: %v", err)
+	}
+	if want := []string{"a", "b"}; !slices.Equal(titles(got), want) {
+		t.Fatalf("Children = %v; want %v", titles(got), want)
+	}
+}
+
+func TestChildrenOfRoot(t *testing.T) {
+	f := newFixture(t)
+	top := f.mk(t, notes.RootID, "top")
+	f.mk(t, top.ID, "nested")
+
+	got, err := f.store.Children(context.Background(), f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatalf("Children: %v", err)
+	}
+	if want := []string{"top"}; !slices.Equal(titles(got), want) {
+		t.Fatalf("Children(RootID) = %v; want %v", titles(got), want)
+	}
+}
+
+func TestChildrenExcludesAnotherUser(t *testing.T) {
+	f := newFixture(t)
+	f.mk(t, notes.RootID, "alice's")
+
+	got, err := f.store.Children(context.Background(), f.bob.ID, notes.RootID)
+	if err != nil {
+		t.Fatalf("Children: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("bob sees %v at the top level; want nothing", titles(got))
+	}
+}
+
+func TestAncestorsIsTheBreadcrumb(t *testing.T) {
+	f := newFixture(t)
+	top := f.mk(t, notes.RootID, "top")
+	mid := f.mk(t, top.ID, "mid")
+	leaf := f.mk(t, mid.ID, "leaf")
+
+	got, err := f.store.Ancestors(context.Background(), f.alice.ID, leaf.ID)
+	if err != nil {
+		t.Fatalf("Ancestors: %v", err)
+	}
+	// Outermost first, and the node itself is not included.
+	if want := []string{"top", "mid"}; !slices.Equal(titles(got), want) {
+		t.Fatalf("Ancestors = %v; want %v", titles(got), want)
+	}
+}
+
+func TestAncestorsOfATopLevelNodeIsEmpty(t *testing.T) {
+	f := newFixture(t)
+	top := f.mk(t, notes.RootID, "top")
+
+	got, err := f.store.Ancestors(context.Background(), f.alice.ID, top.ID)
+	if err != nil {
+		t.Fatalf("Ancestors: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Ancestors of a top-level node = %v; want nothing", titles(got))
+	}
+}
+
+func TestAncestorsOfAnotherUsersNodeIsEmpty(t *testing.T) {
+	f := newFixture(t)
+	top := f.mk(t, notes.RootID, "top")
+	leaf := f.mk(t, top.ID, "leaf")
+
+	got, err := f.store.Ancestors(context.Background(), f.bob.ID, leaf.ID)
+	if err != nil {
+		t.Fatalf("Ancestors: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("bob sees ancestors %v; want nothing", titles(got))
+	}
 }
