@@ -590,6 +590,39 @@ func TestTreeViolationsCatchesCorruption(t *testing.T) {
 		})
 	}
 }
+
+// chain builds a straight line of nodes, each the child of the one before, so
+// the deepest sits at depth len(nodes)-1.
+func chain(length int) []rawNode {
+	var out []rawNode
+	for i := int64(1); i <= int64(length); i++ {
+		n := rawNode{ID: i, UserID: 1, Position: 0}
+		if i > 1 {
+			n.ParentID = sql.NullInt64{Int64: i - 1, Valid: true}
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+func TestTreeViolationsCatchesExcessiveDepth(t *testing.T) {
+	// One level past what MaxDepth permits.
+	got := treeViolations(chain(notes.MaxDepth + 2))
+	if len(got) == 0 {
+		t.Fatal("treeViolations found nothing; want an I4 violation")
+	}
+	if !strings.Contains(strings.Join(got, "\n"), "I4") {
+		t.Fatalf("treeViolations = %v; want an I4 violation", got)
+	}
+}
+
+func TestTreeViolationsAcceptsAChainAtExactlyMaxDepth(t *testing.T) {
+	// The boundary, so the test above cannot be passing for the wrong reason:
+	// MaxDepth+1 nodes put the deepest at exactly MaxDepth, which is legal.
+	if v := treeViolations(chain(notes.MaxDepth + 1)); len(v) > 0 {
+		t.Fatalf("treeViolations on a chain at exactly MaxDepth = %v; want none", v)
+	}
+}
 ```
 
 - [ ] **Step 2: Write the fixture and the failing ByID tests**
@@ -933,6 +966,44 @@ func TestCreateUnderAParent(t *testing.T) {
 	checkInvariants(t, f.db)
 }
 
+func TestByIDReturnsTheStoredNode(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	child := f.mk(t, parent.ID, "child")
+
+	got, err := f.store.ByID(ctx, f.alice.ID, child.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if got.Title != "child" || got.ParentID != parent.ID || got.Position != 0 {
+		t.Errorf("ByID = {title %q, parent %d, position %d}; want {\"child\", %d, 0}",
+			got.Title, got.ParentID, got.Position, parent.ID)
+	}
+	if got.CreatedAt.IsZero() || got.UpdatedAt.IsZero() {
+		t.Error("timestamps are zero; scanNode did not parse them")
+	}
+
+	// A top-level node's NULL parent_id must scan back as RootID rather than
+	// as some stray id — the whole reason RootID is 0.
+	top, err := f.store.ByID(ctx, f.alice.ID, parent.ID)
+	if err != nil {
+		t.Fatalf("ByID(parent): %v", err)
+	}
+	if top.ParentID != notes.RootID {
+		t.Errorf("top-level ParentID = %d; want RootID (%d)", top.ParentID, notes.RootID)
+	}
+}
+
+func TestByIDRejectsAnotherUsersNode(t *testing.T) {
+	f := newFixture(t)
+	n := f.mk(t, notes.RootID, "alice's")
+
+	if _, err := f.store.ByID(context.Background(), f.bob.ID, n.ID); !errors.Is(err, notes.ErrNotFound) {
+		t.Fatalf("bob fetching alice's node = %v; want ErrNotFound", err)
+	}
+}
+
 func TestCreateRejectsAnotherUsersParent(t *testing.T) {
 	f := newFixture(t)
 	alices := f.mk(t, notes.RootID, "alice's bullet")
@@ -1138,10 +1209,11 @@ needs `errors.Is`, and an import added before its first use fails `go vet`.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-go test ./internal/apps/notes/... -count=1 -run TestCreate -v
+go test ./internal/apps/notes/... -count=1 -run 'TestCreate|TestByID' -v
 ```
 
-Expected: PASS, all seven `TestCreate*` tests.
+Expected: PASS — seven `TestCreate*` tests plus the three `TestByID*` tests
+(`TestByIDOnAMissingNode` came from Task 2).
 
 - [ ] **Step 5: Run the full check**
 
