@@ -162,6 +162,18 @@ func (s *server) submit(t *testing.T, sess *session, path string, form url.Value
 	}
 }
 
+// postHX submits a form the way notes.js's own requests always will: HTMX
+// itself sets this header on every request, and the platform's CSRF check
+// already accepts it in place of the hidden form field.
+func (s *server) postHX(t *testing.T, sess *session, path string, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	form.Set(web.CSRFFormField, s.csrfToken(t, sess))
+	req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	return s.do(t, sess, req)
+}
+
 func (s *server) csrfToken(t *testing.T, sess *session) string {
 	t.Helper()
 	for _, c := range sess.cookies {
@@ -1307,5 +1319,104 @@ func TestEveryMutationRequiresSignIn(t *testing.T) {
 	}
 	if n.Title != "a" {
 		t.Errorf("an anonymous request changed the bullet to %q", n.Title)
+	}
+}
+
+// TestStructuralMutationRespondsWithAFragmentForHTMX. Once notes.js exists,
+// every structural button issues this same request over AJAX; the response
+// must be the swap target's own content, not a redirect the browser would
+// have to follow with a second round trip.
+func TestStructuralMutationRespondsWithAFragmentForHTMX(t *testing.T) {
+	s := newServer(t)
+	first := s.seed(t, s.alice, notes.RootID, "first")
+	second := s.seed(t, s.alice, notes.RootID, "second")
+
+	rec := s.postHX(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(second)}, "title": {"second"}, "note": {""},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "<html") {
+		t.Error("an HTMX response carries whole-document chrome")
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if n := len(doc.QueryAll(".outline-item .outline-item")); n != 1 {
+		t.Errorf("got %d nested bullets in the fragment, want 1", n)
+	}
+
+	children, err := s.store.Children(context.Background(), s.alice.user.ID, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(children) != 1 || children[0].ID != second {
+		t.Fatalf("the indent did not apply: children of first = %+v", children)
+	}
+}
+
+func TestCreateRespondsWithAFragmentForHTMX(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.postHX(t, s.alice, "/notes/new", url.Values{
+		"root": {"0"}, "new_title": {"first"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "first") {
+		t.Error("the new bullet is not in the fragment")
+	}
+}
+
+// TestSetTextRespondsWithNoContentForHTMX: nothing visible changes from a
+// text-only save — the input already shows what was typed — so there is
+// nothing to swap.
+func TestSetTextRespondsWithNoContentForHTMX(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "old")
+
+	rec := s.postHX(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
+		"root": {"0"}, "focus_id": {itoa(id)}, "title": {"new"}, "note": {""},
+	})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("body = %q, want empty", rec.Body.String())
+	}
+
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Title != "new" {
+		t.Errorf("saved title = %q, want new", n.Title)
+	}
+}
+
+func TestAFailedStructuralOperationUnderHTMXIsAFragment(t *testing.T) {
+	s := newServer(t)
+	bobs := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	rec := s.postHX(t, s.alice, "/notes/"+itoa(bobs)+"/indent", url.Values{"root": {"0"}})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "<html") {
+		t.Error("an HTMX error response carries whole-document chrome")
+	}
+}
+
+func TestScriptIsServedWithAJavaScriptContentType(t *testing.T) {
+	s := newServer(t)
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/notes.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /notes/notes.js = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/javascript") {
+		t.Errorf("Content-Type = %q, want text/javascript", ct)
+	}
+	if !strings.Contains(rec.Body.String(), "use strict") {
+		t.Error("the served script does not look like notes.js")
 	}
 }

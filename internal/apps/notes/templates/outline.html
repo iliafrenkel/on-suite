@@ -16,16 +16,22 @@
 	<h1>Notes</h1>
 	{{end}}
 
-	{{/* #outline is the swap target N3 will replace on every structural
-	     response, which is why the rows live in a block of their own. */}}
+	{{/* #outline is N3's swap target. Its content is its own named block so
+	     a structural response can re-render just this, through
+	     Renderer.Fragment, without touching the breadcrumb or heading above
+	     it — neither ever changes as a side effect of a structural op. */}}
 	<div id="outline" class="outline">
-		{{if .Data.Rows}}
-		{{template "outline-rows" .Data.Rows}}
-		{{else}}
-		{{template "outline-first" .Data}}
-		{{end}}
+		{{template "outline-body" .Data}}
 	</div>
 </div>
+{{end}}
+
+{{define "outline-body"}}
+{{if .Rows}}
+{{template "outline-rows" .Rows}}
+{{else}}
+{{template "outline-first" .}}
+{{end}}
 {{end}}
 
 {{/* outline-rows renders one sibling list and calls itself for each row's
