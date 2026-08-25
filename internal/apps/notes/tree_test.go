@@ -652,7 +652,7 @@ func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
 
 	f := newFixture(t)
 	ctx := context.Background()
-	rng := rand.New(rand.NewPCG(0x0175, 0x5eed)) // any fixed pair; reproducibility is the point
+	rng := rand.New(rand.NewPCG(0x0175, 0x5eed))
 
 	owned := map[int64][]int64{f.alice.ID: nil, f.bob.ID: nil}
 	users := []int64{f.alice.ID, f.bob.ID}
@@ -662,13 +662,25 @@ func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
 		t.Fatalf("%s\n\noperations so far:\n  %s",
 			fmt.Sprintf(format, args...), strings.Join(opLog, "\n  "))
 	}
-	// expected outcomes: nil, or one of the four sentinels. Anything else is
-	// a real failure, not a rejected operation.
-	record := func(op string, err error) {
+
+	// succeeded counts the nil outcomes per method.
+	//
+	// It is what stops this test passing vacuously. A regression that made
+	// every mutator return ErrNotFound would be waved through below — that is
+	// an accepted outcome — and would then satisfy all four invariants
+	// trivially, because nothing ever changed. Requiring each method to have
+	// succeeded at least once is the difference between proving the
+	// operations ran and proving they did not crash.
+	succeeded := map[string]int{}
+
+	// Only these five outcomes are acceptable. Anything else is a real
+	// failure, not a rejected operation.
+	record := func(method, op string, err error) {
 		opLog = append(opLog, fmt.Sprintf("%s -> %v", op, err))
 		switch {
-		case err == nil,
-			errors.Is(err, notes.ErrNotFound),
+		case err == nil:
+			succeeded[method]++
+		case errors.Is(err, notes.ErrNotFound),
 			errors.Is(err, notes.ErrCycle),
 			errors.Is(err, notes.ErrTooDeep),
 			errors.Is(err, notes.ErrInvalid):
@@ -693,36 +705,36 @@ func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
 
 		switch rng.IntN(9) {
 		case 0, 1, 2: // weighted, so the tree grows faster than it shrinks
-			parent := pick()
-			n, err := f.store.Create(ctx, userID, parent, rng.IntN(6)-1,
-				fmt.Sprintf("n%d", step), "")
-			record(fmt.Sprintf("Create(user=%d, parent=%d)", userID, parent), err)
+			parent, pos := pick(), rng.IntN(6)-1
+			n, err := f.store.Create(ctx, userID, parent, pos, fmt.Sprintf("n%d", step), "")
+			record("Create",
+				fmt.Sprintf("Create(user=%d, parent=%d, pos=%d) #%d", userID, parent, pos, n.ID), err)
 			if err == nil {
 				owned[userID] = append(owned[userID], n.ID)
 			}
 		case 3:
 			id := pick()
-			record(fmt.Sprintf("Indent(user=%d, id=%d)", userID, id),
+			record("Indent", fmt.Sprintf("Indent(user=%d, id=%d)", userID, id),
 				f.store.Indent(ctx, userID, id))
 		case 4:
 			id := pick()
-			record(fmt.Sprintf("Outdent(user=%d, id=%d)", userID, id),
+			record("Outdent", fmt.Sprintf("Outdent(user=%d, id=%d)", userID, id),
 				f.store.Outdent(ctx, userID, id))
 		case 5:
 			id := pick()
-			record(fmt.Sprintf("MoveUp(user=%d, id=%d)", userID, id),
+			record("MoveUp", fmt.Sprintf("MoveUp(user=%d, id=%d)", userID, id),
 				f.store.MoveUp(ctx, userID, id))
 		case 6:
 			id := pick()
-			record(fmt.Sprintf("MoveDown(user=%d, id=%d)", userID, id),
+			record("MoveDown", fmt.Sprintf("MoveDown(user=%d, id=%d)", userID, id),
 				f.store.MoveDown(ctx, userID, id))
 		case 7:
-			id, parent := pick(), pick()
-			record(fmt.Sprintf("Move(user=%d, id=%d, parent=%d)", userID, id, parent),
-				f.store.Move(ctx, userID, id, parent, rng.IntN(6)-1))
+			id, parent, pos := pick(), pick(), rng.IntN(6)-1
+			record("Move", fmt.Sprintf("Move(user=%d, id=%d, parent=%d, pos=%d)", userID, id, parent, pos),
+				f.store.Move(ctx, userID, id, parent, pos))
 		case 8:
 			id := pick()
-			record(fmt.Sprintf("Delete(user=%d, id=%d)", userID, id),
+			record("Delete", fmt.Sprintf("Delete(user=%d, id=%d)", userID, id),
 				f.store.Delete(ctx, userID, id))
 		}
 
@@ -731,9 +743,20 @@ func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
 		}
 	}
 
-	// A sanity check on the test itself: a run that produced nothing would
-	// pass every assertion above while proving nothing.
+	// Every method must actually have done something. Without this, the
+	// degenerate run described above — every mutator failing, Create alone
+	// working — would be indistinguishable from a healthy one.
+	for _, method := range []string{"Create", "Indent", "Outdent", "MoveUp", "MoveDown", "Move", "Delete"} {
+		if succeeded[method] == 0 {
+			fail("%s never succeeded in %d steps; the sequence is not exercising it", method, steps)
+		}
+	}
+	t.Logf("successful operations in %d steps: %v", steps, succeeded)
+
+	// A weaker end-state check, kept because it is cheap. Create alone would
+	// satisfy it, so it is a floor on the fixture rather than evidence that
+	// the operations ran — that is what the loop above is for.
 	if n := len(loadRawNodes(t, f.db)); n < 20 {
-		t.Fatalf("the sequence left only %d nodes; the generator is not exercising the store", n)
+		fail("the sequence left only %d nodes", n)
 	}
 }
