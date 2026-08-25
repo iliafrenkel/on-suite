@@ -690,9 +690,15 @@ button.outline-chevron {
 .outline-text { flex: 1; min-width: 0; }
 
 /* The two inputs are the bullet — there is no separate display mode in this
- * chunk — so they are styled as text, not as fields. */
-.outline-title,
-.outline-note {
+ * chunk — so they are styled as text, not as fields.
+ *
+ * The element is written out because the platform's own field rule is
+ * `input[type="text"], …`, whose attribute selector outweighs a bare class.
+ * Without the `input` here every bullet keeps the border, the padding and the
+ * body text colour of an ordinary form field, and the note stops being
+ * quieter than its title. */
+input.outline-title,
+input.outline-note {
 	width: 100%;
 	padding: 0;
 	border: none;
@@ -701,8 +707,8 @@ button.outline-chevron {
 	font: inherit;
 }
 
-.outline-title { color: var(--c-text); line-height: 1.7; }
-.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
+input.outline-title { color: var(--c-text); line-height: 1.7; }
+input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
 
 /* The underline moves to the whole text column so the title and its note read
  * as one bullet while either is being edited. */
