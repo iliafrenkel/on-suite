@@ -183,6 +183,111 @@
 			click(collapseButton(row));
 			return;
 		}
+		if (e.key === "Enter" && e.shiftKey) {
+			e.preventDefault();
+			focusNote(row);
+			return;
+		}
+		if (e.key === "Enter" && !e.shiftKey) {
+			e.preventDefault();
+			splitAndCreate(el, row);
+			return;
+		}
+		if (e.key === "Backspace") {
+			if (maybeDeleteEmptyBullet(el, row)) {
+				e.preventDefault();
+			}
+			return;
+		}
+	}
+
+	// ---- keyboard: new requests --------------------------------------------
+
+	function titleInputs() {
+		return Array.prototype.slice.call(document.querySelectorAll("#outline input.outline-title"));
+	}
+
+	function appendSiblingBelow(row) {
+		click(row.querySelector('button[formaction="/notes/new"]'));
+	}
+
+	// focusNote moves the caret to the note line under the current bullet,
+	// at the end of whatever text is already there — spec §8's Shift+Enter.
+	function focusNote(row) {
+		var note = row.querySelector("input.outline-note");
+		if (!note) return;
+		note.focus();
+		var pos = note.value.length;
+		note.setSelectionRange(pos, pos);
+	}
+
+	// splitAndCreate is spec §8's Enter: a new sibling below, splitting the
+	// title at the caret. In the note field there is nothing to split — a
+	// note is not the tree structure — so Enter there behaves like the "+"
+	// button instead.
+	function splitAndCreate(el, row) {
+		if (!el.classList.contains("outline-title")) {
+			appendSiblingBelow(row);
+			return;
+		}
+
+		var pos = el.selectionStart;
+		var head = el.value.slice(0, pos);
+		var tail = el.value.slice(pos);
+		var note = row.querySelector('input[name="note"]');
+		var rootField = row.querySelector('input[name="root"]');
+		var id = row.getAttribute("data-id");
+
+		// The new row's id is assigned by the server and unknown until the
+		// response arrives, so the caret target is "the row right after
+		// this one" rather than an id — see restoreFocus's afterID branch.
+		pendingFocus = { afterID: id, field: "title", offset: 0 };
+
+		htmx.ajax("POST", "/notes/new", {
+			source: document.body,
+			target: "#outline",
+			swap: "innerHTML",
+			values: {
+				root: rootField.value,
+				focus_id: id,
+				title: head,
+				note: note ? note.value : "",
+				new_title: tail,
+				_skipFocusOverride: "1"
+			}
+		});
+	}
+
+	// maybeDeleteEmptyBullet is spec §8's Backspace: only when the bullet is
+	// genuinely empty (no title, no note, no children) and the caret sits
+	// at its very start — a leaf with nothing in it loses nothing by going
+	// away without the confirmation the visible delete button asks for.
+	function maybeDeleteEmptyBullet(el, row) {
+		if (!el.classList.contains("outline-title")) return false;
+		if (el.selectionStart !== 0 || el.selectionEnd !== 0) return false;
+		if (el.value !== "") return false;
+
+		var note = row.querySelector('input[name="note"]');
+		if (note && note.value !== "") return false;
+		if (row.closest(".outline-item").querySelector(".outline-list")) return false; // has children
+
+		var inputs = titleInputs();
+		var idx = inputs.indexOf(el);
+		if (idx <= 0) return false; // nothing before it to land on
+
+		var prev = inputs[idx - 1];
+		var rootField = row.querySelector('input[name="root"]');
+		var id = row.getAttribute("data-id");
+
+		pendingFocus = { id: rowOf(prev).getAttribute("data-id"), field: "title", offset: prev.value.length };
+
+		htmx.ajax("POST", "/notes/" + id + "/delete", {
+			source: document.body,
+			target: "#outline",
+			swap: "innerHTML",
+			values: { root: rootField.value, _skipFocusOverride: "1" }
+		});
+		return true;
 	}
 
 	function initKeyboard() {
