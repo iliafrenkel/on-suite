@@ -41,7 +41,7 @@
 <ul class="outline-list">
 	{{range .}}
 	<li class="outline-item">
-		<div class="outline-row">
+		<div class="outline-row" data-id="{{.ID}}">
 			<form method="post" action="/notes/{{.ID}}/text" class="outline-main">
 				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 				<input type="hidden" name="root" value="{{.RootID}}">
@@ -50,6 +50,7 @@
 				{{if .HasChildren}}
 				<button type="submit" class="outline-chevron quiet"
 				        formaction="/notes/{{.ID}}/collapse"
+				        hx-post="/notes/{{.ID}}/collapse" hx-target="#outline" hx-swap="innerHTML"
 				        name="collapsed" value="{{if .Collapsed}}0{{else}}1{{end}}"
 				        aria-expanded="{{if .Collapsed}}false{{else}}true{{end}}"
 				        aria-label="{{if .Collapsed}}Expand{{else}}Collapse{{end}}">{{if .Collapsed}}&#9656;{{else}}&#9662;{{end}}</button>
@@ -63,37 +64,42 @@
 
 				<span class="outline-text">
 					<input class="outline-title" type="text" name="title"
-					       value="{{.Title}}" maxlength="2000" aria-label="Bullet">
+					       value="{{.Title}}" maxlength="2000" aria-label="Bullet"
+					       hx-post="/notes/{{.ID}}/text"
+					       hx-trigger="input changed delay:600ms, blur changed" hx-swap="none">
 					<input class="outline-note" type="text" name="note"
 					       value="{{.Note}}" maxlength="10000"
-					       placeholder="note" aria-label="Note">
+					       placeholder="note" aria-label="Note"
+					       hx-post="/notes/{{.ID}}/text"
+					       hx-trigger="input changed delay:600ms, blur changed" hx-swap="none">
 				</span>
 
 				<span class="outline-actions">
 					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
+					        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
 					        name="dir" value="up" aria-label="Move up"
 					        {{if eq .Position 0}}disabled{{end}}>&uarr;</button>
 					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
+					        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
 					        name="dir" value="down" aria-label="Move down"
 					        {{if .Last}}disabled{{end}}>&darr;</button>
 					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/indent"
+					        hx-post="/notes/{{.ID}}/indent" hx-target="#outline" hx-swap="innerHTML"
 					        aria-label="Indent"
 					        {{if eq .Position 0}}disabled{{end}}>&#8677;</button>
 					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/outdent"
+					        hx-post="/notes/{{.ID}}/outdent" hx-target="#outline" hx-swap="innerHTML"
 					        aria-label="Outdent"
 					        {{if eq .Depth 0}}disabled{{end}}>&#8676;</button>
 					<button type="submit" class="quiet" formaction="/notes/new"
+					        hx-post="/notes/new" hx-target="#outline" hx-swap="innerHTML"
 					        aria-label="Add a bullet below">+</button>
 				</span>
 			</form>
 
-			{{/* Its own form so data-confirm — a form-level attribute the
-			     platform's theme.js already handles — guards this one button
-			     rather than every button in the row. It therefore carries no
-			     focus_id: there is nothing worth saving on a bullet that is
-			     about to stop existing. */}}
 			<form method="post" action="/notes/{{.ID}}/delete" class="outline-delete"
-			      data-confirm="Delete “{{.DisplayTitle}}” and everything under it? This cannot be undone.">
+			      hx-post="/notes/{{.ID}}/delete" hx-target="#outline" hx-swap="innerHTML"
+			      hx-confirm="Delete “{{.DisplayTitle}}” and everything under it? This cannot be undone.">
 				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 				<input type="hidden" name="root" value="{{.RootID}}">
 				<button type="submit" class="quiet" aria-label="Delete">&times;</button>
@@ -115,7 +121,8 @@
 <ul class="outline-list">
 	<li class="outline-item">
 		<div class="outline-row">
-			<form method="post" action="/notes/new" class="outline-main">
+			<form method="post" action="/notes/new" class="outline-main"
+			      hx-post="/notes/new" hx-target="#outline" hx-swap="innerHTML">
 				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 				<input type="hidden" name="root" value="{{.Root.ID}}">
 				<span class="outline-chevron" aria-hidden="true"></span>

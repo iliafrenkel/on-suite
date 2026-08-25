@@ -1116,17 +1116,93 @@ func TestDeletingAnotherUsersBulletIs404(t *testing.T) {
 	}
 }
 
-// TestDeleteIsItsOwnFormWithAConfirmation. data-confirm is a form-level
-// attribute the platform's theme.js already handles; on the row's main form it
-// would confirm every button in the row, so delete gets a form of its own.
+// TestEveryStructuralButtonMirrorsItsFormactionAsHTMX. Progressive
+// enhancement: hx-post always equals formaction, so a JS-disabled browser
+// and an HTMX one issue the exact same request the button already
+// declares — nothing in notes.js needs to know a URL.
+func TestEveryStructuralButtonMirrorsItsFormactionAsHTMX(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "a")
+
+	doc := s.get(t, s.alice, "/notes/")
+	buttons := doc.QueryAll("button[formaction]")
+	if len(buttons) == 0 {
+		t.Fatal("no formaction buttons found")
+	}
+	for _, b := range buttons {
+		action, _ := htmlassert.Attr(b, "formaction")
+		hxPost, ok := htmlassert.Attr(b, "hx-post")
+		if !ok || hxPost != action {
+			t.Errorf("button formaction=%q has hx-post=%q", action, hxPost)
+		}
+		if got, _ := htmlassert.Attr(b, "hx-target"); got != "#outline" {
+			t.Errorf("button formaction=%q has hx-target=%q, want #outline", action, got)
+		}
+		if got, _ := htmlassert.Attr(b, "hx-swap"); got != "innerHTML" {
+			t.Errorf("button formaction=%q has hx-swap=%q, want innerHTML", action, got)
+		}
+	}
+}
+
+func TestRowsCarryTheirNodeID(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	doc := s.get(t, s.alice, "/notes/")
+	row := doc.MustHave(".outline-row")
+	if got, _ := htmlassert.Attr(row, "data-id"); got != itoa(id) {
+		t.Errorf("row data-id = %q, want %q", got, itoa(id))
+	}
+}
+
+// TestTextInputsAutosaveOverHTMX. hx-swap=none: nothing on screen needs to
+// change from a text-only save, the input already shows what was typed.
+func TestTextInputsAutosaveOverHTMX(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	doc := s.get(t, s.alice, "/notes/")
+	for _, sel := range []string{"input.outline-title", "input.outline-note"} {
+		in := doc.MustHave(sel)
+		if got, _ := htmlassert.Attr(in, "hx-post"); got != "/notes/"+itoa(id)+"/text" {
+			t.Errorf("%s hx-post = %q", sel, got)
+		}
+		if got, _ := htmlassert.Attr(in, "hx-swap"); got != "none" {
+			t.Errorf("%s hx-swap = %q, want none", sel, got)
+		}
+		if _, ok := htmlassert.Attr(in, "hx-trigger"); !ok {
+			t.Errorf("%s has no hx-trigger", sel)
+		}
+	}
+}
+
+func TestEmptyOutlineFormIsHTMXWired(t *testing.T) {
+	s := newServer(t)
+	doc := s.get(t, s.alice, "/notes/")
+	form := doc.MustHave(`form[action=/notes/new]`)
+	if got, _ := htmlassert.Attr(form, "hx-post"); got != "/notes/new" {
+		t.Errorf("empty-outline form hx-post = %q", got)
+	}
+}
+
+// TestDeleteIsItsOwnConfirmedForm. hx-confirm, not data-confirm: once the
+// form is hx-post-driven, HTMX's own confirmation runs before it builds the
+// request at all, so there is no dependency on theme.js's generic
+// data-confirm listener or any question of which one runs first.
 func TestDeleteIsItsOwnConfirmedForm(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.alice, notes.RootID, "Projects")
 
 	doc := s.get(t, s.alice, "/notes/")
 	form := doc.MustHave(`form[action=/notes/` + itoa(id) + `/delete]`)
-	if _, ok := htmlassert.Attr(form, "data-confirm"); !ok {
+	if _, ok := htmlassert.Attr(form, "hx-confirm"); !ok {
 		t.Error("the delete form asks for no confirmation")
+	}
+	if got, _ := htmlassert.Attr(form, "hx-post"); got != "/notes/"+itoa(id)+"/delete" {
+		t.Errorf("delete form hx-post = %q", got)
+	}
+	if got, _ := htmlassert.Attr(form, "hx-target"); got != "#outline" {
+		t.Errorf("delete form hx-target = %q, want #outline", got)
 	}
 	// It must not be the row's main form, or every button would be confirmed.
 	if cls, _ := htmlassert.Attr(form, "class"); !strings.Contains(cls, "outline-delete") {
