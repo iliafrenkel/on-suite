@@ -375,3 +375,101 @@ func TestOutlineEscapesBulletText(t *testing.T) {
 		t.Errorf("the round-tripped title is %q", v)
 	}
 }
+
+func TestZoomShowsOnlyTheSubtree(t *testing.T) {
+	s := newServer(t)
+	projects := s.seed(t, s.alice, notes.RootID, "Projects")
+	s.seed(t, s.alice, projects, "AtBudget")
+	s.seed(t, s.alice, notes.RootID, "Reading")
+
+	doc := s.get(t, s.alice, "/notes/"+itoa(projects))
+
+	text := doc.Text()
+	if !strings.Contains(text, "Projects") {
+		t.Error("the zoom root is not named on its own page")
+	}
+	if strings.Contains(text, "Reading") {
+		t.Error("a sibling of the zoom root is on the page")
+	}
+	titles := doc.QueryAll("input.outline-title")
+	if len(titles) != 1 {
+		t.Fatalf("got %d bullets, want just the one child", len(titles))
+	}
+	if v, _ := htmlassert.Attr(titles[0], "value"); v != "AtBudget" {
+		t.Errorf("the visible bullet is %q, want AtBudget", v)
+	}
+}
+
+func TestZoomRendersTheBreadcrumb(t *testing.T) {
+	s := newServer(t)
+	projects := s.seed(t, s.alice, notes.RootID, "Projects")
+	budget := s.seed(t, s.alice, projects, "AtBudget")
+	api := s.seed(t, s.alice, budget, "API")
+
+	doc := s.get(t, s.alice, "/notes/"+itoa(api))
+	crumbs := doc.MustHave("nav.outline-crumbs")
+
+	// Outermost first, and every ancestor is a link back to its own zoom.
+	links := doc.QueryAll("nav.outline-crumbs a")
+	var got []string
+	for _, l := range links {
+		got = append(got, htmlassert.Text(l))
+	}
+	want := []string{"All notes", "Projects", "AtBudget"}
+	if len(got) != len(want) {
+		t.Fatalf("breadcrumb links are %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("breadcrumb link %d is %q, want %q", i, got[i], want[i])
+		}
+	}
+	if href, _ := htmlassert.Attr(links[1], "href"); href != "/notes/"+itoa(projects) {
+		t.Errorf("the Projects crumb points at %q", href)
+	}
+	// The node you are on is not a link to where you already are.
+	if !strings.Contains(htmlassert.Text(crumbs), "API") {
+		t.Error("the breadcrumb does not name the current root")
+	}
+}
+
+func TestTopLevelHasNoBreadcrumb(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "Projects")
+
+	s.get(t, s.alice, "/notes/").MustNotHave("nav.outline-crumbs")
+}
+
+func TestZoomingIntoAnotherUsersNodeIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.bob, notes.RootID, "bob's secret")
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/"+itoa(id), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "bob's secret") {
+		t.Error("another user's bullet leaked through the zoom route")
+	}
+}
+
+func TestZoomingIntoNonsenseIs404(t *testing.T) {
+	s := newServer(t)
+	for _, path := range []string{"/notes/0", "/notes/-1", "/notes/abc", "/notes/999999"} {
+		rec := s.do(t, s.alice, httptest.NewRequest("GET", path, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", path, rec.Code)
+		}
+	}
+}
+
+func TestBulletDotZoomsIn(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "Projects")
+
+	doc := s.get(t, s.alice, "/notes/")
+	href, _ := htmlassert.Attr(doc.MustHave("a.outline-dot"), "href")
+	if href != "/notes/"+itoa(id) {
+		t.Errorf("the bullet dot points at %q, want /notes/%d", href, id)
+	}
+}

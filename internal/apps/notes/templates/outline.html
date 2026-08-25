@@ -1,6 +1,20 @@
 {{define "content"}}
 <div class="stack notes">
+	{{if .Data.Zoomed}}
+	<nav class="outline-crumbs" aria-label="Outline breadcrumb">
+		<a href="/notes/">All notes</a>
+		{{range .Data.Crumbs}}
+		<span aria-hidden="true">/</span>
+		<a href="/notes/{{.ID}}">{{.DisplayTitle}}</a>
+		{{end}}
+		<span aria-hidden="true">/</span>
+		<span class="outline-crumb-current">{{.Data.Root.DisplayTitle}}</span>
+	</nav>
+	<h1>{{.Data.Root.DisplayTitle}}</h1>
+	{{with .Data.Root.Note}}<p class="dim">{{.}}</p>{{end}}
+	{{else}}
 	<h1>Notes</h1>
+	{{end}}
 
 	{{/* #outline is the swap target N3 will replace on every structural
 	     response, which is why the rows live in a block of their own. */}}

@@ -3,6 +3,7 @@ package notes
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -45,6 +46,29 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 // outline renders the top-level outline.
 func (a *App) outline(w http.ResponseWriter, r *http.Request) {
 	a.renderOutline(w, r, RootID)
+}
+
+// nodeID parses the {id} wildcard. A path that is not a positive integer is a
+// 404 rather than a 400: from outside, "there is nothing at that address" is
+// the same answer either way, and it is the true one.
+func (a *App) nodeID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		a.deps.Errors.Status(w, r, http.StatusNotFound)
+		return 0, false
+	}
+	return id, true
+}
+
+// outlineZoomed renders the outline rooted at one node — spec §6: zoom is the
+// URL, and the only difference from the top level is which node the recursive
+// query starts at.
+func (a *App) outlineZoomed(w http.ResponseWriter, r *http.Request) {
+	id, ok := a.nodeID(w, r)
+	if !ok {
+		return
+	}
+	a.renderOutline(w, r, id)
 }
 
 // renderOutline draws the outline rooted at rootID: the breadcrumb, the

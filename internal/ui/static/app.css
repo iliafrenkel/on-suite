@@ -621,6 +621,19 @@ button.danger:hover { background: var(--c-danger-bg); }
  * navigation, so the outline gets no second sidebar. */
 .notes { max-width: 46rem; }
 
+.outline-crumbs {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2);
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+}
+
+.outline-crumbs a { color: var(--c-text-dim); text-decoration: none; }
+.outline-crumbs a:hover { color: var(--c-accent); }
+.outline-crumb-current { color: var(--c-text); font-weight: 500; }
+
 .outline-list { margin: 0; padding: 0; list-style: none; }
 
 /* The nesting is the indentation. The CSP has no unsafe-inline, so a row

@@ -74,5 +74,5 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.store = NewStore(deps.DB)
 
 	r.HandleFunc("GET /{$}", a.outline)
-	r.HandleFunc("GET /{id}", a.outline)
+	r.HandleFunc("GET /{id}", a.outlineZoomed)
 }
