@@ -72,3 +72,35 @@ func TestByIDOnAMissingNode(t *testing.T) {
 		t.Fatalf("ByID on a missing node = %v; want ErrNotFound", err)
 	}
 }
+
+// childTitles reads a parent's children straight from the table, in position
+// order. Structural assertions deliberately bypass the store, so a test of
+// Create cannot be fooled by a matching bug in a read method.
+func (f *fixture) childTitles(t *testing.T, userID, parentID int64) []string {
+	t.Helper()
+
+	var parent any
+	if parentID != notes.RootID {
+		parent = parentID
+	}
+	rows, err := f.db.QueryContext(context.Background(),
+		`SELECT title FROM notes_nodes
+		  WHERE user_id = ? AND parent_id IS ? ORDER BY position`, userID, parent)
+	if err != nil {
+		t.Fatalf("reading child titles: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []string
+	for rows.Next() {
+		var title string
+		if err := rows.Scan(&title); err != nil {
+			t.Fatalf("scanning title: %v", err)
+		}
+		out = append(out, title)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("reading child titles: %v", err)
+	}
+	return out
+}
