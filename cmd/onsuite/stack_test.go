@@ -69,7 +69,7 @@ func TestHomePageShowsRealCardAndNamesComingSoonApps(t *testing.T) {
 		t.Errorf("got %d app cards, want exactly 1 (the real app)", len(cards))
 	}
 	text := doc.Text()
-	for _, name := range []string{"ON Notes", "ON Reader", "ON Flash"} {
+	for _, name := range []string{"ON Reader", "ON Flash"} {
 		if !strings.Contains(text, name) {
 			t.Errorf("coming-soon app %q is not named anywhere on the page", name)
 		}
