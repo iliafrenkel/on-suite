@@ -1464,13 +1464,14 @@ func outlineShape(ns []notes.Node) string {
 	return b.String()
 }
 
-// sample builds the tree every Outline test works from:
+// sample builds the tree every Outline test works from — two top-level
+// bullets, a and b, where a has two children and a2 has one:
 //
-//	- a [+]
-//	  - a1
-//	  - a2 [+]
-//	    - a2x
-//	- b
+//	a
+//	├── a1
+//	└── a2
+//	    └── a2x
+//	b
 func (f *fixture) sample(t *testing.T) (a, a1, a2, a2x, b notes.Node) {
 	t.Helper()
 	a = f.mk(t, notes.RootID, "a")
