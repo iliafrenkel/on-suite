@@ -107,6 +107,16 @@ func TestNestStampsEveryRow(t *testing.T) {
 	}
 }
 
+func TestNestRendersMarkdownIntoEachRow(t *testing.T) {
+	rows := nest([]Node{{ID: 1, Title: "**bold**", Note: "*italic*", Depth: 0}}, RootID, "tok")
+	if got := string(rows[0].RenderedTitle); got != "<strong>bold</strong>" {
+		t.Errorf("RenderedTitle = %q", got)
+	}
+	if got := string(rows[0].RenderedNote); got != "<em>italic</em>" {
+		t.Errorf("RenderedNote = %q", got)
+	}
+}
+
 // TestNestDropsARowWithNoParent is the case the store cannot produce and the
 // renderer must survive: a depth that skips a level has no correct parent, and
 // guessing one would put a bullet somewhere the user never left it.

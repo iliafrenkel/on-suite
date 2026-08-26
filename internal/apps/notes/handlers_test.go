@@ -457,6 +457,82 @@ func TestOutlineEscapesBulletText(t *testing.T) {
 	}
 }
 
+// TestBulletRendersMarkdown covers the full path: a saved title with
+// Markdown in it reaches the page as rendered HTML inside the overlay span,
+// while the input underneath still carries the raw source untouched — the
+// no-JS fallback keeps editing the literal text spec §7 already proved.
+func TestBulletRendersMarkdown(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "**bold** and #tag")
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="rendered-title-`+itoa(id)+`"`) {
+		t.Fatalf("no rendered overlay for bullet %d in:\n%s", id, body)
+	}
+	doc := htmlassert.Parse(t, body)
+	overlay := doc.MustHave(`#rendered-title-` + itoa(id))
+	if got := htmlassert.Text(overlay); got != "bold and #tag" {
+		t.Errorf("rendered overlay text = %q", got)
+	}
+	if n := len(doc.QueryAll(`#rendered-title-` + itoa(id) + ` strong`)); n != 1 {
+		t.Errorf("got %d <strong> in the overlay, want 1", n)
+	}
+	if n := len(doc.QueryAll(`#rendered-title-` + itoa(id) + ` a`)); n != 1 {
+		t.Errorf("got %d tag chip in the overlay, want 1", n)
+	}
+
+	// The raw <input> still carries the literal, unrendered source.
+	raw := doc.MustHave("input.outline-title")
+	if v, _ := htmlassert.Attr(raw, "value"); v != "**bold** and #tag" {
+		t.Errorf("input value = %q, want the raw source untouched", v)
+	}
+}
+
+// TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender. The overlay markup is
+// shared with setText's out-of-band response, but a row rendered the ordinary
+// way must never carry hx-swap-oob: every structural operation answers with
+// the whole outline fragment over AJAX, and htmx lifts each hx-swap-oob
+// element out of such a response before swapping it in — which would strip
+// every overlay and leave the bullets blank until a full reload.
+func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
+	s := newServer(t)
+	first := s.seed(t, s.alice, notes.RootID, "**first**")
+	second := s.seed(t, s.alice, notes.RootID, "second")
+
+	page := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil)).Body.String()
+	if !strings.Contains(page, `id="rendered-title-`+itoa(first)+`"`) {
+		t.Fatalf("no rendered overlay on the page for bullet %d", first)
+	}
+	if strings.Contains(page, "hx-swap-oob") {
+		t.Error("a full page load carries hx-swap-oob on the rendered overlays")
+	}
+
+	// The same rows, this time as the fragment a structural operation returns.
+	frag := s.postHX(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(second)}, "title": {"second"}, "note": {""},
+	}).Body.String()
+	if !strings.Contains(frag, `id="rendered-title-`+itoa(first)+`"`) {
+		t.Fatalf("no rendered overlay in the structural fragment for bullet %d", first)
+	}
+	if strings.Contains(frag, "hx-swap-oob") {
+		t.Error("a structural fragment carries hx-swap-oob, so htmx would strip the overlays out of it")
+	}
+}
+
+// TestRenderedOverlayEscapesBulletText: the overlay is real HTML the browser
+// parses, so it must never carry unescaped user text even when nothing in
+// it looks like Markdown.
+func TestRenderedOverlayEscapesBulletText(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, `<script>alert(1)</script>`)
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	if strings.Contains(rec.Body.String(), "<script>alert(1)</script>") {
+		t.Error("bullet text reached the rendered overlay unescaped")
+	}
+}
+
 func TestZoomShowsOnlyTheSubtree(t *testing.T) {
 	s := newServer(t)
 	projects := s.seed(t, s.alice, notes.RootID, "Projects")
@@ -1465,29 +1541,38 @@ func TestCreateRespondsWithAFragmentForHTMX(t *testing.T) {
 	}
 }
 
-// TestSetTextRespondsWithNoContentForHTMX: nothing visible changes from a
-// text-only save — the input already shows what was typed — so there is
-// nothing to swap.
-func TestSetTextRespondsWithNoContentForHTMX(t *testing.T) {
+// TestSetTextRespondsWithRenderedMarkdownForHTMX supersedes N3's 204: once a
+// field can show rendered Markdown, an edit has to update it, and there is
+// no swap that can happen without a response body to swap in.
+func TestSetTextRespondsWithRenderedMarkdownForHTMX(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.alice, notes.RootID, "old")
 
 	rec := s.postHX(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
-		"root": {"0"}, "focus_id": {itoa(id)}, "title": {"new"}, "note": {""},
+		"root": {"0"}, "focus_id": {itoa(id)}, "title": {"**new**"}, "note": {"*n*"},
 	})
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if rec.Body.Len() != 0 {
-		t.Errorf("body = %q, want empty", rec.Body.String())
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="rendered-title-`+itoa(id)+`"`) ||
+		!strings.Contains(body, "<strong>new</strong>") {
+		t.Errorf("title OOB fragment missing or wrong: %s", body)
+	}
+	if !strings.Contains(body, `id="rendered-note-`+itoa(id)+`"`) ||
+		!strings.Contains(body, "<em>n</em>") {
+		t.Errorf("note OOB fragment missing or wrong: %s", body)
+	}
+	if !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Error("the response does not mark itself as an out-of-band swap")
 	}
 
 	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.Title != "new" {
-		t.Errorf("saved title = %q, want new", n.Title)
+	if n.Title != "**new**" {
+		t.Errorf("saved title = %q, want the raw source", n.Title)
 	}
 }
 

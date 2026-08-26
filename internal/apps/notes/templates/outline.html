@@ -5,6 +5,24 @@
 <script src="/notes/notes.js" defer></script>
 {{end}}
 
+{{/* rendered-title and rendered-note are shared between a normal row render
+     and setText's HTMX response (Task 3), so the markup can never drift
+     between the two. The OOB flag is what keeps the two uses apart: only
+     setText's response sets it. A normal row must NOT carry hx-swap-oob,
+     because the structural operations (add, indent, outdent, move, collapse,
+     delete) answer with the whole outline fragment over AJAX, and htmx lifts
+     every hx-swap-oob element out of such a response before the swap — which
+     would delete every rendered overlay and leave the outline blank. */}}
+{{define "rendered-title"}}<span id="rendered-title-{{.ID}}" class="outline-rendered outline-title-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedTitle}}</span>{{end}}
+{{define "rendered-note"}}<span id="rendered-note-{{.ID}}" class="outline-rendered outline-note-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedNote}}</span>{{end}}
+
+{{/* text-update is setText's whole HTMX response: both fields' rendered
+     forms, each already carrying hx-swap-oob, and nothing else — htmx
+     applies out-of-band swaps found anywhere in a response regardless of
+     the triggering element's own hx-swap, which is why the inputs
+     themselves can stay hx-swap="none". */}}
+{{define "text-update"}}{{template "rendered-title" .}}{{template "rendered-note" .}}{{end}}
+
 {{define "content"}}
 <div class="stack notes">
 	{{if .Data.Zoomed}}
@@ -70,15 +88,21 @@
 				   aria-label="Zoom in to {{.DisplayTitle}}">&bull;</a>
 
 				<span class="outline-text">
-					<input class="outline-title" type="text" name="title"
-					       value="{{.Title}}" maxlength="2000" aria-label="Bullet"
-					       hx-post="/notes/{{.ID}}/text"
-					       hx-trigger="input changed delay:600ms, blur changed" hx-swap="none">
-					<input class="outline-note" type="text" name="note"
-					       value="{{.Note}}" maxlength="10000"
-					       placeholder="note" aria-label="Note"
-					       hx-post="/notes/{{.ID}}/text"
-					       hx-trigger="input changed delay:600ms, blur changed" hx-swap="none">
+					<span class="outline-field">
+						{{template "rendered-title" .}}
+						<input class="outline-title" type="text" name="title"
+						       value="{{.Title}}" maxlength="2000" aria-label="Bullet"
+						       hx-post="/notes/{{.ID}}/text"
+						       hx-trigger="input changed delay:600ms, blur changed" hx-swap="none">
+					</span>
+					<span class="outline-field">
+						{{template "rendered-note" .}}
+						<input class="outline-note" type="text" name="note"
+						       value="{{.Note}}" maxlength="10000"
+						       placeholder="note" aria-label="Note"
+						       hx-post="/notes/{{.ID}}/text"
+						       hx-trigger="input changed delay:600ms, blur changed" hx-swap="none">
+					</span>
 				</span>
 
 				<span class="outline-actions">

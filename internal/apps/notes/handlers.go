@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -311,12 +312,20 @@ func (a *App) setText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.store.SetText(r.Context(), userID, id, r.PostFormValue("title"), r.PostFormValue("note")); err != nil {
+	// Trimmed exactly the way Ops.SetText trims title before saving, so the
+	// Markdown rendered below matches what the database now holds.
+	title := strings.TrimRight(r.PostFormValue("title"), " \t")
+	note := r.PostFormValue("note")
+
+	if err := a.store.SetText(r.Context(), userID, id, title, note); err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	if web.IsHTMX(r) {
-		w.WriteHeader(http.StatusNoContent)
+		row := &outlineRow{Node: Node{ID: id}, OOB: true, RenderedTitle: Render(title), RenderedNote: Render(note)}
+		if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "text-update", row); err != nil {
+			a.deps.Errors.Internal(w, r, err)
+		}
 		return
 	}
 	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)

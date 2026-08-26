@@ -710,6 +710,45 @@ input.outline-note {
 input.outline-title { color: var(--c-text); line-height: 1.7; }
 input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
 
+/* Markdown (N4): each field is [rendered overlay, then the raw input] in
+ * that order, sharing one box. The input's own text is transparent by
+ * default — caret-color keeps the caret itself visible — and the overlay
+ * sits on top showing the rendered form. :has(input:focus), not
+ * :focus-within: a rendered link is itself focusable (see .outline-rendered
+ * a below), and :focus-within would also fire when *it* is tabbed to,
+ * hiding the very link just reached. */
+.outline-field { position: relative; }
+
+.outline-field input { color: transparent; caret-color: var(--c-text); }
+.outline-field:has(input:focus) input { color: inherit; }
+.outline-field:has(input:focus) input.outline-note { color: var(--c-text-dim); }
+.outline-field:has(input:focus) .outline-rendered { display: none; }
+
+.outline-rendered {
+	position: absolute;
+	inset: 0;
+	pointer-events: none; /* let a click on blank rendered text reach the input beneath it */
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+/* A rendered link must stay clickable even though the overlay it lives in
+ * exists mainly to let other clicks fall through to the editable input. */
+.outline-rendered a { pointer-events: auto; }
+
+.outline-title-rendered { color: var(--c-text); line-height: 1.7; }
+.outline-note-rendered { font-size: var(--fs-sm); color: var(--c-text-dim); }
+
+.outline-tag {
+	background: var(--c-bg-inset);
+	color: var(--c-text-dim);
+	padding: 0 0.35em;
+	border-radius: var(--radius);
+	text-decoration: none;
+}
+.outline-tag:hover { color: var(--c-accent); }
+
 /* The underline moves to the whole text column so the title and its note read
  * as one bullet while either is being edited. */
 input.outline-title:focus,
