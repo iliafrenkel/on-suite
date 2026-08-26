@@ -388,6 +388,16 @@ func TestCollapsedBulletHidesItsChildren(t *testing.T) {
 	}
 }
 
+// TestOutlinePageLoadsTheScript. notes.js was dead code for three commits
+// because nothing on the page loaded it: the route served it correctly the
+// whole time. Serving it and loading it are separate claims, so this asserts
+// the second one.
+func TestOutlinePageLoadsTheScript(t *testing.T) {
+	s := newServer(t)
+	doc := s.get(t, s.alice, "/notes/")
+	doc.MustHave("script[src=/notes/notes.js]")
+}
+
 // TestBulletControlsAreDisabledWhereTheOperationIsANoOp. The store treats all
 // four as no-ops rather than errors, so this is honesty rather than
 // enforcement: a button that cannot do anything should not look like it can.
