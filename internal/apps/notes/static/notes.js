@@ -178,6 +178,26 @@
 			click(moveButton(row, "down"));
 			return;
 		}
+		if (e.key === "ArrowUp" && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+			var up = verticalNeighborTitle(row, -1);
+			if (up) {
+				e.preventDefault();
+				var upPos = Math.min(el.selectionStart || 0, up.value.length);
+				up.focus();
+				up.setSelectionRange(upPos, upPos);
+			}
+			return;
+		}
+		if (e.key === "ArrowDown" && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+			var down = verticalNeighborTitle(row, 1);
+			if (down) {
+				e.preventDefault();
+				var downPos = Math.min(el.selectionStart || 0, down.value.length);
+				down.focus();
+				down.setSelectionRange(downPos, downPos);
+			}
+			return;
+		}
 		if ((e.metaKey || e.ctrlKey) && e.key === ".") {
 			e.preventDefault();
 			click(collapseButton(row));
@@ -205,6 +225,20 @@
 
 	function titleInputs() {
 		return Array.prototype.slice.call(document.querySelectorAll("#outline input.outline-title"));
+	}
+
+	// verticalNeighborTitle: the title input immediately above (dir -1) or
+	// below (dir +1) row's own title, in titleInputs()'s DOM-order list —
+	// already visual/tree order, so this is "the bullet above/below on
+	// screen" regardless of nesting depth. Plain Up/Down always targets a
+	// title, even when the keypress happened in a note field (row's own
+	// title is the anchor, not el).
+	function verticalNeighborTitle(row, dir) {
+		var inputs = titleInputs();
+		var current = row.querySelector("input.outline-title");
+		var idx = inputs.indexOf(current);
+		if (idx === -1) return null;
+		return inputs[idx + dir] || null;
 	}
 
 	function appendSiblingBelow(row) {
