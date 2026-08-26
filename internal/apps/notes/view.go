@@ -18,6 +18,13 @@ type outlineView struct {
 	// ShowCompleted is spec §11's preference, read once per request so the
 	// toolbar's toggle button can show its own opposite action.
 	ShowCompleted bool
+	// OOB marks this view as an HTMX fragment response, which is what makes
+	// the toolbar's toggle carry hx-swap-oob. The toggle lives outside
+	// #outline, so a normal swap can never reach it; without the
+	// out-of-band copy its label and value would still describe the state
+	// the page was loaded in. A full page render must leave this false —
+	// see the note above "show-completed-toggle" in outline.html.
+	OOB bool
 }
 
 // outlineRow is one bullet, and exactly the inputs of the one form that edits

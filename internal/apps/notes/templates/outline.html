@@ -23,17 +23,35 @@
      themselves can stay hx-swap="none". */}}
 {{define "text-update"}}{{template "rendered-title" .}}{{template "rendered-note" .}}{{end}}
 
+{{/* show-completed-toggle is the toolbar's button, shared between the page
+     render and every HTMX fragment response, on the same OOB discipline as
+     rendered-title above: the fragment sets .OOB, the page render does not.
+     The button sits outside #outline, so the hx-target="#outline" swap can
+     never update it — without the out-of-band copy its label and value stay
+     frozen at whatever the last full page load wrote, and a second click
+     re-sends the stale value and appears to do nothing. Every fragment
+     carries it, not just prefs': re-applying the same id'd element with
+     unchanged content is idempotent, and it keeps the two callers of
+     renderOutlineFragment identical. */}}
+{{define "show-completed-toggle"}}<button type="submit" id="show-completed-toggle" class="quiet"{{if .OOB}} hx-swap-oob="true"{{end}}
+        name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}">{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}</button>{{end}}
+
+{{/* outline-swap is the whole HTMX response for a structural op or a prefs
+     toggle: #outline's new content, plus the toolbar toggle out of band. */}}
+{{define "outline-swap"}}{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{end}}
+
 {{define "content"}}
 <div class="stack notes">
 	<div class="notes-toolbar">
-		<form method="post" action="/notes/prefs" class="notes-show-completed"
+		{{/* No class of its own: .notes-toolbar already lays this out, and
+		     the form has nothing to style that the toolbar rule does not
+		     cover. Its button is styled by .quiet, like every other
+		     button in the outline. */}}
+		<form method="post" action="/notes/prefs"
 		      hx-post="/notes/prefs" hx-target="#outline" hx-swap="innerHTML">
 			<input type="hidden" name="csrf_token" value="{{.Data.CSRFToken}}">
 			<input type="hidden" name="root" value="{{.Data.Root.ID}}">
-			<button type="submit" class="quiet"
-			        name="show_completed" value="{{if .Data.ShowCompleted}}0{{else}}1{{end}}">
-				{{if .Data.ShowCompleted}}Hide completed{{else}}Show completed{{end}}
-			</button>
+			{{template "show-completed-toggle" .Data}}
 		</form>
 	</div>
 	{{if .Data.Zoomed}}

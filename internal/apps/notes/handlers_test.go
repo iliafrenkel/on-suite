@@ -505,7 +505,7 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 	if !strings.Contains(page, `id="rendered-title-`+itoa(first)+`"`) {
 		t.Fatalf("no rendered overlay on the page for bullet %d", first)
 	}
-	if strings.Contains(page, "hx-swap-oob") {
+	if oobOverlays(t, page) {
 		t.Error("a full page load carries hx-swap-oob on the rendered overlays")
 	}
 
@@ -516,9 +516,24 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 	if !strings.Contains(frag, `id="rendered-title-`+itoa(first)+`"`) {
 		t.Fatalf("no rendered overlay in the structural fragment for bullet %d", first)
 	}
-	if strings.Contains(frag, "hx-swap-oob") {
+	if oobOverlays(t, frag) {
 		t.Error("a structural fragment carries hx-swap-oob, so htmx would strip the overlays out of it")
 	}
+}
+
+// oobOverlays reports whether any rendered overlay in body is marked for an
+// out-of-band swap. The check is per-overlay rather than a substring search
+// for "hx-swap-oob" anywhere, because a fragment does legitimately carry one
+// out-of-band element: the show-completed toggle, which lives outside
+// #outline and could not be updated any other way.
+func oobOverlays(t *testing.T, body string) bool {
+	t.Helper()
+	for _, n := range htmlassert.Parse(t, body).QueryAll(".outline-rendered") {
+		if _, ok := htmlassert.Attr(n, "hx-swap-oob"); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // TestRenderedOverlayEscapesBulletText: the overlay is real HTML the browser
@@ -1787,6 +1802,11 @@ func TestPrefsTogglesTheCookie(t *testing.T) {
 	if got == nil || got.Value != "1" {
 		t.Fatalf("show-completed cookie = %+v, want value 1", got)
 	}
+	// A preference, not a session fact: it has to survive the browser
+	// closing, which a cookie with no MaxAge does not.
+	if got.MaxAge <= 0 {
+		t.Errorf("show-completed cookie MaxAge = %d, want a durable positive value", got.MaxAge)
+	}
 }
 
 // TestPrefsRespondsWithTheFreshValueOverHTMX guards the staleness trap: the
@@ -1809,6 +1829,78 @@ func TestPrefsRespondsWithTheFreshValueOverHTMX(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "child") {
 		t.Error("toggling show-completed on did not reveal the child in the same response")
+	}
+}
+
+// TestPrefsFragmentRefreshesTheToggleOutOfBand guards the other half of the
+// staleness trap. The toggle button sits outside #outline, so the response's
+// normal swap cannot reach it; without an out-of-band copy the label and
+// value would still say "Show completed" / 1 after the toggle had already
+// turned completed bullets on, and a second click would re-send 1 and look
+// like it did nothing.
+func TestPrefsFragmentRefreshesTheToggleOutOfBand(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.postHX(t, s.alice, "/notes/prefs", url.Values{
+		"root": {"0"}, "show_completed": {"1"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	btn := doc.MustHave("#show-completed-toggle")
+	if got, _ := htmlassert.Attr(btn, "hx-swap-oob"); got != "true" {
+		t.Errorf("toggle hx-swap-oob = %q, want \"true\"", got)
+	}
+	if got, _ := htmlassert.Attr(btn, "value"); got != "0" {
+		t.Errorf("toggle value = %q, want \"0\" — it still offers to turn completed back on", got)
+	}
+	if got := strings.TrimSpace(htmlassert.Text(btn)); got != "Hide completed" {
+		t.Errorf("toggle label = %q, want \"Hide completed\"", got)
+	}
+
+	// And back off again, so the block is not simply hardcoded one way.
+	rec = s.postHX(t, s.alice, "/notes/prefs", url.Values{
+		"root": {"0"}, "show_completed": {"0"},
+	})
+	btn = htmlassert.Parse(t, rec.Body.String()).MustHave("#show-completed-toggle")
+	if got, _ := htmlassert.Attr(btn, "value"); got != "1" {
+		t.Errorf("toggle value after turning off = %q, want \"1\"", got)
+	}
+	if got := strings.TrimSpace(htmlassert.Text(btn)); got != "Show completed" {
+		t.Errorf("toggle label after turning off = %q, want \"Show completed\"", got)
+	}
+}
+
+// TestOutlinePageToggleIsNotOutOfBand is the counterpart discipline the N4
+// rendered-title block already follows: a full page render must not carry
+// hx-swap-oob, or htmx would lift the toggle out of a page it never swaps.
+func TestOutlinePageToggleIsNotOutOfBand(t *testing.T) {
+	s := newServer(t)
+	btn := s.get(t, s.alice, "/notes/").MustHave("#show-completed-toggle")
+	if _, ok := htmlassert.Attr(btn, "hx-swap-oob"); ok {
+		t.Error("the page render's toggle carries hx-swap-oob")
+	}
+}
+
+// TestMutationFragmentCarriesTheToggleUnchanged: a structural op does not
+// touch the preference, so its out-of-band toggle must repeat the state the
+// request came in with rather than flip it.
+func TestMutationFragmentCarriesTheToggleUnchanged(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	req := httptest.NewRequest("POST", "/notes/"+itoa(id)+"/indent",
+		strings.NewReader(url.Values{"root": {"0"}, web.CSRFFormField: {s.csrfToken(t, s.alice)}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
+	rec := s.do(t, s.alice, req)
+
+	btn := htmlassert.Parse(t, rec.Body.String()).MustHave("#show-completed-toggle")
+	if got, _ := htmlassert.Attr(btn, "value"); got != "0" {
+		t.Errorf("toggle value = %q, want \"0\" — show-completed was on for this request", got)
 	}
 }
 

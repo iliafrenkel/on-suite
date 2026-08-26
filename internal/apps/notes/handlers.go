@@ -125,6 +125,10 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 // heading stay exactly as the browser already has them, and there is no
 // need to look the root node up — Root.ID is all outline-body reads, and
 // the caller already has it as a plain int64.
+//
+// The response also carries the toolbar's show-completed toggle out of band:
+// that button lives outside #outline, so the swap cannot reach it, and after
+// a prefs toggle its label and value would otherwise stay stale.
 func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64, showCompleted bool) {
 	flat, err := a.store.Outline(r.Context(), userID, rootID)
 	if err != nil {
@@ -133,11 +137,13 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 	}
 	flat = hideDone(flat, showCompleted)
 	view := outlineView{
-		CSRFToken: web.CSRFToken(r.Context()),
-		Root:      Node{ID: rootID},
+		CSRFToken:     web.CSRFToken(r.Context()),
+		Root:          Node{ID: rootID},
+		ShowCompleted: showCompleted,
+		OOB:           true,
 	}
 	view.Rows = nest(flat, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
-	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "outline-body", view); err != nil {
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "outline-swap", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
 }
@@ -455,6 +461,10 @@ func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
 		Path:     "/notes/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		// A preference, not a session: without MaxAge this would reset
+		// every time the browser closes. A year is long enough to feel
+		// permanent and short enough that an abandoned browser forgets.
+		MaxAge: showCompletedCookieMaxAge,
 	})
 
 	if web.IsHTMX(r) {
