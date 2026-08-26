@@ -1589,6 +1589,99 @@ func TestAFailedStructuralOperationUnderHTMXIsAFragment(t *testing.T) {
 	}
 }
 
+func TestDoneTogglesTheBullet(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+		"root": {"0"}, "done": {"1"},
+	}, "/notes/")
+
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.Done {
+		t.Fatal("the bullet is not done")
+	}
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+		"root": {"0"}, "done": {"0"},
+	}, "/notes/")
+
+	n, err = s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Done {
+		t.Fatal("the bullet is still done")
+	}
+}
+
+func TestDoneRejectsAnUnknownValue(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	for _, v := range []string{"", "true", "yes", "2"} {
+		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+			"root": {"0"}, "done": {v},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("done=%q gave %d, want 400", v, rec.Code)
+		}
+	}
+}
+
+func TestDoneOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+		"root": {"0"}, "done": {"1"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+// TestDoneBulletRendersStruckThrough covers the row-level CSS hook rather
+// than CSS itself, which no Go test can see: the row carries a class the
+// stylesheet keys off, and the checkbox reflects the current state.
+func TestDoneBulletRendersStruckThrough(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+	if err := s.store.SetDone(context.Background(), s.alice.user.ID, id, true); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/")
+	row := doc.MustHave(".outline-row-done")
+	if got, _ := htmlassert.Attr(row, "data-id"); got != itoa(id) {
+		t.Errorf("the done row is %q, want %d", got, id)
+	}
+	btn := doc.MustHave(`button[formaction=/notes/` + itoa(id) + `/done]`)
+	if got, _ := htmlassert.Attr(btn, "value"); got != "0" {
+		t.Errorf("a done bullet's toggle sends value=%q, want 0 (mark not done)", got)
+	}
+}
+
+func TestEveryMutationRequiresSignInIncludesDoneAndDue(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	for _, path := range []string{
+		"/notes/" + itoa(id) + "/done",
+		"/notes/" + itoa(id) + "/due",
+	} {
+		req := httptest.NewRequest("POST", path, strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := s.do(t, nil, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("POST %s anonymous and tokenless = %d, want 403 from the CSRF check", path, rec.Code)
+		}
+	}
+}
+
 func TestScriptIsServedWithAJavaScriptContentType(t *testing.T) {
 	s := newServer(t)
 	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/notes.js", nil))

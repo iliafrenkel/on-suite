@@ -403,6 +403,22 @@ func (a *App) collapse(w http.ResponseWriter, r *http.Request) {
 // longer resolves, and answer 404. The outline never renders its own root as a
 // row, so that cannot be reached from the UI; a hand-made request that does it
 // gets an honest "there is nothing at that address" rather than a 500.
+// done marks a bullet done or not. The field names the state to arrive at,
+// exactly like collapsed's, so a double submit or a stale page cannot flip
+// it back.
+func (a *App) done(w http.ResponseWriter, r *http.Request) {
+	raw := r.PostFormValue("done")
+	if raw != "0" && raw != "1" {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	done := raw == "1"
+
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		return o.SetDone(ctx, m.UserID, m.NodeID, done)
+	})
+}
+
 func (a *App) remove(w http.ResponseWriter, r *http.Request) {
 	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
 		if err := o.Delete(ctx, m.UserID, m.NodeID); err != nil {

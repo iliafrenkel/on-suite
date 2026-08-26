@@ -677,6 +677,27 @@ button.outline-chevron {
 	background: none;
 }
 
+.outline-done {
+	flex: none;
+	width: 1.1rem;
+	line-height: 1.7;
+	text-align: center;
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--c-text-faint);
+}
+.outline-done:hover { color: var(--c-text); }
+
+/* A done bullet is struck through everywhere its text appears — the
+ * rendered overlay and the raw input both, since text-decoration on an
+ * ancestor is not reliably painted through a form control in every
+ * browser, unlike plain inline text. */
+.outline-row-done .outline-title-rendered,
+.outline-row-done .outline-note-rendered,
+.outline-row-done input.outline-title,
+.outline-row-done input.outline-note { text-decoration: line-through; }
+
 .outline-dot { text-decoration: none; }
 .outline-dot:hover { color: var(--c-accent); }
 

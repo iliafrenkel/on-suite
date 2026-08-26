@@ -82,7 +82,7 @@ func (a *App) script(w http.ResponseWriter, r *http.Request) {
 //	GET  /notes/notes.js     a literal segment, so it outranks {id} even
 //	                         though "notes.js" is not a valid id
 //	POST /notes/new          a literal segment, and literals outrank {id}
-//	POST /notes/{id}/text    and the seven other mutations: two segments
+//	POST /notes/{id}/text    and the eight other mutations: two segments
 //	                         deeper than the zoom URL, so no pattern in this
 //	                         list is a prefix of another
 func (a *App) Mount(r *app.Router, deps app.Deps) {
@@ -99,4 +99,5 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /{id}/move", a.move)
 	r.HandleFunc("POST /{id}/collapse", a.collapse)
 	r.HandleFunc("POST /{id}/delete", a.remove)
+	r.HandleFunc("POST /{id}/done", a.done)
 }

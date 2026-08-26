@@ -66,11 +66,19 @@
 <ul class="outline-list">
 	{{range .}}
 	<li class="outline-item">
-		<div class="outline-row" data-id="{{.ID}}">
+		<div class="outline-row{{if .Done}} outline-row-done{{end}}" data-id="{{.ID}}">
 			<form method="post" action="/notes/{{.ID}}/text" class="outline-main">
 				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 				<input type="hidden" name="root" value="{{.RootID}}">
 				<input type="hidden" name="focus_id" value="{{.ID}}">
+
+				<button type="submit" class="outline-done quiet"
+				        formaction="/notes/{{.ID}}/done"
+				        hx-post="/notes/{{.ID}}/done" hx-target="#outline" hx-swap="innerHTML"
+				        name="done" value="{{if .Done}}0{{else}}1{{end}}"
+				        aria-pressed="{{if .Done}}true{{else}}false{{end}}"
+				        aria-label="{{if .Done}}Mark not done{{else}}Mark done{{end}}"
+				        >{{if .Done}}&#9745;{{else}}&#9744;{{end}}</button>
 
 				{{if .HasChildren}}
 				<button type="submit" class="outline-chevron quiet"
