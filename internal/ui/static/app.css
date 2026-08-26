@@ -721,6 +721,7 @@ input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
 
 .outline-field input { color: transparent; caret-color: var(--c-text); }
 .outline-field:has(input:focus) input { color: inherit; }
+.outline-field:has(input:focus) input.outline-note { color: var(--c-text-dim); }
 .outline-field:has(input:focus) .outline-rendered { display: none; }
 
 .outline-rendered {
