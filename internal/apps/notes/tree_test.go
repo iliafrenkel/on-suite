@@ -254,6 +254,105 @@ func TestSetCollapsedRejectsAnotherUsersNode(t *testing.T) {
 	}
 }
 
+func TestSetDoneRoundTrips(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "task")
+
+	if err := f.store.SetDone(ctx, f.alice.ID, n.ID, true); err != nil {
+		t.Fatalf("SetDone(true): %v", err)
+	}
+	got, err := f.store.ByID(ctx, f.alice.ID, n.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if !got.Done {
+		t.Fatal("Done = false after SetDone(true)")
+	}
+
+	if err := f.store.SetDone(ctx, f.alice.ID, n.ID, false); err != nil {
+		t.Fatalf("SetDone(false): %v", err)
+	}
+	if got, _ = f.store.ByID(ctx, f.alice.ID, n.ID); got.Done {
+		t.Fatal("Done = true after SetDone(false)")
+	}
+}
+
+// TestSetDoneDoesNotTouchChildren is spec §11: completing a parent does not
+// complete its children — that is a display decision (hideDone, Task 3),
+// never a change to the child's own row.
+func TestSetDoneDoesNotTouchChildren(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	child := f.mk(t, parent.ID, "child")
+
+	if err := f.store.SetDone(ctx, f.alice.ID, parent.ID, true); err != nil {
+		t.Fatalf("SetDone: %v", err)
+	}
+	got, err := f.store.ByID(ctx, f.alice.ID, child.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if got.Done {
+		t.Fatal("the child was marked done by its parent's SetDone")
+	}
+}
+
+func TestSetDoneRejectsAnotherUsersNode(t *testing.T) {
+	f := newFixture(t)
+	n := f.mk(t, notes.RootID, "alice's")
+
+	err := f.store.SetDone(context.Background(), f.bob.ID, n.ID, true)
+	if !errors.Is(err, notes.ErrNotFound) {
+		t.Fatalf("SetDone on another user's node = %v; want ErrNotFound", err)
+	}
+}
+
+func TestSetDuePersistsAndClears(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "task")
+
+	if err := f.store.SetDue(ctx, f.alice.ID, n.ID, "2026-03-05"); err != nil {
+		t.Fatalf("SetDue: %v", err)
+	}
+	got, err := f.store.ByID(ctx, f.alice.ID, n.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if got.DueOn != "2026-03-05" {
+		t.Fatalf("DueOn = %q, want 2026-03-05", got.DueOn)
+	}
+
+	if err := f.store.SetDue(ctx, f.alice.ID, n.ID, ""); err != nil {
+		t.Fatalf("SetDue(clear): %v", err)
+	}
+	if got, _ = f.store.ByID(ctx, f.alice.ID, n.ID); got.DueOn != "" {
+		t.Fatalf("DueOn = %q after clearing, want empty", got.DueOn)
+	}
+}
+
+func TestSetDueRejectsBadFormat(t *testing.T) {
+	f := newFixture(t)
+	n := f.mk(t, notes.RootID, "task")
+
+	err := f.store.SetDue(context.Background(), f.alice.ID, n.ID, "not-a-date")
+	if !errors.Is(err, notes.ErrInvalid) {
+		t.Fatalf("SetDue(bad format) = %v; want ErrInvalid", err)
+	}
+}
+
+func TestSetDueRejectsAnotherUsersNode(t *testing.T) {
+	f := newFixture(t)
+	n := f.mk(t, notes.RootID, "alice's")
+
+	err := f.store.SetDue(context.Background(), f.bob.ID, n.ID, "2026-03-05")
+	if !errors.Is(err, notes.ErrNotFound) {
+		t.Fatalf("SetDue on another user's node = %v; want ErrNotFound", err)
+	}
+}
+
 func TestSetTextReplacesBothFields(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

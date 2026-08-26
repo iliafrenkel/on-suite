@@ -99,6 +99,13 @@ type Node struct {
 	Title     string
 	Note      string
 	Collapsed bool
+	// Done and DueOn are done_at/due_on's Go projections — spec §11. Done
+	// hides the underlying timestamp: nothing in this app ever needs to
+	// show *when* a bullet was completed, only whether it is. DueOn is the
+	// raw 'YYYY-MM-DD' string, or "" for none — a due date is a calendar
+	// date, not an instant, so there is no time.Time here either.
+	Done      bool
+	DueOn     string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
@@ -135,6 +142,22 @@ func Validate(title, note string) error {
 	}
 	if utf8.RuneCountInString(note) > MaxNoteRunes {
 		return fmt.Errorf("%w: the note is longer than %d characters", ErrInvalid, MaxNoteRunes)
+	}
+	return nil
+}
+
+// ValidateDue bounds a due date's format — spec §11: due_on is a date, not
+// an instant. "" clears it. The round trip through Format catches what
+// Parse alone would not: time.Parse silently normalises an impossible date
+// like 2026-02-30 into March 2nd rather than rejecting it, and a normalised
+// date does not equal the string it was parsed from.
+func ValidateDue(due string) error {
+	if due == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", due)
+	if err != nil || t.Format("2006-01-02") != due {
+		return fmt.Errorf("%w: due date must be YYYY-MM-DD", ErrInvalid)
 	}
 	return nil
 }
