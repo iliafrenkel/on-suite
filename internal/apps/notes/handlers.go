@@ -470,6 +470,7 @@ func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
 		Value:    raw,
 		Path:     "/notes/",
 		HttpOnly: true,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 		// A preference, not a session: without MaxAge this would reset
 		// every time the browser closes. A year is long enough to feel
