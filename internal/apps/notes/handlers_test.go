@@ -1946,3 +1946,58 @@ func TestScriptIsServedWithAJavaScriptContentType(t *testing.T) {
 		t.Error("the served script does not look like notes.js")
 	}
 }
+
+func TestDueListGroupsAcrossTheWholeTree(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "Projects")
+	child := s.seed(t, s.alice, parent, "AtBudget")
+	if err := s.store.SetDue(ctx, s.alice.user.ID, child, "2000-01-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/due")
+	doc.MustHave(".outline-due-overdue")
+	if !strings.Contains(doc.Text(), "Projects") {
+		t.Error("the due bullet's ancestor breadcrumb is missing")
+	}
+	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
+	if got := htmlassert.Text(link); got != "AtBudget" {
+		t.Errorf("due list link text = %q, want AtBudget", got)
+	}
+}
+
+func TestDueListRendersAnotherUsersNodesNowhere(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	bobs := s.seed(t, s.bob, notes.RootID, "bob's task")
+	if err := s.store.SetDue(ctx, s.bob.user.ID, bobs, "2000-01-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(s.get(t, s.alice, "/notes/due").Text(), "bob's task") {
+		t.Error("another user's due bullet is on the page")
+	}
+}
+
+func TestDueListRequiresSignIn(t *testing.T) {
+	s := newServer(t)
+	rec := s.do(t, nil, httptest.NewRequest("GET", "/notes/due", nil))
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("GET /notes/due anonymous = %d, want a 303 to the login page", rec.Code)
+	}
+}
+
+func TestDueListWithNothingDue(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "no date on this one")
+
+	if got := s.get(t, s.alice, "/notes/due").Text(); !strings.Contains(got, "Nothing is due") {
+		t.Errorf("empty due list text = %q, want the empty-state line", got)
+	}
+}
+
+func TestTheOutlineLinksToTheDueList(t *testing.T) {
+	s := newServer(t)
+	s.get(t, s.alice, "/notes/").MustHave(`.notes-toolbar a[href=/notes/due]`)
+}

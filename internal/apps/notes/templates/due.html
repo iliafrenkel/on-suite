@@ -1,0 +1,28 @@
+{{define "content"}}
+<div class="stack notes">
+	<h1>Due</h1>
+	{{range .Data.Sections}}
+	{{if .Rows}}
+	<section class="notes-due-group">
+		<h2>{{.Title}}</h2>
+		<ul class="notes-due-list">
+			{{range .Rows}}
+			<li class="notes-due-item">
+				{{if .Crumbs}}
+				<span class="notes-due-crumbs">
+					{{range .Crumbs}}{{.DisplayTitle}} / {{end}}
+				</span>
+				{{end}}
+				<a href="/notes/{{.ID}}" class="notes-due-title">{{.DisplayTitle}}</a>
+				<span class="outline-due-chip{{if .Overdue}} outline-due-overdue{{end}}">{{.DueOn}}</span>
+			</li>
+			{{end}}
+		</ul>
+	</section>
+	{{end}}
+	{{end}}
+	{{if not (or .Data.Overdue .Data.Today .Data.ThisWeek .Data.Later)}}
+	<p class="dim">Nothing is due.</p>
+	{{end}}
+</div>
+{{end}}

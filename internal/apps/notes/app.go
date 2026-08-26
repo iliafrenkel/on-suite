@@ -83,6 +83,7 @@ func (a *App) script(w http.ResponseWriter, r *http.Request) {
 //	                         though "notes.js" is not a valid id
 //	POST /notes/prefs        likewise a literal segment; N5's show-completed
 //	                         toggle
+//	GET  /notes/due          likewise a literal segment; N5's due-date list
 //	POST /notes/new          a literal segment, and literals outrank {id}
 //	POST /notes/{id}/text    and the eight other mutations: two segments
 //	                         deeper than the zoom URL, so no pattern in this
@@ -94,6 +95,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /{$}", a.outline)
 	r.HandleFunc("GET /{id}", a.outlineZoomed)
 	r.HandleFunc("GET /notes.js", a.script)
+	r.HandleFunc("GET /due", a.dueList)
 	r.HandleFunc("POST /new", a.create)
 	r.HandleFunc("POST /prefs", a.prefs)
 	r.HandleFunc("POST /{id}/text", a.setText)

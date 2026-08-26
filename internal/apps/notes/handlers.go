@@ -482,6 +482,34 @@ func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
 }
 
+// dueList renders every one of the user's due bullets, grouped by urgency —
+// spec §11.
+func (a *App) dueList(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	nodes, err := a.store.Due(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	rows := make([]DueRow, len(nodes))
+	for i, n := range nodes {
+		crumbs, err := a.store.Ancestors(r.Context(), userID, n.ID)
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
+		rows[i] = DueRow{Node: n, Crumbs: crumbs}
+	}
+
+	page := a.deps.Page(r, "Due")
+	page.Data = GroupByDue(rows, time.Now())
+	a.render(w, r, http.StatusOK, "notes/due", page)
+}
+
 func (a *App) remove(w http.ResponseWriter, r *http.Request) {
 	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
 		if err := o.Delete(ctx, m.UserID, m.NodeID); err != nil {

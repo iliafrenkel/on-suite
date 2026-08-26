@@ -720,8 +720,30 @@ button.outline-chevron {
 .notes-toolbar {
 	display: flex;
 	justify-content: flex-end;
+	/* The toolbar holds more than one control from N5 on — the Due link and
+	 * the show-completed toggle — and they must not touch. */
+	gap: var(--s-3);
 	font-size: var(--fs-sm);
 }
+
+.notes-due-group + .notes-due-group { margin-top: var(--s-4); }
+.notes-due-group h2 {
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.notes-due-list { margin: 0; padding: 0; list-style: none; }
+.notes-due-item {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-2);
+	padding: var(--s-1) 0;
+	border-bottom: 1px solid var(--c-border);
+}
+.notes-due-crumbs { font-size: var(--fs-sm); color: var(--c-text-faint); }
+.notes-due-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
+.notes-due-title:hover { color: var(--c-accent); }
 
 .outline-dot { text-decoration: none; }
 .outline-dot:hover { color: var(--c-accent); }
