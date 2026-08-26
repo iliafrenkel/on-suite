@@ -115,6 +115,28 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 	a.render(w, r, http.StatusOK, "notes/outline", page)
 }
 
+// renderOutlineFragment re-renders #outline's own content for an HTMX swap.
+// It shares renderOutline's query but not its shell: a structural response
+// never changes which node the page is zoomed to, so the breadcrumb and
+// heading stay exactly as the browser already has them, and there is no
+// need to look the root node up — Root.ID is all outline-body reads, and
+// the caller already has it as a plain int64.
+func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64) {
+	flat, err := a.store.Outline(r.Context(), userID, rootID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	view := outlineView{
+		CSRFToken: web.CSRFToken(r.Context()),
+		Root:      Node{ID: rootID},
+	}
+	view.Rows = nest(flat, rootID, view.CSRFToken)
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "outline-body", view); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
+}
+
 // outlinePath is the zoom URL for a root, and the only place in this package
 // where a path is built from an id. It is always "/notes/" followed by
 // decimal digits, so a redirect through it can never leave the site.
@@ -207,6 +229,10 @@ func (a *App) mutate(w http.ResponseWriter, r *http.Request, op func(context.Con
 		return
 	}
 
+	if web.IsHTMX(r) {
+		a.renderOutlineFragment(w, r, userID, root)
+		return
+	}
 	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
 }
 
@@ -287,6 +313,10 @@ func (a *App) setText(w http.ResponseWriter, r *http.Request) {
 
 	if err := a.store.SetText(r.Context(), userID, id, r.PostFormValue("title"), r.PostFormValue("note")); err != nil {
 		a.fail(w, r, err)
+		return
+	}
+	if web.IsHTMX(r) {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)

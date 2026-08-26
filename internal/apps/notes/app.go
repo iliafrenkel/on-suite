@@ -3,6 +3,7 @@ package notes
 import (
 	"embed"
 	"io/fs"
+	"net/http"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
@@ -18,6 +19,9 @@ var _ app.App = (*App)(nil)
 
 //go:embed templates/*.html
 var templateFiles embed.FS
+
+//go:embed static/notes.js
+var scriptFiles embed.FS
 
 type App struct {
 	store *Store
@@ -50,6 +54,16 @@ func (a *App) Templates() fs.FS {
 	return sub
 }
 
+// script serves notes.js. It sits behind the same sign-in requirement as
+// every other route in this app: there is no page that loads it without
+// already being on an authenticated outline, and the design reserves the
+// app's one public route for N9's share link.
+func (a *App) script(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeFileFS(w, r, scriptFiles, "static/notes.js")
+}
+
 // Mount wires the app up. Everything here goes through Handle, so every route
 // requires a signed-in user. ON Notes has exactly one public route in the
 // finished design — the share page — and it arrives in N9; until then a
@@ -65,6 +79,8 @@ func (a *App) Templates() fs.FS {
 //	GET  /notes/{id}         the outline zoomed to one node. {id} never
 //	                         matches an empty segment, which is what keeps it
 //	                         and {$} disjoint
+//	GET  /notes/notes.js     a literal segment, so it outranks {id} even
+//	                         though "notes.js" is not a valid id
 //	POST /notes/new          a literal segment, and literals outrank {id}
 //	POST /notes/{id}/text    and the seven other mutations: two segments
 //	                         deeper than the zoom URL, so no pattern in this
@@ -75,6 +91,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 
 	r.HandleFunc("GET /{$}", a.outline)
 	r.HandleFunc("GET /{id}", a.outlineZoomed)
+	r.HandleFunc("GET /notes.js", a.script)
 	r.HandleFunc("POST /new", a.create)
 	r.HandleFunc("POST /{id}/text", a.setText)
 	r.HandleFunc("POST /{id}/indent", a.indent)
