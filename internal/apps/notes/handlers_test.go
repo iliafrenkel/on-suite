@@ -2017,3 +2017,74 @@ func TestTheOutlineLinksToTheDueList(t *testing.T) {
 	s := newServer(t)
 	s.get(t, s.alice, "/notes/").MustHave(`.notes-toolbar a[href=/notes/due]`)
 }
+
+func TestSearchFindsABulletAndShowsItsBreadcrumb(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.alice, notes.RootID, "Projects")
+	// A word FTS5's default unicode61 tokenizer treats as its own token, not
+	// "AtBudget report" (the plan's literal example): that camelCase run
+	// tokenizes as one "atbudget" token, which "budget" alone never matches.
+	// See task-2-report.md for the full account of this deviation.
+	child := s.seed(t, s.alice, parent, "Budget report")
+
+	doc := s.get(t, s.alice, "/notes/search?q=budget")
+	if !strings.Contains(doc.Text(), "Projects") {
+		t.Error("the hit's ancestor breadcrumb is missing")
+	}
+	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
+	if got := htmlassert.Text(link); got != "Budget report" {
+		t.Errorf("search hit link text = %q", got)
+	}
+}
+
+func TestSearchWithNoQueryShowsNoResults(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "anything")
+
+	doc := s.get(t, s.alice, "/notes/search")
+	doc.MustNotHave(".notes-search-item")
+}
+
+func TestSearchWithNoMatchesSaysSo(t *testing.T) {
+	s := newServer(t)
+	doc := s.get(t, s.alice, "/notes/search?q=nonexistent")
+	if !strings.Contains(doc.Text(), "No matches") {
+		t.Error("an empty result set shows no feedback")
+	}
+}
+
+func TestSearchDoesNotRenderAnotherUsersNodes(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.bob, notes.RootID, "bob's secret plan")
+
+	doc := s.get(t, s.alice, "/notes/search?q=secret")
+	doc.MustNotHave(".notes-search-item")
+}
+
+func TestSearchRequiresSignIn(t *testing.T) {
+	s := newServer(t)
+	rec := s.do(t, nil, httptest.NewRequest("GET", "/notes/search", nil))
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("GET /notes/search anonymous = %d, want a 303 to the login page", rec.Code)
+	}
+}
+
+// TestTagChipNowResolves closes N4's own follow-up: the #tag chip has
+// always linked to /notes/search?q=..., 404ing until this chunk existed to
+// answer it.
+func TestTagChipNowResolves(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "check #urgent today")
+
+	doc := s.get(t, s.alice, "/notes/")
+	chip := doc.MustHave(".outline-tag")
+	href, _ := htmlassert.Attr(chip, "href")
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", href, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s = %d, want 200", href, rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "check") {
+		t.Error("following the tag chip does not find the bullet that produced it")
+	}
+}

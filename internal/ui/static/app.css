@@ -745,6 +745,29 @@ button.outline-chevron {
 .notes-due-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
 .notes-due-title:hover { color: var(--c-accent); }
 
+.notes-search input[type="search"] {
+	font: inherit;
+	font-size: var(--fs-sm);
+	color: var(--c-text);
+	background: var(--c-bg-inset);
+	border: none;
+	border-radius: var(--radius);
+	padding: var(--s-1) var(--s-2);
+	width: 12rem;
+}
+
+.notes-search-list { margin: 0; padding: 0; list-style: none; }
+.notes-search-item {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-2);
+	padding: var(--s-1) 0;
+	border-bottom: 1px solid var(--c-border);
+}
+.notes-search-crumbs { font-size: var(--fs-sm); color: var(--c-text-faint); }
+.notes-search-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
+.notes-search-title:hover { color: var(--c-accent); }
+
 .outline-dot { text-decoration: none; }
 .outline-dot:hover { color: var(--c-accent); }
 
