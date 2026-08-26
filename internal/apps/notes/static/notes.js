@@ -112,7 +112,18 @@
 	// <body> unless this puts it back. afterID (rather than id) is how
 	// splitAndCreate asks for "the row after this one": the new row's id is
 	// assigned by the server and unknown until the response arrives.
-	function restoreFocus() {
+	function restoreFocus(e) {
+		// Only a swap of #outline destroys rows, and only those need the
+		// caret put back. N4 gave setText a real response body (the OOB
+		// rendered spans, targeting the input itself — see outline.html's
+		// text-update), where before it answered 204 and swapped nothing:
+		// every autosave now fires this event too. Without this guard an
+		// autosave landing just before a structural response would consume
+		// the pendingFocus that response is about to need, and the caret
+		// would be lost to <body> when #outline is finally replaced. Same
+		// positive identification as augmentRequest's: the request that
+		// replaces #outline, not "anything that is not a text save".
+		if (!e || !e.detail || !e.detail.target || e.detail.target.id !== "outline") return;
 		if (!pendingFocus) return;
 		var input;
 
@@ -140,10 +151,12 @@
 		pendingFocus = null;
 	}
 
-	// N4 (Markdown) needs no code here: setText's response carries its own
-	// hx-swap-oob elements, and htmx applies those on its own the moment a
-	// response contains one, regardless of the triggering element's own
-	// hx-swap. There is nothing for a named function to do.
+	// N4 (Markdown) adds no listener here: setText's response carries its
+	// own hx-swap-oob elements, and htmx applies those on its own the moment
+	// a response contains one, regardless of the triggering element's own
+	// hx-swap. What it did change is that those responses now swap at all,
+	// so the htmx:afterSwap below fires for autosaves too — restoreFocus
+	// guards on the swap target for exactly that reason.
 	function initFocusSync() {
 		if (!document.getElementById("outline")) return;
 		trackFocus();
