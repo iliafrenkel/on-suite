@@ -15,6 +15,9 @@ type outlineView struct {
 	// empty bullet instead — spec §6.
 	Rows      []*outlineRow
 	CSRFToken string
+	// ShowCompleted is spec §11's preference, read once per request so the
+	// toolbar's toggle button can show its own opposite action.
+	ShowCompleted bool
 }
 
 // outlineRow is one bullet, and exactly the inputs of the one form that edits
@@ -111,4 +114,30 @@ func markLast(rows []*outlineRow) {
 		r.Last = i == len(rows)-1
 		markLast(r.Children)
 	}
+}
+
+// hideDone drops a done node and everything under it, unless showCompleted
+// is true — spec §11. Completing a parent does not complete its children
+// (Task 1), so a child's own Done never matters once an ancestor's already
+// hides it: this walks flat in the pre-order Outline guarantees, skipping
+// everything deeper than the most recently hidden node until depth returns
+// to that node's own level or shallower.
+func hideDone(flat []Node, showCompleted bool) []Node {
+	if showCompleted {
+		return flat
+	}
+	var out []Node
+	skipBelow := -1
+	for _, n := range flat {
+		if skipBelow >= 0 && n.Depth > skipBelow {
+			continue
+		}
+		skipBelow = -1
+		if n.Done {
+			skipBelow = n.Depth
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
 }

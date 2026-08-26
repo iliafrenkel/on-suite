@@ -176,3 +176,49 @@ func TestNestHandlesTheDeepestPermittedOutline(t *testing.T) {
 		t.Errorf("the tree is %d deep, want %d", depth, MaxDepth+1)
 	}
 }
+
+func TestHideDoneHidesADoneNodeAndItsSubtree(t *testing.T) {
+	flat := []Node{
+		{ID: 1, Title: "done", Done: true, Depth: 0},
+		{ID: 2, Title: "child of done", Depth: 1},
+		{ID: 3, Title: "grandchild", Depth: 2},
+		{ID: 4, Title: "sibling", Depth: 0},
+	}
+	got := hideDone(flat, false)
+	if len(got) != 1 || got[0].ID != 4 {
+		t.Fatalf("hideDone(false) = %+v, want only the sibling", got)
+	}
+}
+
+func TestHideDoneShowsEverythingWhenOn(t *testing.T) {
+	flat := []Node{
+		{ID: 1, Title: "done", Done: true, Depth: 0},
+		{ID: 2, Title: "child of done", Depth: 1},
+	}
+	got := hideDone(flat, true)
+	if len(got) != 2 {
+		t.Fatalf("hideDone(true) = %+v, want everything", got)
+	}
+}
+
+// TestHideDoneHandlesConsecutiveDoneSubtrees: two separate done subtrees
+// back to back must not let one's skip swallow the other's sibling.
+func TestHideDoneHandlesConsecutiveDoneSubtrees(t *testing.T) {
+	flat := []Node{
+		{ID: 1, Title: "done A", Done: true, Depth: 0},
+		{ID: 2, Title: "child of A", Depth: 1},
+		{ID: 3, Title: "between", Depth: 0},
+		{ID: 4, Title: "done B", Done: true, Depth: 0},
+		{ID: 5, Title: "child of B", Depth: 1},
+		{ID: 6, Title: "after", Depth: 0},
+	}
+	got := hideDone(flat, false)
+	var ids []int64
+	for _, n := range got {
+		ids = append(ids, n.ID)
+	}
+	want := []int64{3, 6}
+	if len(ids) != len(want) || ids[0] != want[0] || ids[1] != want[1] {
+		t.Fatalf("hideDone left %v, want %v", ids, want)
+	}
+}

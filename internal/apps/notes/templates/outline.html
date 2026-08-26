@@ -25,6 +25,17 @@
 
 {{define "content"}}
 <div class="stack notes">
+	<div class="notes-toolbar">
+		<form method="post" action="/notes/prefs" class="notes-show-completed"
+		      hx-post="/notes/prefs" hx-target="#outline" hx-swap="innerHTML">
+			<input type="hidden" name="csrf_token" value="{{.Data.CSRFToken}}">
+			<input type="hidden" name="root" value="{{.Data.Root.ID}}">
+			<button type="submit" class="quiet"
+			        name="show_completed" value="{{if .Data.ShowCompleted}}0{{else}}1{{end}}">
+				{{if .Data.ShowCompleted}}Hide completed{{else}}Show completed{{end}}
+			</button>
+		</form>
+	</div>
 	{{if .Data.Zoomed}}
 	<nav class="outline-crumbs" aria-label="Outline breadcrumb">
 		<a href="/notes/">All notes</a>

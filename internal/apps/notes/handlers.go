@@ -85,7 +85,8 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		return
 	}
 
-	view := outlineView{CSRFToken: web.CSRFToken(r.Context())}
+	showCompleted := showCompletedFrom(r)
+	view := outlineView{CSRFToken: web.CSRFToken(r.Context()), ShowCompleted: showCompleted}
 
 	// An empty title leaves the shell's breadcrumb reading "Home / ON Notes",
 	// which is what the top level is. A zoomed outline names its root.
@@ -110,6 +111,7 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
+	flat = hideDone(flat, showCompleted)
 	view.Rows = nest(flat, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
 
 	page := a.deps.Page(r, title)
@@ -123,12 +125,13 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 // heading stay exactly as the browser already has them, and there is no
 // need to look the root node up — Root.ID is all outline-body reads, and
 // the caller already has it as a plain int64.
-func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64) {
+func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64, showCompleted bool) {
 	flat, err := a.store.Outline(r.Context(), userID, rootID)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
+	flat = hideDone(flat, showCompleted)
 	view := outlineView{
 		CSRFToken: web.CSRFToken(r.Context()),
 		Root:      Node{ID: rootID},
@@ -232,7 +235,7 @@ func (a *App) mutate(w http.ResponseWriter, r *http.Request, op func(context.Con
 	}
 
 	if web.IsHTMX(r) {
-		a.renderOutlineFragment(w, r, userID, root)
+		a.renderOutlineFragment(w, r, userID, root, showCompletedFrom(r))
 		return
 	}
 	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
@@ -429,6 +432,44 @@ func (a *App) due(w http.ResponseWriter, r *http.Request) {
 	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
 		return o.SetDue(ctx, m.UserID, m.NodeID, due)
 	})
+}
+
+// prefs sets the show-completed preference — spec §11. This is a plain POST
+// rather than a JS cookie write, and picks up the platform's CSRF
+// protection for exactly that reason (see prefs.go).
+func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
+	raw := r.PostFormValue("show_completed")
+	if raw != "0" && raw != "1" {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	root, ok := formID(r, "root")
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     ShowCompletedCookie,
+		Value:    raw,
+		Path:     "/notes/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	if web.IsHTMX(r) {
+		userID, ok := a.userID(w, r)
+		if !ok {
+			return
+		}
+		// The value just computed, not showCompletedFrom(r): r still
+		// carries whatever the browser sent on this request, before the
+		// SetCookie above, which the browser will only start sending back
+		// on its *next* one.
+		a.renderOutlineFragment(w, r, userID, root, raw == "1")
+		return
+	}
+	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
 }
 
 func (a *App) remove(w http.ResponseWriter, r *http.Request) {

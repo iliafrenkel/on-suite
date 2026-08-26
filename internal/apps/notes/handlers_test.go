@@ -1648,6 +1648,9 @@ func TestDoneOnAnotherUsersBulletIs404(t *testing.T) {
 // TestDoneBulletRendersStruckThrough covers the row-level CSS hook rather
 // than CSS itself, which no Go test can see: the row carries a class the
 // stylesheet keys off, and the checkbox reflects the current state.
+//
+// It asks for the outline with show-completed on (N5): without the cookie a
+// done bullet is not rendered at all, so there would be no row to inspect.
 func TestDoneBulletRendersStruckThrough(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.alice, notes.RootID, "task")
@@ -1655,7 +1658,13 @@ func TestDoneBulletRendersStruckThrough(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	doc := s.get(t, s.alice, "/notes/")
+	req := httptest.NewRequest("GET", "/notes/", nil)
+	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
+	rec := s.do(t, s.alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /notes/ = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
 	row := doc.MustHave(".outline-row-done")
 	if got, _ := htmlassert.Attr(row, "data-id"); got != itoa(id) {
 		t.Errorf("the done row is %q, want %d", got, id)
@@ -1733,6 +1742,86 @@ func TestAFutureDueChipIsNotMarkedOverdue(t *testing.T) {
 	}
 
 	s.get(t, s.alice, "/notes/").MustNotHave(".outline-due-overdue")
+}
+
+// TestShowCompletedHidesAndReveals is spec §11 end to end: a done bullet's
+// whole subtree disappears from the outline until the preference is on.
+func TestShowCompletedHidesAndReveals(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "parent")
+	s.seed(t, s.alice, parent, "child")
+	if err := s.store.SetDone(ctx, s.alice.user.ID, parent, true); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/")
+	if strings.Contains(doc.Text(), "child") {
+		t.Error("a done bullet's child is visible with show-completed off")
+	}
+	doc.MustNotHave(`input[name=title]`) // the done parent itself is gone too
+
+	req := httptest.NewRequest("GET", "/notes/", nil)
+	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
+	rec := s.do(t, s.alice, req)
+	if !strings.Contains(rec.Body.String(), "child") {
+		t.Error("show-completed=1 still hides the done bullet's child")
+	}
+}
+
+func TestPrefsTogglesTheCookie(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.post(t, s.alice, "/notes/prefs", url.Values{
+		"root": {"0"}, "show_completed": {"1"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	var got *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == notes.ShowCompletedCookie {
+			got = c
+		}
+	}
+	if got == nil || got.Value != "1" {
+		t.Fatalf("show-completed cookie = %+v, want value 1", got)
+	}
+}
+
+// TestPrefsRespondsWithTheFreshValueOverHTMX guards the staleness trap: the
+// fragment this returns must reflect the setting just toggled, not whatever
+// the request's own (pre-toggle) cookie said.
+func TestPrefsRespondsWithTheFreshValueOverHTMX(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "parent")
+	s.seed(t, s.alice, parent, "child")
+	if err := s.store.SetDone(ctx, s.alice.user.ID, parent, true); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.postHX(t, s.alice, "/notes/prefs", url.Values{
+		"root": {"0"}, "show_completed": {"1"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "child") {
+		t.Error("toggling show-completed on did not reveal the child in the same response")
+	}
+}
+
+func TestPrefsRejectsAnUnknownValue(t *testing.T) {
+	s := newServer(t)
+	for _, v := range []string{"", "true", "2"} {
+		rec := s.post(t, s.alice, "/notes/prefs", url.Values{
+			"root": {"0"}, "show_completed": {v},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("show_completed=%q gave %d, want 400", v, rec.Code)
+		}
+	}
 }
 
 func TestEveryMutationRequiresSignInIncludesDoneAndDue(t *testing.T) {

@@ -717,6 +717,12 @@ button.outline-chevron {
 	width: 6.5rem;
 }
 
+.notes-toolbar {
+	display: flex;
+	justify-content: flex-end;
+	font-size: var(--fs-sm);
+}
+
 .outline-dot { text-decoration: none; }
 .outline-dot:hover { color: var(--c-accent); }
 
