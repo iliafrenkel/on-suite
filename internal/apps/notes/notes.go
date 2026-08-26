@@ -7,9 +7,10 @@
 // one line in cmd/onsuite/main.go.
 //
 // The design is in docs/superpowers/specs/2026-08-25-on-notes-design.md. This
-// package spans chunk N1 (schema and store) through N4 (Markdown): app.App,
-// routes, templates, handlers, the keyboard layer in static/notes.js, and the
-// inline Markdown renderer in markdown.go.
+// package spans chunk N1 (schema and store) through N5 (done and due dates):
+// app.App, routes, templates, handlers, the keyboard layer in
+// static/notes.js, the inline Markdown renderer in markdown.go, and task
+// tracking in tree.go, prefs.go and due.go.
 package notes
 
 import (
