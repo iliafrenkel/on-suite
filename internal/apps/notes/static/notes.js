@@ -198,6 +198,14 @@
 			handleEscape();
 			return;
 		}
+		if (e.key === "/" && !isOutlineField(e.target) && e.target.id !== "notes-search-input") {
+			var search = document.getElementById("notes-search-input");
+			if (search) {
+				e.preventDefault();
+				search.focus();
+			}
+			return;
+		}
 
 		var el = e.target;
 		if (!isOutlineField(el)) return;
