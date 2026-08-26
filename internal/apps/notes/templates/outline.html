@@ -16,6 +16,13 @@
 {{define "rendered-title"}}<span id="rendered-title-{{.ID}}" class="outline-rendered outline-title-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedTitle}}</span>{{end}}
 {{define "rendered-note"}}<span id="rendered-note-{{.ID}}" class="outline-rendered outline-note-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedNote}}</span>{{end}}
 
+{{/* text-update is setText's whole HTMX response: both fields' rendered
+     forms, each already carrying hx-swap-oob, and nothing else — htmx
+     applies out-of-band swaps found anywhere in a response regardless of
+     the triggering element's own hx-swap, which is why the inputs
+     themselves can stay hx-swap="none". */}}
+{{define "text-update"}}{{template "rendered-title" .}}{{template "rendered-note" .}}{{end}}
+
 {{define "content"}}
 <div class="stack notes">
 	{{if .Data.Zoomed}}

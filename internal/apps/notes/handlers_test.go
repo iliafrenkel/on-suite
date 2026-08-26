@@ -1541,29 +1541,38 @@ func TestCreateRespondsWithAFragmentForHTMX(t *testing.T) {
 	}
 }
 
-// TestSetTextRespondsWithNoContentForHTMX: nothing visible changes from a
-// text-only save — the input already shows what was typed — so there is
-// nothing to swap.
-func TestSetTextRespondsWithNoContentForHTMX(t *testing.T) {
+// TestSetTextRespondsWithRenderedMarkdownForHTMX supersedes N3's 204: once a
+// field can show rendered Markdown, an edit has to update it, and there is
+// no swap that can happen without a response body to swap in.
+func TestSetTextRespondsWithRenderedMarkdownForHTMX(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.alice, notes.RootID, "old")
 
 	rec := s.postHX(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
-		"root": {"0"}, "focus_id": {itoa(id)}, "title": {"new"}, "note": {""},
+		"root": {"0"}, "focus_id": {itoa(id)}, "title": {"**new**"}, "note": {"*n*"},
 	})
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if rec.Body.Len() != 0 {
-		t.Errorf("body = %q, want empty", rec.Body.String())
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="rendered-title-`+itoa(id)+`"`) ||
+		!strings.Contains(body, "<strong>new</strong>") {
+		t.Errorf("title OOB fragment missing or wrong: %s", body)
+	}
+	if !strings.Contains(body, `id="rendered-note-`+itoa(id)+`"`) ||
+		!strings.Contains(body, "<em>n</em>") {
+		t.Errorf("note OOB fragment missing or wrong: %s", body)
+	}
+	if !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Error("the response does not mark itself as an out-of-band swap")
 	}
 
 	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.Title != "new" {
-		t.Errorf("saved title = %q, want new", n.Title)
+	if n.Title != "**new**" {
+		t.Errorf("saved title = %q, want the raw source", n.Title)
 	}
 }
 

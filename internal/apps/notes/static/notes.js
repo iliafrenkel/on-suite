@@ -140,6 +140,10 @@
 		pendingFocus = null;
 	}
 
+	// N4 (Markdown) needs no code here: setText's response carries its own
+	// hx-swap-oob elements, and htmx applies those on its own the moment a
+	// response contains one, regardless of the triggering element's own
+	// hx-swap. There is nothing for a named function to do.
 	function initFocusSync() {
 		if (!document.getElementById("outline")) return;
 		trackFocus();
