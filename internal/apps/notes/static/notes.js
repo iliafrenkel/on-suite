@@ -24,7 +24,10 @@
 	// dispatching its click event), so activeElement would report the
 	// button, never the field the user was actually editing a moment ago.
 	var lastFocus = null; // {id, field}
-	var pendingFocus = null; // {id, field, offset} or {afterID, field, offset}
+	// pendingFocus is {id, field, offset}, {afterID, field, offset}, or
+	// {first: true, field, offset} — see restoreFocus for what each resolves
+	// to once the swapped DOM exists.
+	var pendingFocus = null;
 
 	function isOutlineField(el) {
 		return !!(el && el.matches && el.matches(".outline-title, .outline-note"));
@@ -55,7 +58,27 @@
 			delete params._skipFocusOverride;
 			return;
 		}
-		if (!lastFocus) return;
+		if (!lastFocus) {
+			// The empty outline's bootstrap field is deliberately untracked
+			// (it has no data-id — see trackFocus), so a brand-new outline
+			// reaches its first Enter with lastFocus still null and nothing
+			// asking for the caret back. The swap that turns that field into
+			// the first real bullet would then drop focus to <body>, and the
+			// user would have to click to type bullet two.
+			//
+			// Identified positively rather than assumed: the page holds no
+			// real row at all, which is true only of the empty outline, and
+			// the request replaces #outline. Any other untracked request
+			// leaves pendingFocus null and behaves exactly as before.
+			if (!document.querySelector(".outline-row[data-id]") && e.detail.target && e.detail.target.id === "outline") {
+				// Caret at the end of what was typed, not at 0: the new
+				// bullet carries that same text, so this is where the user
+				// left off.
+				var bootstrap = document.querySelector("#outline input.outline-title");
+				pendingFocus = { first: true, field: "title", offset: bootstrap ? bootstrap.value.length : 0 };
+			}
+			return;
+		}
 
 		// A row's own text autosave (hx-trigger="input changed delay:600ms,
 		// blur changed" on .outline-title/.outline-note) must never be
@@ -93,7 +116,12 @@
 		if (!pendingFocus) return;
 		var input;
 
-		if (pendingFocus.afterID !== undefined) {
+		if (pendingFocus.first) {
+			// The bootstrap case: there is no anchor id to look up, because
+			// before the swap there was no row at all. The first title input
+			// in the fresh DOM is the bullet the user just created.
+			input = titleInputs()[0];
+		} else if (pendingFocus.afterID !== undefined) {
 			var anchor = document.querySelector('.outline-row[data-id="' + pendingFocus.afterID + '"]');
 			var li = anchor && anchor.closest(".outline-item");
 			var nextLi = li && li.nextElementSibling;
