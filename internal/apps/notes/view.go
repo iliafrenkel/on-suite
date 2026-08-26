@@ -1,5 +1,7 @@
 package notes
 
+import "html/template"
+
 // outlineView is what the outline template renders.
 type outlineView struct {
 	// Root is the node the outline is zoomed to. At the top level it is the
@@ -34,6 +36,12 @@ type outlineRow struct {
 	RootID    int64
 	CSRFToken string
 	Children  []*outlineRow
+	// RenderedTitle and RenderedNote are Title and Note run through Render —
+	// spec §10. The template shows these by default and the raw input only
+	// while it has focus; computing them here, once, keeps that a template
+	// concern rather than something outline-rows has to call out to.
+	RenderedTitle template.HTML
+	RenderedNote  template.HTML
 }
 
 // nest turns Outline's flat pre-order slice into the tree the template renders
@@ -58,7 +66,11 @@ func nest(flat []Node, root int64, csrfToken string) []*outlineRow {
 	open := make([]*outlineRow, 0, MaxDepth+1)
 
 	for _, n := range flat {
-		row := &outlineRow{Node: n, RootID: root, CSRFToken: csrfToken}
+		row := &outlineRow{
+			Node: n, RootID: root, CSRFToken: csrfToken,
+			RenderedTitle: Render(n.Title),
+			RenderedNote:  Render(n.Note),
+		}
 
 		switch d := n.Depth; {
 		case d == 0:

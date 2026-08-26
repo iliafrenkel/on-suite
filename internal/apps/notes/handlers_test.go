@@ -457,6 +457,51 @@ func TestOutlineEscapesBulletText(t *testing.T) {
 	}
 }
 
+// TestBulletRendersMarkdown covers the full path: a saved title with
+// Markdown in it reaches the page as rendered HTML inside the overlay span,
+// while the input underneath still carries the raw source untouched — the
+// no-JS fallback keeps editing the literal text spec §7 already proved.
+func TestBulletRendersMarkdown(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "**bold** and #tag")
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="rendered-title-`+itoa(id)+`"`) {
+		t.Fatalf("no rendered overlay for bullet %d in:\n%s", id, body)
+	}
+	doc := htmlassert.Parse(t, body)
+	overlay := doc.MustHave(`#rendered-title-` + itoa(id))
+	if got := htmlassert.Text(overlay); got != "bold and #tag" {
+		t.Errorf("rendered overlay text = %q", got)
+	}
+	if n := len(doc.QueryAll(`#rendered-title-` + itoa(id) + ` strong`)); n != 1 {
+		t.Errorf("got %d <strong> in the overlay, want 1", n)
+	}
+	if n := len(doc.QueryAll(`#rendered-title-` + itoa(id) + ` a`)); n != 1 {
+		t.Errorf("got %d tag chip in the overlay, want 1", n)
+	}
+
+	// The raw <input> still carries the literal, unrendered source.
+	raw := doc.MustHave("input.outline-title")
+	if v, _ := htmlassert.Attr(raw, "value"); v != "**bold** and #tag" {
+		t.Errorf("input value = %q, want the raw source untouched", v)
+	}
+}
+
+// TestRenderedOverlayEscapesBulletText: the overlay is real HTML the browser
+// parses, so it must never carry unescaped user text even when nothing in
+// it looks like Markdown.
+func TestRenderedOverlayEscapesBulletText(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, `<script>alert(1)</script>`)
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	if strings.Contains(rec.Body.String(), "<script>alert(1)</script>") {
+		t.Error("bullet text reached the rendered overlay unescaped")
+	}
+}
+
 func TestZoomShowsOnlyTheSubtree(t *testing.T) {
 	s := newServer(t)
 	projects := s.seed(t, s.alice, notes.RootID, "Projects")
