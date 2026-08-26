@@ -303,7 +303,14 @@
 
 		var note = row.querySelector('input[name="note"]');
 		if (note && note.value !== "") return false;
-		if (row.closest(".outline-item").querySelector(".outline-list")) return false; // has children
+		// The chevron button, not a rendered .outline-list, is what says "this
+		// bullet has children": Store.Outline stops descending into a
+		// collapsed node, so a collapsed parent renders no child list at all
+		// while still rendering its chevron ({{if .HasChildren}} in
+		// outline.html, pinned by TestCollapsedBulletHidesItsChildren). Asking
+		// the DOM for a subtree would call a collapsed parent a leaf and
+		// delete its hidden children with it.
+		if (collapseButton(row)) return false; // has children (collapsed or not)
 
 		var inputs = titleInputs();
 		var idx = inputs.indexOf(el);

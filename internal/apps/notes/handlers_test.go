@@ -372,8 +372,19 @@ func TestCollapsedBulletHidesItsChildren(t *testing.T) {
 	if strings.Contains(doc.Text(), "AtBudget") {
 		t.Error("a collapsed bullet's child is in the response")
 	}
-	if _, ok := htmlassert.Attr(doc.MustHave(".outline-chevron"), "aria-expanded"); !ok {
+	// The chevron is a button whenever the bullet has children, collapsed or
+	// not — collapsing removes the child list from the render, never the
+	// chevron. notes.js depends on exactly that: with no child list in the
+	// DOM, button.outline-chevron is the only remaining evidence that a
+	// collapsed bullet has a subtree, and Backspace-to-delete refuses on it.
+	// Drop the button here and an empty collapsed parent would be silently
+	// deleted along with its hidden children.
+	chevron := doc.MustHave("button.outline-chevron")
+	if _, ok := htmlassert.Attr(chevron, "aria-expanded"); !ok {
 		t.Error("a collapsed bullet renders no expand control")
+	}
+	if got, _ := htmlassert.Attr(chevron, "aria-expanded"); got != "false" {
+		t.Errorf("a collapsed bullet's chevron is aria-expanded=%q, want false", got)
 	}
 }
 
