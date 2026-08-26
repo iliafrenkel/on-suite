@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
@@ -504,7 +505,7 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 	if !strings.Contains(page, `id="rendered-title-`+itoa(first)+`"`) {
 		t.Fatalf("no rendered overlay on the page for bullet %d", first)
 	}
-	if strings.Contains(page, "hx-swap-oob") {
+	if oobOverlays(t, page) {
 		t.Error("a full page load carries hx-swap-oob on the rendered overlays")
 	}
 
@@ -515,9 +516,40 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 	if !strings.Contains(frag, `id="rendered-title-`+itoa(first)+`"`) {
 		t.Fatalf("no rendered overlay in the structural fragment for bullet %d", first)
 	}
-	if strings.Contains(frag, "hx-swap-oob") {
+	if oobOverlays(t, frag) {
 		t.Error("a structural fragment carries hx-swap-oob, so htmx would strip the overlays out of it")
 	}
+	assertOnlyToggleIsOOB(t, frag)
+}
+
+// assertOnlyToggleIsOOB asserts that the show-completed toggle is the only
+// element anywhere in body carrying hx-swap-oob. A structural fragment
+// legitimately marks that one toolbar button out of band — see
+// renderOutlineFragment — but nothing else should ever be: an accidental
+// hx-swap-oob on, say, .outline-list or an .outline-row would make htmx
+// silently strip that chunk out of the response before swapping it in.
+func assertOnlyToggleIsOOB(t *testing.T, body string) {
+	t.Helper()
+	for _, n := range htmlassert.Parse(t, body).QueryAll("[hx-swap-oob]") {
+		if id, _ := htmlassert.Attr(n, "id"); id != "show-completed-toggle" {
+			t.Errorf("unexpected hx-swap-oob element (id=%q); only show-completed-toggle may be out of band", id)
+		}
+	}
+}
+
+// oobOverlays reports whether any rendered overlay in body is marked for an
+// out-of-band swap. The check is per-overlay rather than a substring search
+// for "hx-swap-oob" anywhere, because a fragment does legitimately carry one
+// out-of-band element: the show-completed toggle, which lives outside
+// #outline and could not be updated any other way.
+func oobOverlays(t *testing.T, body string) bool {
+	t.Helper()
+	for _, n := range htmlassert.Parse(t, body).QueryAll(".outline-rendered") {
+		if _, ok := htmlassert.Attr(n, "hx-swap-oob"); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // TestRenderedOverlayEscapesBulletText: the overlay is real HTML the browser
@@ -1589,6 +1621,334 @@ func TestAFailedStructuralOperationUnderHTMXIsAFragment(t *testing.T) {
 	}
 }
 
+func TestDoneTogglesTheBullet(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+		"root": {"0"}, "done": {"1"},
+	}, "/notes/")
+
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.Done {
+		t.Fatal("the bullet is not done")
+	}
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+		"root": {"0"}, "done": {"0"},
+	}, "/notes/")
+
+	n, err = s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Done {
+		t.Fatal("the bullet is still done")
+	}
+}
+
+func TestDoneRejectsAnUnknownValue(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	for _, v := range []string{"", "true", "yes", "2"} {
+		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+			"root": {"0"}, "done": {v},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("done=%q gave %d, want 400", v, rec.Code)
+		}
+	}
+}
+
+func TestDoneOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+		"root": {"0"}, "done": {"1"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+// TestDoneBulletRendersStruckThrough covers the row-level CSS hook rather
+// than CSS itself, which no Go test can see: the row carries a class the
+// stylesheet keys off, and the checkbox reflects the current state.
+//
+// It asks for the outline with show-completed on (N5): without the cookie a
+// done bullet is not rendered at all, so there would be no row to inspect.
+func TestDoneBulletRendersStruckThrough(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+	if err := s.store.SetDone(context.Background(), s.alice.user.ID, id, true); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", "/notes/", nil)
+	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
+	rec := s.do(t, s.alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /notes/ = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	row := doc.MustHave(".outline-row-done")
+	if got, _ := htmlassert.Attr(row, "data-id"); got != itoa(id) {
+		t.Errorf("the done row is %q, want %d", got, id)
+	}
+	btn := doc.MustHave(`button[formaction=/notes/` + itoa(id) + `/done]`)
+	if got, _ := htmlassert.Attr(btn, "value"); got != "0" {
+		t.Errorf("a done bullet's toggle sends value=%q, want 0 (mark not done)", got)
+	}
+}
+
+func TestDueSetsAndClearsTheChip(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+		"root": {"0"}, "due": {"2026-03-05"},
+	}, "/notes/")
+
+	doc := s.get(t, s.alice, "/notes/")
+	chip := doc.MustHave(".outline-due-chip")
+	if got := htmlassert.Text(chip); got != "2026-03-05" {
+		t.Errorf("chip text = %q, want 2026-03-05", got)
+	}
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+		"root": {"0"}, "due": {""},
+	}, "/notes/")
+	s.get(t, s.alice, "/notes/").MustNotHave(".outline-due-chip")
+}
+
+func TestDueRejectsBadFormat(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+		"root": {"0"}, "due": {"not-a-date"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestDueOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+		"root": {"0"}, "due": {"2026-03-05"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+// TestOverdueChipIsMarked doesn't depend on the real clock: it sets a due
+// date far enough in the past (year 2000) that it will read as overdue for
+// the entire lifetime of this test suite.
+func TestOverdueChipIsMarked(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+	if err := s.store.SetDue(context.Background(), s.alice.user.ID, id, "2000-01-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/")
+	doc.MustHave(".outline-due-overdue")
+}
+
+func TestAFutureDueChipIsNotMarkedOverdue(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+	future := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+	if err := s.store.SetDue(context.Background(), s.alice.user.ID, id, future); err != nil {
+		t.Fatal(err)
+	}
+
+	s.get(t, s.alice, "/notes/").MustNotHave(".outline-due-overdue")
+}
+
+// TestShowCompletedHidesAndReveals is spec §11 end to end: a done bullet's
+// whole subtree disappears from the outline until the preference is on.
+func TestShowCompletedHidesAndReveals(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "parent")
+	s.seed(t, s.alice, parent, "child")
+	if err := s.store.SetDone(ctx, s.alice.user.ID, parent, true); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/")
+	if strings.Contains(doc.Text(), "child") {
+		t.Error("a done bullet's child is visible with show-completed off")
+	}
+	doc.MustNotHave(`input[name=title]`) // the done parent itself is gone too
+
+	req := httptest.NewRequest("GET", "/notes/", nil)
+	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
+	rec := s.do(t, s.alice, req)
+	if !strings.Contains(rec.Body.String(), "child") {
+		t.Error("show-completed=1 still hides the done bullet's child")
+	}
+}
+
+func TestPrefsTogglesTheCookie(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.post(t, s.alice, "/notes/prefs", url.Values{
+		"root": {"0"}, "show_completed": {"1"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	var got *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == notes.ShowCompletedCookie {
+			got = c
+		}
+	}
+	if got == nil || got.Value != "1" {
+		t.Fatalf("show-completed cookie = %+v, want value 1", got)
+	}
+	// A preference, not a session fact: it has to survive the browser
+	// closing, which a cookie with no MaxAge does not.
+	if got.MaxAge <= 0 {
+		t.Errorf("show-completed cookie MaxAge = %d, want a durable positive value", got.MaxAge)
+	}
+}
+
+// TestPrefsRespondsWithTheFreshValueOverHTMX guards the staleness trap: the
+// fragment this returns must reflect the setting just toggled, not whatever
+// the request's own (pre-toggle) cookie said.
+func TestPrefsRespondsWithTheFreshValueOverHTMX(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "parent")
+	s.seed(t, s.alice, parent, "child")
+	if err := s.store.SetDone(ctx, s.alice.user.ID, parent, true); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.postHX(t, s.alice, "/notes/prefs", url.Values{
+		"root": {"0"}, "show_completed": {"1"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "child") {
+		t.Error("toggling show-completed on did not reveal the child in the same response")
+	}
+}
+
+// TestPrefsFragmentRefreshesTheToggleOutOfBand guards the other half of the
+// staleness trap. The toggle button sits outside #outline, so the response's
+// normal swap cannot reach it; without an out-of-band copy the label and
+// value would still say "Show completed" / 1 after the toggle had already
+// turned completed bullets on, and a second click would re-send 1 and look
+// like it did nothing.
+func TestPrefsFragmentRefreshesTheToggleOutOfBand(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.postHX(t, s.alice, "/notes/prefs", url.Values{
+		"root": {"0"}, "show_completed": {"1"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	btn := doc.MustHave("#show-completed-toggle")
+	if got, _ := htmlassert.Attr(btn, "hx-swap-oob"); got != "true" {
+		t.Errorf("toggle hx-swap-oob = %q, want \"true\"", got)
+	}
+	if got, _ := htmlassert.Attr(btn, "value"); got != "0" {
+		t.Errorf("toggle value = %q, want \"0\" — it still offers to turn completed back on", got)
+	}
+	if got := strings.TrimSpace(htmlassert.Text(btn)); got != "Hide completed" {
+		t.Errorf("toggle label = %q, want \"Hide completed\"", got)
+	}
+
+	// And back off again, so the block is not simply hardcoded one way.
+	rec = s.postHX(t, s.alice, "/notes/prefs", url.Values{
+		"root": {"0"}, "show_completed": {"0"},
+	})
+	btn = htmlassert.Parse(t, rec.Body.String()).MustHave("#show-completed-toggle")
+	if got, _ := htmlassert.Attr(btn, "value"); got != "1" {
+		t.Errorf("toggle value after turning off = %q, want \"1\"", got)
+	}
+	if got := strings.TrimSpace(htmlassert.Text(btn)); got != "Show completed" {
+		t.Errorf("toggle label after turning off = %q, want \"Show completed\"", got)
+	}
+}
+
+// TestOutlinePageToggleIsNotOutOfBand is the counterpart discipline the N4
+// rendered-title block already follows: a full page render must not carry
+// hx-swap-oob, or htmx would lift the toggle out of a page it never swaps.
+func TestOutlinePageToggleIsNotOutOfBand(t *testing.T) {
+	s := newServer(t)
+	btn := s.get(t, s.alice, "/notes/").MustHave("#show-completed-toggle")
+	if _, ok := htmlassert.Attr(btn, "hx-swap-oob"); ok {
+		t.Error("the page render's toggle carries hx-swap-oob")
+	}
+}
+
+// TestMutationFragmentCarriesTheToggleUnchanged: a structural op does not
+// touch the preference, so its out-of-band toggle must repeat the state the
+// request came in with rather than flip it.
+func TestMutationFragmentCarriesTheToggleUnchanged(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	req := httptest.NewRequest("POST", "/notes/"+itoa(id)+"/indent",
+		strings.NewReader(url.Values{"root": {"0"}, web.CSRFFormField: {s.csrfToken(t, s.alice)}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
+	rec := s.do(t, s.alice, req)
+
+	btn := htmlassert.Parse(t, rec.Body.String()).MustHave("#show-completed-toggle")
+	if got, _ := htmlassert.Attr(btn, "value"); got != "0" {
+		t.Errorf("toggle value = %q, want \"0\" — show-completed was on for this request", got)
+	}
+}
+
+func TestPrefsRejectsAnUnknownValue(t *testing.T) {
+	s := newServer(t)
+	for _, v := range []string{"", "true", "2"} {
+		rec := s.post(t, s.alice, "/notes/prefs", url.Values{
+			"root": {"0"}, "show_completed": {v},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("show_completed=%q gave %d, want 400", v, rec.Code)
+		}
+	}
+}
+
+func TestEveryMutationRequiresSignInIncludesDoneAndDue(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	for _, path := range []string{
+		"/notes/" + itoa(id) + "/done",
+		"/notes/" + itoa(id) + "/due",
+	} {
+		req := httptest.NewRequest("POST", path, strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := s.do(t, nil, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("POST %s anonymous and tokenless = %d, want 403 from the CSRF check", path, rec.Code)
+		}
+	}
+}
+
 func TestScriptIsServedWithAJavaScriptContentType(t *testing.T) {
 	s := newServer(t)
 	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/notes.js", nil))
@@ -1601,4 +1961,59 @@ func TestScriptIsServedWithAJavaScriptContentType(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "use strict") {
 		t.Error("the served script does not look like notes.js")
 	}
+}
+
+func TestDueListGroupsAcrossTheWholeTree(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "Projects")
+	child := s.seed(t, s.alice, parent, "AtBudget")
+	if err := s.store.SetDue(ctx, s.alice.user.ID, child, "2000-01-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/due")
+	doc.MustHave(".outline-due-overdue")
+	if !strings.Contains(doc.Text(), "Projects") {
+		t.Error("the due bullet's ancestor breadcrumb is missing")
+	}
+	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
+	if got := htmlassert.Text(link); got != "AtBudget" {
+		t.Errorf("due list link text = %q, want AtBudget", got)
+	}
+}
+
+func TestDueListRendersAnotherUsersNodesNowhere(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	bobs := s.seed(t, s.bob, notes.RootID, "bob's task")
+	if err := s.store.SetDue(ctx, s.bob.user.ID, bobs, "2000-01-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(s.get(t, s.alice, "/notes/due").Text(), "bob's task") {
+		t.Error("another user's due bullet is on the page")
+	}
+}
+
+func TestDueListRequiresSignIn(t *testing.T) {
+	s := newServer(t)
+	rec := s.do(t, nil, httptest.NewRequest("GET", "/notes/due", nil))
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("GET /notes/due anonymous = %d, want a 303 to the login page", rec.Code)
+	}
+}
+
+func TestDueListWithNothingDue(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "no date on this one")
+
+	if got := s.get(t, s.alice, "/notes/due").Text(); !strings.Contains(got, "Nothing is due") {
+		t.Errorf("empty due list text = %q, want the empty-state line", got)
+	}
+}
+
+func TestTheOutlineLinksToTheDueList(t *testing.T) {
+	s := newServer(t)
+	s.get(t, s.alice, "/notes/").MustHave(`.notes-toolbar a[href=/notes/due]`)
 }

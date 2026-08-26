@@ -23,8 +23,38 @@
      themselves can stay hx-swap="none". */}}
 {{define "text-update"}}{{template "rendered-title" .}}{{template "rendered-note" .}}{{end}}
 
+{{/* show-completed-toggle is the toolbar's button, shared between the page
+     render and every HTMX fragment response, on the same OOB discipline as
+     rendered-title above: the fragment sets .OOB, the page render does not.
+     The button sits outside #outline, so the hx-target="#outline" swap can
+     never update it — without the out-of-band copy its label and value stay
+     frozen at whatever the last full page load wrote, and a second click
+     re-sends the stale value and appears to do nothing. Every fragment
+     carries it, not just prefs': re-applying the same id'd element with
+     unchanged content is idempotent, and it keeps the two callers of
+     renderOutlineFragment identical. */}}
+{{define "show-completed-toggle"}}<button type="submit" id="show-completed-toggle" class="quiet"{{if .OOB}} hx-swap-oob="true"{{end}}
+        name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}">{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}</button>{{end}}
+
+{{/* outline-swap is the whole HTMX response for a structural op or a prefs
+     toggle: #outline's new content, plus the toolbar toggle out of band. */}}
+{{define "outline-swap"}}{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{end}}
+
 {{define "content"}}
 <div class="stack notes">
+	<div class="notes-toolbar">
+		<a href="/notes/due">Due</a>
+		{{/* No class of its own: .notes-toolbar already lays this out, and
+		     the form has nothing to style that the toolbar rule does not
+		     cover. Its button is styled by .quiet, like every other
+		     button in the outline. */}}
+		<form method="post" action="/notes/prefs"
+		      hx-post="/notes/prefs" hx-target="#outline" hx-swap="innerHTML">
+			<input type="hidden" name="csrf_token" value="{{.Data.CSRFToken}}">
+			<input type="hidden" name="root" value="{{.Data.Root.ID}}">
+			{{template "show-completed-toggle" .Data}}
+		</form>
+	</div>
 	{{if .Data.Zoomed}}
 	<nav class="outline-crumbs" aria-label="Outline breadcrumb">
 		<a href="/notes/">All notes</a>
@@ -66,11 +96,19 @@
 <ul class="outline-list">
 	{{range .}}
 	<li class="outline-item">
-		<div class="outline-row" data-id="{{.ID}}">
+		<div class="outline-row{{if .Done}} outline-row-done{{end}}" data-id="{{.ID}}">
 			<form method="post" action="/notes/{{.ID}}/text" class="outline-main">
 				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 				<input type="hidden" name="root" value="{{.RootID}}">
 				<input type="hidden" name="focus_id" value="{{.ID}}">
+
+				<button type="submit" class="outline-done quiet"
+				        formaction="/notes/{{.ID}}/done"
+				        hx-post="/notes/{{.ID}}/done" hx-target="#outline" hx-swap="innerHTML"
+				        name="done" value="{{if .Done}}0{{else}}1{{end}}"
+				        aria-pressed="{{if .Done}}true{{else}}false{{end}}"
+				        aria-label="{{if .Done}}Mark not done{{else}}Mark done{{end}}"
+				        >{{if .Done}}&#9745;{{else}}&#9744;{{end}}</button>
 
 				{{if .HasChildren}}
 				<button type="submit" class="outline-chevron quiet"
@@ -105,7 +143,17 @@
 					</span>
 				</span>
 
+				{{$row := .}}
+				{{with .DueOn}}
+				<a class="outline-due-chip{{if $row.Overdue}} outline-due-overdue{{end}}"
+				   href="/notes/due">{{.}}</a>
+				{{end}}
+
 				<span class="outline-actions">
+					<input type="date" class="outline-due-input" name="due" value="{{.DueOn}}"
+					       aria-label="Due date"
+					       hx-post="/notes/{{.ID}}/due" hx-target="#outline" hx-swap="innerHTML"
+					       hx-trigger="change">
 					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
 					        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
 					        name="dir" value="up" aria-label="Move up"

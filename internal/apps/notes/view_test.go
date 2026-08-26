@@ -55,7 +55,7 @@ func TestNestBuildsTheTree(t *testing.T) {
 		lvl{2, "a1x"},
 		lvl{1, "a2"},
 		lvl{0, "b"},
-	), RootID, "tok")
+	), RootID, "tok", "9999-12-31")
 
 	want := "a\n  a1\n    a1x*\n  a2*\nb*\n"
 	if got := draw(rows); got != want {
@@ -68,7 +68,7 @@ func TestNestMarksTheLastSiblingAtEveryLevel(t *testing.T) {
 		lvl{0, "a"},
 		lvl{1, "a1"},
 		lvl{1, "a2"},
-	), RootID, "tok")
+	), RootID, "tok", "9999-12-31")
 
 	if rows[0].Last != true {
 		t.Error("the only top-level row is not marked last")
@@ -85,7 +85,7 @@ func TestNestMarksTheLastSiblingAtEveryLevel(t *testing.T) {
 // carries the hidden fields that form needs rather than reaching for a shared
 // parent the template has no way to address from inside a recursive block.
 func TestNestStampsEveryRow(t *testing.T) {
-	rows := nest(flat(lvl{0, "a"}, lvl{1, "a1"}), 42, "tok")
+	rows := nest(flat(lvl{0, "a"}, lvl{1, "a1"}), 42, "tok", "9999-12-31")
 
 	var seen int
 	var walk func([]*outlineRow)
@@ -108,7 +108,7 @@ func TestNestStampsEveryRow(t *testing.T) {
 }
 
 func TestNestRendersMarkdownIntoEachRow(t *testing.T) {
-	rows := nest([]Node{{ID: 1, Title: "**bold**", Note: "*italic*", Depth: 0}}, RootID, "tok")
+	rows := nest([]Node{{ID: 1, Title: "**bold**", Note: "*italic*", Depth: 0}}, RootID, "tok", "9999-12-31")
 	if got := string(rows[0].RenderedTitle); got != "<strong>bold</strong>" {
 		t.Errorf("RenderedTitle = %q", got)
 	}
@@ -126,7 +126,7 @@ func TestNestDropsARowWithNoParent(t *testing.T) {
 		lvl{2, "orphan"},
 		lvl{3, "orphan's child"},
 		lvl{1, "a1"},
-	), RootID, "tok")
+	), RootID, "tok", "9999-12-31")
 
 	// "a" is the only surviving top-level row, so it is also the last one.
 	want := "a*\n  a1*\n"
@@ -144,7 +144,7 @@ func TestNestResetsTheOpenChainAtEachTopLevelRow(t *testing.T) {
 		lvl{1, "a1"},
 		lvl{0, "b"},
 		lvl{1, "b1"},
-	), RootID, "tok")
+	), RootID, "tok", "9999-12-31")
 
 	want := "a\n  a1*\nb*\n  b1*\n"
 	if got := draw(rows); got != want {
@@ -153,7 +153,7 @@ func TestNestResetsTheOpenChainAtEachTopLevelRow(t *testing.T) {
 }
 
 func TestNestOfNothingIsNothing(t *testing.T) {
-	if rows := nest(nil, RootID, "tok"); len(rows) != 0 {
+	if rows := nest(nil, RootID, "tok", "9999-12-31"); len(rows) != 0 {
 		t.Errorf("nest(nil) returned %d rows", len(rows))
 	}
 }
@@ -166,7 +166,7 @@ func TestNestHandlesTheDeepestPermittedOutline(t *testing.T) {
 	for d := 0; d <= MaxDepth; d++ {
 		spec = append(spec, lvl{d, "d" + string(rune('0'+d%10))})
 	}
-	rows := nest(flat(spec...), RootID, "tok")
+	rows := nest(flat(spec...), RootID, "tok", "9999-12-31")
 
 	depth := 0
 	for cur := rows; len(cur) > 0; cur = cur[0].Children {
@@ -174,5 +174,51 @@ func TestNestHandlesTheDeepestPermittedOutline(t *testing.T) {
 	}
 	if depth != MaxDepth+1 {
 		t.Errorf("the tree is %d deep, want %d", depth, MaxDepth+1)
+	}
+}
+
+func TestHideDoneHidesADoneNodeAndItsSubtree(t *testing.T) {
+	flat := []Node{
+		{ID: 1, Title: "done", Done: true, Depth: 0},
+		{ID: 2, Title: "child of done", Depth: 1},
+		{ID: 3, Title: "grandchild", Depth: 2},
+		{ID: 4, Title: "sibling", Depth: 0},
+	}
+	got := hideDone(flat, false)
+	if len(got) != 1 || got[0].ID != 4 {
+		t.Fatalf("hideDone(false) = %+v, want only the sibling", got)
+	}
+}
+
+func TestHideDoneShowsEverythingWhenOn(t *testing.T) {
+	flat := []Node{
+		{ID: 1, Title: "done", Done: true, Depth: 0},
+		{ID: 2, Title: "child of done", Depth: 1},
+	}
+	got := hideDone(flat, true)
+	if len(got) != 2 {
+		t.Fatalf("hideDone(true) = %+v, want everything", got)
+	}
+}
+
+// TestHideDoneHandlesConsecutiveDoneSubtrees: two separate done subtrees
+// back to back must not let one's skip swallow the other's sibling.
+func TestHideDoneHandlesConsecutiveDoneSubtrees(t *testing.T) {
+	flat := []Node{
+		{ID: 1, Title: "done A", Done: true, Depth: 0},
+		{ID: 2, Title: "child of A", Depth: 1},
+		{ID: 3, Title: "between", Depth: 0},
+		{ID: 4, Title: "done B", Done: true, Depth: 0},
+		{ID: 5, Title: "child of B", Depth: 1},
+		{ID: 6, Title: "after", Depth: 0},
+	}
+	got := hideDone(flat, false)
+	var ids []int64
+	for _, n := range got {
+		ids = append(ids, n.ID)
+	}
+	want := []int64{3, 6}
+	if len(ids) != len(want) || ids[0] != want[0] || ids[1] != want[1] {
+		t.Fatalf("hideDone left %v, want %v", ids, want)
 	}
 }

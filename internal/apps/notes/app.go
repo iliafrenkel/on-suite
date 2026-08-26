@@ -81,8 +81,11 @@ func (a *App) script(w http.ResponseWriter, r *http.Request) {
 //	                         and {$} disjoint
 //	GET  /notes/notes.js     a literal segment, so it outranks {id} even
 //	                         though "notes.js" is not a valid id
+//	POST /notes/prefs        likewise a literal segment; N5's show-completed
+//	                         toggle
+//	GET  /notes/due          likewise a literal segment; N5's due-date list
 //	POST /notes/new          a literal segment, and literals outrank {id}
-//	POST /notes/{id}/text    and the seven other mutations: two segments
+//	POST /notes/{id}/text    and the eight other mutations: two segments
 //	                         deeper than the zoom URL, so no pattern in this
 //	                         list is a prefix of another
 func (a *App) Mount(r *app.Router, deps app.Deps) {
@@ -92,11 +95,15 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /{$}", a.outline)
 	r.HandleFunc("GET /{id}", a.outlineZoomed)
 	r.HandleFunc("GET /notes.js", a.script)
+	r.HandleFunc("GET /due", a.dueList)
 	r.HandleFunc("POST /new", a.create)
+	r.HandleFunc("POST /prefs", a.prefs)
 	r.HandleFunc("POST /{id}/text", a.setText)
 	r.HandleFunc("POST /{id}/indent", a.indent)
 	r.HandleFunc("POST /{id}/outdent", a.outdent)
 	r.HandleFunc("POST /{id}/move", a.move)
 	r.HandleFunc("POST /{id}/collapse", a.collapse)
 	r.HandleFunc("POST /{id}/delete", a.remove)
+	r.HandleFunc("POST /{id}/done", a.done)
+	r.HandleFunc("POST /{id}/due", a.due)
 }

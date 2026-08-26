@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -84,7 +85,8 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		return
 	}
 
-	view := outlineView{CSRFToken: web.CSRFToken(r.Context())}
+	showCompleted := showCompletedFrom(r)
+	view := outlineView{CSRFToken: web.CSRFToken(r.Context()), ShowCompleted: showCompleted}
 
 	// An empty title leaves the shell's breadcrumb reading "Home / ON Notes",
 	// which is what the top level is. A zoomed outline names its root.
@@ -109,7 +111,8 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	view.Rows = nest(flat, rootID, view.CSRFToken)
+	flat = hideDone(flat, showCompleted)
+	view.Rows = nest(flat, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
 
 	page := a.deps.Page(r, title)
 	page.Data = view
@@ -122,18 +125,25 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 // heading stay exactly as the browser already has them, and there is no
 // need to look the root node up — Root.ID is all outline-body reads, and
 // the caller already has it as a plain int64.
-func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64) {
+//
+// The response also carries the toolbar's show-completed toggle out of band:
+// that button lives outside #outline, so the swap cannot reach it, and after
+// a prefs toggle its label and value would otherwise stay stale.
+func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64, showCompleted bool) {
 	flat, err := a.store.Outline(r.Context(), userID, rootID)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
+	flat = hideDone(flat, showCompleted)
 	view := outlineView{
-		CSRFToken: web.CSRFToken(r.Context()),
-		Root:      Node{ID: rootID},
+		CSRFToken:     web.CSRFToken(r.Context()),
+		Root:          Node{ID: rootID},
+		ShowCompleted: showCompleted,
+		OOB:           true,
 	}
-	view.Rows = nest(flat, rootID, view.CSRFToken)
-	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "outline-body", view); err != nil {
+	view.Rows = nest(flat, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "outline-swap", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
 }
@@ -231,7 +241,7 @@ func (a *App) mutate(w http.ResponseWriter, r *http.Request, op func(context.Con
 	}
 
 	if web.IsHTMX(r) {
-		a.renderOutlineFragment(w, r, userID, root)
+		a.renderOutlineFragment(w, r, userID, root, showCompletedFrom(r))
 		return
 	}
 	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
@@ -411,4 +421,102 @@ func (a *App) remove(w http.ResponseWriter, r *http.Request) {
 		a.deps.Log.Info("bullet deleted", "app", ID, "user_id", m.UserID, "node_id", m.NodeID)
 		return nil
 	})
+}
+
+// done marks a bullet done or not. The field names the state to arrive at,
+// exactly like collapsed's, so a double submit or a stale page cannot flip
+// it back.
+func (a *App) done(w http.ResponseWriter, r *http.Request) {
+	raw := r.PostFormValue("done")
+	if raw != "0" && raw != "1" {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	done := raw == "1"
+
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		return o.SetDone(ctx, m.UserID, m.NodeID, done)
+	})
+}
+
+// due sets or clears a bullet's due date. An empty value clears it, which is
+// what a native <input type="date">'s own clear affordance sends — there is
+// no separate "remove due date" control. ValidateDue's error already maps
+// to a 400 through fail, so there is nothing to check ahead of mutate here.
+func (a *App) due(w http.ResponseWriter, r *http.Request) {
+	due := r.PostFormValue("due")
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		return o.SetDue(ctx, m.UserID, m.NodeID, due)
+	})
+}
+
+// prefs sets the show-completed preference — spec §11. This is a plain POST
+// rather than a JS cookie write, and picks up the platform's CSRF
+// protection for exactly that reason (see prefs.go).
+func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
+	raw := r.PostFormValue("show_completed")
+	if raw != "0" && raw != "1" {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	root, ok := formID(r, "root")
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     ShowCompletedCookie,
+		Value:    raw,
+		Path:     "/notes/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		// A preference, not a session: without MaxAge this would reset
+		// every time the browser closes. A year is long enough to feel
+		// permanent and short enough that an abandoned browser forgets.
+		MaxAge: showCompletedCookieMaxAge,
+	})
+
+	if web.IsHTMX(r) {
+		userID, ok := a.userID(w, r)
+		if !ok {
+			return
+		}
+		// The value just computed, not showCompletedFrom(r): r still
+		// carries whatever the browser sent on this request, before the
+		// SetCookie above, which the browser will only start sending back
+		// on its *next* one.
+		a.renderOutlineFragment(w, r, userID, root, raw == "1")
+		return
+	}
+	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
+}
+
+// dueList renders every one of the user's due bullets, grouped by urgency —
+// spec §11.
+func (a *App) dueList(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	nodes, err := a.store.Due(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	rows := make([]DueRow, len(nodes))
+	for i, n := range nodes {
+		crumbs, err := a.store.Ancestors(r.Context(), userID, n.ID)
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
+		rows[i] = DueRow{Node: n, Crumbs: crumbs}
+	}
+
+	page := a.deps.Page(r, "Due")
+	page.Data = GroupByDue(rows, time.Now())
+	a.render(w, r, http.StatusOK, "notes/due", page)
 }

@@ -44,6 +44,34 @@ func TestValidateCountsRunesNotBytes(t *testing.T) {
 	}
 }
 
+func TestValidateDueAcceptsEmpty(t *testing.T) {
+	if err := notes.ValidateDue(""); err != nil {
+		t.Fatalf(`ValidateDue("") = %v; empty means "no due date"`, err)
+	}
+}
+
+func TestValidateDueAcceptsAWellFormedDate(t *testing.T) {
+	if err := notes.ValidateDue("2026-03-05"); err != nil {
+		t.Fatalf("ValidateDue(2026-03-05) = %v", err)
+	}
+}
+
+func TestValidateDueRejectsBadInput(t *testing.T) {
+	for _, due := range []string{
+		"not-a-date",
+		"2026-13-01", // no month 13
+		"2026-02-30", // February has no 30th; time.Parse would normalise
+		// this into March rather than reject it — the round
+		// trip in ValidateDue is what catches that
+		"03/05/2026", // wrong format entirely
+		"2026-3-5",   // not zero-padded
+	} {
+		if err := notes.ValidateDue(due); !errors.Is(err, notes.ErrInvalid) {
+			t.Errorf("ValidateDue(%q) = %v; want ErrInvalid", due, err)
+		}
+	}
+}
+
 func TestMigrationsApply(t *testing.T) {
 	ctx := context.Background()
 

@@ -202,6 +202,47 @@ func (st *Store) SetCollapsed(ctx context.Context, userID, id int64, collapsed b
 	return st.Do(ctx, func(o *Ops) error { return o.SetCollapsed(ctx, userID, id, collapsed) })
 }
 
+// SetDone marks a bullet done or not. Completing a parent does not complete
+// its children — spec §11 — so this only ever touches the one row; hiding
+// a done bullet's subtree is a display decision made in view.go, not
+// something recorded here.
+func (o *Ops) SetDone(ctx context.Context, userID, id int64, done bool) error {
+	doneAt := sql.NullString{}
+	if done {
+		doneAt = sql.NullString{String: formatTime(o.now()), Valid: true}
+	}
+	return o.update(ctx, "set done",
+		`UPDATE notes_nodes SET done_at = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+		doneAt, formatTime(o.now()), id, userID)
+}
+
+// SetDone marks a bullet done or not, in a transaction of its own. See
+// Ops.SetDone.
+func (st *Store) SetDone(ctx context.Context, userID, id int64, done bool) error {
+	return st.Do(ctx, func(o *Ops) error { return o.SetDone(ctx, userID, id, done) })
+}
+
+// SetDue sets or clears a bullet's due date. due is "" to clear, or a
+// validated 'YYYY-MM-DD' string — see ValidateDue.
+func (o *Ops) SetDue(ctx context.Context, userID, id int64, due string) error {
+	if err := ValidateDue(due); err != nil {
+		return err
+	}
+	var arg any
+	if due != "" {
+		arg = due
+	}
+	return o.update(ctx, "set due",
+		`UPDATE notes_nodes SET due_on = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+		arg, formatTime(o.now()), id, userID)
+}
+
+// SetDue sets or clears a bullet's due date, in a transaction of its own.
+// See Ops.SetDue.
+func (st *Store) SetDue(ctx context.Context, userID, id int64, due string) error {
+	return st.Do(ctx, func(o *Ops) error { return o.SetDue(ctx, userID, id, due) })
+}
+
 // SetText replaces a bullet's title and note.
 //
 // Trailing spaces are stripped but leading ones are not: an outline is written

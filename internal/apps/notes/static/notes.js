@@ -174,6 +174,7 @@
 	function outdentButton(row) { return row.querySelector('button[formaction$="/outdent"]'); }
 	function moveButton(row, dir) { return row.querySelector('button[name="dir"][value="' + dir + '"]'); }
 	function collapseButton(row) { return row.querySelector("button.outline-chevron"); }
+	function doneButton(row) { return row.querySelector("button.outline-done"); }
 
 	// handleEscape: first press leaves editing (blur); a second press,
 	// with nothing left focused in the outline, zooms out one level via the
@@ -241,6 +242,11 @@
 				down.focus();
 				down.setSelectionRange(downPos, downPos);
 			}
+			return;
+		}
+		if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+			e.preventDefault();
+			click(doneButton(row));
 			return;
 		}
 		if ((e.metaKey || e.ctrlKey) && e.key === ".") {
