@@ -698,6 +698,25 @@ button.outline-chevron {
 .outline-row-done input.outline-title,
 .outline-row-done input.outline-note { text-decoration: line-through; }
 
+.outline-due-chip {
+	flex: none;
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+	text-decoration: none;
+	white-space: nowrap;
+}
+.outline-due-chip:hover { color: var(--c-accent); }
+.outline-due-overdue { color: var(--c-danger); }
+
+.outline-due-input {
+	font: inherit;
+	font-size: var(--fs-sm);
+	color: var(--c-text-faint);
+	background: none;
+	border: none;
+	width: 6.5rem;
+}
+
 .outline-dot { text-decoration: none; }
 .outline-dot:hover { color: var(--c-accent); }
 

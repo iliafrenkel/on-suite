@@ -42,6 +42,11 @@ type outlineRow struct {
 	// concern rather than something outline-rows has to call out to.
 	RenderedTitle template.HTML
 	RenderedNote  template.HTML
+	// Overdue is DueOn set and in the past, relative to the day nest was
+	// called — spec §11: comparison is against the server's local date.
+	// Computed once here, not in the template, for the same reason
+	// RenderedTitle/RenderedNote are: a recursive block gets one argument.
+	Overdue bool
 	// OOB marks this row as the subject of an out-of-band swap, which is
 	// what makes the shared overlay blocks emit hx-swap-oob. Only setText's
 	// response sets it; nest never does, because htmx strips every
@@ -63,7 +68,7 @@ type outlineRow struct {
 // A row that breaks that has no correct parent — and inventing one would put a
 // bullet somewhere the user never left it — so it is dropped, along with
 // everything that would have hung beneath it.
-func nest(flat []Node, root int64, csrfToken string) []*outlineRow {
+func nest(flat []Node, root int64, csrfToken, today string) []*outlineRow {
 	var top []*outlineRow
 
 	// open is the ancestor chain of the row most recently added: open[d] is
@@ -76,6 +81,7 @@ func nest(flat []Node, root int64, csrfToken string) []*outlineRow {
 			Node: n, RootID: root, CSRFToken: csrfToken,
 			RenderedTitle: Render(n.Title),
 			RenderedNote:  Render(n.Note),
+			Overdue:       n.DueOn != "" && n.DueOn < today,
 		}
 
 		switch d := n.Depth; {

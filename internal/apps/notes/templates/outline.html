@@ -113,7 +113,17 @@
 					</span>
 				</span>
 
+				{{$row := .}}
+				{{with .DueOn}}
+				<a class="outline-due-chip{{if $row.Overdue}} outline-due-overdue{{end}}"
+				   href="/notes/due">{{.}}</a>
+				{{end}}
+
 				<span class="outline-actions">
+					<input type="date" class="outline-due-input" name="due" value="{{.DueOn}}"
+					       aria-label="Due date"
+					       hx-post="/notes/{{.ID}}/due" hx-target="#outline" hx-swap="innerHTML"
+					       hx-trigger="change">
 					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
 					        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
 					        name="dir" value="up" aria-label="Move up"

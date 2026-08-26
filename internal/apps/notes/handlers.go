@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -109,7 +110,7 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	view.Rows = nest(flat, rootID, view.CSRFToken)
+	view.Rows = nest(flat, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
 
 	page := a.deps.Page(r, title)
 	page.Data = view
@@ -132,7 +133,7 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 		CSRFToken: web.CSRFToken(r.Context()),
 		Root:      Node{ID: rootID},
 	}
-	view.Rows = nest(flat, rootID, view.CSRFToken)
+	view.Rows = nest(flat, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
 	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "outline-body", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
@@ -416,6 +417,17 @@ func (a *App) done(w http.ResponseWriter, r *http.Request) {
 
 	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
 		return o.SetDone(ctx, m.UserID, m.NodeID, done)
+	})
+}
+
+// due sets or clears a bullet's due date. An empty value clears it, which is
+// what a native <input type="date">'s own clear affordance sends — there is
+// no separate "remove due date" control. ValidateDue's error already maps
+// to a 400 through fail, so there is nothing to check ahead of mutate here.
+func (a *App) due(w http.ResponseWriter, r *http.Request) {
+	due := r.PostFormValue("due")
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		return o.SetDue(ctx, m.UserID, m.NodeID, due)
 	})
 }
 

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
@@ -1663,6 +1664,75 @@ func TestDoneBulletRendersStruckThrough(t *testing.T) {
 	if got, _ := htmlassert.Attr(btn, "value"); got != "0" {
 		t.Errorf("a done bullet's toggle sends value=%q, want 0 (mark not done)", got)
 	}
+}
+
+func TestDueSetsAndClearsTheChip(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+		"root": {"0"}, "due": {"2026-03-05"},
+	}, "/notes/")
+
+	doc := s.get(t, s.alice, "/notes/")
+	chip := doc.MustHave(".outline-due-chip")
+	if got := htmlassert.Text(chip); got != "2026-03-05" {
+		t.Errorf("chip text = %q, want 2026-03-05", got)
+	}
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+		"root": {"0"}, "due": {""},
+	}, "/notes/")
+	s.get(t, s.alice, "/notes/").MustNotHave(".outline-due-chip")
+}
+
+func TestDueRejectsBadFormat(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+		"root": {"0"}, "due": {"not-a-date"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestDueOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+		"root": {"0"}, "due": {"2026-03-05"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+// TestOverdueChipIsMarked doesn't depend on the real clock: it sets a due
+// date far enough in the past (year 2000) that it will read as overdue for
+// the entire lifetime of this test suite.
+func TestOverdueChipIsMarked(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+	if err := s.store.SetDue(context.Background(), s.alice.user.ID, id, "2000-01-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/")
+	doc.MustHave(".outline-due-overdue")
+}
+
+func TestAFutureDueChipIsNotMarkedOverdue(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+	future := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+	if err := s.store.SetDue(context.Background(), s.alice.user.ID, id, future); err != nil {
+		t.Fatal(err)
+	}
+
+	s.get(t, s.alice, "/notes/").MustNotHave(".outline-due-overdue")
 }
 
 func TestEveryMutationRequiresSignInIncludesDoneAndDue(t *testing.T) {

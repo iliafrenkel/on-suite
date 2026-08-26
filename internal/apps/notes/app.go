@@ -100,4 +100,5 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /{id}/collapse", a.collapse)
 	r.HandleFunc("POST /{id}/delete", a.remove)
 	r.HandleFunc("POST /{id}/done", a.done)
+	r.HandleFunc("POST /{id}/due", a.due)
 }
