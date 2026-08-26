@@ -413,6 +413,16 @@ func (a *App) collapse(w http.ResponseWriter, r *http.Request) {
 // longer resolves, and answer 404. The outline never renders its own root as a
 // row, so that cannot be reached from the UI; a hand-made request that does it
 // gets an honest "there is nothing at that address" rather than a 500.
+func (a *App) remove(w http.ResponseWriter, r *http.Request) {
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		if err := o.Delete(ctx, m.UserID, m.NodeID); err != nil {
+			return err
+		}
+		a.deps.Log.Info("bullet deleted", "app", ID, "user_id", m.UserID, "node_id", m.NodeID)
+		return nil
+	})
+}
+
 // done marks a bullet done or not. The field names the state to arrive at,
 // exactly like collapsed's, so a double submit or a stale page cannot flip
 // it back.
@@ -508,14 +518,4 @@ func (a *App) dueList(w http.ResponseWriter, r *http.Request) {
 	page := a.deps.Page(r, "Due")
 	page.Data = GroupByDue(rows, time.Now())
 	a.render(w, r, http.StatusOK, "notes/due", page)
-}
-
-func (a *App) remove(w http.ResponseWriter, r *http.Request) {
-	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
-		if err := o.Delete(ctx, m.UserID, m.NodeID); err != nil {
-			return err
-		}
-		a.deps.Log.Info("bullet deleted", "app", ID, "user_id", m.UserID, "node_id", m.NodeID)
-		return nil
-	})
 }

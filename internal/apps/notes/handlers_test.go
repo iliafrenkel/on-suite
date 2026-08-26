@@ -519,6 +519,22 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 	if oobOverlays(t, frag) {
 		t.Error("a structural fragment carries hx-swap-oob, so htmx would strip the overlays out of it")
 	}
+	assertOnlyToggleIsOOB(t, frag)
+}
+
+// assertOnlyToggleIsOOB asserts that the show-completed toggle is the only
+// element anywhere in body carrying hx-swap-oob. A structural fragment
+// legitimately marks that one toolbar button out of band — see
+// renderOutlineFragment — but nothing else should ever be: an accidental
+// hx-swap-oob on, say, .outline-list or an .outline-row would make htmx
+// silently strip that chunk out of the response before swapping it in.
+func assertOnlyToggleIsOOB(t *testing.T, body string) {
+	t.Helper()
+	for _, n := range htmlassert.Parse(t, body).QueryAll("[hx-swap-oob]") {
+		if id, _ := htmlassert.Attr(n, "id"); id != "show-completed-toggle" {
+			t.Errorf("unexpected hx-swap-oob element (id=%q); only show-completed-toggle may be out of band", id)
+		}
+	}
 }
 
 // oobOverlays reports whether any rendered overlay in body is marked for an
