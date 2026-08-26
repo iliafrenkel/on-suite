@@ -2088,3 +2088,27 @@ func TestTagChipNowResolves(t *testing.T) {
 		t.Error("following the tag chip does not find the bullet that produced it")
 	}
 }
+
+// TestOutlineToolbarHasASearchBox: search has to be reachable from the page
+// the user is actually on, not just by typing the URL. The box is a plain GET
+// form, so it needs no CSRF token and works with JavaScript off.
+func TestOutlineToolbarHasASearchBox(t *testing.T) {
+	s := newServer(t)
+	doc := s.get(t, s.alice, "/notes/")
+	in := doc.MustHave("#notes-search-input")
+	if got, _ := htmlassert.Attr(in, "name"); got != "q" {
+		t.Errorf("search input name = %q, want q", got)
+	}
+	form := doc.MustHave("form.notes-search")
+	if got, _ := htmlassert.Attr(form, "action"); got != "/notes/search" {
+		t.Errorf("search form action = %q", got)
+	}
+	if got, _ := htmlassert.Attr(form, "method"); !strings.EqualFold(got, "get") {
+		t.Errorf("search form method = %q, want get (no CSRF token needed)", got)
+	}
+}
+
+func TestDueToolbarHasASearchBox(t *testing.T) {
+	s := newServer(t)
+	s.get(t, s.alice, "/notes/due").MustHave("#notes-search-input")
+}

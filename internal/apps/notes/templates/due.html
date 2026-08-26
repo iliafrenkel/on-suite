@@ -1,5 +1,15 @@
 {{define "content"}}
 <div class="stack notes">
+	{{/* /notes/due's own listing excludes done bullets unconditionally —
+	     spec §11 — so, unlike the outline, this toolbar needs no
+	     show-completed toggle and no .notes-toolbar-actions cluster. */}}
+	<div class="notes-toolbar">
+		<form method="get" action="/notes/search" class="notes-search">
+			<input type="search" id="notes-search-input" name="q"
+			       placeholder="Search…" aria-label="Search notes">
+		</form>
+		<a href="/notes/">All notes</a>
+	</div>
 	<h1>Due</h1>
 	{{range .Data.Sections}}
 	{{if .Rows}}

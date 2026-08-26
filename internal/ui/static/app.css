@@ -719,11 +719,18 @@ button.outline-chevron {
 
 .notes-toolbar {
 	display: flex;
-	justify-content: flex-end;
-	/* The toolbar holds more than one control from N5 on — the Due link and
-	 * the show-completed toggle — and they must not touch. */
+	justify-content: space-between;
+	align-items: center;
 	gap: var(--s-3);
 	font-size: var(--fs-sm);
+}
+
+/* Groups the Due link and the show-completed toggle on the right of the
+ * outline's toolbar, so N6's search box can sit alone on the left. */
+.notes-toolbar-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
 }
 
 .notes-due-group + .notes-due-group { margin-top: var(--s-4); }
