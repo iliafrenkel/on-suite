@@ -42,6 +42,12 @@ type outlineRow struct {
 	// concern rather than something outline-rows has to call out to.
 	RenderedTitle template.HTML
 	RenderedNote  template.HTML
+	// OOB marks this row as the subject of an out-of-band swap, which is
+	// what makes the shared overlay blocks emit hx-swap-oob. Only setText's
+	// response sets it; nest never does, because htmx strips every
+	// hx-swap-oob element out of the outline fragment that the structural
+	// operations return, blanking the overlays if a plain row carried it.
+	OOB bool
 }
 
 // nest turns Outline's flat pre-order slice into the tree the template renders

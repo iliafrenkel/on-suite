@@ -489,6 +489,37 @@ func TestBulletRendersMarkdown(t *testing.T) {
 	}
 }
 
+// TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender. The overlay markup is
+// shared with setText's out-of-band response, but a row rendered the ordinary
+// way must never carry hx-swap-oob: every structural operation answers with
+// the whole outline fragment over AJAX, and htmx lifts each hx-swap-oob
+// element out of such a response before swapping it in — which would strip
+// every overlay and leave the bullets blank until a full reload.
+func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
+	s := newServer(t)
+	first := s.seed(t, s.alice, notes.RootID, "**first**")
+	second := s.seed(t, s.alice, notes.RootID, "second")
+
+	page := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil)).Body.String()
+	if !strings.Contains(page, `id="rendered-title-`+itoa(first)+`"`) {
+		t.Fatalf("no rendered overlay on the page for bullet %d", first)
+	}
+	if strings.Contains(page, "hx-swap-oob") {
+		t.Error("a full page load carries hx-swap-oob on the rendered overlays")
+	}
+
+	// The same rows, this time as the fragment a structural operation returns.
+	frag := s.postHX(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(second)}, "title": {"second"}, "note": {""},
+	}).Body.String()
+	if !strings.Contains(frag, `id="rendered-title-`+itoa(first)+`"`) {
+		t.Fatalf("no rendered overlay in the structural fragment for bullet %d", first)
+	}
+	if strings.Contains(frag, "hx-swap-oob") {
+		t.Error("a structural fragment carries hx-swap-oob, so htmx would strip the overlays out of it")
+	}
+}
+
 // TestRenderedOverlayEscapesBulletText: the overlay is real HTML the browser
 // parses, so it must never carry unescaped user text even when nothing in
 // it looks like Markdown.

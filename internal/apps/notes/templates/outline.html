@@ -7,11 +7,14 @@
 
 {{/* rendered-title and rendered-note are shared between a normal row render
      and setText's HTMX response (Task 3), so the markup can never drift
-     between the two. hx-swap-oob is inert here — htmx only interprets it
-     when processing an AJAX response, never while parsing a normally
-     rendered page — and harmless to carry on every row for that reason. */}}
-{{define "rendered-title"}}<span id="rendered-title-{{.ID}}" class="outline-rendered outline-title-rendered" hx-swap-oob="true">{{.RenderedTitle}}</span>{{end}}
-{{define "rendered-note"}}<span id="rendered-note-{{.ID}}" class="outline-rendered outline-note-rendered" hx-swap-oob="true">{{.RenderedNote}}</span>{{end}}
+     between the two. The OOB flag is what keeps the two uses apart: only
+     setText's response sets it. A normal row must NOT carry hx-swap-oob,
+     because the structural operations (add, indent, outdent, move, collapse,
+     delete) answer with the whole outline fragment over AJAX, and htmx lifts
+     every hx-swap-oob element out of such a response before the swap — which
+     would delete every rendered overlay and leave the outline blank. */}}
+{{define "rendered-title"}}<span id="rendered-title-{{.ID}}" class="outline-rendered outline-title-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedTitle}}</span>{{end}}
+{{define "rendered-note"}}<span id="rendered-note-{{.ID}}" class="outline-rendered outline-note-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedNote}}</span>{{end}}
 
 {{define "content"}}
 <div class="stack notes">
