@@ -825,6 +825,8 @@ input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
  * a below), and :focus-within would also fire when *it* is tabbed to,
  * hiding the very link just reached. */
 .outline-field {
+	display: block;
+	width: 100%;
 	position: relative;
 	min-height: 1.4em;
 }
