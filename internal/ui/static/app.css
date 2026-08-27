@@ -685,9 +685,21 @@ button.danger:hover { background: var(--c-danger-bg); }
 .outline-dot {
 	flex: none;
 	width: 1.1rem;
+	color: var(--c-text-faint);
+}
+
+.outline-chevron {
 	line-height: 1.7;
 	text-align: center;
-	color: var(--c-text-faint);
+}
+
+.outline-dot {
+	display: inline-block;
+	height: 1.1rem;
+	line-height: 1.1rem;
+	margin-top: 0.3rem;
+	text-align: center;
+	border-radius: 50%;
 }
 
 button.outline-chevron {
@@ -817,7 +829,6 @@ button.outline-chevron {
  * dot gets a halo: the bullet is not as empty as it looks. */
 .outline-dot-full {
 	background: var(--c-bg-inset);
-	border-radius: 50%;
 }
 
 .outline-text { flex: 1; min-width: 0; }
