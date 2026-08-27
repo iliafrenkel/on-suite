@@ -652,10 +652,13 @@ button.danger:hover { background: var(--c-danger-bg); }
 
 /* The nesting is the indentation. The CSP has no unsafe-inline, so a row
  * cannot carry its depth in a style attribute — see nest() in view.go — and
- * a nested list is what produces both the indent and the guide line. */
+ * a nested list is what produces both the indent and the guide line.
+ * margin-left is 3.25rem (.outline-menu 1.1rem + gap 0.25rem + .outline-chevron 1.1rem
+ * + gap 0.25rem + half .outline-dot 0.55rem) so the guide line runs directly
+ * under the parent bullet dot. */
 .outline-item .outline-list {
-	margin-left: var(--s-4);
-	padding-left: var(--s-3);
+	margin-left: 3.25rem;
+	padding-left: 0.8rem;
 	border-left: 1px solid var(--c-border);
 }
 
