@@ -36,7 +36,11 @@ with a hover-only overlay floating over the row's right edge (see below).
 - **Chevron & dot** — unchanged (chevron stays hover-reveal, only shown
   when the row has children; dot stays always-visible zoom-in link).
 - **Title/note text** — unchanged, still `flex: 1; min-width: 0`.
-- **Due chip** — unchanged: always visible when a due date is set.
+- **Due chip** — always visible when a due date is set. Manual verification
+  found the hover overlay (pinned to the row's right edge) hid the chip
+  while hovering, since both target the same pixels; fixed by reserving
+  the overlay's width as `margin-right` on `.outline-due-chip`, so the two
+  render side by side instead of overlapping.
 
 ## Context menu (`···`)
 
@@ -63,11 +67,12 @@ Each menu item is a `<button>`/`<input>` inside the row's existing
 today (`/notes/{id}/done`, `/move`, `/indent`, `/outdent`, `/due`,
 `/delete`) with the same `hx-target="#outline" hx-swap="innerHTML"`.
 
-Open question to resolve during implementation: whether `<details>`
-should auto-close after a menu action submits (via `hx-swap` replacing
-the row) or whether it's fine left as default browser behavior. Try the
-naive version first (no extra JS); only add closing behavior (e.g.
-`hx-on::after-request`) if leaving it open reads as broken in practice.
+Open question, resolved during manual verification: the naive version
+works with no extra JS. `hx-swap="innerHTML"` replaces the whole
+`#outline` on every action, so `<details>` is recreated fresh (closed)
+each time rather than persisting an open state — the menu simply closes
+itself after every action, including ones that don't remove the row
+(e.g. move/indent). No `hx-on::after-request` needed.
 
 ## Hover overlay (quick access)
 
