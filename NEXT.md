@@ -38,7 +38,7 @@ Other features and ideas that need to be fleshed out:
 
 - [ ] Search should filter the tree and highlight the search term.
 - [x] Long titles and notes should be displayed in full width with multiple lines.
-- [ ] Long title in the breadcrumbs and navigation should be truncated to
+- [x] Long title in the breadcrumbs and navigation should be truncated to
   something like 200px with ellipsis.
 - [x] Completed items should have fainter text.
 - [ ] Add a context menu with actions
