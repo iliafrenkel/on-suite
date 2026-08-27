@@ -689,14 +689,23 @@ button.outline-chevron {
 }
 .outline-done:hover { color: var(--c-text); }
 
-/* A done bullet is struck through everywhere its text appears — the
+/* A done bullet is struck through and faint everywhere its text appears — the
  * rendered overlay and the raw input both, since text-decoration on an
  * ancestor is not reliably painted through a form control in every
  * browser, unlike plain inline text. */
 .outline-row-done .outline-title-rendered,
-.outline-row-done .outline-note-rendered,
+.outline-row-done .outline-note-rendered {
+	color: var(--c-text-faint);
+	text-decoration: line-through;
+}
 .outline-row-done input.outline-title,
-.outline-row-done input.outline-note { text-decoration: line-through; }
+.outline-row-done input.outline-note {
+	text-decoration: line-through;
+}
+.outline-row-done .outline-field:has(input:focus) input.outline-title,
+.outline-row-done .outline-field:has(input:focus) input.outline-note {
+	color: var(--c-text-faint);
+}
 
 .outline-due-chip {
 	flex: none;
