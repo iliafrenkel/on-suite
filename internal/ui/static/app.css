@@ -660,6 +660,7 @@ button.danger:hover { background: var(--c-danger-bg); }
 }
 
 .outline-row {
+	position: relative;
 	display: flex;
 	align-items: flex-start;
 	gap: var(--s-1);
@@ -690,18 +691,6 @@ button.outline-chevron {
 	border: none;
 	background: none;
 }
-
-.outline-done {
-	flex: none;
-	width: 1.1rem;
-	line-height: 1.7;
-	text-align: center;
-	padding: 0;
-	border: none;
-	background: none;
-	color: var(--c-text-faint);
-}
-.outline-done:hover { color: var(--c-text); }
 
 /* A done bullet is struck through and faint everywhere its text appears — the
  * rendered overlay and the raw input both, since text-decoration on an
@@ -905,20 +894,32 @@ input.outline-note:focus { outline: none; }
 /* opacity, not visibility: a visibility:hidden control cannot take focus, so
  * :focus-within would never fire and these would be unreachable from the
  * keyboard. */
-.outline-chevron,
-.outline-actions,
-.outline-delete { opacity: 0; }
+.outline-chevron { opacity: 0; }
 
 .outline-row:hover .outline-chevron,
-.outline-row:hover .outline-actions,
-.outline-row:hover .outline-delete,
-.outline-row:focus-within .outline-chevron,
-.outline-row:focus-within .outline-actions,
-.outline-row:focus-within .outline-delete { opacity: 1; }
+.outline-row:focus-within .outline-chevron { opacity: 1; }
 
-.outline-actions { display: flex; flex: none; }
+/* The overlay floats over the row's right edge instead of sitting in the
+ * flex flow, so it reserves no width when hidden — unlike the old
+ * opacity:0 approach, which kept the space reserved even though nothing
+ * was visible there. */
+.outline-overlay {
+	position: absolute;
+	right: 0;
+	top: 0;
+	z-index: 5;
+	display: flex;
+	opacity: 0;
+	background: var(--c-bg);
+	border: var(--border);
+	border-radius: var(--radius);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
 
-.outline-actions button {
+.outline-row:hover .outline-overlay,
+.outline-row:focus-within .outline-overlay { opacity: 1; }
+
+.outline-overlay button {
 	padding: 0 var(--s-1);
 	border: none;
 	background: none;
@@ -926,24 +927,70 @@ input.outline-note:focus { outline: none; }
 	line-height: 1.7;
 }
 
-.outline-actions button:hover:not([disabled]) {
+.outline-overlay button:hover:not([disabled]) {
 	background: var(--c-bg-inset);
 	color: var(--c-text);
 }
 
-.outline-actions button[disabled] { opacity: 0.3; cursor: default; }
+.outline-overlay button[disabled] { opacity: 0.3; cursor: default; }
 
-.outline-delete { flex: none; }
-
-.outline-delete button {
-	padding: 0 var(--s-1);
-	border: none;
-	background: none;
-	color: var(--c-text-faint);
-	line-height: 1.7;
+.outline-menu {
+	position: relative;
+	flex: none;
 }
 
-.outline-delete button:hover { background: var(--c-danger-bg); color: var(--c-danger); }
+.outline-menu-toggle {
+	display: block;
+	width: 1.1rem;
+	line-height: 1.7;
+	text-align: center;
+	color: var(--c-text-faint);
+	list-style: none;
+	cursor: pointer;
+}
+.outline-menu-toggle::-webkit-details-marker { display: none; }
+.outline-menu-toggle:hover { color: var(--c-text); }
+
+.outline-menu-list {
+	position: absolute;
+	left: 0;
+	top: calc(100% + var(--s-1));
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	min-width: 11rem;
+	padding: var(--s-2);
+	background: var(--c-bg);
+	border: var(--border);
+	border-radius: var(--radius);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.outline-menu-list button {
+	display: block;
+	width: 100%;
+	padding: var(--s-1) var(--s-2);
+	border: none;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--c-text);
+	text-align: left;
+	line-height: 1.7;
+}
+.outline-menu-list button:hover:not([disabled]) { background: var(--c-bg-inset); }
+.outline-menu-list button[disabled] { opacity: 0.4; cursor: default; }
+
+.outline-menu-due {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2);
+	padding: var(--s-1) var(--s-2);
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+}
+
+.outline-menu-delete:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 
 /* ---- Narrow viewports --------------------------------------------------- */
 
