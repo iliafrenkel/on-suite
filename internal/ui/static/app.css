@@ -920,10 +920,14 @@ input.outline-note:focus { outline: none; }
 /* opacity, not visibility: a visibility:hidden control cannot take focus, so
  * :focus-within would never fire and these would be unreachable from the
  * keyboard. */
-.outline-chevron { opacity: 0; }
+.outline-chevron,
+.outline-menu-toggle { opacity: 0; }
 
 .outline-row:hover .outline-chevron,
-.outline-row:focus-within .outline-chevron { opacity: 1; }
+.outline-row:focus-within .outline-chevron,
+.outline-row:hover .outline-menu-toggle,
+.outline-row:focus-within .outline-menu-toggle,
+.outline-menu[open] .outline-menu-toggle { opacity: 1; }
 
 /* The overlay floats over the row's right edge instead of sitting in the
  * flex flow, so it reserves no width when hidden — unlike the old
