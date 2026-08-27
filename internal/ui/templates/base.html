@@ -29,9 +29,9 @@
 		<a href="/">Home</a>
 		{{if .Shell.ActiveAppName}}
 		<span aria-hidden="true">/</span>
-		{{if .Title}}<a href="{{.Shell.ActiveAppPath}}">{{.Shell.ActiveAppName}}</a>{{else}}<span>{{.Shell.ActiveAppName}}</span>{{end}}
+		{{if .Title}}<a href="{{.Shell.ActiveAppPath}}" title="{{.Shell.ActiveAppName}}">{{.Shell.ActiveAppName}}</a>{{else}}<span title="{{.Shell.ActiveAppName}}">{{.Shell.ActiveAppName}}</span>{{end}}
 		{{end}}
-		{{if .Title}}<span aria-hidden="true">/</span><span>{{.Title}}</span>{{end}}
+		{{if .Title}}<span aria-hidden="true">/</span><span title="{{.Title}}">{{.Title}}</span>{{end}}
 	</nav>
 	{{if .Shell.LoggedIn}}
 	<div class="shell-user">

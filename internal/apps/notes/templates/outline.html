@@ -70,10 +70,10 @@
 		<a href="/notes/">All notes</a>
 		{{range .Data.Crumbs}}
 		<span aria-hidden="true">/</span>
-		<a href="/notes/{{.ID}}">{{.DisplayTitle}}</a>
+		<a href="/notes/{{.ID}}" title="{{.DisplayTitle}}">{{.DisplayTitle}}</a>
 		{{end}}
 		<span aria-hidden="true">/</span>
-		<span class="outline-crumb-current">{{.Data.Root.DisplayTitle}}</span>
+		<span class="outline-crumb-current" title="{{.Data.Root.DisplayTitle}}">{{.Data.Root.DisplayTitle}}</span>
 	</nav>
 	<h1>{{.Data.Root.DisplayTitle}}</h1>
 	{{with .Data.Root.Note}}<p class="dim">{{.}}</p>{{end}}

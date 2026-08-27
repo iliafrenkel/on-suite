@@ -15,7 +15,7 @@
 		<li class="notes-search-item">
 			{{if .Crumbs}}
 			<span class="notes-search-crumbs">
-				{{range .Crumbs}}{{.DisplayTitle}} / {{end}}
+				{{range .Crumbs}}<span class="notes-crumb-item" title="{{.DisplayTitle}}">{{.DisplayTitle}}</span> / {{end}}
 			</span>
 			{{end}}
 			<a href="/notes/{{.ID}}" class="notes-search-title">{{.DisplayTitle}}</a>

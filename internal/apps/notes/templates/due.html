@@ -20,7 +20,7 @@
 			<li class="notes-due-item">
 				{{if .Crumbs}}
 				<span class="notes-due-crumbs">
-					{{range .Crumbs}}{{.DisplayTitle}} / {{end}}
+					{{range .Crumbs}}<span class="notes-crumb-item" title="{{.DisplayTitle}}">{{.DisplayTitle}}</span> / {{end}}
 				</span>
 				{{end}}
 				<a href="/notes/{{.ID}}" class="notes-due-title">{{.DisplayTitle}}</a>
