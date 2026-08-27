@@ -33,3 +33,13 @@ Other features and ideas that need to be fleshed out:
 - Sharing: need to think this through; by default, all notes should be private.
 - Archiving: notes can be archived to hide them from the main note list.
 - Export/import of notes.
+
+### To Fix
+
+- [ ] Search should filter the tree and highlight the search term.
+- [ ] Long titles and notes should be displayed in full width with multiple lines.
+- [ ] Long title in the breadcrumbs and navigation should be truncated to
+  something like 200px with ellipsis.
+- [x] Completed items should have fainter text.
+- [ ] Add a context menu with actions
+- [ ] Remove the checkbox on the left.
