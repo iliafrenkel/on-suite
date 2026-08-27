@@ -710,8 +710,13 @@ button.outline-chevron {
 	color: var(--c-text-faint);
 }
 
+/* margin-right reserves room for the hover overlay (.outline-overlay,
+ * position: absolute, pinned to the row's right edge) so the two never
+ * occupy the same pixels — without it, hovering a row with a due date
+ * hides the chip behind the overlay's opaque background. */
 .outline-due-chip {
 	flex: none;
+	margin-right: 8rem;
 	font-size: var(--fs-sm);
 	color: var(--c-text-dim);
 	text-decoration: none;
