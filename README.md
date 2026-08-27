@@ -18,10 +18,10 @@ Of the four apps the "ON" prefix is reserved for, two are built and registered
 today. **ON Paste** holds snippets of code or text, with syntax highlighting
 and shareable links. **ON Notes** is a hierarchical outliner — one infinite
 tree per account, with zoom, collapse, every structural operation, a full
-keyboard layer, inline Markdown (bold, links, `#tags`), and done/due tracking
-with a cross-tree due-date view. Search is still being built out. ON Reader
-and ON Flash are future work: the platform and app framework are ready for
-them, but no code exists yet.
+keyboard layer, inline Markdown (bold, links, `#tags`), done/due tracking
+with a cross-tree due-date view, and full-text search with ancestor
+breadcrumbs. ON Reader and ON Flash are future work: the platform and app
+framework are ready for them, but no code exists yet.
 
 ## Is this for you?
 
@@ -181,7 +181,7 @@ Work since then is per-app rather than per-phase. ON Notes is being built in
 ten small chunks under
 [`docs/superpowers/specs/2026-08-25-on-notes-design.md`](docs/superpowers/specs/2026-08-25-on-notes-design.md);
 N1 (schema and store), N2 (the outline), N3 (the keyboard layer), N4
-(Markdown) and N5 (done + due dates) are done.
+(Markdown), N5 (done + due dates) and N6 (search and tags) are done.
 
 See [the roadmap](docs/superpowers/plans/2026-08-18-on-suite-00-roadmap.md)
 for the full task list and the [design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md)
