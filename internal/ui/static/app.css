@@ -878,6 +878,7 @@ input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
 	height: 100%;
 	color: transparent;
 	caret-color: var(--c-text);
+	z-index: 0;
 }
 .outline-field:has(input:focus) input {
 	position: relative;
@@ -889,6 +890,8 @@ input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
 .outline-rendered {
 	display: block;
 	width: 100%;
+	position: relative;
+	z-index: 1;
 	pointer-events: none; /* let a click on blank rendered text reach the input beneath it */
 	white-space: pre-wrap;
 	overflow-wrap: break-word;
