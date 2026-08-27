@@ -520,3 +520,37 @@ func (a *App) dueList(w http.ResponseWriter, r *http.Request) {
 	page.Data = GroupByDue(rows, time.Now())
 	a.render(w, r, http.StatusOK, "notes/due", page)
 }
+
+// search runs spec §12's full-text search across the whole tree. An empty
+// query shows just the search box, with nothing to list — there is nothing
+// sensible to prefill a fresh search with, unlike the outline's own empty
+// bullet.
+func (a *App) search(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	query := r.URL.Query().Get("q")
+
+	var rows []SearchRow
+	if strings.TrimSpace(query) != "" {
+		nodes, err := a.store.Search(r.Context(), userID, query, showCompletedFrom(r))
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
+		rows = make([]SearchRow, len(nodes))
+		for i, n := range nodes {
+			crumbs, err := a.store.Ancestors(r.Context(), userID, n.ID)
+			if err != nil {
+				a.deps.Errors.Internal(w, r, err)
+				return
+			}
+			rows[i] = SearchRow{Node: n, Crumbs: crumbs}
+		}
+	}
+
+	page := a.deps.Page(r, "Search")
+	page.Data = searchView{Query: query, Rows: rows}
+	a.render(w, r, http.StatusOK, "notes/search", page)
+}

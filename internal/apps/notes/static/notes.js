@@ -33,6 +33,20 @@
 		return !!(el && el.matches && el.matches(".outline-title, .outline-note"));
 	}
 
+	// isTypingTarget: used only by the "/" search-focus binding below. Unlike
+	// isOutlineField (deliberately narrow — title/note only, so Tab/arrow-key/
+	// Backspace outline-navigation stays scoped to those two fields), this
+	// asks the broader question "is the user typing anywhere right now,"
+	// so it also covers fields isOutlineField was never meant to reach, such
+	// as N5's due-date input (.outline-due-input). Without this, "/" typed
+	// into a date (e.g. "26/08/2026") would preventDefault and yank focus to
+	// the search box mid-entry, discarding the rest of what was typed.
+	function isTypingTarget(el) {
+		if (!el) return false;
+		var tag = el.tagName;
+		return tag === "INPUT" || tag === "TEXTAREA" || !!el.isContentEditable;
+	}
+
 	function rowOf(el) {
 		return el && el.closest && el.closest(".outline-row");
 	}
@@ -196,6 +210,22 @@
 	function handleKeydown(e) {
 		if (e.key === "Escape") {
 			handleEscape();
+			return;
+		}
+		// isTypingTarget, not isOutlineField: this guard must catch every
+		// field the user might be typing into (including the due-date
+		// input, which isOutlineField deliberately does not match — see
+		// isTypingTarget above), not just the outline's title/note fields.
+		// The old explicit "!== notes-search-input" id check is dropped as
+		// redundant, not forgotten: the search box is itself an INPUT, so
+		// isTypingTarget(e.target) is already true while it's focused, which
+		// makes the "/" guard false without needing the id check too.
+		if (e.key === "/" && !isTypingTarget(e.target)) {
+			var search = document.getElementById("notes-search-input");
+			if (search) {
+				e.preventDefault();
+				search.focus();
+			}
 			return;
 		}
 

@@ -719,11 +719,18 @@ button.outline-chevron {
 
 .notes-toolbar {
 	display: flex;
-	justify-content: flex-end;
-	/* The toolbar holds more than one control from N5 on — the Due link and
-	 * the show-completed toggle — and they must not touch. */
+	justify-content: space-between;
+	align-items: center;
 	gap: var(--s-3);
 	font-size: var(--fs-sm);
+}
+
+/* Groups the Due link and the show-completed toggle on the right of the
+ * outline's toolbar, so N6's search box can sit alone on the left. */
+.notes-toolbar-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
 }
 
 .notes-due-group + .notes-due-group { margin-top: var(--s-4); }
@@ -744,6 +751,29 @@ button.outline-chevron {
 .notes-due-crumbs { font-size: var(--fs-sm); color: var(--c-text-faint); }
 .notes-due-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
 .notes-due-title:hover { color: var(--c-accent); }
+
+.notes-search input[type="search"] {
+	font: inherit;
+	font-size: var(--fs-sm);
+	color: var(--c-text);
+	background: var(--c-bg-inset);
+	border: none;
+	border-radius: var(--radius);
+	padding: var(--s-1) var(--s-2);
+	width: 12rem;
+}
+
+.notes-search-list { margin: 0; padding: 0; list-style: none; }
+.notes-search-item {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-2);
+	padding: var(--s-1) 0;
+	border-bottom: 1px solid var(--c-border);
+}
+.notes-search-crumbs { font-size: var(--fs-sm); color: var(--c-text-faint); }
+.notes-search-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
+.notes-search-title:hover { color: var(--c-accent); }
 
 .outline-dot { text-decoration: none; }
 .outline-dot:hover { color: var(--c-accent); }
