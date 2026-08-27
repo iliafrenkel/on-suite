@@ -824,20 +824,36 @@ input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
  * :focus-within: a rendered link is itself focusable (see .outline-rendered
  * a below), and :focus-within would also fire when *it* is tabbed to,
  * hiding the very link just reached. */
-.outline-field { position: relative; }
+.outline-field {
+	position: relative;
+	min-height: 1.4em;
+}
+.outline-field:has(input.outline-title) {
+	min-height: 1.7em;
+}
 
-.outline-field input { color: transparent; caret-color: var(--c-text); }
-.outline-field:has(input:focus) input { color: inherit; }
+.outline-field input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	color: transparent;
+	caret-color: var(--c-text);
+}
+.outline-field:has(input:focus) input {
+	position: relative;
+	color: inherit;
+}
 .outline-field:has(input:focus) input.outline-note { color: var(--c-text-dim); }
 .outline-field:has(input:focus) .outline-rendered { display: none; }
 
 .outline-rendered {
-	position: absolute;
-	inset: 0;
+	display: block;
+	width: 100%;
 	pointer-events: none; /* let a click on blank rendered text reach the input beneath it */
-	overflow: hidden;
-	white-space: nowrap;
-	text-overflow: ellipsis;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	word-break: break-word;
 }
 
 /* A rendered link must stay clickable even though the overlay it lives in
