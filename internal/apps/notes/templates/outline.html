@@ -13,7 +13,7 @@
      delete) answer with the whole outline fragment over AJAX, and htmx lifts
      every hx-swap-oob element out of such a response before the swap — which
      would delete every rendered overlay and leave the outline blank. */}}
-{{define "rendered-title"}}<span id="rendered-title-{{.ID}}" class="outline-rendered outline-title-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedTitle}}</span>{{end}}
+{{define "rendered-title"}}<span id="rendered-title-{{.ID}}" class="outline-rendered outline-title-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedTitle}}{{if .DueOn}} <a class="outline-due-chip{{if .Overdue}} outline-due-overdue{{end}}" href="/notes/due">{{.DueOn}}</a>{{end}}</span>{{end}}
 {{define "rendered-note"}}<span id="rendered-note-{{.ID}}" class="outline-rendered outline-note-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedNote}}</span>{{end}}
 
 {{/* text-update is setText's whole HTMX response: both fields' rendered
@@ -190,12 +190,6 @@
 						       hx-trigger="input changed delay:600ms, blur changed" hx-swap="none">
 					</span>
 				</span>
-
-				{{$row := .}}
-				{{with .DueOn}}
-				<a class="outline-due-chip{{if $row.Overdue}} outline-due-overdue{{end}}"
-				   href="/notes/due">{{.}}</a>
-				{{end}}
 
 				<span class="outline-overlay">
 					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"

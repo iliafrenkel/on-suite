@@ -727,25 +727,22 @@ button.outline-chevron {
 }
 
 .outline-due-chip {
-	flex: none;
-	font-size: var(--fs-sm);
-	color: var(--c-text-dim);
+	display: inline-block;
+	font-size: var(--fs-xs);
+	background: var(--c-accent-bg);
+	color: var(--c-accent);
+	padding: 0 0.35em;
+	border-radius: var(--radius);
 	text-decoration: none;
 	white-space: nowrap;
 }
 .outline-due-chip:hover { color: var(--c-accent); }
 
-/* margin-right reserves room for the hover overlay (.outline-overlay,
- * position: absolute, pinned to the row's right edge) so the two never
- * occupy the same pixels — without it, hovering a row with a due date
- * hides the chip behind the overlay's opaque background. Scoped to
- * .outline-row and driven by the same --outline-overlay-w variable the
- * overlay's own min-width uses (see .outline-overlay below), so the
- * reserved space can never drift out of sync with the overlay's actual
- * box width, and chips outside .outline-row (e.g. the /notes/due page)
- * get no margin at all. */
-.outline-row .outline-due-chip { margin-right: var(--outline-overlay-w); }
-.outline-due-overdue { color: var(--c-danger); }
+.outline-due-overdue {
+	background: var(--c-danger-bg);
+	color: var(--c-danger);
+}
+.outline-due-overdue:hover { color: var(--c-danger); }
 
 .outline-due-input {
 	font: inherit;
