@@ -184,6 +184,14 @@
 		if (btn && !btn.disabled) btn.click();
 	}
 
+	// indentButton, outdentButton, and moveButton's selectors each match TWO
+	// elements per row: one in the "···" menu (.outline-menu-list) and one in
+	// the hover overlay (.outline-overlay). querySelector returns the first
+	// DOM-order match, which today is always the menu's copy, since the menu
+	// renders before the overlay in outline.html. That's fine — both copies
+	// are wired identically, so clicking either has the same effect — but if
+	// the row markup is ever reordered so the overlay renders first, these
+	// would silently start clicking the overlay's copy instead.
 	function indentButton(row) { return row.querySelector('button[formaction$="/indent"]'); }
 	function outdentButton(row) { return row.querySelector('button[formaction$="/outdent"]'); }
 	function moveButton(row, dir) { return row.querySelector('button[name="dir"][value="' + dir + '"]'); }

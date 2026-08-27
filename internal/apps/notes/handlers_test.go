@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/html"
+
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
@@ -272,6 +274,18 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
+// within reports whether node is ancestor or a descendant of it — used to
+// check which container (menu vs. overlay) a given button actually lives
+// in, since both contain buttons matching the same CSS selectors.
+func within(node, ancestor *html.Node) bool {
+	for n := node; n != nil; n = n.Parent {
+		if n == ancestor {
+			return true
+		}
+	}
+	return false
+}
+
 // ---- tests ----------------------------------------------------------------
 
 // TestNotesRequiresSignIn confirms the default-deny router covers this
@@ -322,6 +336,11 @@ func TestOutlineRendersTheTreeNested(t *testing.T) {
 	if len(nested) != 1 {
 		t.Fatalf("got %d nested bullets, want 1", len(nested))
 	}
+
+	// The row's main form still carries its CSRF token — delete moved into
+	// this form in an earlier commit, and this is the only render-level
+	// assertion that a token is actually on the page.
+	doc.MustHave("form.outline-main input[name=csrf_token]")
 
 	// Every bullet's text is an input, so the page is already editable.
 	titles := doc.QueryAll("input.outline-title")
@@ -409,25 +428,64 @@ func TestBulletControlsAreDisabledAtTheEdges(t *testing.T) {
 
 	doc := s.get(t, s.alice, "/notes/")
 
-	// Two flat bullets, so document order is outline order: [0] is first,
-	// [1] is second.
+	// Two flat bullets, each with move buttons appearing twice — once in the
+	// "···" menu (.outline-menu-list) and once in the hover overlay
+	// (.outline-overlay). Rather than assume a DOM order for the flat list of
+	// matches (brittle to markup reordering), within() pins each button to
+	// its actual row and container.
+	rows := doc.QueryAll(".outline-row")
+	menus := doc.QueryAll(".outline-menu-list")
+	overlays := doc.QueryAll(".outline-overlay")
 	ups := doc.QueryAll(`button[value=up]`)
 	downs := doc.QueryAll(`button[value=down]`)
-	if len(ups) != 2 || len(downs) != 2 {
-		t.Fatalf("got %d move-up and %d move-down buttons, want 2 of each", len(ups), len(downs))
+	if len(rows) != 2 || len(menus) != 2 || len(overlays) != 2 || len(ups) != 4 || len(downs) != 4 {
+		t.Fatalf("got %d rows, %d menus, %d overlays, %d move-up and %d move-down buttons, want 2, 2, 2, 4, 4",
+			len(rows), len(menus), len(overlays), len(ups), len(downs))
 	}
-	if _, ok := htmlassert.Attr(ups[0], "disabled"); !ok {
-		t.Error("the first bullet's move-up is not disabled")
+
+	withinAll := func(nodes []*html.Node, ancestor *html.Node) []*html.Node {
+		var out []*html.Node
+		for _, n := range nodes {
+			if within(n, ancestor) {
+				out = append(out, n)
+			}
+		}
+		return out
 	}
-	if _, ok := htmlassert.Attr(downs[0], "disabled"); ok {
-		t.Error("the first bullet's move-down is disabled but a sibling follows it")
+	find := func(t *testing.T, nodes []*html.Node, container *html.Node, what string) *html.Node {
+		t.Helper()
+		matches := withinAll(nodes, container)
+		if len(matches) != 1 {
+			t.Fatalf("got %d %s buttons in container, want 1", len(matches), what)
+		}
+		return matches[0]
 	}
-	if _, ok := htmlassert.Attr(ups[1], "disabled"); ok {
-		t.Error("the second bullet's move-up is disabled but a sibling precedes it")
+
+	check := func(label string, row *html.Node, wantUpDisabled, wantDownDisabled bool) {
+		menu := find(t, menus, row, "menu")
+		overlay := find(t, overlays, row, "overlay")
+
+		menuUp := find(t, ups, menu, "menu move-up")
+		overlayUp := find(t, ups, overlay, "overlay move-up")
+		menuDown := find(t, downs, menu, "menu move-down")
+		overlayDown := find(t, downs, overlay, "overlay move-down")
+
+		if _, ok := htmlassert.Attr(menuUp, "disabled"); ok != wantUpDisabled {
+			t.Errorf("the %s bullet's menu move-up disabled=%v, want %v", label, ok, wantUpDisabled)
+		}
+		if _, ok := htmlassert.Attr(overlayUp, "disabled"); ok != wantUpDisabled {
+			t.Errorf("the %s bullet's overlay move-up disabled=%v, want %v", label, ok, wantUpDisabled)
+		}
+		if _, ok := htmlassert.Attr(menuDown, "disabled"); ok != wantDownDisabled {
+			t.Errorf("the %s bullet's menu move-down disabled=%v, want %v", label, ok, wantDownDisabled)
+		}
+		if _, ok := htmlassert.Attr(overlayDown, "disabled"); ok != wantDownDisabled {
+			t.Errorf("the %s bullet's overlay move-down disabled=%v, want %v", label, ok, wantDownDisabled)
+		}
 	}
-	if _, ok := htmlassert.Attr(downs[1], "disabled"); !ok {
-		t.Error("the last bullet's move-down is not disabled")
-	}
+
+	check("first", rows[0], true, false)
+	check("second", rows[1], false, true)
 }
 
 // TestOutlineUsesNoInlineStyles. The CSP has no unsafe-inline: a style
@@ -1314,31 +1372,123 @@ func TestEmptyOutlineFormIsHTMXWired(t *testing.T) {
 	}
 }
 
-// TestDeleteIsItsOwnConfirmedForm. hx-confirm, not data-confirm: once the
-// form is hx-post-driven, HTMX's own confirmation runs before it builds the
-// request at all, so there is no dependency on theme.js's generic
-// data-confirm listener or any question of which one runs first.
-func TestDeleteIsItsOwnConfirmedForm(t *testing.T) {
+// TestDeleteButtonIsIndividuallyConfirmed. hx-confirm lives on the delete
+// button itself, not on a wrapping form: htmx scopes hx-confirm to the
+// element that issues the request, so putting it on the button (rather
+// than an ancestor) is what keeps every other button in the same menu from
+// asking for confirmation too.
+func TestDeleteButtonIsIndividuallyConfirmed(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.alice, notes.RootID, "Projects")
 
 	doc := s.get(t, s.alice, "/notes/")
-	form := doc.MustHave(`form[action=/notes/` + itoa(id) + `/delete]`)
-	if _, ok := htmlassert.Attr(form, "hx-confirm"); !ok {
-		t.Error("the delete form asks for no confirmation")
+	btn := doc.MustHave(`button[formaction=/notes/` + itoa(id) + `/delete]`)
+	if _, ok := htmlassert.Attr(btn, "hx-confirm"); !ok {
+		t.Error("the delete button asks for no confirmation")
 	}
-	if got, _ := htmlassert.Attr(form, "hx-post"); got != "/notes/"+itoa(id)+"/delete" {
-		t.Errorf("delete form hx-post = %q", got)
+	if got, _ := htmlassert.Attr(btn, "hx-post"); got != "/notes/"+itoa(id)+"/delete" {
+		t.Errorf("delete button hx-post = %q", got)
 	}
-	if got, _ := htmlassert.Attr(form, "hx-target"); got != "#outline" {
-		t.Errorf("delete form hx-target = %q, want #outline", got)
+	if got, _ := htmlassert.Attr(btn, "hx-target"); got != "#outline" {
+		t.Errorf("delete button hx-target = %q, want #outline", got)
 	}
-	// It must not be the row's main form, or every button would be confirmed.
-	if cls, _ := htmlassert.Attr(form, "class"); !strings.Contains(cls, "outline-delete") {
-		t.Errorf("the delete form's class is %q", cls)
+	if cls, _ := htmlassert.Attr(btn, "class"); !strings.Contains(cls, "outline-menu-delete") {
+		t.Errorf("the delete button's class is %q", cls)
 	}
-	doc.MustHave(`form.outline-delete input[name=csrf_token]`)
-	doc.MustHave(`form.outline-delete input[name=root]`)
+
+	// Neighboring menu buttons must not inherit the confirmation.
+	for _, sel := range []string{
+		`button[formaction=/notes/` + itoa(id) + `/done]`,
+		`button[value=up]`,
+	} {
+		b := doc.MustHave(sel)
+		if _, ok := htmlassert.Attr(b, "hx-confirm"); ok {
+			t.Errorf("%s unexpectedly asks for confirmation", sel)
+		}
+	}
+}
+
+// TestOutlineMenuHoldsEveryAction. The "···" menu is the comprehensive,
+// touch-reachable home for every row action — including the four that also
+// get a hover-overlay shortcut — so nothing is unreachable without a mouse
+// hovering the row.
+func TestOutlineMenuHoldsEveryAction(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "Projects")
+
+	doc := s.get(t, s.alice, "/notes/")
+	menu := doc.MustHave(".outline-menu")
+	summary := doc.MustHave(".outline-menu-toggle")
+	if tag := summary.Data; tag != "summary" {
+		t.Errorf("menu toggle is a <%s>, want <summary>", tag)
+	}
+	if !within(summary, menu) {
+		t.Error("the toggle is not inside .outline-menu")
+	}
+	list := doc.MustHave(".outline-menu-list")
+	if !within(list, menu) {
+		t.Error(".outline-menu-list is not inside .outline-menu")
+	}
+
+	for _, sel := range []string{
+		`button.outline-done`,
+		`input.outline-due-input`,
+		`button[value=up]`,
+		`button[value=down]`,
+		`button[formaction=/notes/` + itoa(id) + `/indent]`,
+		`button[formaction=/notes/` + itoa(id) + `/outdent]`,
+		`button[formaction=/notes/new]`,
+		`button.outline-menu-delete`,
+	} {
+		found := false
+		for _, n := range doc.QueryAll(sel) {
+			if within(n, list) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("menu is missing %s", sel)
+		}
+	}
+}
+
+// TestHoverOverlayDuplicatesStructuralActions. The overlay is the
+// fast-mouse-access shortcut for the four actions used often enough to
+// justify a hover target — it must not include done, due-date editing, or
+// delete, which stay menu-only.
+func TestHoverOverlayDuplicatesStructuralActions(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "Projects")
+
+	doc := s.get(t, s.alice, "/notes/")
+	overlay := doc.MustHave(".outline-overlay")
+
+	for _, sel := range []string{
+		`button[value=up]`,
+		`button[value=down]`,
+		`button[formaction=/notes/` + itoa(id) + `/indent]`,
+		`button[formaction=/notes/` + itoa(id) + `/outdent]`,
+		`button[formaction=/notes/new]`,
+	} {
+		found := false
+		for _, n := range doc.QueryAll(sel) {
+			if within(n, overlay) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("overlay is missing %s", sel)
+		}
+	}
+	for _, sel := range []string{`button.outline-done`, `input.outline-due-input`, `button.outline-menu-delete`} {
+		for _, n := range doc.QueryAll(sel) {
+			if within(n, overlay) {
+				t.Errorf("%s must not be in the hover overlay", sel)
+			}
+		}
+	}
 }
 
 // TestStructuralRequestSavesTheFocusedText is spec §7. Every structural POST

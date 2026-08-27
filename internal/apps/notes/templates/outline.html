@@ -112,13 +112,51 @@
 				<input type="hidden" name="root" value="{{.RootID}}">
 				<input type="hidden" name="focus_id" value="{{.ID}}">
 
-				<button type="submit" class="outline-done quiet"
-				        formaction="/notes/{{.ID}}/done"
-				        hx-post="/notes/{{.ID}}/done" hx-target="#outline" hx-swap="innerHTML"
-				        name="done" value="{{if .Done}}0{{else}}1{{end}}"
-				        aria-pressed="{{if .Done}}true{{else}}false{{end}}"
-				        aria-label="{{if .Done}}Mark not done{{else}}Mark done{{end}}"
-				        >{{if .Done}}&#9745;{{else}}&#9744;{{end}}</button>
+				<details class="outline-menu">
+					<summary class="outline-menu-toggle quiet" aria-label="Bullet actions">&#8943;</summary>
+					<div class="outline-menu-list">
+						<button type="submit" class="quiet outline-done"
+						        formaction="/notes/{{.ID}}/done"
+						        hx-post="/notes/{{.ID}}/done" hx-target="#outline" hx-swap="innerHTML"
+						        name="done" value="{{if .Done}}0{{else}}1{{end}}"
+						        aria-pressed="{{if .Done}}true{{else}}false{{end}}"
+						        aria-label="{{if .Done}}Mark not done{{else}}Mark done{{end}}"
+						        >{{if .Done}}&#9745; Mark not done{{else}}&#9744; Mark done{{end}}</button>
+
+						<label class="outline-menu-due">
+							<span>Due date</span>
+							<input type="date" class="outline-due-input" name="due" value="{{.DueOn}}"
+							       aria-label="Due date"
+							       hx-post="/notes/{{.ID}}/due" hx-target="#outline" hx-swap="innerHTML"
+							       hx-trigger="change">
+						</label>
+
+						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
+						        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
+						        name="dir" value="up" aria-label="Move up"
+						        {{if eq .Position 0}}disabled{{end}}>&uarr; Move up</button>
+						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
+						        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
+						        name="dir" value="down" aria-label="Move down"
+						        {{if .Last}}disabled{{end}}>&darr; Move down</button>
+						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/indent"
+						        hx-post="/notes/{{.ID}}/indent" hx-target="#outline" hx-swap="innerHTML"
+						        aria-label="Indent"
+						        {{if eq .Position 0}}disabled{{end}}>&#8677; Indent</button>
+						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/outdent"
+						        hx-post="/notes/{{.ID}}/outdent" hx-target="#outline" hx-swap="innerHTML"
+						        aria-label="Outdent"
+						        {{if eq .Depth 0}}disabled{{end}}>&#8676; Outdent</button>
+						<button type="submit" class="quiet" formaction="/notes/new"
+						        hx-post="/notes/new" hx-target="#outline" hx-swap="innerHTML"
+						        aria-label="Add a bullet below">+ Add bullet</button>
+
+						<button type="submit" class="quiet outline-menu-delete" formaction="/notes/{{.ID}}/delete"
+						        hx-post="/notes/{{.ID}}/delete" hx-target="#outline" hx-swap="innerHTML"
+						        hx-confirm="Delete &#8220;{{.DisplayTitle}}&#8221; and everything under it? This cannot be undone."
+						        aria-label="Delete">&times; Delete</button>
+					</div>
+				</details>
 
 				{{if .HasChildren}}
 				<button type="submit" class="outline-chevron quiet"
@@ -159,11 +197,7 @@
 				   href="/notes/due">{{.}}</a>
 				{{end}}
 
-				<span class="outline-actions">
-					<input type="date" class="outline-due-input" name="due" value="{{.DueOn}}"
-					       aria-label="Due date"
-					       hx-post="/notes/{{.ID}}/due" hx-target="#outline" hx-swap="innerHTML"
-					       hx-trigger="change">
+				<span class="outline-overlay">
 					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
 					        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
 					        name="dir" value="up" aria-label="Move up"
@@ -184,14 +218,6 @@
 					        hx-post="/notes/new" hx-target="#outline" hx-swap="innerHTML"
 					        aria-label="Add a bullet below">+</button>
 				</span>
-			</form>
-
-			<form method="post" action="/notes/{{.ID}}/delete" class="outline-delete"
-			      hx-post="/notes/{{.ID}}/delete" hx-target="#outline" hx-swap="innerHTML"
-			      hx-confirm="Delete “{{.DisplayTitle}}” and everything under it? This cannot be undone.">
-				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-				<input type="hidden" name="root" value="{{.RootID}}">
-				<button type="submit" class="quiet" aria-label="Delete">&times;</button>
 			</form>
 		</div>
 
