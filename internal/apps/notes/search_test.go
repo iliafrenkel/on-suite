@@ -1,0 +1,160 @@
+package notes_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/iliafrenkel/on-suite/internal/apps/notes"
+)
+
+func TestSearchFindsAMatchInTheTitle(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.mk(t, notes.RootID, "buy milk")
+	f.mk(t, notes.RootID, "call dentist")
+
+	got, err := f.store.Search(ctx, f.alice.ID, "milk", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Title != "buy milk" {
+		t.Fatalf("Search(milk) = %+v, want just the milk bullet", got)
+	}
+}
+
+func TestSearchFindsAMatchInTheNote(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "groceries")
+	if err := f.store.SetText(ctx, f.alice.ID, n.ID, "groceries", "don't forget the oat milk"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Search(ctx, f.alice.ID, "oat", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != n.ID {
+		t.Fatalf("Search(oat) = %+v, want the groceries bullet", got)
+	}
+}
+
+// TestSearchRequiresEveryWord: space-separated words are ANDed, not ORed —
+// ftsQuery's job is to make that true regardless of what the words are.
+func TestSearchRequiresEveryWord(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.mk(t, notes.RootID, "budget report")
+	f.mk(t, notes.RootID, "budget only")
+
+	got, err := f.store.Search(ctx, f.alice.ID, "budget report", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Title != "budget report" {
+		t.Fatalf("Search(budget report) = %+v, want just the one with both words", got)
+	}
+}
+
+// TestSearchTracksEdits proves the FTS5 triggers actually fire, not just
+// that the initial backfill worked: a stale index would still find the old
+// text, or miss the new.
+func TestSearchTracksEdits(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "old title")
+
+	if got, err := f.store.Search(ctx, f.alice.ID, "old", false); err != nil || len(got) != 1 {
+		t.Fatalf("Search(old) before edit = %+v, %v", got, err)
+	}
+
+	if err := f.store.SetText(ctx, f.alice.ID, n.ID, "new title", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := f.store.Search(ctx, f.alice.ID, "old", false); err != nil || len(got) != 0 {
+		t.Fatalf("Search(old) after edit = %+v, %v; the index is stale", got, err)
+	}
+	if got, err := f.store.Search(ctx, f.alice.ID, "new", false); err != nil || len(got) != 1 {
+		t.Fatalf("Search(new) after edit = %+v, %v", got, err)
+	}
+}
+
+// TestSearchTracksDeletes proves the AD trigger removes a deleted bullet
+// from the index itself, not merely that Search happens to filter it out
+// some other way.
+func TestSearchTracksDeletes(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "temporary")
+
+	if err := f.store.Delete(ctx, f.alice.ID, n.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Search(ctx, f.alice.ID, "temporary", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Search after delete = %+v, want none", got)
+	}
+}
+
+func TestSearchDoesNotLeakAnotherUsersNodes(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.mk(t, notes.RootID, "alice only")
+	f.mkFor(t, f.bob.ID, notes.RootID, "bob's secret")
+
+	got, err := f.store.Search(ctx, f.alice.ID, "secret", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("alice's search found bob's node: %+v", got)
+	}
+}
+
+func TestSearchExcludesDoneUnlessShowCompleted(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "finished task")
+	if err := f.store.SetDone(ctx, f.alice.ID, n.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := f.store.Search(ctx, f.alice.ID, "finished", false); err != nil || len(got) != 0 {
+		t.Fatalf("Search with showCompleted=false = %+v, %v; want none", got, err)
+	}
+	if got, err := f.store.Search(ctx, f.alice.ID, "finished", true); err != nil || len(got) != 1 {
+		t.Fatalf("Search with showCompleted=true = %+v, %v; want the one hit", got, err)
+	}
+}
+
+func TestSearchWithNoQueryReturnsNoResults(t *testing.T) {
+	f := newFixture(t)
+	f.mk(t, notes.RootID, "anything")
+
+	got, err := f.store.Search(context.Background(), f.alice.ID, "   ", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Search(whitespace) = %+v, want none", got)
+	}
+}
+
+// TestSearchHandlesFTS5SyntaxCharactersLiterally proves ftsQuery's escaping:
+// none of these characters carry their usual FTS5 meaning here, and none of
+// them should make Search return an error.
+func TestSearchHandlesFTS5SyntaxCharactersLiterally(t *testing.T) {
+	f := newFixture(t)
+	f.mk(t, notes.RootID, `a "quoted" word`)
+
+	for _, q := range []string{`"quoted"`, `budget* OR report`, `foo" bar`, `NOT`} {
+		if _, err := f.store.Search(context.Background(), f.alice.ID, q, false); err != nil {
+			t.Errorf("Search(%q) errored: %v", q, err)
+		}
+	}
+}

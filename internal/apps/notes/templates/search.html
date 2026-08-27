@@ -1,0 +1,30 @@
+{{define "content"}}
+<div class="stack notes">
+	<div class="notes-toolbar">
+		<form method="get" action="/notes/search" class="notes-search">
+			<input type="search" id="notes-search-input" name="q" value="{{.Data.Query}}"
+			       placeholder="Search…" aria-label="Search notes" autofocus>
+		</form>
+		<a href="/notes/">All notes</a>
+	</div>
+	<h1>Search</h1>
+	{{if .Data.Query}}
+	{{if .Data.Rows}}
+	<ul class="notes-search-list">
+		{{range .Data.Rows}}
+		<li class="notes-search-item">
+			{{if .Crumbs}}
+			<span class="notes-search-crumbs">
+				{{range .Crumbs}}{{.DisplayTitle}} / {{end}}
+			</span>
+			{{end}}
+			<a href="/notes/{{.ID}}" class="notes-search-title">{{.DisplayTitle}}</a>
+		</li>
+		{{end}}
+	</ul>
+	{{else}}
+	<p class="dim">No matches for &ldquo;{{.Data.Query}}&rdquo;.</p>
+	{{end}}
+	{{end}}
+</div>
+{{end}}
