@@ -41,5 +41,5 @@ Other features and ideas that need to be fleshed out:
 - [x] Long title in the breadcrumbs and navigation should be truncated to
   something like 200px with ellipsis.
 - [x] Completed items should have fainter text.
-- [ ] Add a context menu with actions
-- [ ] Remove the checkbox on the left.
+- [x] Add a context menu with actions
+- [x] Remove the checkbox on the left.
