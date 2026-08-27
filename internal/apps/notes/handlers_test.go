@@ -337,6 +337,11 @@ func TestOutlineRendersTheTreeNested(t *testing.T) {
 		t.Fatalf("got %d nested bullets, want 1", len(nested))
 	}
 
+	// The row's main form still carries its CSRF token — delete moved into
+	// this form in an earlier commit, and this is the only render-level
+	// assertion that a token is actually on the page.
+	doc.MustHave("form.outline-main input[name=csrf_token]")
+
 	// Every bullet's text is an input, so the page is already editable.
 	titles := doc.QueryAll("input.outline-title")
 	if len(titles) != 3 {
@@ -423,40 +428,64 @@ func TestBulletControlsAreDisabledAtTheEdges(t *testing.T) {
 
 	doc := s.get(t, s.alice, "/notes/")
 
-	// Two flat bullets: each now has move buttons in both the menu and overlay.
-	// ups[0] and ups[1] are for first bullet (menu + overlay),
-	// ups[2] and ups[3] are for second bullet (menu + overlay).
+	// Two flat bullets, each with move buttons appearing twice — once in the
+	// "···" menu (.outline-menu-list) and once in the hover overlay
+	// (.outline-overlay). Rather than assume a DOM order for the flat list of
+	// matches (brittle to markup reordering), within() pins each button to
+	// its actual row and container.
+	rows := doc.QueryAll(".outline-row")
+	menus := doc.QueryAll(".outline-menu-list")
+	overlays := doc.QueryAll(".outline-overlay")
 	ups := doc.QueryAll(`button[value=up]`)
 	downs := doc.QueryAll(`button[value=down]`)
-	if len(ups) != 4 || len(downs) != 4 {
-		t.Fatalf("got %d move-up and %d move-down buttons, want 4 of each", len(ups), len(downs))
+	if len(rows) != 2 || len(menus) != 2 || len(overlays) != 2 || len(ups) != 4 || len(downs) != 4 {
+		t.Fatalf("got %d rows, %d menus, %d overlays, %d move-up and %d move-down buttons, want 2, 2, 2, 4, 4",
+			len(rows), len(menus), len(overlays), len(ups), len(downs))
 	}
-	// First bullet (indices 0 and 1): move-up must be disabled, move-down must not be
-	if _, ok := htmlassert.Attr(ups[0], "disabled"); !ok {
-		t.Error("the first bullet's menu move-up is not disabled")
+
+	withinAll := func(nodes []*html.Node, ancestor *html.Node) []*html.Node {
+		var out []*html.Node
+		for _, n := range nodes {
+			if within(n, ancestor) {
+				out = append(out, n)
+			}
+		}
+		return out
 	}
-	if _, ok := htmlassert.Attr(ups[1], "disabled"); !ok {
-		t.Error("the first bullet's overlay move-up is not disabled")
+	find := func(t *testing.T, nodes []*html.Node, container *html.Node, what string) *html.Node {
+		t.Helper()
+		matches := withinAll(nodes, container)
+		if len(matches) != 1 {
+			t.Fatalf("got %d %s buttons in container, want 1", len(matches), what)
+		}
+		return matches[0]
 	}
-	if _, ok := htmlassert.Attr(downs[0], "disabled"); ok {
-		t.Error("the first bullet's menu move-down is disabled but a sibling follows it")
+
+	check := func(label string, row *html.Node, wantUpDisabled, wantDownDisabled bool) {
+		menu := find(t, menus, row, "menu")
+		overlay := find(t, overlays, row, "overlay")
+
+		menuUp := find(t, ups, menu, "menu move-up")
+		overlayUp := find(t, ups, overlay, "overlay move-up")
+		menuDown := find(t, downs, menu, "menu move-down")
+		overlayDown := find(t, downs, overlay, "overlay move-down")
+
+		if _, ok := htmlassert.Attr(menuUp, "disabled"); ok != wantUpDisabled {
+			t.Errorf("the %s bullet's menu move-up disabled=%v, want %v", label, ok, wantUpDisabled)
+		}
+		if _, ok := htmlassert.Attr(overlayUp, "disabled"); ok != wantUpDisabled {
+			t.Errorf("the %s bullet's overlay move-up disabled=%v, want %v", label, ok, wantUpDisabled)
+		}
+		if _, ok := htmlassert.Attr(menuDown, "disabled"); ok != wantDownDisabled {
+			t.Errorf("the %s bullet's menu move-down disabled=%v, want %v", label, ok, wantDownDisabled)
+		}
+		if _, ok := htmlassert.Attr(overlayDown, "disabled"); ok != wantDownDisabled {
+			t.Errorf("the %s bullet's overlay move-down disabled=%v, want %v", label, ok, wantDownDisabled)
+		}
 	}
-	if _, ok := htmlassert.Attr(downs[1], "disabled"); ok {
-		t.Error("the first bullet's overlay move-down is disabled but a sibling follows it")
-	}
-	// Second bullet (indices 2 and 3): move-up must not be disabled, move-down must be
-	if _, ok := htmlassert.Attr(ups[2], "disabled"); ok {
-		t.Error("the second bullet's menu move-up is disabled but a sibling precedes it")
-	}
-	if _, ok := htmlassert.Attr(ups[3], "disabled"); ok {
-		t.Error("the second bullet's overlay move-up is disabled but a sibling precedes it")
-	}
-	if _, ok := htmlassert.Attr(downs[2], "disabled"); !ok {
-		t.Error("the second bullet's menu move-down is not disabled")
-	}
-	if _, ok := htmlassert.Attr(downs[3], "disabled"); !ok {
-		t.Error("the second bullet's overlay move-down is not disabled")
-	}
+
+	check("first", rows[0], true, false)
+	check("second", rows[1], false, true)
 }
 
 // TestOutlineUsesNoInlineStyles. The CSP has no unsafe-inline: a style

@@ -120,6 +120,7 @@
 						        hx-post="/notes/{{.ID}}/done" hx-target="#outline" hx-swap="innerHTML"
 						        name="done" value="{{if .Done}}0{{else}}1{{end}}"
 						        aria-pressed="{{if .Done}}true{{else}}false{{end}}"
+						        aria-label="{{if .Done}}Mark not done{{else}}Mark done{{end}}"
 						        >{{if .Done}}&#9745; Mark not done{{else}}&#9744; Mark done{{end}}</button>
 
 						<label class="outline-menu-due">
@@ -222,7 +223,6 @@
 
 		{{with .Children}}{{template "outline-rows" .}}{{end}}
 	</li>
-
 	{{end}}
 </ul>
 {{end}}

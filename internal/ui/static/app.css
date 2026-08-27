@@ -665,6 +665,10 @@ button.danger:hover { background: var(--c-danger-bg); }
 	align-items: flex-start;
 	gap: var(--s-1);
 	border-radius: var(--radius);
+	/* Reserved width for the hover overlay (.outline-overlay), shared with
+	 * the due chip's margin-right below so the two stay in sync — see the
+	 * comment above .outline-due-chip. */
+	--outline-overlay-w: 6rem;
 }
 
 .outline-row:hover { background: var(--c-bg-subtle); }
@@ -710,19 +714,25 @@ button.outline-chevron {
 	color: var(--c-text-faint);
 }
 
-/* margin-right reserves room for the hover overlay (.outline-overlay,
- * position: absolute, pinned to the row's right edge) so the two never
- * occupy the same pixels — without it, hovering a row with a due date
- * hides the chip behind the overlay's opaque background. */
 .outline-due-chip {
 	flex: none;
-	margin-right: 8rem;
 	font-size: var(--fs-sm);
 	color: var(--c-text-dim);
 	text-decoration: none;
 	white-space: nowrap;
 }
 .outline-due-chip:hover { color: var(--c-accent); }
+
+/* margin-right reserves room for the hover overlay (.outline-overlay,
+ * position: absolute, pinned to the row's right edge) so the two never
+ * occupy the same pixels — without it, hovering a row with a due date
+ * hides the chip behind the overlay's opaque background. Scoped to
+ * .outline-row and driven by the same --outline-overlay-w variable the
+ * overlay's own min-width uses (see .outline-overlay below), so the
+ * reserved space can never drift out of sync with the overlay's actual
+ * box width, and chips outside .outline-row (e.g. the /notes/due page)
+ * get no margin at all. */
+.outline-row .outline-due-chip { margin-right: var(--outline-overlay-w); }
 .outline-due-overdue { color: var(--c-danger); }
 
 .outline-due-input {
@@ -914,6 +924,8 @@ input.outline-note:focus { outline: none; }
 	top: 0;
 	z-index: 5;
 	display: flex;
+	min-width: var(--outline-overlay-w);
+	justify-content: flex-end;
 	opacity: 0;
 	background: var(--c-bg);
 	border: var(--border);
@@ -921,8 +933,15 @@ input.outline-note:focus { outline: none; }
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.outline-row:hover .outline-overlay,
-.outline-row:focus-within .outline-overlay { opacity: 1; }
+/* :hover only, not :focus-within — unlike .outline-chevron above, every
+ * action in this overlay is also reachable from the "···" menu, so a
+ * keyboard user never loses access to anything by the overlay being
+ * mouse-hover-only. :focus-within was carried over from the old
+ * pre-menu design, when the overlay's predecessor was the *only* way to
+ * reach these actions; with :focus-within here, focusing the title
+ * input (e.g. while typing) would show the overlay and its opaque
+ * background would cover the tail of the input, hiding the caret. */
+.outline-row:hover .outline-overlay { opacity: 1; }
 
 .outline-overlay button {
 	padding: 0 var(--s-1);
@@ -946,6 +965,7 @@ input.outline-note:focus { outline: none; }
 
 .outline-menu-toggle {
 	display: block;
+	padding: 0;
 	width: 1.1rem;
 	line-height: 1.7;
 	text-align: center;
