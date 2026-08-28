@@ -33,7 +33,7 @@
      carries it, not just prefs': re-applying the same id'd element with
      unchanged content is idempotent, and it keeps the two callers of
      renderOutlineFragment identical. */}}
-{{define "show-completed-toggle"}}<button type="submit" id="show-completed-toggle" class="quiet"{{if .OOB}} hx-swap-oob="true"{{end}}
+{{define "show-completed-toggle"}}<button type="submit" id="show-completed-toggle" class="toolbar-btn{{if .ShowCompleted}} toolbar-btn-active{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}
         name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}">{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}</button>{{end}}
 
 {{/* outline-swap is the whole HTMX response for a structural op or a prefs
@@ -51,12 +51,11 @@
 		     search box alone on the left and this cluster together on the
 		     right, rather than spreading three items evenly. The prefs form
 		     needs no class of its own: .notes-toolbar-actions already lays
-		     this out, and each button is styled by .quiet. The extra nesting
-		     is invisible to the out-of-band swap above: htmx finds
-		     #show-completed-toggle by id anywhere in the document, whatever
-		     it is wrapped in. */}}
+		     this out. The extra nesting is invisible to the out-of-band swap
+		     above: htmx finds #show-completed-toggle by id anywhere in the
+		     document, whatever it is wrapped in. */}}
 		<div class="notes-toolbar-actions">
-			<a href="/notes/due">Due</a>
+			<a href="/notes/due" class="toolbar-btn toolbar-btn-nav">Due</a>
 			<form method="post" action="/notes/prefs"
 			      hx-post="/notes/prefs" hx-target="#outline" hx-swap="innerHTML">
 				<input type="hidden" name="csrf_token" value="{{.Data.CSRFToken}}">
@@ -64,7 +63,7 @@
 				{{template "show-completed-toggle" .Data}}
 			</form>
 			<details class="notes-help-menu">
-				<summary class="quiet notes-help-toggle" aria-label="Keyboard shortcuts">Shortcuts</summary>
+				<summary class="toolbar-btn toolbar-btn-disclosure notes-help-toggle" aria-label="Keyboard shortcuts">Shortcuts</summary>
 				<div class="notes-help-panel">
 					<div class="notes-help-header">
 						<h3>Keyboard Shortcuts</h3>
