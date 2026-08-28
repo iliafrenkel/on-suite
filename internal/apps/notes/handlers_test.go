@@ -428,19 +428,17 @@ func TestBulletControlsAreDisabledAtTheEdges(t *testing.T) {
 
 	doc := s.get(t, s.alice, "/notes/")
 
-	// Two flat bullets, each with move buttons appearing twice — once in the
-	// "···" menu (.outline-menu-list) and once in the hover overlay
-	// (.outline-overlay). Rather than assume a DOM order for the flat list of
+	// Two flat bullets, each with move buttons in the "···" menu
+	// (.outline-menu-list). Rather than assume a DOM order for the flat list of
 	// matches (brittle to markup reordering), within() pins each button to
 	// its actual row and container.
 	rows := doc.QueryAll(".outline-row")
 	menus := doc.QueryAll(".outline-menu-list")
-	overlays := doc.QueryAll(".outline-overlay")
 	ups := doc.QueryAll(`button[value=up]`)
 	downs := doc.QueryAll(`button[value=down]`)
-	if len(rows) != 2 || len(menus) != 2 || len(overlays) != 2 || len(ups) != 4 || len(downs) != 4 {
-		t.Fatalf("got %d rows, %d menus, %d overlays, %d move-up and %d move-down buttons, want 2, 2, 2, 4, 4",
-			len(rows), len(menus), len(overlays), len(ups), len(downs))
+	if len(rows) != 2 || len(menus) != 2 || len(ups) != 2 || len(downs) != 2 {
+		t.Fatalf("got %d rows, %d menus, %d move-up and %d move-down buttons, want 2, 2, 2, 2",
+			len(rows), len(menus), len(ups), len(downs))
 	}
 
 	withinAll := func(nodes []*html.Node, ancestor *html.Node) []*html.Node {
@@ -463,24 +461,15 @@ func TestBulletControlsAreDisabledAtTheEdges(t *testing.T) {
 
 	check := func(label string, row *html.Node, wantUpDisabled, wantDownDisabled bool) {
 		menu := find(t, menus, row, "menu")
-		overlay := find(t, overlays, row, "overlay")
 
 		menuUp := find(t, ups, menu, "menu move-up")
-		overlayUp := find(t, ups, overlay, "overlay move-up")
 		menuDown := find(t, downs, menu, "menu move-down")
-		overlayDown := find(t, downs, overlay, "overlay move-down")
 
 		if _, ok := htmlassert.Attr(menuUp, "disabled"); ok != wantUpDisabled {
 			t.Errorf("the %s bullet's menu move-up disabled=%v, want %v", label, ok, wantUpDisabled)
 		}
-		if _, ok := htmlassert.Attr(overlayUp, "disabled"); ok != wantUpDisabled {
-			t.Errorf("the %s bullet's overlay move-up disabled=%v, want %v", label, ok, wantUpDisabled)
-		}
 		if _, ok := htmlassert.Attr(menuDown, "disabled"); ok != wantDownDisabled {
 			t.Errorf("the %s bullet's menu move-down disabled=%v, want %v", label, ok, wantDownDisabled)
-		}
-		if _, ok := htmlassert.Attr(overlayDown, "disabled"); ok != wantDownDisabled {
-			t.Errorf("the %s bullet's overlay move-down disabled=%v, want %v", label, ok, wantDownDisabled)
 		}
 	}
 
@@ -1457,38 +1446,12 @@ func TestOutlineMenuHoldsEveryAction(t *testing.T) {
 // fast-mouse-access shortcut for the four actions used often enough to
 // justify a hover target — it must not include done, due-date editing, or
 // delete, which stay menu-only.
-func TestHoverOverlayDuplicatesStructuralActions(t *testing.T) {
+func TestHoverOverlayIsRemoved(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "Projects")
+	s.seed(t, s.alice, notes.RootID, "Projects")
 
 	doc := s.get(t, s.alice, "/notes/")
-	overlay := doc.MustHave(".outline-overlay")
-
-	for _, sel := range []string{
-		`button[value=up]`,
-		`button[value=down]`,
-		`button[formaction=/notes/` + itoa(id) + `/indent]`,
-		`button[formaction=/notes/` + itoa(id) + `/outdent]`,
-		`button[formaction=/notes/new]`,
-	} {
-		found := false
-		for _, n := range doc.QueryAll(sel) {
-			if within(n, overlay) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("overlay is missing %s", sel)
-		}
-	}
-	for _, sel := range []string{`button.outline-done`, `input.outline-due-input`, `button.outline-menu-delete`} {
-		for _, n := range doc.QueryAll(sel) {
-			if within(n, overlay) {
-				t.Errorf("%s must not be in the hover overlay", sel)
-			}
-		}
-	}
+	doc.MustNotHave(".outline-overlay")
 }
 
 // TestStructuralRequestSavesTheFocusedText is spec §7. Every structural POST
