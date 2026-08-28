@@ -761,7 +761,57 @@ button.outline-chevron {
 .notes-toolbar-actions {
 	display: flex;
 	align-items: center;
-	gap: var(--s-3);
+	gap: var(--s-2);
+}
+
+.toolbar-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-1);
+	padding: var(--s-1) var(--s-2);
+	border: 1px solid transparent;
+	border-radius: var(--radius);
+	font-size: var(--fs-sm);
+	font-weight: 400;
+	color: var(--c-text-dim);
+	text-decoration: none;
+	background: none;
+	cursor: pointer;
+	line-height: 1.4;
+	transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.toolbar-btn:hover {
+	color: var(--c-text);
+	background: var(--c-bg-subtle);
+}
+
+/* Active toggle state */
+.toolbar-btn-active,
+.notes-help-menu[open] .notes-help-toggle {
+	color: var(--c-accent);
+	background: var(--c-accent-bg);
+	border-color: transparent;
+	font-weight: 500;
+}
+
+.toolbar-btn-active:hover {
+	color: var(--c-accent);
+	background: var(--c-accent-bg);
+}
+
+/* Trailing arrow for navigation links */
+.toolbar-btn-nav::after {
+	content: " →";
+	font-size: 0.85em;
+	opacity: 0.7;
+}
+
+/* Trailing chevron for popover disclosures */
+.toolbar-btn-disclosure::after {
+	content: " ▾";
+	font-size: 0.85em;
+	opacity: 0.7;
 }
 
 .notes-due-group + .notes-due-group { margin-top: var(--s-4); }
