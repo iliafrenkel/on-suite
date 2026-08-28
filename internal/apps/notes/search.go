@@ -42,8 +42,9 @@ func ftsQuery(q string) string {
 // rows rather than asking FTS5 to MATCH an empty string, which is a syntax
 // error of its own. Results are ordered by FTS5's own relevance rank, and,
 // like Store.Due, honour showCompleted: a done bullet that matches is
-// excluded unless the preference is on. Archived nodes are not excluded —
-// archived_at does not exist until N7 (see this plan's Global Constraints).
+// excluded unless the preference is on. A node that is archived, or that
+// sits under an archived ancestor, is excluded unconditionally — spec
+// §13 — via archivedBelowCTE (store.go), shared with Store.Due.
 //
 // The query references notes_fts by its real name rather than through a
 // table alias: this driver's FTS5 support resolves MATCH and rank against
@@ -55,12 +56,14 @@ func (st *Store) Search(ctx context.Context, userID int64, query string, showCom
 		return nil, nil
 	}
 	rows, err := st.db.QueryContext(ctx,
-		`SELECT `+aliasNodeColumns("n")+`
+		`WITH RECURSIVE `+archivedBelowCTE+`
+		 SELECT `+aliasNodeColumns("n")+`
 		   FROM notes_fts
 		   JOIN notes_nodes n ON n.id = notes_fts.rowid
 		  WHERE notes_fts MATCH ? AND n.user_id = ? AND (? OR n.done_at IS NULL)
+		    AND n.id NOT IN (SELECT id FROM archived_below)
 		  ORDER BY rank`,
-		q, userID, showCompleted)
+		userID, userID, q, userID, showCompleted)
 	if err != nil {
 		return nil, fmt.Errorf("notes: search: %w", err)
 	}

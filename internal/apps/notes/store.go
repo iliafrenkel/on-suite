@@ -42,6 +42,29 @@ var (
 	childColumns = aliasNodeColumns("c")
 )
 
+// archivedBelowCTE names every one of a user's node ids that is archived,
+// or sits anywhere under an archived ancestor — spec §13: "an archived
+// node and its subtree disappear from ... search results" (§12), and
+// "archived nodes are excluded" from /notes/due (§11). Search and Due both
+// match against notes_nodes directly rather than descending from a root
+// the way Outline does, so unlike Outline — whose recursive walk simply
+// never reaches an archived node's children in the first place — they
+// need this table of ids to exclude explicitly. It takes two ?
+// placeholders, both the caller's user_id.
+//
+// UNION, not UNION ALL: an id already found cannot be found again, which
+// is what makes this safe against a cycle a bug might have introduced —
+// with a finite, deduplicated id space, the recursion has nowhere left to
+// go once every reachable id is already in it, the same guarantee
+// Outline's own MaxDepth cap gives its own descent.
+const archivedBelowCTE = `
+	archived_below(id) AS (
+	    SELECT id FROM notes_nodes WHERE user_id = ? AND archived_at IS NOT NULL
+	  UNION
+	    SELECT c.id FROM notes_nodes c JOIN archived_below a ON c.parent_id = a.id
+	     WHERE c.user_id = ?
+	)`
+
 // aliasNodeColumns prefixes each of nodeColumns with a table alias.
 func aliasNodeColumns(alias string) string {
 	cols := strings.Split(nodeColumns, ", ")
@@ -235,6 +258,14 @@ func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
 // positions as fixed-width text, so plain lexicographic ORDER BY produces
 // pre-order — a parent immediately before its subtree, siblings by position.
 //
+// An archived node, and everything under it, is kept out of tree the same
+// way a collapsed node's children are: the recursive step's own WHERE
+// clause excludes it, so nothing can ever join onto it as a parent —
+// spec §13. This is not a preference the way hideDone's showCompleted is
+// (view.go): there is no "show archived" toggle anywhere in the design, so
+// exclusion belongs in the query itself rather than in a post-filter that
+// would need one.
+//
 // Both the descent and the has_children test match on the owner as well as on
 // the parent, rather than leaning on invariant I2 to supply it. I2 is an
 // application invariant and not a schema constraint — parent_id is a plain
@@ -253,16 +284,18 @@ func (st *Store) Outline(ctx context.Context, userID, rootID int64) ([]Node, err
 		`WITH RECURSIVE tree AS (
 		     SELECT `+nodeColumns+`, 0 AS depth, printf('%08d', position) AS path
 		       FROM notes_nodes
-		      WHERE user_id = ? AND parent_id IS ?
+		      WHERE user_id = ? AND parent_id IS ? AND archived_at IS NULL
 		   UNION ALL
 		     SELECT `+childColumns+`,
 		            t.depth + 1, t.path || '/' || printf('%08d', c.position)
 		       FROM notes_nodes c JOIN tree t ON c.parent_id = t.id
-		      WHERE c.user_id = t.user_id AND t.collapsed = 0 AND t.depth + 1 <= ?
+		      WHERE c.user_id = t.user_id AND c.archived_at IS NULL
+		        AND t.collapsed = 0 AND t.depth + 1 <= ?
 		 )
 		 SELECT `+nodeColumns+`, depth,
 		        EXISTS (SELECT 1 FROM notes_nodes k
-		                 WHERE k.user_id = tree.user_id AND k.parent_id = tree.id)
+		                 WHERE k.user_id = tree.user_id AND k.parent_id = tree.id
+		                   AND k.archived_at IS NULL)
 		   FROM tree ORDER BY path`,
 		userID, parentArg(rootID), MaxDepth)
 	if err != nil {

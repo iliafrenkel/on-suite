@@ -158,3 +158,42 @@ func TestSearchHandlesFTS5SyntaxCharactersLiterally(t *testing.T) {
 		}
 	}
 }
+
+// TestSearchExcludesArchivedNodes is spec §13's other half of §12: unlike
+// done, there is no toggle that can bring an archived hit back.
+func TestSearchExcludesArchivedNodes(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "put away")
+	if err := f.store.SetArchived(ctx, f.alice.ID, n.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Search(ctx, f.alice.ID, "away", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Search = %+v, want none — it is archived", got)
+	}
+}
+
+// TestSearchExcludesADescendantOfAnArchivedNode: the match itself is not
+// archived, but its ancestor is — spec §13's "subtree" applies here too.
+func TestSearchExcludesADescendantOfAnArchivedNode(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "put away")
+	child := f.mk(t, parent.ID, "buried treasure")
+	if err := f.store.SetArchived(ctx, f.alice.ID, parent.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Search(ctx, f.alice.ID, "treasure", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Search = %+v, want none — %d sits under an archived node", got, child.ID)
+	}
+}
