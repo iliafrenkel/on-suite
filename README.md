@@ -181,7 +181,8 @@ Work since then is per-app rather than per-phase. ON Notes is being built in
 ten small chunks under
 [`docs/superpowers/specs/2026-08-25-on-notes-design.md`](docs/superpowers/specs/2026-08-25-on-notes-design.md);
 N1 (schema and store), N2 (the outline), N3 (the keyboard layer), N4
-(Markdown), N5 (done + due dates) and N6 (search and tags) are done.
+(Markdown), N5 (done + due dates), N6 (search and tags) and N7 (archiving)
+are done.
 
 See [the roadmap](docs/superpowers/plans/2026-08-18-on-suite-00-roadmap.md)
 for the full task list and the [design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md)
