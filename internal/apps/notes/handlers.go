@@ -521,6 +521,106 @@ func (a *App) dueList(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, http.StatusOK, "notes/due", page)
 }
 
+// archiveList renders every one of the user's archived subtree roots —
+// spec §13.
+func (a *App) archiveList(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	view, err := a.buildArchiveView(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	view.CSRFToken = web.CSRFToken(r.Context())
+	page := a.deps.Page(r, "Archive")
+	page.Data = view
+	a.render(w, r, http.StatusOK, "notes/archive", page)
+}
+
+// renderArchiveFragment re-renders /notes/archive's own list for an HTMX
+// restore — the equivalent of renderOutlineFragment, but targeting this
+// page's own swap target instead of #outline.
+func (a *App) renderArchiveFragment(w http.ResponseWriter, r *http.Request, userID int64) {
+	view, err := a.buildArchiveView(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	view.CSRFToken = web.CSRFToken(r.Context())
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/archive", "archive-list", view); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
+}
+
+// buildArchiveView is the query behind both of the above: the full page and
+// the HTMX fragment render exactly the same rows, so they share the one
+// place that fetches them.
+func (a *App) buildArchiveView(ctx context.Context, userID int64) (archiveView, error) {
+	nodes, err := a.store.Archive(ctx, userID)
+	if err != nil {
+		return archiveView{}, err
+	}
+	rows := make([]ArchiveRow, len(nodes))
+	for i, n := range nodes {
+		crumbs, err := a.store.Ancestors(ctx, userID, n.ID)
+		if err != nil {
+			return archiveView{}, err
+		}
+		rows[i] = ArchiveRow{Node: n, Crumbs: crumbs}
+	}
+	return archiveView{Rows: rows}, nil
+}
+
+// archive marks a bullet archived, or restores it — spec §13. The field
+// names the state to arrive at, exactly like done's and collapsed's, so a
+// double submit or a stale page cannot flip it back.
+//
+// Archiving happens from a row in the outline (Task 4's new menu item),
+// which may carry unsaved text in its title or note, so it goes through
+// mutate exactly like every other structural op. Restoring happens from a
+// row on /notes/archive, which is never mid-edit — there is no outline row
+// to save text from, and the response that page needs back is its own
+// list, not the outline — so it forks to restore instead. See this task's
+// design note.
+func (a *App) archive(w http.ResponseWriter, r *http.Request) {
+	raw := r.PostFormValue("archived")
+	if raw != "0" && raw != "1" {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	if raw == "0" {
+		a.restore(w, r)
+		return
+	}
+
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		return o.SetArchived(ctx, m.UserID, m.NodeID, true)
+	})
+}
+
+// restore un-archives a bullet from its row on /notes/archive. See archive.
+func (a *App) restore(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.nodeID(w, r)
+	if !ok {
+		return
+	}
+	if err := a.store.SetArchived(r.Context(), userID, id, false); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if web.IsHTMX(r) {
+		a.renderArchiveFragment(w, r, userID)
+		return
+	}
+	http.Redirect(w, r, "/notes/archive", http.StatusSeeOther)
+}
+
 // search runs spec §12's full-text search across the whole tree. An empty
 // query shows just the search box, with nothing to list — there is nothing
 // sensible to prefill a fresh search with, unlike the outline's own empty

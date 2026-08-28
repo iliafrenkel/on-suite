@@ -1604,6 +1604,7 @@ func TestEveryMutationRequiresSignIn(t *testing.T) {
 		"/notes/" + itoa(id) + "/move",
 		"/notes/" + itoa(id) + "/collapse",
 		"/notes/" + itoa(id) + "/delete",
+		"/notes/" + itoa(id) + "/archive",
 	}
 
 	// No CSRF token: the CSRF middleware is outermost of the two and answers.
@@ -2123,6 +2124,160 @@ func TestDueListWithNothingDue(t *testing.T) {
 
 	if got := s.get(t, s.alice, "/notes/due").Text(); !strings.Contains(got, "Nothing is due") {
 		t.Errorf("empty due list text = %q, want the empty-state line", got)
+	}
+}
+
+func TestArchiveHidesTheBulletAndRedirectsToTheOutline(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "put away")
+
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{
+		"root": {"0"}, "archived": {"1"},
+	}, "/notes/")
+
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n.Archived {
+		t.Fatal("the bullet is not archived")
+	}
+
+	// htmlassert only matches one qualifier per selector part (see its own
+	// doc comment), so ".outline-row[data-id=...]" is not a valid selector
+	// here — this walks the (unqualified-by-id) rows instead and checks
+	// each one's own data-id attribute.
+	doc := s.get(t, s.alice, "/notes/")
+	for _, row := range doc.QueryAll(".outline-row") {
+		if got, _ := htmlassert.Attr(row, "data-id"); got == itoa(id) {
+			t.Fatal("the archived bullet still appears in the outline")
+		}
+	}
+}
+
+func TestArchiveRejectsAnUnknownValue(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "a")
+
+	for _, v := range []string{"", "true", "yes", "2"} {
+		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{
+			"root": {"0"}, "archived": {v},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("archived=%q gave %d, want 400", v, rec.Code)
+		}
+	}
+}
+
+func TestArchiveOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{
+		"root": {"0"}, "archived": {"1"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+// TestRestoreBringsTheBulletBackAndRedirectsToTheArchivePage: the field's
+// own value (archived=0) is what routes this request to restore rather
+// than mutate — see archive's design note in this plan.
+func TestRestoreBringsTheBulletBackAndRedirectsToTheArchivePage(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "put away")
+	if err := s.store.SetArchived(context.Background(), s.alice.user.ID, id, true); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{"archived": {"0"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Location"); got != "/notes/archive" {
+		t.Fatalf("redirected to %q, want /notes/archive", got)
+	}
+
+	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Archived {
+		t.Fatal("the bullet is still archived")
+	}
+}
+
+func TestRestoreOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.bob, notes.RootID, "bob's")
+	if err := s.store.SetArchived(context.Background(), s.bob.user.ID, id, true); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{"archived": {"0"}})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestRestoreRespondsWithTheArchiveListFragmentForHTMX(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "put away")
+	if err := s.store.SetArchived(context.Background(), s.alice.user.ID, id, true); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.postHX(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{"archived": {"0"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "<html") {
+		t.Error("an HTMX response carries whole-document chrome")
+	}
+	if strings.Contains(rec.Body.String(), "put away") {
+		t.Error("the restored bullet still appears in the archive list fragment")
+	}
+}
+
+func TestArchiveListShowsArchivedNodesWithCrumbs(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "Projects")
+	child := s.seed(t, s.alice, parent, "old project")
+	if err := s.store.SetArchived(ctx, s.alice.user.ID, child, true); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/archive")
+	// htmlassert only matches one qualifier per selector part, so the class
+	// and the href check are two steps rather than one compound selector.
+	title := doc.MustHave("a.notes-archive-title")
+	if got, _ := htmlassert.Attr(title, "href"); got != "/notes/"+itoa(child) {
+		t.Errorf("archive title href = %q, want /notes/%s", got, itoa(child))
+	}
+	crumbs := doc.MustHave(".notes-archive-crumbs")
+	if !strings.Contains(htmlassert.Text(crumbs), "Projects") {
+		t.Errorf("crumbs = %q, want it to mention Projects", htmlassert.Text(crumbs))
+	}
+}
+
+func TestArchiveListWithNothingArchived(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "never archived")
+
+	doc := s.get(t, s.alice, "/notes/archive")
+	doc.MustHave("body") // page renders at all
+	if strings.Contains(htmlassert.Text(doc.MustHave(".notes")), "never archived") {
+		t.Error("an unarchived bullet appears on the archive page")
+	}
+}
+
+func TestArchiveListRequiresSignIn(t *testing.T) {
+	s := newServer(t)
+	rec := s.do(t, nil, httptest.NewRequest("GET", "/notes/archive", nil))
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("GET /notes/archive anonymous = %d, want a 303 to the login page", rec.Code)
 	}
 }
 
