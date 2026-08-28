@@ -38,6 +38,7 @@
 	--font-body: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
+	--fs-2xs: 0.625rem;
 	--fs-xs: 0.75rem;
 	--fs-sm: 0.8125rem;
 	--fs-base: 0.9375rem;
@@ -674,7 +675,7 @@ button.danger:hover { background: var(--c-danger-bg); }
 	--outline-overlay-w: 6rem;
 }
 
-.outline-row:hover { background: var(--c-bg-subtle); }
+.outline-row:hover { background: var(--c-bg); }
 
 .outline-main {
 	display: flex;
@@ -731,10 +732,10 @@ button.outline-chevron {
 
 .outline-due-chip {
 	display: inline-block;
-	font-size: var(--fs-xs);
+	font-size: var(--fs-2xs);
 	background: var(--c-accent-bg);
 	color: var(--c-accent);
-	padding: 0 0.35em;
+	padding: 0 0.5em;
 	border-radius: var(--radius);
 	text-decoration: none;
 	white-space: nowrap;
@@ -906,11 +907,13 @@ input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
 .outline-note-rendered { font-size: var(--fs-sm); color: var(--c-text-dim); }
 
 .outline-tag {
-	background: var(--c-bg-inset);
+	background: var(--c-bg-subtle);
 	color: var(--c-text-dim);
 	padding: 0 0.35em;
 	border-radius: var(--radius);
 	text-decoration: none;
+	font-size: var(--fs-sm);
+	padding: 0 0.5em;
 }
 .outline-tag:hover { color: var(--c-accent); }
 

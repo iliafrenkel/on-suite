@@ -1,5 +1,6 @@
 # Compiled binary
 /onsuite
+onsuite.exe
 /dist/
 
 # Runtime data — the entire persistent state of a local instance
