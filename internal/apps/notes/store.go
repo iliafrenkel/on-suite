@@ -279,6 +279,22 @@ func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
 // Calling it from inside a Do closure waits for the connection that
 // transaction is holding, and waits for ever, so a render belongs after Do has
 // returned rather than inside it.
+//
+// The archived_at exclusion above applies to the ROWS this returns, not to
+// rootID itself: nothing here checks whether rootID is archived, so a caller
+// that descends from an archived root still gets back its non-archived
+// children exactly as if the root were ordinary. That is deliberate, not an
+// oversight — there is no route that reaches an archived id except by URL
+// (archive.html's own entry point links straight at it), so treating that as
+// "the user asked to look inside this archived bullet" and rendering its
+// still-visible contents is a reasonable affordance, not a bug to close by
+// re-filtering on rootID. The handler layer is responsible for telling the
+// two cases apart for display: renderOutline fetches rootID via ByID (which
+// is not archived-filtered) and the outline template shows a banner when
+// that root's Archived is true. A future consumer that walks a subtree from
+// an arbitrary root — N9's share pages are the known case — will need to make
+// this same choice explicitly rather than assuming one behavior or the
+// other.
 func (st *Store) Outline(ctx context.Context, userID, rootID int64) ([]Node, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`WITH RECURSIVE tree AS (

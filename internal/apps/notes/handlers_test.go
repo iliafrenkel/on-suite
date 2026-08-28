@@ -2281,6 +2281,59 @@ func TestArchiveListRequiresSignIn(t *testing.T) {
 	}
 }
 
+// TestZoomingIntoAnArchivedNodeShowsABannerAndItsChildren covers the finding
+// that Store.Outline's archived_at exclusion applies to the rows it returns,
+// not to rootID itself: navigating straight to an archived node's own URL —
+// exactly what archive.html's own title link does — renders a completely
+// normal, editable outline of its still-visible children, with no built-in
+// indication that the root is archived. The chosen fix is a banner, not
+// re-filtering the root, so this asserts the banner appears and the child is
+// still there, not that the child gets hidden too.
+func TestZoomingIntoAnArchivedNodeShowsABannerAndItsChildren(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "put away")
+	child := s.seed(t, s.alice, parent, "still visible")
+	if err := s.store.SetArchived(ctx, s.alice.user.ID, parent, true); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/"+itoa(parent))
+	banner := doc.MustHave(".notes-archived-banner")
+	if !strings.Contains(htmlassert.Text(banner), "archived") {
+		t.Errorf("banner text = %q, want it to mention the node is archived", htmlassert.Text(banner))
+	}
+	found := false
+	for _, row := range doc.QueryAll(".outline-row") {
+		if got, _ := htmlassert.Attr(row, "data-id"); got == itoa(child) {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the non-archived child does not appear when zoomed into its archived parent")
+	}
+}
+
+// TestZoomingIntoANonArchivedNodeShowsNoBanner: the banner must not appear
+// just because the outline is zoomed — only when the root itself is
+// archived.
+func TestZoomingIntoANonArchivedNodeShowsNoBanner(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.alice, notes.RootID, "ordinary")
+	s.seed(t, s.alice, parent, "child")
+
+	s.get(t, s.alice, "/notes/"+itoa(parent)).MustNotHave(".notes-archived-banner")
+}
+
+// TestTopLevelOutlineShowsNoArchivedBanner: RootID is never archived, so the
+// top-level view must never carry the banner either.
+func TestTopLevelOutlineShowsNoArchivedBanner(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "top level")
+
+	s.get(t, s.alice, "/notes/").MustNotHave(".notes-archived-banner")
+}
+
 func TestTheOutlineLinksToTheDueList(t *testing.T) {
 	s := newServer(t)
 	s.get(t, s.alice, "/notes/").MustHave(`.notes-toolbar a[href=/notes/due]`)

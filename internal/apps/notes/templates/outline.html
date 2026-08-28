@@ -99,6 +99,9 @@
 		<span aria-hidden="true">/</span>
 		<span class="outline-crumb-current" title="{{.Data.Root.DisplayTitle}}">{{.Data.Root.DisplayTitle}}</span>
 	</nav>
+	{{if .Data.Root.Archived}}
+	<p class="notes-archived-banner">This bullet is archived. Its still-visible children can be edited here, but consider <a href="/notes/archive">restoring it</a> first.</p>
+	{{end}}
 	<h1>{{.Data.Root.DisplayTitle}}</h1>
 	{{with .Data.Root.Note}}<p class="dim">{{.}}</p>{{end}}
 	{{else}}
