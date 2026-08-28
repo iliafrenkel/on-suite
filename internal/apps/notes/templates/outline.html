@@ -113,7 +113,7 @@
 				<input type="hidden" name="focus_id" value="{{.ID}}">
 
 				<details class="outline-menu">
-					<summary class="outline-menu-toggle quiet" aria-label="Bullet actions">&#8943;</summary>
+					<summary class="outline-menu-toggle quiet" aria-label="Bullet actions"><svg class="icon-menu" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg></summary>
 					<div class="outline-menu-list">
 						<button type="submit" class="quiet outline-done"
 						        formaction="/notes/{{.ID}}/done"
@@ -164,14 +164,14 @@
 				        hx-post="/notes/{{.ID}}/collapse" hx-target="#outline" hx-swap="innerHTML"
 				        name="collapsed" value="{{if .Collapsed}}0{{else}}1{{end}}"
 				        aria-expanded="{{if .Collapsed}}false{{else}}true{{end}}"
-				        aria-label="{{if .Collapsed}}Expand{{else}}Collapse{{end}}">{{if .Collapsed}}&#9656;{{else}}&#9662;{{end}}</button>
+				        aria-label="{{if .Collapsed}}Expand{{else}}Collapse{{end}}">{{if .Collapsed}}<svg class="icon-chevron" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l5 4-5 4V4z"/></svg>{{else}}<svg class="icon-chevron" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 6l4 5 4-5H4z"/></svg>{{end}}</button>
 				{{else}}
 				<span class="outline-chevron" aria-hidden="true"></span>
 				{{end}}
 
 				<a class="outline-dot{{if .Collapsed}} outline-dot-full{{end}}"
 				   href="/notes/{{.ID}}"
-				   aria-label="Zoom in to {{.DisplayTitle}}">&bull;</a>
+				   aria-label="Zoom in to {{.DisplayTitle}}"><svg class="icon-dot" width="16" height="16" viewBox="0 0 16 16">{{if .Collapsed}}<circle class="icon-dot-halo" cx="8" cy="8" r="6.5"/><circle cx="8" cy="8" r="3" fill="currentColor"/>{{else}}<circle cx="8" cy="8" r="3" fill="currentColor"/>{{end}}</svg></a>
 
 				<span class="outline-text">
 					<span class="outline-field">
@@ -235,7 +235,7 @@
 				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 				<input type="hidden" name="root" value="{{.Root.ID}}">
 				<span class="outline-chevron" aria-hidden="true"></span>
-				<span class="outline-dot" aria-hidden="true">&bull;</span>
+				<span class="outline-dot" aria-hidden="true"><svg class="icon-dot" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="currentColor"/></svg></span>
 				<span class="outline-text">
 					<input class="outline-title" type="text" name="new_title"
 					       maxlength="2000" autofocus
