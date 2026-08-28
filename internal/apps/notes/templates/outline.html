@@ -34,7 +34,7 @@
      unchanged content is idempotent, and it keeps the two callers of
      renderOutlineFragment identical. */}}
 {{define "show-completed-toggle"}}<button type="submit" id="show-completed-toggle" class="toolbar-btn{{if .ShowCompleted}} toolbar-btn-active{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}
-        name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}">{{if .ShowCompleted}}&#9745; Hide completed{{else}}&#9744; Show completed{{end}}</button>{{end}}
+        name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}">{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}</button>{{end}}
 
 {{/* outline-swap is the whole HTMX response for a structural op or a prefs
      toggle: #outline's new content, plus the toolbar toggle out of band. */}}
