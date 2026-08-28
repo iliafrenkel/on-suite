@@ -1,0 +1,45 @@
+{{define "content"}}
+<div class="stack notes">
+	<div class="notes-toolbar">
+		<form method="get" action="/notes/search" class="notes-search">
+			<input type="search" id="notes-search-input" name="q"
+			       placeholder="Search…" aria-label="Search notes">
+		</form>
+		<div class="notes-toolbar-actions">
+			<a href="/notes/due" class="toolbar-btn toolbar-btn-nav">Due</a>
+			<a href="/notes/" class="toolbar-btn toolbar-btn-nav">All notes</a>
+		</div>
+	</div>
+	<h1>Archive</h1>
+	{{/* #archive-list is restore's own swap target, the equivalent of
+	     #outline: its content is a named block so an HTMX restore can
+	     re-render just this list through Renderer.Fragment. */}}
+	<div id="archive-list">
+		{{template "archive-list" .Data}}
+	</div>
+</div>
+{{end}}
+
+{{define "archive-list"}}
+{{if .Rows}}
+<ul class="notes-archive-list">
+	{{range .Rows}}
+	<li class="notes-archive-item">
+		{{if .Crumbs}}
+		<span class="notes-archive-crumbs">
+			{{range .Crumbs}}<span class="notes-crumb-item" title="{{.DisplayTitle}}">{{.DisplayTitle}}</span> / {{end}}
+		</span>
+		{{end}}
+		<a href="/notes/{{.ID}}" class="notes-archive-title">{{.DisplayTitle}}</a>
+		<form method="post" action="/notes/{{.ID}}/archive"
+		      hx-post="/notes/{{.ID}}/archive" hx-target="#archive-list" hx-swap="innerHTML">
+			<input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+			<button type="submit" name="archived" value="0" class="toolbar-btn notes-archive-restore">Restore</button>
+		</form>
+	</li>
+	{{end}}
+</ul>
+{{else}}
+<p class="dim">Nothing is archived.</p>
+{{end}}
+{{end}}

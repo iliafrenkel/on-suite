@@ -649,6 +649,22 @@ button.danger:hover { background: var(--c-danger-bg); }
 .outline-crumbs a:hover { color: var(--c-accent); }
 .outline-crumb-current { color: var(--c-text); font-weight: 500; }
 
+/* Shown only when the outline is zoomed into an archived node's own URL —
+ * see the deviation documented on Store.Outline (store.go): rows stay
+ * filtered, but the root itself is not, so this is the one visible cue that
+ * what's on screen is still-editable content living under an archived
+ * bullet. */
+.notes-archived-banner {
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+	background: var(--c-bg-subtle);
+	border: var(--border);
+	border-radius: var(--radius);
+	padding: var(--s-2) var(--s-3);
+	margin: 0 0 var(--s-3);
+}
+.notes-archived-banner a { color: var(--c-accent); }
+
 .outline-list { margin: 0; padding: 0; list-style: none; }
 
 /* The nesting is the indentation. The CSP has no unsafe-inline, so a row
@@ -838,7 +854,8 @@ button.outline-chevron {
 	border-bottom: 1px solid var(--c-border);
 }
 .notes-due-crumbs,
-.notes-search-crumbs { font-size: var(--fs-sm); color: var(--c-text-faint); }
+.notes-search-crumbs,
+.notes-archive-crumbs { font-size: var(--fs-sm); color: var(--c-text-faint); }
 .notes-crumb-item {
 	display: inline-block;
 	max-width: 200px;
@@ -871,6 +888,18 @@ button.outline-chevron {
 }
 .notes-search-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
 .notes-search-title:hover { color: var(--c-accent); }
+
+.notes-archive-list { margin: 0; padding: 0; list-style: none; }
+.notes-archive-item {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-2);
+	padding: var(--s-1) 0;
+	border-bottom: 1px solid var(--c-border);
+}
+.notes-archive-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
+.notes-archive-title:hover { color: var(--c-accent); }
+.notes-archive-restore { flex-shrink: 0; }
 
 .outline-dot { text-decoration: none; }
 .outline-dot:hover { color: var(--c-accent); }

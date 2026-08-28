@@ -67,16 +67,19 @@ func GroupByDue(rows []DueRow, today time.Time) DueGroups {
 }
 
 // Due returns every one of userID's nodes with a due date set, excluding
-// done ones — spec §11's "done and archived nodes are excluded". archived_at
-// does not exist until N7, so only done is excluded here; see this plan's
-// Global Constraints for why that is not a judgment call. Ordered by due_on
-// so GroupByDue only has to bucket, never sort.
+// done ones and archived ones — spec §11's "done and archived nodes are
+// excluded". A node that sits under an archived ancestor is excluded too,
+// via archivedBelowCTE (store.go), shared with Store.Search — spec §13's
+// subtree rule applies here exactly as it does there. Ordered by due_on so
+// GroupByDue only has to bucket, never sort.
 func (st *Store) Due(ctx context.Context, userID int64) ([]Node, error) {
 	rows, err := st.db.QueryContext(ctx,
-		`SELECT `+nodeColumns+`
+		`WITH RECURSIVE `+archivedBelowCTE+`
+		 SELECT `+nodeColumns+`
 		   FROM notes_nodes
 		  WHERE user_id = ? AND due_on IS NOT NULL AND done_at IS NULL
-		  ORDER BY due_on`, userID)
+		    AND id NOT IN (SELECT id FROM archived_below)
+		  ORDER BY due_on`, userID, userID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("notes: due nodes: %w", err)
 	}

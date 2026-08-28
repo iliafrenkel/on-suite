@@ -56,6 +56,7 @@
 		     document, whatever it is wrapped in. */}}
 		<div class="notes-toolbar-actions">
 			<a href="/notes/due" class="toolbar-btn toolbar-btn-nav">Due</a>
+			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav">Archive</a>
 			<form method="post" action="/notes/prefs"
 			      hx-post="/notes/prefs" hx-target="#outline" hx-swap="innerHTML">
 				<input type="hidden" name="csrf_token" value="{{.Data.CSRFToken}}">
@@ -98,6 +99,9 @@
 		<span aria-hidden="true">/</span>
 		<span class="outline-crumb-current" title="{{.Data.Root.DisplayTitle}}">{{.Data.Root.DisplayTitle}}</span>
 	</nav>
+	{{if .Data.Root.Archived}}
+	<p class="notes-archived-banner">This bullet is archived. Its still-visible children can be edited here, but consider <a href="/notes/archive">restoring it</a> first.</p>
+	{{end}}
 	<h1>{{.Data.Root.DisplayTitle}}</h1>
 	{{with .Data.Root.Note}}<p class="dim">{{.}}</p>{{end}}
 	{{else}}
@@ -189,6 +193,13 @@
 						        aria-label="Add a bullet below">
 							<span class="outline-menu-label">+ Add bullet</span>
 							<span class="outline-menu-shortcut">Enter</span>
+						</button>
+
+						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/archive"
+						        hx-post="/notes/{{.ID}}/archive" hx-target="#outline" hx-swap="innerHTML"
+						        name="archived" value="1"
+						        aria-label="Archive">
+							<span class="outline-menu-label">Archive</span>
 						</button>
 
 						<button type="submit" class="quiet outline-menu-delete" formaction="/notes/{{.ID}}/delete"

@@ -243,6 +243,27 @@ func (st *Store) SetDue(ctx context.Context, userID, id int64, due string) error
 	return st.Do(ctx, func(o *Ops) error { return o.SetDue(ctx, userID, id, due) })
 }
 
+// SetArchived marks a bullet archived, or restores it — spec §13. Like
+// SetDone, this only ever touches the one row: an archived node's subtree
+// disappearing from the outline, search and due list (Task 2) is a display
+// decision made in the queries that build those views, never something
+// recorded on every descendant.
+func (o *Ops) SetArchived(ctx context.Context, userID, id int64, archived bool) error {
+	archivedAt := sql.NullString{}
+	if archived {
+		archivedAt = sql.NullString{String: formatTime(o.now()), Valid: true}
+	}
+	return o.update(ctx, "set archived",
+		`UPDATE notes_nodes SET archived_at = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+		archivedAt, formatTime(o.now()), id, userID)
+}
+
+// SetArchived marks a bullet archived, or restores it, in a transaction of
+// its own. See Ops.SetArchived.
+func (st *Store) SetArchived(ctx context.Context, userID, id int64, archived bool) error {
+	return st.Do(ctx, func(o *Ops) error { return o.SetArchived(ctx, userID, id, archived) })
+}
+
 // SetText replaces a bullet's title and note.
 //
 // Trailing spaces are stripped but leading ones are not: an outline is written

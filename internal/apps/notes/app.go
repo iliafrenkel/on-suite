@@ -85,6 +85,7 @@ func (a *App) script(w http.ResponseWriter, r *http.Request) {
 //	                         toggle
 //	GET  /notes/due          likewise a literal segment; N5's due-date list
 //	GET  /notes/search       likewise a literal segment; N6's search
+//	GET  /notes/archive      likewise a literal segment; N7's archive list
 //	POST /notes/new          a literal segment, and literals outrank {id}
 //	POST /notes/{id}/text    and the eight other mutations: two segments
 //	                         deeper than the zoom URL, so no pattern in this
@@ -98,6 +99,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /notes.js", a.script)
 	r.HandleFunc("GET /due", a.dueList)
 	r.HandleFunc("GET /search", a.search)
+	r.HandleFunc("GET /archive", a.archiveList)
 	r.HandleFunc("POST /new", a.create)
 	r.HandleFunc("POST /prefs", a.prefs)
 	r.HandleFunc("POST /{id}/text", a.setText)
@@ -108,4 +110,5 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /{id}/delete", a.remove)
 	r.HandleFunc("POST /{id}/done", a.done)
 	r.HandleFunc("POST /{id}/due", a.due)
+	r.HandleFunc("POST /{id}/archive", a.archive)
 }

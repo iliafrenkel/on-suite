@@ -28,7 +28,7 @@ func (st *Store) SetClock(now func() time.Time) { st.now = now }
 // column added to one of them and not the others is a silent scan error.
 //
 // aliasNodeColumns below parses this by splitting on ", " — that separator must stay exactly ", ".
-const nodeColumns = `id, user_id, parent_id, position, title, note, collapsed, created_at, updated_at, done_at, due_on`
+const nodeColumns = `id, user_id, parent_id, position, title, note, collapsed, created_at, updated_at, done_at, due_on, archived_at`
 
 // The recursive CTEs below need the same list qualified by a table alias, in
 // the same order. Writing it out again would put the column order in three
@@ -41,6 +41,29 @@ var (
 	// childColumns is the list as the "c" row of Outline's descent.
 	childColumns = aliasNodeColumns("c")
 )
+
+// archivedBelowCTE names every one of a user's node ids that is archived,
+// or sits anywhere under an archived ancestor — spec §13: "an archived
+// node and its subtree disappear from ... search results" (§12), and
+// "archived nodes are excluded" from /notes/due (§11). Search and Due both
+// match against notes_nodes directly rather than descending from a root
+// the way Outline does, so unlike Outline — whose recursive walk simply
+// never reaches an archived node's children in the first place — they
+// need this table of ids to exclude explicitly. It takes two ?
+// placeholders, both the caller's user_id.
+//
+// UNION, not UNION ALL: an id already found cannot be found again, which
+// is what makes this safe against a cycle a bug might have introduced —
+// with a finite, deduplicated id space, the recursion has nowhere left to
+// go once every reachable id is already in it, the same guarantee
+// Outline's own MaxDepth cap gives its own descent.
+const archivedBelowCTE = `
+	archived_below(id) AS (
+	    SELECT id FROM notes_nodes WHERE user_id = ? AND archived_at IS NOT NULL
+	  UNION
+	    SELECT c.id FROM notes_nodes c JOIN archived_below a ON c.parent_id = a.id
+	     WHERE c.user_id = ?
+	)`
 
 // aliasNodeColumns prefixes each of nodeColumns with a table alias.
 func aliasNodeColumns(alias string) string {
@@ -101,16 +124,17 @@ type rowScanner interface{ Scan(dest ...any) error }
 // — so there is only ever one place that knows the column order.
 func scanNode(row rowScanner, extra ...any) (Node, error) {
 	var (
-		n         Node
-		parent    sql.NullInt64
-		createdAt string
-		updatedAt string
-		doneAt    sql.NullString
-		dueOn     sql.NullString
+		n          Node
+		parent     sql.NullInt64
+		createdAt  string
+		updatedAt  string
+		doneAt     sql.NullString
+		dueOn      sql.NullString
+		archivedAt sql.NullString
 	)
 	dest := append([]any{
 		&n.ID, &n.UserID, &parent, &n.Position, &n.Title, &n.Note,
-		&n.Collapsed, &createdAt, &updatedAt, &doneAt, &dueOn,
+		&n.Collapsed, &createdAt, &updatedAt, &doneAt, &dueOn, &archivedAt,
 	}, extra...)
 
 	err := row.Scan(dest...)
@@ -127,6 +151,7 @@ func scanNode(row rowScanner, extra ...any) (Node, error) {
 	// sql.NullString's String is "" when Valid is false, which is already
 	// DueOn's own "none" sentinel — no extra branch needed.
 	n.DueOn = dueOn.String
+	n.Archived = archivedAt.Valid
 
 	if n.CreatedAt, err = parseTime(createdAt); err != nil {
 		return Node{}, err
@@ -233,6 +258,14 @@ func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
 // positions as fixed-width text, so plain lexicographic ORDER BY produces
 // pre-order — a parent immediately before its subtree, siblings by position.
 //
+// An archived node, and everything under it, is kept out of tree the same
+// way a collapsed node's children are: the recursive step's own WHERE
+// clause excludes it, so nothing can ever join onto it as a parent —
+// spec §13. This is not a preference the way hideDone's showCompleted is
+// (view.go): there is no "show archived" toggle anywhere in the design, so
+// exclusion belongs in the query itself rather than in a post-filter that
+// would need one.
+//
 // Both the descent and the has_children test match on the owner as well as on
 // the parent, rather than leaning on invariant I2 to supply it. I2 is an
 // application invariant and not a schema constraint — parent_id is a plain
@@ -246,21 +279,39 @@ func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
 // Calling it from inside a Do closure waits for the connection that
 // transaction is holding, and waits for ever, so a render belongs after Do has
 // returned rather than inside it.
+//
+// The archived_at exclusion above applies to the ROWS this returns, not to
+// rootID itself: nothing here checks whether rootID is archived, so a caller
+// that descends from an archived root still gets back its non-archived
+// children exactly as if the root were ordinary. That is deliberate, not an
+// oversight — there is no route that reaches an archived id except by URL
+// (archive.html's own entry point links straight at it), so treating that as
+// "the user asked to look inside this archived bullet" and rendering its
+// still-visible contents is a reasonable affordance, not a bug to close by
+// re-filtering on rootID. The handler layer is responsible for telling the
+// two cases apart for display: renderOutline fetches rootID via ByID (which
+// is not archived-filtered) and the outline template shows a banner when
+// that root's Archived is true. A future consumer that walks a subtree from
+// an arbitrary root — N9's share pages are the known case — will need to make
+// this same choice explicitly rather than assuming one behavior or the
+// other.
 func (st *Store) Outline(ctx context.Context, userID, rootID int64) ([]Node, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`WITH RECURSIVE tree AS (
 		     SELECT `+nodeColumns+`, 0 AS depth, printf('%08d', position) AS path
 		       FROM notes_nodes
-		      WHERE user_id = ? AND parent_id IS ?
+		      WHERE user_id = ? AND parent_id IS ? AND archived_at IS NULL
 		   UNION ALL
 		     SELECT `+childColumns+`,
 		            t.depth + 1, t.path || '/' || printf('%08d', c.position)
 		       FROM notes_nodes c JOIN tree t ON c.parent_id = t.id
-		      WHERE c.user_id = t.user_id AND t.collapsed = 0 AND t.depth + 1 <= ?
+		      WHERE c.user_id = t.user_id AND c.archived_at IS NULL
+		        AND t.collapsed = 0 AND t.depth + 1 <= ?
 		 )
 		 SELECT `+nodeColumns+`, depth,
 		        EXISTS (SELECT 1 FROM notes_nodes k
-		                 WHERE k.user_id = tree.user_id AND k.parent_id = tree.id)
+		                 WHERE k.user_id = tree.user_id AND k.parent_id = tree.id
+		                   AND k.archived_at IS NULL)
 		   FROM tree ORDER BY path`,
 		userID, parentArg(rootID), MaxDepth)
 	if err != nil {

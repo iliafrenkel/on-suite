@@ -588,3 +588,55 @@ func TestOutlineTerminatesOnACycle(t *testing.T) {
 		t.Fatalf("Outline returned %d rows; want at most MaxDepth+1 (%d)", len(got), notes.MaxDepth+1)
 	}
 }
+
+// TestOutlineExcludesAnArchivedNodeAndItsSubtree is spec §13: an archived
+// node, and everything under it, disappears from the outline.
+func TestOutlineExcludesAnArchivedNodeAndItsSubtree(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	archived := f.mk(t, notes.RootID, "put away")
+	child := f.mk(t, archived.ID, "child of put away")
+	sibling := f.mk(t, notes.RootID, "still visible")
+
+	if err := f.store.SetArchived(ctx, f.alice.ID, archived.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []int64
+	for _, n := range got {
+		ids = append(ids, n.ID)
+	}
+	if len(ids) != 1 || ids[0] != sibling.ID {
+		t.Fatalf("Outline = %v, want only the sibling %d (not %d or its child %d)",
+			ids, sibling.ID, archived.ID, child.ID)
+	}
+}
+
+// TestOutlineHasChildrenIgnoresAnArchivedChild: a parent whose only child
+// has been archived must not still claim it has children — the chevron
+// would then expand into nothing, contradicting Outline's own promise that
+// the result is exactly what is on screen.
+func TestOutlineHasChildrenIgnoresAnArchivedChild(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	child := f.mk(t, parent.ID, "child")
+	if err := f.store.SetArchived(ctx, f.alice.ID, child.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != parent.ID {
+		t.Fatalf("Outline = %+v, want only the parent", got)
+	}
+	if got[0].HasChildren {
+		t.Error("HasChildren is true, but the only child is archived")
+	}
+}

@@ -124,3 +124,47 @@ func TestGroupByDueBucketsRelativeToToday(t *testing.T) {
 		t.Error("today's row is marked Overdue")
 	}
 }
+
+// TestDueExcludesArchivedNodes is spec §11 and §13.
+func TestDueExcludesArchivedNodes(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "put away but due")
+	if err := f.store.SetDue(ctx, f.alice.ID, n.ID, "2026-03-05"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetArchived(ctx, f.alice.ID, n.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Due(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Due = %+v, want none — it is archived", got)
+	}
+}
+
+// TestDueExcludesADescendantOfAnArchivedNode mirrors the search case: the
+// due node itself is not archived, but an ancestor is.
+func TestDueExcludesADescendantOfAnArchivedNode(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "put away")
+	child := f.mk(t, parent.ID, "due")
+	if err := f.store.SetDue(ctx, f.alice.ID, child.ID, "2026-03-05"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetArchived(ctx, f.alice.ID, parent.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Due(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Due = %+v, want none — it sits under an archived node", got)
+	}
+}
