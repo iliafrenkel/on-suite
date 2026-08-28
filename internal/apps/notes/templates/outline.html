@@ -63,6 +63,30 @@
 				<input type="hidden" name="root" value="{{.Data.Root.ID}}">
 				{{template "show-completed-toggle" .Data}}
 			</form>
+			<details class="notes-help-menu">
+				<summary class="quiet notes-help-toggle" aria-label="Keyboard shortcuts">Shortcuts</summary>
+				<div class="notes-help-panel">
+					<div class="notes-help-header">
+						<h3>Keyboard Shortcuts</h3>
+					</div>
+					<div class="notes-help-section">
+						<h4>Editing</h4>
+						<div class="notes-help-row"><span>Add bullet below</span><kbd>Enter</kbd></div>
+						<div class="notes-help-row"><span>Add / focus note</span><kbd>Shift+Enter</kbd></div>
+						<div class="notes-help-row"><span>Toggle done</span><kbd>Ctrl+Enter</kbd></div>
+						<div class="notes-help-row"><span>Collapse / expand</span><kbd>Ctrl+.</kbd></div>
+						<div class="notes-help-row"><span>Delete empty bullet</span><kbd>Backspace</kbd></div>
+					</div>
+					<div class="notes-help-section">
+						<h4>Navigation & Structure</h4>
+						<div class="notes-help-row"><span>Navigate bullets</span><kbd>&uarr; / &darr;</kbd></div>
+						<div class="notes-help-row"><span>Indent / Outdent</span><kbd>Tab / Shift+Tab</kbd></div>
+						<div class="notes-help-row"><span>Move up / down</span><kbd>Ctrl+Shift+&uarr; / &darr;</kbd></div>
+						<div class="notes-help-row"><span>Focus search</span><kbd>/</kbd></div>
+						<div class="notes-help-row"><span>Unfocus / Zoom out</span><kbd>Esc</kbd></div>
+					</div>
+				</div>
+			</details>
 		</div>
 	</div>
 	{{if .Data.Zoomed}}
@@ -120,11 +144,13 @@
 						        hx-post="/notes/{{.ID}}/done" hx-target="#outline" hx-swap="innerHTML"
 						        name="done" value="{{if .Done}}0{{else}}1{{end}}"
 						        aria-pressed="{{if .Done}}true{{else}}false{{end}}"
-						        aria-label="{{if .Done}}Mark not done{{else}}Mark done{{end}}"
-						        >{{if .Done}}&#9745; Mark not done{{else}}&#9744; Mark done{{end}}</button>
+						        aria-label="{{if .Done}}Mark not done{{else}}Mark done{{end}}">
+							<span class="outline-menu-label">{{if .Done}}&#9745; Mark not done{{else}}&#9744; Mark done{{end}}</span>
+							<span class="outline-menu-shortcut">Ctrl+Enter</span>
+						</button>
 
 						<label class="outline-menu-due">
-							<span>Due date</span>
+							<span class="outline-menu-label">Due date</span>
 							<input type="date" class="outline-due-input" name="due" value="{{.DueOn}}"
 							       aria-label="Due date"
 							       hx-post="/notes/{{.ID}}/due" hx-target="#outline" hx-swap="innerHTML"
@@ -134,27 +160,44 @@
 						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
 						        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
 						        name="dir" value="up" aria-label="Move up"
-						        {{if eq .Position 0}}disabled{{end}}>&uarr; Move up</button>
+						        {{if eq .Position 0}}disabled{{end}}>
+							<span class="outline-menu-label">&uarr; Move up</span>
+							<span class="outline-menu-shortcut">Ctrl+Shift+&uarr;</span>
+						</button>
 						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
 						        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
 						        name="dir" value="down" aria-label="Move down"
-						        {{if .Last}}disabled{{end}}>&darr; Move down</button>
+						        {{if .Last}}disabled{{end}}>
+							<span class="outline-menu-label">&darr; Move down</span>
+							<span class="outline-menu-shortcut">Ctrl+Shift+&darr;</span>
+						</button>
 						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/indent"
 						        hx-post="/notes/{{.ID}}/indent" hx-target="#outline" hx-swap="innerHTML"
 						        aria-label="Indent"
-						        {{if eq .Position 0}}disabled{{end}}>&#8677; Indent</button>
+						        {{if eq .Position 0}}disabled{{end}}>
+							<span class="outline-menu-label">&#8677; Indent</span>
+							<span class="outline-menu-shortcut">Tab</span>
+						</button>
 						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/outdent"
 						        hx-post="/notes/{{.ID}}/outdent" hx-target="#outline" hx-swap="innerHTML"
 						        aria-label="Outdent"
-						        {{if eq .Depth 0}}disabled{{end}}>&#8676; Outdent</button>
+						        {{if eq .Depth 0}}disabled{{end}}>
+							<span class="outline-menu-label">&#8676; Outdent</span>
+							<span class="outline-menu-shortcut">Shift+Tab</span>
+						</button>
 						<button type="submit" class="quiet" formaction="/notes/new"
 						        hx-post="/notes/new" hx-target="#outline" hx-swap="innerHTML"
-						        aria-label="Add a bullet below">+ Add bullet</button>
+						        aria-label="Add a bullet below">
+							<span class="outline-menu-label">+ Add bullet</span>
+							<span class="outline-menu-shortcut">Enter</span>
+						</button>
 
 						<button type="submit" class="quiet outline-menu-delete" formaction="/notes/{{.ID}}/delete"
 						        hx-post="/notes/{{.ID}}/delete" hx-target="#outline" hx-swap="innerHTML"
 						        hx-confirm="Delete &#8220;{{.DisplayTitle}}&#8221; and everything under it? This cannot be undone."
-						        aria-label="Delete">&times; Delete</button>
+						        aria-label="Delete">
+							<span class="outline-menu-label">&times; Delete</span>
+						</button>
 					</div>
 				</details>
 
@@ -189,28 +232,6 @@
 						       hx-post="/notes/{{.ID}}/text"
 						       hx-trigger="input changed delay:600ms, blur changed" hx-swap="none">
 					</span>
-				</span>
-
-				<span class="outline-overlay">
-					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
-					        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
-					        name="dir" value="up" aria-label="Move up"
-					        {{if eq .Position 0}}disabled{{end}}>&uarr;</button>
-					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
-					        hx-post="/notes/{{.ID}}/move" hx-target="#outline" hx-swap="innerHTML"
-					        name="dir" value="down" aria-label="Move down"
-					        {{if .Last}}disabled{{end}}>&darr;</button>
-					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/indent"
-					        hx-post="/notes/{{.ID}}/indent" hx-target="#outline" hx-swap="innerHTML"
-					        aria-label="Indent"
-					        {{if eq .Position 0}}disabled{{end}}>&#8677;</button>
-					<button type="submit" class="quiet" formaction="/notes/{{.ID}}/outdent"
-					        hx-post="/notes/{{.ID}}/outdent" hx-target="#outline" hx-swap="innerHTML"
-					        aria-label="Outdent"
-					        {{if eq .Depth 0}}disabled{{end}}>&#8676;</button>
-					<button type="submit" class="quiet" formaction="/notes/new"
-					        hx-post="/notes/new" hx-target="#outline" hx-swap="innerHTML"
-					        aria-label="Add a bullet below">+</button>
 				</span>
 			</form>
 		</div>
