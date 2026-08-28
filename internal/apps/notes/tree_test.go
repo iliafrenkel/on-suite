@@ -353,6 +353,93 @@ func TestSetDueRejectsAnotherUsersNode(t *testing.T) {
 	}
 }
 
+func TestSetArchivedRoundTrips(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "task")
+
+	if err := f.store.SetArchived(ctx, f.alice.ID, n.ID, true); err != nil {
+		t.Fatalf("SetArchived(true): %v", err)
+	}
+	got, err := f.store.ByID(ctx, f.alice.ID, n.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if !got.Archived {
+		t.Fatal("Archived = false after SetArchived(true)")
+	}
+
+	if err := f.store.SetArchived(ctx, f.alice.ID, n.ID, false); err != nil {
+		t.Fatalf("SetArchived(false): %v", err)
+	}
+	if got, _ = f.store.ByID(ctx, f.alice.ID, n.ID); got.Archived {
+		t.Fatal("Archived = true after SetArchived(false)")
+	}
+}
+
+// TestSetArchivedDoesNotTouchChildren mirrors TestSetDoneDoesNotTouchChildren:
+// archiving a parent does not write archived_at onto its children — hiding
+// the subtree is a display decision made in the queries that build the
+// outline, search results and due list (Task 2), never a change to the
+// child's own row.
+func TestSetArchivedDoesNotTouchChildren(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	child := f.mk(t, parent.ID, "child")
+
+	if err := f.store.SetArchived(ctx, f.alice.ID, parent.ID, true); err != nil {
+		t.Fatalf("SetArchived: %v", err)
+	}
+	got, err := f.store.ByID(ctx, f.alice.ID, child.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if got.Archived {
+		t.Fatal("the child was marked archived by its parent's SetArchived")
+	}
+}
+
+// TestSetArchivedIsIndependentOfDone is spec §13: a node can be either,
+// both, or neither.
+func TestSetArchivedIsIndependentOfDone(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "task")
+
+	if err := f.store.SetDone(ctx, f.alice.ID, n.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetArchived(ctx, f.alice.ID, n.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.ByID(ctx, f.alice.ID, n.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Done || !got.Archived {
+		t.Fatalf("got Done=%v Archived=%v, want both true", got.Done, got.Archived)
+	}
+
+	if err := f.store.SetArchived(ctx, f.alice.ID, n.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = f.store.ByID(ctx, f.alice.ID, n.ID); !got.Done || got.Archived {
+		t.Fatalf("after un-archiving: Done=%v Archived=%v, want Done true, Archived false", got.Done, got.Archived)
+	}
+}
+
+func TestSetArchivedRejectsAnotherUsersNode(t *testing.T) {
+	f := newFixture(t)
+	n := f.mk(t, notes.RootID, "alice's")
+
+	err := f.store.SetArchived(context.Background(), f.bob.ID, n.ID, true)
+	if !errors.Is(err, notes.ErrNotFound) {
+		t.Fatalf("SetArchived on another user's node = %v; want ErrNotFound", err)
+	}
+}
+
 func TestSetTextReplacesBothFields(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

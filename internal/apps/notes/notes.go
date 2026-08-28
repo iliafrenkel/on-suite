@@ -105,8 +105,12 @@ type Node struct {
 	// show *when* a bullet was completed, only whether it is. DueOn is the
 	// raw 'YYYY-MM-DD' string, or "" for none — a due date is a calendar
 	// date, not an instant, so there is no time.Time here either.
-	Done      bool
-	DueOn     string
+	Done  bool
+	DueOn string
+	// Archived is archived_at's Go projection — spec §13. Same reasoning as
+	// Done: nothing in this app ever needs to show *when* a bullet was put
+	// away, only whether it is.
+	Archived  bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
