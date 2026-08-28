@@ -5,7 +5,10 @@
 			<input type="search" id="notes-search-input" name="q" value="{{.Data.Query}}"
 			       placeholder="Search…" aria-label="Search notes" autofocus>
 		</form>
-		<a href="/notes/">All notes</a>
+		<div class="notes-toolbar-actions">
+			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav">Archive</a>
+			<a href="/notes/">All notes</a>
+		</div>
 	</div>
 	<h1>Search</h1>
 	{{if .Data.Query}}

@@ -2380,3 +2380,38 @@ func TestDueToolbarHasASearchBox(t *testing.T) {
 	s := newServer(t)
 	s.get(t, s.alice, "/notes/due").MustHave("#notes-search-input")
 }
+
+// TestOutlineMenuHasAnArchiveAction extends the existing comprehensive-menu
+// check (TestOutlineMenuHoldsEveryAction) with this task's new action.
+func TestOutlineMenuHasAnArchiveAction(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "Projects")
+
+	doc := s.get(t, s.alice, "/notes/")
+	menu := doc.MustHave(".outline-menu")
+	list := doc.MustHave(".outline-menu-list")
+
+	found := false
+	for _, n := range doc.QueryAll(`button[formaction=/notes/` + itoa(id) + `/archive]`) {
+		if within(n, list) && within(n, menu) {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the menu is missing an Archive action")
+	}
+}
+
+func TestArchiveToolbarHasASearchBox(t *testing.T) {
+	s := newServer(t)
+	s.get(t, s.alice, "/notes/archive").MustHave("#notes-search-input")
+}
+
+func TestOutlineToolbarHasAnArchiveLink(t *testing.T) {
+	s := newServer(t)
+	doc := s.get(t, s.alice, "/notes/")
+	link := doc.MustHave(`a[href="/notes/archive"]`)
+	if htmlassert.Text(link) != "Archive" {
+		t.Errorf("archive link text = %q, want Archive", htmlassert.Text(link))
+	}
+}

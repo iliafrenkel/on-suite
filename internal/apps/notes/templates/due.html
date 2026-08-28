@@ -8,7 +8,10 @@
 			<input type="search" id="notes-search-input" name="q"
 			       placeholder="Search…" aria-label="Search notes">
 		</form>
-		<a href="/notes/">All notes</a>
+		<div class="notes-toolbar-actions">
+			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav">Archive</a>
+			<a href="/notes/" class="toolbar-btn toolbar-btn-nav">All notes</a>
+		</div>
 	</div>
 	<h1>Due</h1>
 	{{range .Data.Sections}}

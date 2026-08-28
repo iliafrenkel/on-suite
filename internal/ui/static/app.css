@@ -838,7 +838,8 @@ button.outline-chevron {
 	border-bottom: 1px solid var(--c-border);
 }
 .notes-due-crumbs,
-.notes-search-crumbs { font-size: var(--fs-sm); color: var(--c-text-faint); }
+.notes-search-crumbs,
+.notes-archive-crumbs { font-size: var(--fs-sm); color: var(--c-text-faint); }
 .notes-crumb-item {
 	display: inline-block;
 	max-width: 200px;
@@ -871,6 +872,18 @@ button.outline-chevron {
 }
 .notes-search-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
 .notes-search-title:hover { color: var(--c-accent); }
+
+.notes-archive-list { margin: 0; padding: 0; list-style: none; }
+.notes-archive-item {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-2);
+	padding: var(--s-1) 0;
+	border-bottom: 1px solid var(--c-border);
+}
+.notes-archive-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
+.notes-archive-title:hover { color: var(--c-accent); }
+.notes-archive-restore { flex-shrink: 0; }
 
 .outline-dot { text-decoration: none; }
 .outline-dot:hover { color: var(--c-accent); }
