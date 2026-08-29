@@ -139,6 +139,16 @@
 				<input type="hidden" name="root" value="{{.RootID}}">
 				<input type="hidden" name="focus_id" value="{{.ID}}">
 
+				{{/* Issue #57: with JS disabled, pressing Enter in a text field
+				     implicitly submits the form's first non-disabled submit
+				     button in tree order, even one hidden inside a closed
+				     <details>. This button must stay the form's first
+				     submit-capable child so Enter always degrades to append,
+				     not whatever action happens to lead the menu below. */}}
+				<button type="submit" class="visually-hidden" formaction="/notes/new"
+				        hx-post="/notes/new" hx-target="#outline" hx-swap="innerHTML"
+				        tabindex="-1" aria-hidden="true">Add bullet</button>
+
 				<details class="outline-menu">
 					<summary class="outline-menu-toggle quiet" aria-label="Bullet actions"><svg class="icon-menu" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg></summary>
 					<div class="outline-menu-list">

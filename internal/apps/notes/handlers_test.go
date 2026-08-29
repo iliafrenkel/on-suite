@@ -360,6 +360,27 @@ func TestOutlineRendersTheTreeNested(t *testing.T) {
 	}
 }
 
+// TestRowFormDegradesEnterToAppend is issue #57: with JS disabled, pressing
+// Enter in a title field implicitly submits the form's first non-disabled
+// submit button in tree order — regardless of whether that button sits
+// inside a closed <details> menu. A hidden append button must therefore be
+// the form's first submit-capable child, or Enter silently fires whatever
+// menu action happens to come first (e.g. "Mark done").
+func TestRowFormDegradesEnterToAppend(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "Projects")
+
+	doc := s.get(t, s.alice, "/notes/")
+
+	buttons := doc.QueryAll("form.outline-main button[type=submit]")
+	if len(buttons) == 0 {
+		t.Fatal("row form has no submit buttons")
+	}
+	if got, _ := htmlassert.Attr(buttons[0], "formaction"); got != "/notes/new" {
+		t.Errorf("first submit button in the row form has formaction %q, want /notes/new (issue #57: Enter must degrade to append)", got)
+	}
+}
+
 func TestOutlineRendersAnotherUsersTreeNowhere(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.bob, notes.RootID, "bob's secret")
