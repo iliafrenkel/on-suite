@@ -208,6 +208,93 @@ func TestAddApp(t *testing.T) {
 	}
 }
 
+// TestAddAppSharesPartialsAcrossItsOwnPages is issue #89: a *.partial.html
+// file's {{define}} blocks must be visible from every one of the app's own
+// pages, not just its own file — each page is otherwise its own independent
+// template set (addPage clones base and parses only that one page's file).
+func TestAddAppSharesPartialsAcrossItsOwnPages(t *testing.T) {
+	r := testRenderer(t)
+	app := fstest.MapFS{
+		"shared.partial.html": {Data: []byte(`{{define "greeting"}}<p class="greeting">Hello, {{.}}!</p>{{end}}`)},
+		"one.html":            {Data: []byte(`{{define "content"}}{{template "greeting" "Alice"}}{{end}}`)},
+		"two.html":            {Data: []byte(`{{define "content"}}{{template "greeting" "Bob"}}{{end}}`)},
+	}
+	if err := r.AddApp("greet", app); err != nil {
+		t.Fatalf("AddApp: %v", err)
+	}
+	// The partial is not a page in its own right: it must not be registered
+	// or renderable as one.
+	if r.Has("greet/shared") {
+		t.Error("the partial registered as its own page")
+	}
+
+	for _, tc := range []struct {
+		page string
+		want string
+	}{
+		{"greet/one", "Hello, Alice!"},
+		{"greet/two", "Hello, Bob!"},
+	} {
+		rec := httptest.NewRecorder()
+		if err := r.Page(rec, http.StatusOK, tc.page, render.Page{}); err != nil {
+			t.Fatalf("Page(%s): %v", tc.page, err)
+		}
+		doc := htmlassert.Parse(t, rec.Body.String())
+		if got := htmlassert.Text(doc.MustHave(".greeting")); got != tc.want {
+			t.Errorf("%s greeting = %q, want %q", tc.page, got, tc.want)
+		}
+	}
+}
+
+// TestAddAppRejectsAnAppWithOnlyAPartial: a partial is shared content, not a
+// page — an app consisting of nothing else still has no page to serve.
+func TestAddAppRejectsAnAppWithOnlyAPartial(t *testing.T) {
+	r := testRenderer(t)
+	app := fstest.MapFS{
+		"shared.partial.html": {Data: []byte(`{{define "x"}}x{{end}}`)},
+	}
+	if err := r.AddApp("onlypartial", app); err == nil {
+		t.Error("AddApp accepted an app with only a partial and no page")
+	}
+}
+
+// TestDictBuildsAMapForMultiArgTemplateCalls covers the dict template func
+// (issue #89/#90's search box needed two values — Query and Autofocus —
+// passed to one {{template}} call, which only accepts a single argument).
+func TestDictBuildsAMapForMultiArgTemplateCalls(t *testing.T) {
+	r := testRenderer(t)
+	app := fstest.MapFS{
+		"page.html": {Data: []byte(
+			`{{define "content"}}{{with dict "A" "x" "B" "y"}}{{.A}}-{{.B}}{{end}}{{end}}`)},
+	}
+	if err := r.AddApp("dicttest", app); err != nil {
+		t.Fatalf("AddApp: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	if err := r.Page(rec, http.StatusOK, "dicttest/page", render.Page{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.Body.String(); !strings.Contains(got, "x-y") {
+		t.Errorf("body = %q, want it to contain x-y", got)
+	}
+}
+
+// TestDictRejectsAnOddArgumentCount is dict's own input validation: an
+// unpaired key would otherwise silently drop a value.
+func TestDictRejectsAnOddArgumentCount(t *testing.T) {
+	r := testRenderer(t)
+	app := fstest.MapFS{
+		"page.html": {Data: []byte(`{{define "content"}}{{dict "A"}}{{end}}`)},
+	}
+	if err := r.AddApp("dictbad", app); err != nil {
+		t.Fatalf("AddApp: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	if err := r.Page(rec, http.StatusOK, "dictbad/page", render.Page{}); err == nil {
+		t.Error("Page succeeded with an odd number of dict arguments")
+	}
+}
+
 func TestIconFuncIsAvailableInTemplates(t *testing.T) {
 	r := testRenderer(t)
 	app := fstest.MapFS{

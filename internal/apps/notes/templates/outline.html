@@ -47,10 +47,7 @@
 {{define "content"}}
 <div class="stack notes">
 	<div class="notes-toolbar">
-		<form method="get" action="/notes/search" class="notes-search">
-			<input type="search" id="notes-search-input" name="q"
-			       placeholder="Search…" aria-label="Search notes">
-		</form>
+		{{template "notes-search-box" (dict "Query" "" "Autofocus" false)}}
 		{{/* Grouped together so .notes-toolbar's own justify-content puts the
 		     search box alone on the left and this cluster together on the
 		     right, rather than spreading three items evenly. The prefs form

@@ -4,10 +4,7 @@
 	     spec §11 — so, unlike the outline, this toolbar needs no
 	     show-completed toggle and no .notes-toolbar-actions cluster. */}}
 	<div class="notes-toolbar">
-		<form method="get" action="/notes/search" class="notes-search">
-			<input type="search" id="notes-search-input" name="q"
-			       placeholder="Search…" aria-label="Search notes">
-		</form>
+		{{template "notes-search-box" (dict "Query" "" "Autofocus" false)}}
 		<div class="notes-toolbar-actions">
 			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav">Archive</a>
 			<a href="/notes/" class="toolbar-btn toolbar-btn-nav">All notes</a>

@@ -97,6 +97,7 @@ func NewRenderer(opts Options) (*Renderer, error) {
 		funcs: template.FuncMap{
 			"asset": opts.AssetURL,
 			"icon":  ui.IconFor,
+			"dict":  dict,
 		},
 	}
 
@@ -124,6 +125,16 @@ func NewRenderer(opts Options) (*Renderer, error) {
 
 // AddApp registers every *.html at the root of templates under the app's id.
 // Called once per app at startup, before the server listens.
+//
+// A file named *.partial.html is not a page of its own — it holds only
+// {{define}} blocks meant to be shared, via {{template}}, across more than
+// one of this app's pages (issue #89: the search box hand-copied across
+// outline.html/due.html/search.html/archive.html, with nothing stopping the
+// copies drifting apart). It is parsed into every one of this app's own
+// page clones, alongside that page's own file — each page's template set
+// otherwise stays exactly as independent as Fragment's own doc comment
+// relies on: a partial is content a page opts into with an explicit
+// {{template}} call, not another page's whole file appearing in its set.
 func (r *Renderer) AddApp(id string, templates fs.FS) error {
 	if id == "" {
 		return fmt.Errorf("render: app id must not be empty")
@@ -132,19 +143,29 @@ func (r *Renderer) AddApp(id string, templates fs.FS) error {
 	if err != nil {
 		return fmt.Errorf("render: glob %s templates: %w", id, err)
 	}
-	if len(names) == 0 {
+
+	var pages, partials []string
+	for _, name := range names {
+		if strings.HasSuffix(name, ".partial.html") {
+			partials = append(partials, name)
+		} else {
+			pages = append(pages, name)
+		}
+	}
+	if len(pages) == 0 {
 		return fmt.Errorf("render: app %s has no templates", id)
 	}
-	for _, name := range names {
+
+	for _, name := range pages {
 		key := id + "/" + strings.TrimSuffix(path.Base(name), ".html")
-		if err := r.addPage(key, templates, name); err != nil {
+		if err := r.addPage(key, templates, name, partials...); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *Renderer) addPage(key string, fsys fs.FS, name string) error {
+func (r *Renderer) addPage(key string, fsys fs.FS, name string, partials ...string) error {
 	if _, exists := r.pages[key]; exists {
 		return fmt.Errorf("render: template %q is already registered", key)
 	}
@@ -152,7 +173,7 @@ func (r *Renderer) addPage(key string, fsys fs.FS, name string) error {
 	if err != nil {
 		return fmt.Errorf("render: clone base for %s: %w", key, err)
 	}
-	if _, err := clone.ParseFS(fsys, name); err != nil {
+	if _, err := clone.ParseFS(fsys, append([]string{name}, partials...)...); err != nil {
 		return fmt.Errorf("render: parse %s: %w", name, err)
 	}
 	r.pages[key] = clone
@@ -197,6 +218,25 @@ func (r *Renderer) Fragment(w http.ResponseWriter, status int, page, block strin
 		return fmt.Errorf("render: template %q has no block %q", page, block)
 	}
 	return r.execute(w, status, t, block, data)
+}
+
+// dict builds a map from alternating string-key/value arguments, for a
+// {{template}} call that needs to pass more than one value where the action
+// only accepts a single dot argument — e.g. {{template "x" (dict "A" 1 "B" 2)}}.
+// A generic templating helper, not tied to any one app's page.
+func dict(pairs ...any) (map[string]any, error) {
+	if len(pairs)%2 != 0 {
+		return nil, fmt.Errorf("dict: odd number of arguments")
+	}
+	m := make(map[string]any, len(pairs)/2)
+	for i := 0; i < len(pairs); i += 2 {
+		key, ok := pairs[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("dict: key %v is not a string", pairs[i])
+		}
+		m[key] = pairs[i+1]
+	}
+	return m, nil
 }
 
 // execute renders into a buffer before touching the ResponseWriter, so a

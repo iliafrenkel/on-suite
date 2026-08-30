@@ -1,0 +1,17 @@
+{{/* notes-search-box is the toolbar search box, shared by every ON Notes
+     page's toolbar (outline, due, search, archive) — issue #89: it used to
+     be hand-copied verbatim across all of them, with no shared define
+     protecting the id notes.js's "/" binding looks up (#notes-search-input)
+     from drifting out of sync. *.partial.html (render.go's AddApp) is what
+     makes one define visible from every one of this app's own page files,
+     each of which is otherwise its own independent template set.
+
+     Takes a dict (issue #90's Query/Autofocus both vary: search.html alone
+     prefills the last query and autofocuses; every other page wants
+     neither), since a {{template}} call passes exactly one argument.
+     role="search" is the landmark WCAG asks for alongside the input's own
+     aria-label. */}}
+{{define "notes-search-box"}}<form method="get" action="/notes/search" class="notes-search" role="search">
+	<input type="search" id="notes-search-input" name="q" value="{{.Query}}"
+	       placeholder="Search…" aria-label="Search notes"{{if .Autofocus}} autofocus{{end}}>
+</form>{{end}}

@@ -1,10 +1,10 @@
 {{define "content"}}
 <div class="stack notes">
 	<div class="notes-toolbar">
-		<form method="get" action="/notes/search" class="notes-search">
-			<input type="search" id="notes-search-input" name="q"
-			       placeholder="Search…" aria-label="Search notes">
-		</form>
+		{{/* Issue #89: a 4th copy of the same markup — not in scope when
+		     that issue was filed (archiving hadn't shipped yet), but the
+		     exact drift risk it's about, so folded in here too. */}}
+		{{template "notes-search-box" (dict "Query" "" "Autofocus" false)}}
 		<div class="notes-toolbar-actions">
 			<a href="/notes/due" class="toolbar-btn toolbar-btn-nav">Due</a>
 			<a href="/notes/" class="toolbar-btn toolbar-btn-nav">All notes</a>
