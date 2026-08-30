@@ -57,6 +57,26 @@ func TestParseMarkdownJoinsConsecutiveNoteLines(t *testing.T) {
 	}
 }
 
+func TestParseMarkdownPreservesIndentationDeeperThanTheMinimum(t *testing.T) {
+	got, err := notes.ParseMarkdown("- task\n    indented extra\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Note != "  indented extra" {
+		t.Fatalf("ParseMarkdown = %+v, want a note with its extra indentation preserved", got)
+	}
+}
+
+func TestParseMarkdownStripsCarriageReturns(t *testing.T) {
+	got, err := notes.ParseMarkdown("- task\r\n  a note\r\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Title != "task" || got[0].Note != "a note" {
+		t.Fatalf("ParseMarkdown = %+v, want no stray carriage returns", got)
+	}
+}
+
 func TestParseMarkdownSkipsBlankLines(t *testing.T) {
 	got, err := notes.ParseMarkdown("- first\n\n- second\n")
 	if err != nil {
