@@ -1972,6 +1972,43 @@ func TestShowCompletedHidesAndReveals(t *testing.T) {
 	}
 }
 
+// TestPrefsCookieSecureFollowsAppDeps is issue #79: ShowCompletedCookie must
+// mark Secure from app.Deps.Secure, the platform's own configured
+// secure-cookie flag — not hardcode it, which would either make the cookie
+// silently stop persisting on a real non-TLS deployment (hardcoded true) or
+// send it over a plain connection on a TLS one (hardcoded false).
+func TestPrefsCookieSecureFollowsAppDeps(t *testing.T) {
+	plain := &server{apptest.NewServer(t, notes.New(), notes.NewStore)}
+	secure := &server{apptest.NewServer(t, notes.New(), notes.NewStore, apptest.WithSecureCookies())}
+
+	for _, tc := range []struct {
+		name string
+		s    *server
+		want bool
+	}{
+		{"plain deployment", plain, false},
+		{"secure-cookies deployment", secure, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := tc.s.Post(t, tc.s.Alice, "/notes/prefs", url.Values{
+				"root": {"0"}, "show_completed": {"1"},
+			})
+			var got *http.Cookie
+			for _, c := range rec.Result().Cookies() {
+				if c.Name == notes.ShowCompletedCookie {
+					got = c
+				}
+			}
+			if got == nil {
+				t.Fatal("no show-completed cookie set")
+			}
+			if got.Secure != tc.want {
+				t.Errorf("Secure = %v, want %v", got.Secure, tc.want)
+			}
+		})
+	}
+}
+
 func TestPrefsTogglesTheCookie(t *testing.T) {
 	s := newServer(t)
 

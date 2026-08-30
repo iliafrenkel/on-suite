@@ -73,6 +73,7 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		Errors:  errs,
 		Log:     deps.Log,
 		Version: deps.Version,
+		Secure:  deps.Secure,
 	}, authn.RequireUser); err != nil {
 		return nil, err
 	}

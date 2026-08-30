@@ -64,12 +64,33 @@ type Server[S any] struct {
 	Bob     *Session
 }
 
+// Option configures a detail of NewServer beyond its required arguments.
+type Option func(*config)
+
+type config struct {
+	secure bool
+}
+
+// WithSecureCookies makes the stack behave as it would behind a real TLS
+// deployment (config.Config.SecureCookies) — every cookie the platform sets,
+// and app.Deps.Secure for an app's own (issue #79), is marked Secure. Omit
+// this (the default) to match a plain-HTTP dev server instead, which is
+// what every other test in this harness wants.
+func WithSecureCookies() Option {
+	return func(c *config) { c.secure = true }
+}
+
 // NewServer builds a Server for one app. newStore turns the opened database
 // handle into that app's own store type; the harness calls it once, after
 // migrations have run, and stores the result on Store.
-func NewServer[S any](t *testing.T, a app.App, newStore func(*sql.DB) S) *Server[S] {
+func NewServer[S any](t *testing.T, a app.App, newStore func(*sql.DB) S, opts ...Option) *Server[S] {
 	t.Helper()
 	ctx := context.Background()
+
+	var cfg config
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 
 	handle, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -106,15 +127,15 @@ func NewServer[S any](t *testing.T, a app.App, newStore func(*sql.DB) S) *Server
 
 	log := slog.New(slog.DiscardHandler)
 	errs := web.NewErrors(rend, log)
-	csrf := web.NewCSRF(false, errs)
+	csrf := web.NewCSRF(cfg.secure, errs)
 	authn := web.NewAuth(web.AuthOptions{
-		Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Secure: false,
+		Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Secure: cfg.secure,
 	})
 
 	mux := http.NewServeMux()
 	authn.Routes(mux, nil)
 	if err := registry.Mount(mux, app.Deps{
-		DB: handle, Render: rend, Users: users, Errors: errs, Log: log,
+		DB: handle, Render: rend, Users: users, Errors: errs, Log: log, Secure: cfg.secure,
 	}, authn.RequireUser); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

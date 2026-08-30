@@ -473,7 +473,12 @@ func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
 		Value:    raw,
 		Path:     "/notes/",
 		HttpOnly: true,
-		Secure:   true,
+		// Issue #79: a.deps.Secure, not hardcoded true — this cookie is not
+		// a secret, but a hardcoded true would make it silently stop
+		// persisting on any real (non-localhost) deployment that isn't
+		// served over TLS, the same reason the platform's own session and
+		// CSRF cookies read this from configuration rather than assuming it.
+		Secure:   a.deps.Secure,
 		SameSite: http.SameSiteLaxMode,
 		// A preference, not a session: without MaxAge this would reset
 		// every time the browser closes. A year is long enough to feel
