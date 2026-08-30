@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -54,6 +55,41 @@ func (st *Store) Export(ctx context.Context, userID, rootID int64) ([]Node, erro
 		return nil, fmt.Errorf("notes: export: %w", err)
 	}
 	return out, nil
+}
+
+// ExportMarkdown renders flat (pre-order, depth-tagged) nodes as spec
+// §14's Markdown outline format: a "- " line per node, two spaces of
+// indent per level, an optional "[x]" suffix for done, a trailing
+// "@YYYY-MM-DD" for a due date, and the note as unbulleted lines indented
+// one level deeper. It is Store.Export's own output shape, so a whole-tree
+// or a subtree export both feed it directly. ParseMarkdown (import.go) is
+// its exact inverse — see that function's own doc comment for why suffix
+// order must be stripped in the reverse of the order this appends them.
+func ExportMarkdown(flat []Node) string {
+	var b strings.Builder
+	for _, n := range flat {
+		indent := strings.Repeat("  ", n.Depth)
+		b.WriteString(indent)
+		b.WriteString("- ")
+		b.WriteString(n.Title)
+		if n.Done {
+			b.WriteString(" [x]")
+		}
+		if n.DueOn != "" {
+			b.WriteString(" @")
+			b.WriteString(n.DueOn)
+		}
+		b.WriteString("\n")
+		if n.Note != "" {
+			for _, line := range strings.Split(n.Note, "\n") {
+				b.WriteString(indent)
+				b.WriteString("  ")
+				b.WriteString(line)
+				b.WriteString("\n")
+			}
+		}
+	}
+	return b.String()
 }
 
 // exportedNode is the JSON on-disk shape of one node — the whole row,

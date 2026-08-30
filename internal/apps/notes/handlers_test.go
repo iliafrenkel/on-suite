@@ -2724,6 +2724,84 @@ func TestArchiveToolbarHasASearchBox(t *testing.T) {
 	s.Get(t, s.Alice, "/notes/archive").MustHave("#notes-search-input")
 }
 
+func TestExportDownloadsTheWholeTree(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "top level bullet")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/export", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/markdown") {
+		t.Errorf("Content-Type = %q, want text/markdown", got)
+	}
+	if got := rec.Header().Get("Content-Disposition"); !strings.Contains(got, "attachment") {
+		t.Errorf("Content-Disposition = %q, want an attachment", got)
+	}
+	if !strings.Contains(rec.Body.String(), "- top level bullet\n") {
+		t.Errorf("export body = %q, missing the bullet", rec.Body.String())
+	}
+}
+
+func TestExportOfASubtree(t *testing.T) {
+	s := newServer(t)
+	root := s.seed(t, s.Alice, notes.RootID, "root")
+	s.seed(t, s.Alice, root, "child")
+	s.seed(t, s.Alice, notes.RootID, "unrelated")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/export?root="+itoa(root), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "- child\n") {
+		t.Errorf("export body = %q, missing the child", body)
+	}
+	if strings.Contains(body, "root") || strings.Contains(body, "unrelated") {
+		t.Errorf("export body = %q, a subtree export must not include the root or unrelated bullets", body)
+	}
+}
+
+func TestExportOnAnotherUsersRootIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/export?root="+itoa(id), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestExportRequiresSignIn(t *testing.T) {
+	s := newServer(t)
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/export", nil))
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("GET /notes/export anonymous = %d, want a 303 to the login page", rec.Code)
+	}
+}
+
+// TestOutlineToolbarHasAnExportLink looks the link up by its text rather
+// than by a compound selector: htmlassert matches only one qualifier per
+// selector part (see its own doc comment), so a combined
+// tag+class+attribute-prefix selector is not expressible here.
+func TestOutlineToolbarHasAnExportLink(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/notes/")
+
+	var link *html.Node
+	for _, a := range doc.QueryAll("a.toolbar-btn-nav") {
+		if htmlassert.Text(a) == "Export" {
+			link = a
+		}
+	}
+	if link == nil {
+		t.Fatal("no toolbar-btn-nav link reads \"Export\"")
+	}
+	if got, _ := htmlassert.Attr(link, "href"); got != "/notes/export?root=0" {
+		t.Errorf("export link href = %q, want /notes/export?root=0", got)
+	}
+}
+
 func TestOutlineToolbarHasAnArchiveLink(t *testing.T) {
 	s := newServer(t)
 	doc := s.Get(t, s.Alice, "/notes/")

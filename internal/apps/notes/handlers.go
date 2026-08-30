@@ -702,3 +702,49 @@ func (a *App) search(w http.ResponseWriter, r *http.Request) {
 	page.Data = searchView{Query: query, Rows: rows, ShowCompleted: showCompletedFrom(r)}
 	a.render(w, r, http.StatusOK, "notes/search", page)
 }
+
+// export downloads userID's whole tree, or one subtree, as spec §14's
+// Markdown outline format.
+func (a *App) export(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	rootID, ok := exportRootFrom(r)
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusNotFound)
+		return
+	}
+	if rootID != RootID {
+		if _, err := a.store.ByID(r.Context(), userID, rootID); err != nil {
+			a.fail(w, r, err)
+			return
+		}
+	}
+
+	flat, err := a.store.Export(r.Context(), userID, rootID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="notes-export.md"`)
+	_, _ = w.Write([]byte(ExportMarkdown(flat)))
+}
+
+// exportRootFrom parses export's ?root= query parameter: RootID (the
+// whole tree) when absent, exactly like formID's "absent means none" rule
+// for a hidden form field, adapted to a query string instead of a POST
+// body.
+func exportRootFrom(r *http.Request) (int64, bool) {
+	raw := r.URL.Query().Get("root")
+	if raw == "" {
+		return RootID, true
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id < 0 {
+		return 0, false
+	}
+	return id, true
+}

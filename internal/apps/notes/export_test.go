@@ -119,6 +119,45 @@ func TestNotesImplementsTheExporterInterface(t *testing.T) {
 	}
 }
 
+func TestExportMarkdownRendersOneBulletPerLine(t *testing.T) {
+	flat := []notes.Node{
+		{ID: 1, Title: "Software projects", Note: "Various software projects", Depth: 0},
+		{ID: 2, Title: "AtBudget", Depth: 1},
+		{ID: 3, Title: "Project objectives", Done: true, Depth: 2},
+		{ID: 4, Title: "API", DueOn: "2026-09-01", Depth: 2},
+	}
+	want := "- Software projects\n" +
+		"  Various software projects\n" +
+		"  - AtBudget\n" +
+		"    - Project objectives [x]\n" +
+		"    - API @2026-09-01\n"
+	if got := notes.ExportMarkdown(flat); got != want {
+		t.Errorf("ExportMarkdown =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestExportMarkdownCombinesDoneAndDueOnOneLine(t *testing.T) {
+	flat := []notes.Node{{ID: 1, Title: "both", Done: true, DueOn: "2026-09-01", Depth: 0}}
+	want := "- both [x] @2026-09-01\n"
+	if got := notes.ExportMarkdown(flat); got != want {
+		t.Errorf("ExportMarkdown = %q, want %q", got, want)
+	}
+}
+
+func TestExportMarkdownWritesMultiLineNotesAsConsecutiveIndentedLines(t *testing.T) {
+	flat := []notes.Node{{ID: 1, Title: "task", Note: "line one\nline two", Depth: 0}}
+	want := "- task\n  line one\n  line two\n"
+	if got := notes.ExportMarkdown(flat); got != want {
+		t.Errorf("ExportMarkdown = %q, want %q", got, want)
+	}
+}
+
+func TestExportMarkdownOfNothingIsEmpty(t *testing.T) {
+	if got := notes.ExportMarkdown(nil); got != "" {
+		t.Errorf("ExportMarkdown(nil) = %q, want empty", got)
+	}
+}
+
 func TestJSONExportContainsEveryColumn(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
