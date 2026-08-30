@@ -2899,6 +2899,17 @@ func TestImportUnderAZoomedRoot(t *testing.T) {
 	}
 }
 
+func TestImportUnderAnotherUsersParentIs404(t *testing.T) {
+	s := newServer(t)
+	bobs := s.seed(t, s.Bob, notes.RootID, "bob's")
+	req := s.multipartMarkdownRequest(t, s.Alice, itoa(bobs), "- x\n")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
 func TestImportRespondsWithAFragmentForHTMX(t *testing.T) {
 	s := newServer(t)
 	req := s.multipartMarkdownRequest(t, s.Alice, "0", "- imported\n")
@@ -2967,6 +2978,9 @@ func TestOutlineToolbarHasAnImportForm(t *testing.T) {
 	}
 	if got, _ := htmlassert.Attr(form, "enctype"); got != "multipart/form-data" {
 		t.Errorf("import form enctype = %q, want multipart/form-data", got)
+	}
+	if got, _ := htmlassert.Attr(form, "hx-encoding"); got != "multipart/form-data" {
+		t.Errorf("import form hx-encoding = %q, want multipart/form-data", got)
 	}
 	doc.MustHave("form.notes-import input[type=file]")
 }
