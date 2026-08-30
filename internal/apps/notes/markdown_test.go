@@ -144,6 +144,33 @@ func TestRenderTagStopsAtPunctuation(t *testing.T) {
 	}
 }
 
+// TestRenderMentionInEmailIsLiteral is issue #68: an email address's domain
+// looks exactly like a #tag/@mention chip's own pattern, so a boundary check
+// is what tells "ilia@example.com" apart from "ping @alice".
+func TestRenderMentionInEmailIsLiteral(t *testing.T) {
+	got := string(notes.Render("mail me at ilia@example.com"))
+	if strings.Contains(got, "outline-tag") {
+		t.Errorf("got %q, an email address should not produce a mention chip", got)
+	}
+	if got != "mail me at ilia@example.com" {
+		t.Errorf("got %q, want the literal source unchanged", got)
+	}
+}
+
+// TestRenderTagMidWordIsLiteral is issue #68: a #/@ preceded by a word
+// character is part of that word, not a tag/mention on its own.
+func TestRenderTagMidWordIsLiteral(t *testing.T) {
+	for _, s := range []string{"a#b", "x@y"} {
+		got := string(notes.Render(s))
+		if strings.Contains(got, "outline-tag") {
+			t.Errorf("Render(%q) = %q, want no chip mid-word", s, got)
+		}
+		if got != s {
+			t.Errorf("Render(%q) = %q, want the literal source unchanged", s, got)
+		}
+	}
+}
+
 // TestRenderUnclosedMarkerIsLiteral: a marker with no matching close is not
 // markdown — it renders as the literal characters the user typed.
 func TestRenderUnclosedMarkerIsLiteral(t *testing.T) {

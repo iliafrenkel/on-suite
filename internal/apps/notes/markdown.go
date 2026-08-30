@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // codePattern finds `code` spans. Its content is verbatim — spec §10 — so it
@@ -88,11 +90,33 @@ func renderInline(b *strings.Builder, s string) {
 			// it can be reached.
 			writeLink(b, s[m[12]:m[13]], s[m[12]:m[13]], s[m[12]:m[13]])
 		case m[14] >= 0: // #tag / @mention
+			// Issue #68: RE2 has no lookbehind, so the left-boundary check
+			// CommonMark-style flanking would give this construct is done
+			// here instead of in inlinePattern. Without it, "#"/"@" preceded
+			// by a word character reads as a chip mid-word — most visibly,
+			// an email address's domain ("ilia@example.com") renders as a
+			// bogus mention.
+			if !tagHasLeftBoundary(s, m[14]) {
+				b.WriteString(html.EscapeString(s[m[14]:m[15]]))
+				break
+			}
 			writeTag(b, s[m[14]:m[15]])
 		}
 		last = m[1]
 	}
 	b.WriteString(html.EscapeString(s[last:]))
+}
+
+// tagHasLeftBoundary reports whether the rune preceding index i in s allows a
+// #tag/@mention to start there: the beginning of the text, or a rune that
+// isn't itself a word character. i is always a match start returned by
+// inlinePattern, so it never splits a rune.
+func tagHasLeftBoundary(s string, i int) bool {
+	if i == 0 {
+		return true
+	}
+	r, _ := utf8.DecodeLastRuneInString(s[:i])
+	return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_')
 }
 
 // writeLink is the only place that can produce an <a href> to somewhere
