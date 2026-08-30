@@ -1097,12 +1097,18 @@ input.outline-note:focus { outline: none; }
 .outline-menu-due {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
 	gap: var(--s-2);
 	padding: var(--s-1) var(--s-2);
 	font-size: var(--fs-sm);
 	color: var(--c-text);
 	white-space: nowrap;
+}
+.outline-menu-due > .outline-menu-label { margin-right: auto; }
+
+/* Issue #74: the no-JS submit path for the due-date field. */
+.outline-due-save {
+	font-size: var(--fs-xs);
+	padding: 0.15rem 0.5rem;
 }
 
 .outline-due-input {

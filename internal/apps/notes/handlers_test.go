@@ -1885,6 +1885,44 @@ func TestDueOnAnotherUsersBulletIs404(t *testing.T) {
 	}
 }
 
+// TestDueDateHasANoJSSubmissionPath is issue #74: the date input must not
+// rely solely on hx-trigger=change, and must not implicitly submit through
+// outline-main's own default button (#57's hidden append button) when the
+// user presses Enter. Both are satisfied by giving the input and its Save
+// button a form="due-form-{id}" attribute pointing at a genuinely separate
+// <form>, rather than leaving them owned by outline-main.
+func TestDueDateHasANoJSSubmissionPath(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+
+	doc := s.get(t, s.alice, "/notes/")
+
+	input := doc.MustHave("input.outline-due-input")
+	dueForm, ok := htmlassert.Attr(input, "form")
+	if !ok || dueForm != "due-form-"+itoa(id) {
+		t.Errorf(`due-date input form=%q, ok=%v, want "due-form-%d"`, dueForm, ok, id)
+	}
+
+	save := doc.MustHave("button.outline-due-save")
+	if got, _ := htmlassert.Attr(save, "form"); got != dueForm {
+		t.Errorf("save button form=%q, want %q (same form as the input)", got, dueForm)
+	}
+	if got, _ := htmlassert.Attr(save, "type"); got != "submit" {
+		t.Errorf("save button type=%q, want submit", got)
+	}
+
+	owner := doc.MustHave("form#" + dueForm)
+	if got, _ := htmlassert.Attr(owner, "action"); got != "/notes/"+itoa(id)+"/due" {
+		t.Errorf("due-form action=%q, want /notes/%d/due", got, id)
+	}
+	if got := len(doc.QueryAll("form#" + dueForm + " input[name=root]")); got != 1 {
+		t.Errorf("due-form has %d root fields, want 1", got)
+	}
+	if got := len(doc.QueryAll("form#" + dueForm + " input[name=csrf_token]")); got != 1 {
+		t.Errorf("due-form has %d csrf_token fields, want 1", got)
+	}
+}
+
 // TestOverdueChipIsMarked doesn't depend on the real clock: it sets a due
 // date far enough in the past (year 2000) that it will read as overdue for
 // the entire lifetime of this test suite.
