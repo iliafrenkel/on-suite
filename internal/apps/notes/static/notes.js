@@ -552,7 +552,7 @@
 		return "";
 	}
 
-	function showPasteError() {
+	function showPasteError(status) {
 		var outline = document.getElementById("outline");
 		if (!outline || !outline.parentNode) return;
 		if (document.getElementById("notes-paste-error")) return; // already showing one
@@ -560,8 +560,11 @@
 		notice.id = "notes-paste-error";
 		notice.className = "notice notice-error";
 		notice.setAttribute("role", "alert");
-		notice.textContent = "Couldn't paste that: it doesn't look like valid outline text, or it's too large.";
+		notice.textContent = status >= 500
+			? "Something went wrong pasting that. Try again."
+			: "Couldn't paste that: it doesn't look like valid outline text, or it's too large.";
 		outline.parentNode.insertBefore(notice, outline);
+		notice.scrollIntoView({ block: "nearest" });
 	}
 
 	function clearPasteError() {
@@ -573,7 +576,7 @@
 		if (!document.getElementById("outline")) return;
 		document.body.addEventListener("htmx:responseError", function (evt) {
 			if (pasteRequestPath(evt).indexOf("/paste") === -1) return;
-			showPasteError();
+			showPasteError(evt.detail && evt.detail.xhr && evt.detail.xhr.status);
 		});
 		// Any later successful swap of #outline — a retried paste, or any
 		// other structural action — clears a stale error rather than
