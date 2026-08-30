@@ -211,7 +211,10 @@ func TestJSONExportContainsEveryColumn(t *testing.T) {
 	}
 	text := string(encoded)
 
-	for _, want := range []string{`"task"`, `"done":true`, `"due_on":"2026-09-01"`, `"collapsed":true`} {
+	for _, want := range []string{
+		`"task"`, `"done":true`, `"due_on":"2026-09-01"`, `"collapsed":true`,
+		`"id":`, `"parent_id":`, `"position":`, `"note":`, `"archived":`, `"created_at":`, `"updated_at":`,
+	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("export is missing %s: %s", want, text)
 		}
