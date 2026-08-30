@@ -80,6 +80,15 @@ type Deps struct {
 	// Version is the running build version, shown in the footer of every
 	// page.
 	Version string
+	// Secure is the platform's own configured secure-cookie flag (see
+	// config.Config.SecureCookies) — issue #79: an app-level handler that
+	// sets its own cookie (the first is notes' ShowCompletedCookie) needs
+	// this the same way the platform's own session and CSRF cookies do, to
+	// mark Secure correctly rather than guessing or hardcoding it. False on
+	// a plain-HTTP dev server, for the same reason web.AuthOptions.Secure
+	// must be: a Secure cookie is never sent over http, so hardcoding true
+	// would make an app's own cookie silently stop working there.
+	Secure bool
 
 	// nav is the switcher contents, set by the registry so Page can fill in
 	// the shell without every app knowing about every other app.
