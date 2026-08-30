@@ -2746,6 +2746,19 @@ func TestExportDownloadsTheWholeTree(t *testing.T) {
 	}
 }
 
+func TestExportOnRootZeroDownloadsTheWholeTree(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "top level bullet")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/export?root=0", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "- top level bullet\n") {
+		t.Errorf("export body = %q, missing the bullet", rec.Body.String())
+	}
+}
+
 func TestExportOfASubtree(t *testing.T) {
 	s := newServer(t)
 	root := s.seed(t, s.Alice, notes.RootID, "root")
