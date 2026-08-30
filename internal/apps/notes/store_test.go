@@ -198,6 +198,65 @@ func TestAncestorsOfAnotherUsersNodeIsEmpty(t *testing.T) {
 	}
 }
 
+// TestAncestorsManyMatchesAncestorsForEachID is issue #77: AncestorsMany
+// batches what used to be one Ancestors call per row into a single query,
+// keyed by each starting id's own breadcrumb — it must return exactly what
+// calling Ancestors individually for each id would.
+func TestAncestorsManyMatchesAncestorsForEachID(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	top := f.mk(t, notes.RootID, "top")
+	mid := f.mk(t, top.ID, "mid")
+	leaf := f.mk(t, mid.ID, "leaf")
+	other := f.mk(t, notes.RootID, "other top-level")
+
+	got, err := f.store.AncestorsMany(ctx, f.alice.ID, []int64{leaf.ID, top.ID, other.ID})
+	if err != nil {
+		t.Fatalf("AncestorsMany: %v", err)
+	}
+
+	if want := []string{"top", "mid"}; !slices.Equal(titles(got[leaf.ID]), want) {
+		t.Errorf("AncestorsMany[leaf] = %v, want %v", titles(got[leaf.ID]), want)
+	}
+	if got, ok := got[top.ID]; ok && len(got) != 0 {
+		t.Errorf("AncestorsMany[top] = %v, want nothing (top-level)", titles(got))
+	}
+	if got, ok := got[other.ID]; ok && len(got) != 0 {
+		t.Errorf("AncestorsMany[other] = %v, want nothing (top-level)", titles(got))
+	}
+}
+
+// TestAncestorsManyExcludesAnotherUsersNode is the owner-scoping half of
+// #77: a requested id that exists but belongs to someone else must not leak
+// its ancestor chain (or itself) into the caller's map.
+func TestAncestorsManyExcludesAnotherUsersNode(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	top := f.mk(t, notes.RootID, "top")
+	leaf := f.mk(t, top.ID, "leaf")
+
+	got, err := f.store.AncestorsMany(ctx, f.bob.ID, []int64{leaf.ID})
+	if err != nil {
+		t.Fatalf("AncestorsMany: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("bob's AncestorsMany = %v, want nothing", got)
+	}
+}
+
+// TestAncestorsManyOfNothingIsEmpty: an empty id slice must not query at
+// all, let alone panic on a SELECT ... IN () syntax error.
+func TestAncestorsManyOfNothingIsEmpty(t *testing.T) {
+	f := newFixture(t)
+	got, err := f.store.AncestorsMany(context.Background(), f.alice.ID, nil)
+	if err != nil {
+		t.Fatalf("AncestorsMany(nil): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("AncestorsMany(nil) = %v, want empty", got)
+	}
+}
+
 // outlineShape renders an outline the way a person reads one, so a failing
 // assertion prints a tree instead of a wall of structs.
 func outlineShape(ns []notes.Node) string {
