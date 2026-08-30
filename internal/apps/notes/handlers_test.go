@@ -690,6 +690,51 @@ func TestZoomRendersTheBreadcrumb(t *testing.T) {
 	}
 }
 
+// TestZoomedHeadingRendersMarkdown is issue #65: the zoomed heading and the
+// current (non-link) breadcrumb segment are not themselves links, so
+// rendering a bullet's Markdown there can't nest an <a> — unlike the
+// breadcrumb's ancestor links, which stay on plain DisplayTitle (see the
+// template comment beside them).
+func TestZoomedHeadingRendersMarkdown(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "**Projects**")
+
+	doc := s.get(t, s.alice, "/notes/"+itoa(id))
+
+	h1 := doc.MustHave("h1")
+	if got := htmlassert.Text(h1); got != "Projects" {
+		t.Errorf("h1 text = %q, want the rendered form", got)
+	}
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/"+itoa(id), nil))
+	if !strings.Contains(rec.Body.String(), "<h1><strong>Projects</strong></h1>") {
+		t.Error("the zoomed heading did not render as bold HTML")
+	}
+
+	current := doc.MustHave(".outline-crumb-current")
+	if got := htmlassert.Text(current); got != "Projects" {
+		t.Errorf("current crumb text = %q, want the rendered form", got)
+	}
+}
+
+// TestBreadcrumbAncestorLinksStayPlainText is issue #65's own noted tension:
+// an ancestor breadcrumb is a link, and Render can itself emit an <a> (for a
+// link, autolink, or #tag/@mention) — nesting anchors is invalid HTML, so
+// these deliberately do not render Markdown.
+func TestBreadcrumbAncestorLinksStayPlainText(t *testing.T) {
+	s := newServer(t)
+	projects := s.seed(t, s.alice, notes.RootID, "**Projects**")
+	child := s.seed(t, s.alice, projects, "child")
+
+	doc := s.get(t, s.alice, "/notes/"+itoa(child))
+	links := doc.QueryAll("nav.outline-crumbs a")
+	if len(links) < 2 {
+		t.Fatalf("got %d breadcrumb links, want at least 2", len(links))
+	}
+	if got := htmlassert.Text(links[1]); got != "**Projects**" {
+		t.Errorf("ancestor crumb link text = %q, want the literal source", got)
+	}
+}
+
 func TestTopLevelHasNoBreadcrumb(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.alice, notes.RootID, "Projects")
@@ -2184,6 +2229,32 @@ func TestDueListGroupsAcrossTheWholeTree(t *testing.T) {
 	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
 	if got := htmlassert.Text(link); got != "AtBudget" {
 		t.Errorf("due list link text = %q, want AtBudget", got)
+	}
+}
+
+// TestDueListCrumbsRenderMarkdownButRowTitleStaysPlain is issue #76: the
+// crumb spans aren't links, so they render a bullet's Markdown; the row's
+// own title IS a link (to its zoom), so — same tension as #65's breadcrumb
+// ancestors — it deliberately stays on plain DisplayTitle rather than risk
+// nesting an <a> inside it.
+func TestDueListCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "**Projects**")
+	child := s.seed(t, s.alice, parent, "**Milk**")
+	if err := s.store.SetDue(ctx, s.alice.user.ID, child, "2000-01-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/due")
+	crumb := doc.MustHave(".notes-crumb-item")
+	if got := htmlassert.Text(crumb); got != "Projects" {
+		t.Errorf("due-list crumb text = %q, want the rendered form", got)
+	}
+
+	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
+	if got := htmlassert.Text(link); got != "**Milk**" {
+		t.Errorf("due-list row title = %q, want the literal source (it's a link)", got)
 	}
 }
 

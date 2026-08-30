@@ -94,15 +94,20 @@
 		<a href="/notes/">All notes</a>
 		{{range .Data.Crumbs}}
 		<span aria-hidden="true">/</span>
+		{{/* Stays on DisplayTitle, not DisplayTitleHTML: this IS a link, so a
+		     title containing its own link/autolink/#tag would nest anchors —
+		     issue #65's own text on the tension. */}}
 		<a href="/notes/{{.ID}}" title="{{.DisplayTitle}}">{{.DisplayTitle}}</a>
 		{{end}}
 		<span aria-hidden="true">/</span>
-		<span class="outline-crumb-current" title="{{.Data.Root.DisplayTitle}}">{{.Data.Root.DisplayTitle}}</span>
+		{{/* Not a link — see DisplayTitleHTML's own doc comment (issue #65) —
+		     so rendering the title's Markdown here can't nest an <a>. */}}
+		<span class="outline-crumb-current" title="{{.Data.Root.DisplayTitle}}">{{.Data.Root.DisplayTitleHTML}}</span>
 	</nav>
 	{{if .Data.Root.Archived}}
 	<p class="notes-archived-banner">This bullet is archived. Its still-visible children can be edited here, but consider <a href="/notes/archive">restoring it</a> first.</p>
 	{{end}}
-	<h1>{{.Data.Root.DisplayTitle}}</h1>
+	<h1>{{.Data.Root.DisplayTitleHTML}}</h1>
 	{{with .Data.Root.Note}}<p class="dim">{{.}}</p>{{end}}
 	{{else}}
 	<h1>Notes</h1>
