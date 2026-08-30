@@ -2773,11 +2773,13 @@ func TestExportOfASubtree(t *testing.T) {
 	if !strings.Contains(body, "- child\n") {
 		t.Errorf("export body = %q, missing the child", body)
 	}
-	// A loose strings.Contains(body, "root") / "unrelated") check would only
-	// happen to pass because no other fixture in this test contains those
-	// as a substring — it would not actually catch the root or unrelated
-	// bullet's own exported line being present. Assert the exact absence
-	// of each one's own line instead.
+	// A loose strings.Contains(body, "root") / "unrelated") check would
+	// still catch the root or unrelated bullet's own exported line being
+	// present — it's a strict superset of the exact-line check below. Its
+	// real defect is brittleness: it would only happen to pass because no
+	// other fixture in this test contains those strings as a substring,
+	// not because it's a reliable check on its own. Assert the exact
+	// absence of each one's own line instead.
 	if strings.Contains(body, "- root\n") {
 		t.Errorf("export body = %q, must not include the excluded root's own bullet line", body)
 	}
