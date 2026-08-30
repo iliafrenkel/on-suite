@@ -73,9 +73,6 @@ func ParseMarkdown(text string) ([]ParsedNode, error) {
 
 	for i, raw := range strings.Split(text, "\n") {
 		line := strings.TrimRight(raw, "\r")
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
 
 		if m := bulletLineRe.FindStringSubmatch(line); m != nil {
 			depth := len(m[1]) / 2
@@ -104,11 +101,25 @@ func ParseMarkdown(text string) ([]ParsedNode, error) {
 		minIndent := (lastDepth + 1) * 2
 		indent := leadingSpaces(line)
 		if lastBullet < 0 || indent < minIndent {
+			// A line that is blank (or all whitespace) and not indented
+			// enough to be a note continuation is a separator between
+			// bullets, not content — ExportMarkdown never emits one, so
+			// this only ever happens in hand-written input. A genuinely
+			// blank *note* line, by contrast, always carries at least
+			// minIndent leading spaces (ExportMarkdown writes indent+"  "
+			// for every note line, blank or not) and so never reaches this
+			// branch — see the indented case below, which handles it.
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
 			return nil, fmt.Errorf("%w: line %d: text is not indented under any bullet", ErrInvalid, i+1)
 		}
 		// Only minIndent characters are stripped, never more: indentation
 		// beyond the bullet's own minimum is the user's content, not
-		// structural whitespace, so it survives into the note verbatim.
+		// structural whitespace, so it survives into the note verbatim —
+		// including a line that is nothing but that indentation, which
+		// round-trips as a blank line inside the note rather than being
+		// mistaken for a separator between bullets (issue #140).
 		noteLine := unescapeNoteLine(line[minIndent:])
 		if out[lastBullet].Note == "" {
 			out[lastBullet].Note = noteLine
