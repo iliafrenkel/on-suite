@@ -843,6 +843,37 @@ func TestEmptyOutlineOffersOneBullet(t *testing.T) {
 	doc.MustNotHave(`input[name=title]`)
 }
 
+// TestAllDoneOutlineDoesNotShowTheEmptyPlaceholder is issue #75: an outline
+// whose every top-level bullet is done and hidden must not look identical to
+// a genuinely empty one — that reads as data loss, not "nothing left to do".
+func TestAllDoneOutlineDoesNotShowTheEmptyPlaceholder(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.alice, notes.RootID, "task")
+	s.submit(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+		"root": {"0"}, "done": {"1"},
+	}, "/notes/")
+
+	doc := s.get(t, s.alice, "/notes/")
+	doc.MustNotHave(`input[name=new_title]`)
+	doc.MustHave(".outline-all-done")
+
+	// The inline toggle must work with JS off: a real form posting to the
+	// same /notes/prefs route the toolbar's own toggle uses.
+	form := doc.MustHave(".outline-all-done form")
+	if got, _ := htmlassert.Attr(form, "action"); got != "/notes/prefs" {
+		t.Errorf("inline toggle form action = %q, want /notes/prefs", got)
+	}
+	doc.MustHave(`.outline-all-done button[name=show_completed]`)
+
+	// Showing completed must bring the bullet back.
+	req := httptest.NewRequest("GET", "/notes/", nil)
+	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
+	rec := s.do(t, s.alice, req)
+	got := htmlassert.Parse(t, rec.Body.String())
+	got.MustHave(`input[value=task]`)
+	got.MustNotHave(".outline-all-done")
+}
+
 func TestCreateFromTheEmptyOutline(t *testing.T) {
 	s := newServer(t)
 

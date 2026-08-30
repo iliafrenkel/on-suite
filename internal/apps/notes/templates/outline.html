@@ -121,9 +121,29 @@
 {{define "outline-body"}}
 {{if .Rows}}
 {{template "outline-rows" .Rows}}
+{{else if .HiddenCount}}
+{{template "outline-all-done" .}}
 {{else}}
 {{template "outline-first" .}}
 {{end}}
+{{end}}
+
+{{/* outline-all-done is issue #75: every bullet at this level is done and
+     hidden, which without this reads as the outline having been emptied —
+     spec §6's placeholder is for a genuinely empty outline, not this. The
+     toggle posts to the same /notes/prefs route as the toolbar's own
+     show-completed button (outline.html's show-completed-toggle above),
+     working with JS off exactly the same way that one does. */}}
+{{define "outline-all-done"}}
+<div class="outline-all-done">
+	<p>{{.HiddenCount}} completed {{if eq .HiddenCount 1}}bullet is{{else}}bullets are{{end}} hidden.</p>
+	<form method="post" action="/notes/prefs"
+	      hx-post="/notes/prefs" hx-target="#outline" hx-swap="innerHTML">
+		<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+		<input type="hidden" name="root" value="{{.Root.ID}}">
+		<button type="submit" class="quiet" name="show_completed" value="1">Show completed</button>
+	</form>
+</div>
 {{end}}
 
 {{/* outline-rows renders one sibling list and calls itself for each row's
