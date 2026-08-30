@@ -322,9 +322,10 @@ func (a *App) setText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Trimmed exactly the way Ops.SetText trims title before saving, so the
-	// Markdown rendered below matches what the database now holds.
-	title := strings.TrimRight(r.PostFormValue("title"), " \t")
+	// trimTitle, not an inline TrimRight: the same call Ops.SetText makes
+	// before saving, so the Markdown rendered below can never drift from
+	// what the database now holds — issue #72.
+	title := trimTitle(r.PostFormValue("title"))
 	note := r.PostFormValue("note")
 
 	if err := a.store.SetText(r.Context(), userID, id, title, note); err != nil {

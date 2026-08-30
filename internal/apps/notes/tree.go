@@ -67,6 +67,18 @@ func (o *Ops) siblingAt(ctx context.Context, userID, parentID int64, pos int) (N
 	return siblingAt(ctx, o.tx, userID, parentID, pos)
 }
 
+// trimTitle applies notes' one title-normalization rule: trailing spaces and
+// tabs are stripped, leading ones are not — an outline is written in prose,
+// and a leading space is sometimes deliberate, while a trailing one never is.
+//
+// Every write path that saves a title calls this rather than trimming
+// inline, including handlers.go's setText, which renders the Markdown for
+// its HTMX response before the write reaches the store — issue #72: two
+// independent copies of this rule could silently drift if it ever changed.
+func trimTitle(title string) string {
+	return strings.TrimRight(title, " \t")
+}
+
 // Create inserts a new bullet as a child of parentID, which may be RootID.
 //
 // afterPos is the position of the sibling to insert after: -1 inserts first,
@@ -76,7 +88,7 @@ func (o *Ops) siblingAt(ctx context.Context, userID, parentID int64, pos int) (N
 //
 // The title is trimmed on the right only, for the reason given on SetText.
 func (o *Ops) Create(ctx context.Context, userID, parentID int64, afterPos int, title, note string) (Node, error) {
-	title = strings.TrimRight(title, " \t")
+	title = trimTitle(title)
 	if err := Validate(title, note); err != nil {
 		return Node{}, err
 	}
@@ -270,7 +282,7 @@ func (st *Store) SetArchived(ctx context.Context, userID, id int64, archived boo
 // in prose, and a leading space is sometimes deliberate, while a trailing one
 // never is.
 func (o *Ops) SetText(ctx context.Context, userID, id int64, title, note string) error {
-	title = strings.TrimRight(title, " \t")
+	title = trimTitle(title)
 	if err := Validate(title, note); err != nil {
 		return err
 	}
