@@ -812,3 +812,26 @@ func (a *App) importNotes(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
 }
+
+// paste creates a subtree under NodeID from a clipboard block — spec §14,
+// "the same code path, reached from the editor instead of from a file"
+// as POST /notes/import (Task 5). See this task's own design notes in the
+// plan for why the shape decision is entirely notes.js's, why this goes
+// through mutate while import does not, and why there is no
+// http.MaxBytesReader here.
+func (a *App) paste(w http.ResponseWriter, r *http.Request) {
+	text := r.PostFormValue("text")
+	if len(text) > MaxPasteTextBytes {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		parsed, err := ParseMarkdown(text)
+		if err != nil {
+			return err
+		}
+		_, err = o.ImportUnder(ctx, m.UserID, m.NodeID, parsed)
+		return err
+	})
+}

@@ -118,4 +118,5 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /{id}/done", a.done)
 	r.HandleFunc("POST /{id}/due", a.due)
 	r.HandleFunc("POST /{id}/archive", a.archive)
+	r.HandleFunc("POST /{id}/paste", a.paste)
 }

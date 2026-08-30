@@ -1600,6 +1600,7 @@ func TestEveryMutationRequiresSignIn(t *testing.T) {
 		"/notes/" + itoa(id) + "/collapse",
 		"/notes/" + itoa(id) + "/delete",
 		"/notes/" + itoa(id) + "/archive",
+		"/notes/" + itoa(id) + "/paste",
 	}
 
 	// No CSRF token: the CSRF middleware is outermost of the two and answers.
@@ -2947,4 +2948,101 @@ func TestOutlineToolbarHasAnImportForm(t *testing.T) {
 		t.Errorf("import form enctype = %q, want multipart/form-data", got)
 	}
 	doc.MustHave("form.notes-import input[type=file]")
+}
+
+func TestPasteCreatesASubtreeUnderTheBullet(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "target")
+
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "text": {"- child\n  - grandchild\n"},
+	}, "/notes/")
+
+	got := s.titlesAt(t, s.Alice, id)
+	if len(got) != 1 || got[0] != "child" {
+		t.Fatalf("children of the target = %v, want just child", got)
+	}
+	grandchildID := mustFindTitleUnder(t, s, id, "child")
+	grandchildren := s.titlesAt(t, s.Alice, grandchildID)
+	if len(grandchildren) != 1 || grandchildren[0] != "grandchild" {
+		t.Fatalf("children of child = %v, want just grandchild", grandchildren)
+	}
+}
+
+// mustFindTitleUnder returns the id of parentID's child titled title, for
+// a test asserting on a grandchild whose id the request never reports
+// back directly.
+func mustFindTitleUnder(t *testing.T, s *server, parentID int64, title string) int64 {
+	t.Helper()
+	children, err := s.Store.Children(context.Background(), s.Alice.User.ID, parentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range children {
+		if c.Title == title {
+			return c.ID
+		}
+	}
+	t.Fatalf("no child titled %q under %d", title, parentID)
+	return 0
+}
+
+// TestPasteSavesTheFocusedTextInTheSameTransaction is spec §7: pasting
+// into a bullet's title while the note field carries unsaved text must
+// not lose it, the same guarantee every other structural request already
+// gives every row.
+func TestPasteSavesTheFocusedTextInTheSameTransaction(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "target")
+
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "focus_id": {itoa(id)},
+		"title": {"target"}, "note": {"typed just before pasting"},
+		"text": {"- child\n"},
+	}, "/notes/")
+
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Note != "typed just before pasting" {
+		t.Errorf("note = %q, the concurrent text edit was lost", n.Note)
+	}
+}
+
+func TestPasteRejectsTextThatIsNotOutlineShaped(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "target")
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "text": {"just some ordinary text\nwith a second line\n"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPasteRejectsOversizedText(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "target")
+	oversized := strings.Repeat("x", notes.MaxPasteTextBytes+1)
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "text": {"- " + oversized},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPasteOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "text": {"- child\n"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
 }

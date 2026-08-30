@@ -469,6 +469,69 @@
 		document.addEventListener("keydown", handleKeydown);
 	}
 
+	// ---- paste: outline-shaped blocks only ---------------------------------
+	//
+	// looksLikeOutline is a cheap client-side mirror of ParseMarkdown's own
+	// bullet-line rule (import.go): does at least one line start with an
+	// even number of spaces followed by "- ". It only decides WHETHER to
+	// intercept — the server runs the real parse once the request lands, so
+	// a mismatch between this regex and the Go one can only ever produce an
+	// unnecessary round trip (this says yes, ParseMarkdown says no, and the
+	// user sees an error) rather than silently mishandling a paste; it can
+	// never make the browser's own default paste behaviour do the wrong
+	// thing, since that path is untouched unless this test passes.
+	function looksLikeOutline(text) {
+		return /^(?: {2})*- /m.test(text);
+	}
+
+	// handlePaste is spec §14's "paste-a-multi-line-block-into-a-bullet":
+	// only intercepted when the clipboard content already looks like this
+	// app's own export format (see looksLikeOutline above) — anything else
+	// is left entirely to the browser's default paste, which is why every
+	// early return here happens before preventDefault.
+	function handlePaste(e) {
+		var el = e.target;
+		if (!isOutlineField(el)) return;
+
+		var clipboard = e.clipboardData || window.clipboardData;
+		var text = clipboard ? clipboard.getData("text/plain") : "";
+		if (!looksLikeOutline(text)) return;
+
+		var row = rowOf(el);
+		// The empty outline's bootstrap field has no data-id (see
+		// trackFocus) and so nothing to paste children under yet — left to
+		// the browser's default paste, the same as any other unmatched
+		// case, rather than swallowing the paste with nothing to show for
+		// it.
+		if (!row || !row.hasAttribute("data-id")) return;
+
+		e.preventDefault();
+		var id = row.getAttribute("data-id");
+		var rootField = row.querySelector('input[name="root"]');
+		var title = row.querySelector('input[name="title"]');
+		var note = row.querySelector('input[name="note"]');
+
+		htmx.ajax("POST", "/notes/" + id + "/paste", {
+			source: document.body,
+			target: "#outline",
+			swap: "innerHTML",
+			values: {
+				root: rootField.value,
+				focus_id: id,
+				title: title ? title.value : "",
+				note: note ? note.value : "",
+				text: text,
+				_skipFocusOverride: "1"
+			}
+		});
+	}
+
+	function initPaste() {
+		if (!document.getElementById("outline")) return;
+		document.addEventListener("paste", handlePaste);
+	}
+
 	initFocusSync();
 	initKeyboard();
+	initPaste();
 })();
