@@ -32,7 +32,12 @@
 				</span>
 				{{end}}
 				<a href="/notes/{{.ID}}" class="notes-due-title">{{.DisplayTitle}}</a>
-				<span class="outline-due-chip{{if .Overdue}} outline-due-overdue{{end}}">{{.DueOn}}</span>
+				{{/* Issue #78: same non-colour signal as the outline's own
+				     chip (outline.html's rendered-title) — the "Overdue"
+				     section heading above also carries the meaning here, but
+				     a chip read on its own (e.g. by a screen reader jumping
+				     straight to it) still needs its own mark. */}}
+				<span class="outline-due-chip{{if .Overdue}} outline-due-overdue{{end}}"{{if .Overdue}} aria-label="Overdue: {{.DueOn}}"{{end}}>{{if .Overdue}}&#33; {{end}}{{.DueOn}}</span>
 			</li>
 			{{end}}
 		</ul>
