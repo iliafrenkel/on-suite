@@ -57,6 +57,38 @@ func TestParseMarkdownJoinsConsecutiveNoteLines(t *testing.T) {
 	}
 }
 
+func TestParseMarkdownPreservesABlankLineInsideAnIndentedNote(t *testing.T) {
+	// "  " on its own is what ExportMarkdown writes for a blank line inside
+	// a depth-0 bullet's note: minIndent (2) spaces and nothing else.
+	got, err := notes.ParseMarkdown("- task\n  para one\n  \n  para two\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Note != "para one\n\npara two" {
+		t.Fatalf("ParseMarkdown = %+v, want a note with its blank line preserved", got)
+	}
+}
+
+func TestParseMarkdownPreservesAWhitespaceOnlyNote(t *testing.T) {
+	got, err := notes.ParseMarkdown("- task\n  \n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Note != "" {
+		t.Fatalf("ParseMarkdown = %+v, want an empty (not absent) note", got)
+	}
+}
+
+func TestParseMarkdownStillSkipsABlankSeparatorBetweenBullets(t *testing.T) {
+	got, err := notes.ParseMarkdown("- first\n  note\n\n- second\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Note != "note" || got[1].Note != "" {
+		t.Fatalf("ParseMarkdown = %+v, want the blank line treated as a separator, not part of either note", got)
+	}
+}
+
 func TestParseMarkdownPreservesIndentationDeeperThanTheMinimum(t *testing.T) {
 	got, err := notes.ParseMarkdown("- task\n    indented extra\n")
 	if err != nil {
@@ -400,6 +432,35 @@ func TestExportThenImportRoundTripsABulletShapedNote(t *testing.T) {
 	}
 	if parsed[0].Note != "- x" {
 		t.Errorf("Note = %q, want the literal string %q", parsed[0].Note, "- x")
+	}
+}
+
+// TestExportThenImportRoundTripsANoteWithABlankLine pins issue #140: a
+// blank line inside a multi-line note used to be indistinguishable from a
+// blank separator between bullets and was silently dropped on re-import.
+func TestExportThenImportRoundTripsANoteWithABlankLine(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	if err := f.store.SetText(ctx, f.alice.ID, parent.ID, "parent", "para one\n\npara two"); err != nil {
+		t.Fatal(err)
+	}
+
+	exported, err := f.store.Export(ctx, f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := notes.ExportMarkdown(exported)
+
+	parsed, err := notes.ParseMarkdown(md)
+	if err != nil {
+		t.Fatalf("re-parsing the export: %v", err)
+	}
+	if len(parsed) != 1 {
+		t.Fatalf("ParseMarkdown = %+v, want exactly one node", parsed)
+	}
+	if parsed[0].Note != "para one\n\npara two" {
+		t.Errorf("Note = %q, want the blank line preserved", parsed[0].Note)
 	}
 }
 
