@@ -258,6 +258,14 @@
 		var row = rowOf(el);
 		if (!row || !row.hasAttribute("data-id")) return; // the empty-outline's bootstrap field
 
+		// Issue #58: Tab/Shift+Tab always preventDefault, even when the
+		// indent/outdent button they click is disabled (first sibling, or
+		// depth 0) — this is deliberate, standard outliner behavior, not an
+		// oversight, so a keyboard-only user cannot Tab out of a title/note
+		// field to reach anything past it (the delete button, the bullet
+		// dot, shell navigation). That is not a WCAG 2.1.2 keyboard trap:
+		// Escape (handleEscape, first stage) always blurs the field and
+		// remains the documented way out.
 		if (e.key === "Tab" && !e.shiftKey) {
 			e.preventDefault();
 			click(indentButton(row));
