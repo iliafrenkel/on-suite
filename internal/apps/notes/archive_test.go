@@ -73,6 +73,68 @@ func TestArchiveListsANestedNodeWhoseParentIsNotArchived(t *testing.T) {
 	}
 }
 
+// TestArchiveExcludesADoublyNestedArchivedDescendant is issue #109: A
+// archived, B (child of A, not archived), C (child of B, archived). C's own
+// direct parent (B) is not archived, so a direct-parent-only check would
+// still list C alongside A even though restoring A already brings C back —
+// C has no restore action of its own to be listed for. archived_below's
+// recursive walk must catch the archived ancestor (A) sitting above C's
+// direct parent (B).
+func TestArchiveExcludesADoublyNestedArchivedDescendant(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.mk(t, notes.RootID, "A")
+	b := f.mk(t, a.ID, "B")
+	c := f.mk(t, b.ID, "C")
+
+	if err := f.store.SetArchived(ctx, f.alice.ID, a.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetArchived(ctx, f.alice.ID, c.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Archive(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != a.ID {
+		t.Fatalf("Archive = %+v, want only A (%d), not C", got, a.ID)
+	}
+}
+
+// TestArchiveOrdersChronologicallyAcrossWholeAndFractionalSeconds is issue
+// #108: formatTime strips a whole-second timestamp's trailing zero
+// fraction, so "...T10:00:00Z" and "...T10:00:00.5Z" — chronologically the
+// former is earlier — sort in the wrong order under a plain lexicographic
+// ORDER BY archived_at DESC ('Z' > '.' byte-wise). archived_at is written
+// directly here, bypassing SetArchived's own clock, to construct exactly
+// that pair regardless of how fast this test runs.
+func TestArchiveOrdersChronologicallyAcrossWholeAndFractionalSeconds(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	earlier := f.mk(t, notes.RootID, "earlier, whole second")
+	later := f.mk(t, notes.RootID, "later, fractional second")
+
+	for id, ts := range map[int64]string{
+		earlier.ID: "2026-01-01T10:00:00Z",
+		later.ID:   "2026-01-01T10:00:00.5Z",
+	} {
+		if _, err := f.db.ExecContext(ctx,
+			`UPDATE notes_nodes SET archived_at = ? WHERE id = ?`, ts, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := f.store.Archive(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != later.ID || got[1].ID != earlier.ID {
+		t.Fatalf("Archive = %+v, want [later, earlier] (most recent first)", got)
+	}
+}
+
 func TestArchiveDoesNotLeakAnotherUsersNodes(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
