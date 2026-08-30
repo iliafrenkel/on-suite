@@ -217,12 +217,32 @@
 	function handleEscape() {
 		var active = document.activeElement;
 		if (isOutlineField(active)) {
-			active.blur();
+			// Issue #60: same data-id exclusion every other keyboard binding
+			// gives the empty-outline's bootstrap field (see handleKeydown
+			// below) — without it, Escape there blurred the field, harmless
+			// but inconsistent with every other binding treating it as
+			// untracked.
+			var row = rowOf(active);
+			if (row && row.hasAttribute("data-id")) {
+				active.blur();
+			}
+			return;
+		}
+		// Issue #60: scoped to #outline (or no focused element at all, i.e.
+		// <body>), not global — harmless today since the outline page has
+		// nothing else Escape-worthy, but without this a future control
+		// using Escape for its own purpose elsewhere on the page would also
+		// zoom the outline out from under it.
+		if (active !== document.body && !(active && active.closest && active.closest("#outline"))) {
 			return;
 		}
 		var crumbs = document.querySelectorAll(".outline-crumbs a");
 		if (crumbs.length === 0) return;
-		location.href = crumbs[crumbs.length - 1].href;
+		// crumbs[...].click(), not location.href = crumbs[...].href — reuses
+		// an existing control the way the rest of this module does,
+		// behaviorally identical here since the breadcrumb anchor carries
+		// no hx-*.
+		crumbs[crumbs.length - 1].click();
 	}
 
 	function handleKeydown(e) {
