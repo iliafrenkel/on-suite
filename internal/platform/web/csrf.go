@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
+	"mime"
 	"net/http"
 )
 
@@ -95,17 +96,41 @@ func (c *CSRF) verify(r *http.Request, cookieToken string) bool {
 
 	sent := r.Header.Get(CSRFHeader)
 	if sent == "" {
-		// ParseForm caches into r.PostForm, so the handler can still read its
-		// own fields afterwards. It only touches the body for form content
-		// types, leaving other bodies for the handler to stream.
-		if err := r.ParseForm(); err == nil {
-			sent = r.PostFormValue(CSRFFormField)
-		}
+		sent = formToken(r)
 	}
 	if sent == "" {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(sent), []byte(cookieToken)) == 1
+}
+
+// formToken reads the CSRF field from the request body, for the one kind
+// of request that cannot carry the token as a header: a plain HTML form
+// submitted with JavaScript off.
+//
+// ParseForm only reads the body for application/x-www-form-urlencoded,
+// leaving any other content type's body untouched — a route whose form
+// also uploads a file needs ParseMultipartForm instead (ON Notes' import
+// route, N8, is the first one in this codebase to need it). Anything else
+// is left alone by both calls, exactly as ParseForm alone already left it
+// before this function existed, so a handler expecting some other body
+// shape can still read it itself.
+//
+// Both calls cache into r.Form/r.PostForm (and, for multipart,
+// r.MultipartForm), so the handler that runs afterwards reads that same
+// cache rather than triggering a second read of the body.
+func formToken(r *http.Request) string {
+	ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if ct == "multipart/form-data" {
+		if err := r.ParseMultipartForm(DefaultMaxBodyBytes); err != nil {
+			return ""
+		}
+		return r.PostFormValue(CSRFFormField)
+	}
+	if err := r.ParseForm(); err != nil {
+		return ""
+	}
+	return r.PostFormValue(CSRFFormField)
 }
 
 func safeMethod(method string) bool {

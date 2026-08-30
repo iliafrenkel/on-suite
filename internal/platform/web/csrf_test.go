@@ -1,6 +1,9 @@
 package web_test
 
 import (
+	"bytes"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -263,5 +266,109 @@ func TestLimitBody(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code == http.StatusOK {
 		t.Error("an oversized body was accepted")
+	}
+}
+
+func TestCSRFAcceptsTheTokenInAMultipartFormField(t *testing.T) {
+	h, _ := csrfStack(t, false)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	token := cookieFrom(t, rec, web.CSRFCookieName).Value
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField(web.CSRFFormField, token); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("POST", "/", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: web.CSRFCookieName, Value: token})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200 (multipart form token)", rec.Code)
+	}
+}
+
+func TestCSRFRejectsAMissingMultipartToken(t *testing.T) {
+	h, _ := csrfStack(t, false)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	token := cookieFrom(t, rec, web.CSRFCookieName).Value
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField("title", "no token in this body"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("POST", "/", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: web.CSRFCookieName, Value: token})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403 (no token anywhere in the multipart body)", rec.Code)
+	}
+}
+
+// TestCSRFMultipartParsingLeavesTheHandlersOwnFieldsReadable mirrors
+// TestCSRFFormParsingDoesNotConsumeTheBody for multipart: the handler
+// must still see its own form fields and its uploaded file after the
+// middleware has already parsed the body once, looking for the token.
+func TestCSRFMultipartParsingLeavesTheHandlersOwnFieldsReadable(t *testing.T) {
+	e, _ := testErrors(t)
+	c := web.NewCSRF(false, e)
+	h := c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer func() { _ = file.Close() }()
+		data, _ := io.ReadAll(file)
+		_, _ = w.Write([]byte("title=" + r.FormValue("title") + " file=" + string(data)))
+	}))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	token := cookieFrom(t, rec, web.CSRFCookieName).Value
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField(web.CSRFFormField, token); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteField("title", "a title"); err != nil {
+		t.Fatal(err)
+	}
+	part, err := mw.CreateFormFile("file", "notes.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("- bullet")); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("POST", "/", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: web.CSRFCookieName, Value: token})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if got := rec.Body.String(); got != "title=a title file=- bullet" {
+		t.Errorf("handler saw %q; the middleware did not leave its fields readable", got)
 	}
 }
