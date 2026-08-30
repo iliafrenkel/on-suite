@@ -1817,14 +1817,20 @@ func TestDueSetsAndClearsTheChip(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.Alice, notes.RootID, "task")
 
+	// A relative future date, not a hardcoded one — this test is about the
+	// chip existing and showing what was set, not about overdue status
+	// (that's TestOverdueChipIsMarked/TestAFutureDueChipIsNotMarkedOverdue),
+	// so a hardcoded date must never drift into the past and start being
+	// treated as overdue (issue #78 added a leading "!" for that state).
+	future := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
 	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{
-		"root": {"0"}, "due": {"2026-03-05"},
+		"root": {"0"}, "due": {future},
 	}, "/notes/")
 
 	doc := s.Get(t, s.Alice, "/notes/")
 	chip := doc.MustHave(".outline-due-chip")
-	if got := htmlassert.Text(chip); got != "2026-03-05" {
-		t.Errorf("chip text = %q, want 2026-03-05", got)
+	if got := htmlassert.Text(chip); got != future {
+		t.Errorf("chip text = %q, want %s", got, future)
 	}
 
 	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{
@@ -1918,6 +1924,27 @@ func TestAFutureDueChipIsNotMarkedOverdue(t *testing.T) {
 	}
 
 	s.Get(t, s.Alice, "/notes/").MustNotHave(".outline-due-overdue")
+}
+
+// TestOverdueChipIsNotSignalledByColourAlone is issue #78 (WCAG 1.4.1): an
+// overdue chip must carry a non-colour signal too, for a colour-blind or
+// greyscale-display reader (the leading "!") and a screen reader user (the
+// aria-label overriding the announced text) — not just .outline-due-overdue's
+// colour.
+func TestOverdueChipIsNotSignalledByColourAlone(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "task")
+	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, "2000-01-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	chip := s.Get(t, s.Alice, "/notes/").MustHave(".outline-due-overdue")
+	if got := htmlassert.Text(chip); !strings.HasPrefix(got, "!") {
+		t.Errorf("overdue chip text = %q, want a leading \"!\"", got)
+	}
+	if got, ok := htmlassert.Attr(chip, "aria-label"); !ok || got != "Overdue: 2000-01-01" {
+		t.Errorf("overdue chip aria-label = %q, ok=%v, want %q", got, ok, "Overdue: 2000-01-01")
+	}
 }
 
 // TestShowCompletedHidesAndReveals is spec §11 end to end: a done bullet's
@@ -2125,6 +2152,17 @@ func TestDueListGroupsAcrossTheWholeTree(t *testing.T) {
 	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
 	if got := htmlassert.Text(link); got != "AtBudget" {
 		t.Errorf("due list link text = %q, want AtBudget", got)
+	}
+
+	// Issue #78: /notes/due's own chip carries the same non-colour signal
+	// as the outline's, since a screen reader could still land on the chip
+	// on its own even with the "Overdue" section heading above it.
+	chip := doc.MustHave(".outline-due-overdue")
+	if got := htmlassert.Text(chip); !strings.HasPrefix(got, "!") {
+		t.Errorf("due-list overdue chip text = %q, want a leading \"!\"", got)
+	}
+	if got, ok := htmlassert.Attr(chip, "aria-label"); !ok || got != "Overdue: 2000-01-01" {
+		t.Errorf("due-list overdue chip aria-label = %q, ok=%v, want %q", got, ok, "Overdue: 2000-01-01")
 	}
 }
 

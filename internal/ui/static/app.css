@@ -782,9 +782,14 @@ button.outline-chevron {
 }
 .outline-due-chip:hover { color: var(--c-accent); }
 
+/* Issue #78: font-weight, not just colour — WCAG 1.4.1. The chip's own
+ * template markup adds a leading "!" alongside this, for the same reason:
+ * a colour-blind or greyscale-display reader must still be able to tell an
+ * overdue chip apart from a normal one. */
 .outline-due-overdue {
 	background: var(--c-danger-bg);
 	color: var(--c-danger);
+	font-weight: 700;
 }
 .outline-due-overdue:hover { color: var(--c-danger); }
 
