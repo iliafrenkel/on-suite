@@ -496,6 +496,17 @@ func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
 }
 
+// idsOf is the ID column of a node slice — issue #77: the shared shape
+// dueList, buildArchiveView, and search each hand to Store.AncestorsMany to
+// fetch every row's breadcrumb in one batched query instead of one per row.
+func idsOf(nodes []Node) []int64 {
+	ids := make([]int64, len(nodes))
+	for i, n := range nodes {
+		ids[i] = n.ID
+	}
+	return ids
+}
+
 // dueList renders every one of the user's due bullets, grouped by urgency —
 // spec §11.
 func (a *App) dueList(w http.ResponseWriter, r *http.Request) {
@@ -509,14 +520,14 @@ func (a *App) dueList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	crumbs, err := a.store.AncestorsMany(r.Context(), userID, idsOf(nodes))
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
 	rows := make([]DueRow, len(nodes))
 	for i, n := range nodes {
-		crumbs, err := a.store.Ancestors(r.Context(), userID, n.ID)
-		if err != nil {
-			a.deps.Errors.Internal(w, r, err)
-			return
-		}
-		rows[i] = DueRow{Node: n, Crumbs: crumbs}
+		rows[i] = DueRow{Node: n, Crumbs: crumbs[n.ID]}
 	}
 
 	page := a.deps.Page(r, "Due")
@@ -565,13 +576,13 @@ func (a *App) buildArchiveView(ctx context.Context, userID int64) (archiveView, 
 	if err != nil {
 		return archiveView{}, err
 	}
+	crumbs, err := a.store.AncestorsMany(ctx, userID, idsOf(nodes))
+	if err != nil {
+		return archiveView{}, err
+	}
 	rows := make([]ArchiveRow, len(nodes))
 	for i, n := range nodes {
-		crumbs, err := a.store.Ancestors(ctx, userID, n.ID)
-		if err != nil {
-			return archiveView{}, err
-		}
-		rows[i] = ArchiveRow{Node: n, Crumbs: crumbs}
+		rows[i] = ArchiveRow{Node: n, Crumbs: crumbs[n.ID]}
 	}
 	return archiveView{Rows: rows}, nil
 }
@@ -642,14 +653,14 @@ func (a *App) search(w http.ResponseWriter, r *http.Request) {
 			a.deps.Errors.Internal(w, r, err)
 			return
 		}
+		crumbs, err := a.store.AncestorsMany(r.Context(), userID, idsOf(nodes))
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
 		rows = make([]SearchRow, len(nodes))
 		for i, n := range nodes {
-			crumbs, err := a.store.Ancestors(r.Context(), userID, n.ID)
-			if err != nil {
-				a.deps.Errors.Internal(w, r, err)
-				return
-			}
-			rows[i] = SearchRow{Node: n, Crumbs: crumbs}
+			rows[i] = SearchRow{Node: n, Crumbs: crumbs[n.ID]}
 		}
 	}
 

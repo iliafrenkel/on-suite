@@ -221,6 +221,65 @@ func (st *Store) Ancestors(ctx context.Context, userID, id int64) ([]Node, error
 	return collectNodes(rows, "ancestors")
 }
 
+// AncestorsMany is Ancestors for a whole set of ids in one query, keyed by
+// each id's own breadcrumb (outermost first) — issue #77. dueList,
+// buildArchiveView, and search each used to call Ancestors once per row,
+// serializing N recursive CTE walks on this app's single SQLite connection
+// (SetMaxOpenConns(1)): fine at single-household scale, but degrading
+// non-linearly rather than gracefully as a list grows. One recursive CTE,
+// seeded from every id at once and tagged with which one each resulting row
+// walked up from, replaces all of them with a single walk.
+//
+// An id with no ancestors (top-level, or one that doesn't exist or isn't
+// userID's) simply has no entry in the returned map — exactly what a caller
+// gets from indexing a nil/missing key with Node's own zero value semantics
+// were it to look one up and get back an empty, nil slice.
+func (st *Store) AncestorsMany(ctx context.Context, userID int64, ids []int64) (map[int64][]Node, error) {
+	out := map[int64][]Node{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	placeholders := strings.Repeat("?,", len(ids))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	args := make([]any, 0, len(ids)+2)
+	args = append(args, userID)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	args = append(args, MaxDepth)
+
+	rows, err := st.db.QueryContext(ctx,
+		`WITH RECURSIVE up AS (
+		     SELECT id AS start_id, `+nodeColumns+`, 0 AS d
+		       FROM notes_nodes WHERE user_id = ? AND id IN (`+placeholders+`)
+		   UNION ALL
+		     SELECT u.start_id, `+parentColumns+`, u.d + 1
+		       FROM notes_nodes p JOIN up u ON p.id = u.parent_id
+		      WHERE p.user_id = u.user_id AND u.d < ?
+		 )
+		 SELECT `+nodeColumns+`, start_id FROM up WHERE d > 0 ORDER BY start_id, d DESC`,
+		args...)
+	if err != nil {
+		return nil, fmt.Errorf("notes: ancestors of %d nodes: %w", len(ids), err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var startID int64
+		n, err := scanNode(rows, &startID)
+		if err != nil {
+			return nil, err
+		}
+		out[startID] = append(out[startID], n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("notes: ancestors of %d nodes: %w", len(ids), err)
+	}
+	return out, nil
+}
+
 // collectNodes drains rows into Nodes and closes them.
 func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
 	defer func() { _ = rows.Close() }()
