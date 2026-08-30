@@ -65,7 +65,12 @@ var pairsPrefixRe = regexp.MustCompile(`^(?:  )*`)
 // stored, reversing escapeNoteLine's (export.go) backslash escape for a
 // note line that would otherwise look like a bullet — so the caller sees
 // the user's original note text, byte for byte, never the escaped form
-// that actually sat on disk.
+// that actually sat on disk. This unescaping is unconditional, which
+// assumes the input is ExportMarkdown's own output: a hand-authored
+// Markdown file whose note line genuinely starts with a backslash (after
+// its own leading indent) has that backslash silently stripped on
+// import, the same way it would if ExportMarkdown had put it there to
+// escape a bullet-shaped line.
 func ParseMarkdown(text string) ([]ParsedNode, error) {
 	var out []ParsedNode
 	lastBullet := -1 // index into out of the most recently seen bullet
@@ -144,6 +149,11 @@ func leadingSpaces(s string) int {
 // ExportMarkdown — stripping it recovers the user's original text, byte
 // for byte. A line that was never escaped (its content, at that same
 // position, starts with neither "- " nor "\") is returned unchanged.
+//
+// This assumes the input came from ExportMarkdown: a hand-authored line
+// whose content genuinely starts with "\" has that backslash stripped
+// too, since there is no way to tell the two cases apart on the way back
+// in — the same trade-off ParseMarkdown's own doc comment describes.
 func unescapeNoteLine(line string) string {
 	prefix := pairsPrefixRe.FindString(line)
 	rest := line[len(prefix):]
