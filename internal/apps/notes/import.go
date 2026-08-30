@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -134,4 +135,68 @@ func parseTitleLine(s string) (title string, done bool, dueOn string) {
 		done = true
 	}
 	return title, done, dueOn
+}
+
+// ImportUnder inserts parsed as new children of parentID, appended after
+// whatever is already there, in one transaction — spec §14: import and
+// paste-into-a-bullet (Task 6) share this exact code path. Returns how
+// many nodes were created.
+//
+// parsed's Depth values are trusted never to skip a level: ParseMarkdown
+// (Task 4) already rejects that shape at parse time, so unlike nest
+// (view.go), which tolerates and drops a corrupted display row, this
+// never needs to guess at one — the default branch below exists only as a
+// guard against parsed arriving from some future second producer that
+// does not go through ParseMarkdown, not as an expected path today.
+//
+// Depth and node-count bounds are Create's and ParseMarkdown's own —
+// MaxDepth via Create's existing ErrTooDeep, MaxImportNodes already
+// enforced by ParseMarkdown before this ever runs — so nothing here
+// duplicates either check.
+func (o *Ops) ImportUnder(ctx context.Context, userID, parentID int64, parsed []ParsedNode) (int, error) {
+	open := make([]int64, 0, MaxDepth+1) // open[d] is the id of the ancestor at depth d
+	created := 0
+
+	for _, p := range parsed {
+		parent := parentID
+		switch {
+		case p.Depth == 0:
+			open = open[:0]
+		case p.Depth > 0 && p.Depth <= len(open):
+			parent = open[p.Depth-1]
+			open = open[:p.Depth]
+		default:
+			return created, fmt.Errorf("%w: malformed parsed node at depth %d", ErrInvalid, p.Depth)
+		}
+
+		n, err := o.Create(ctx, userID, parent, maxPosition, p.Title, p.Note)
+		if err != nil {
+			return created, err
+		}
+		if p.Done {
+			if err := o.SetDone(ctx, userID, n.ID, true); err != nil {
+				return created, err
+			}
+		}
+		if p.DueOn != "" {
+			if err := o.SetDue(ctx, userID, n.ID, p.DueOn); err != nil {
+				return created, err
+			}
+		}
+		open = append(open, n.ID)
+		created++
+	}
+	return created, nil
+}
+
+// ImportUnder inserts parsed as new children of parentID, in a
+// transaction of its own. See Ops.ImportUnder.
+func (st *Store) ImportUnder(ctx context.Context, userID, parentID int64, parsed []ParsedNode) (int, error) {
+	var created int
+	err := st.Do(ctx, func(o *Ops) error {
+		var err error
+		created, err = o.ImportUnder(ctx, userID, parentID, parsed)
+		return err
+	})
+	return created, err
 }

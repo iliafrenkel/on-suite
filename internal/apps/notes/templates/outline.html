@@ -46,6 +46,13 @@
 			<a href="/notes/due" class="toolbar-btn toolbar-btn-nav">Due</a>
 			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav">Archive</a>
 			<a href="/notes/export?root={{.Data.Root.ID}}" class="toolbar-btn toolbar-btn-nav">Export</a>
+			<form method="post" action="/notes/import" enctype="multipart/form-data" class="notes-import"
+			      hx-post="/notes/import" hx-target="#outline" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+				<input type="hidden" name="csrf_token" value="{{.Data.CSRFToken}}">
+				<input type="hidden" name="root" value="{{.Data.Root.ID}}">
+				<input type="file" name="file" accept=".md,text/markdown" aria-label="Import a Markdown file" required>
+				<button type="submit" class="toolbar-btn">Import</button>
+			</form>
 			<form method="post" action="/notes/prefs"
 			      hx-post="/notes/prefs" hx-target="#outline" hx-swap="innerHTML">
 				<input type="hidden" name="csrf_token" value="{{.Data.CSRFToken}}">

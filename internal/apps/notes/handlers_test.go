@@ -1,7 +1,9 @@
 package notes_test
 
 import (
+	"bytes"
 	"context"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -2809,4 +2811,140 @@ func TestOutlineToolbarHasAnArchiveLink(t *testing.T) {
 	if htmlassert.Text(link) != "Archive" {
 		t.Errorf("archive link text = %q, want Archive", htmlassert.Text(link))
 	}
+}
+
+// multipartMarkdownRequest builds a POST /notes/import request carrying
+// content as a file named "file", plus root and a valid CSRF token — the
+// shape s.Post's url.Values-based helper cannot produce, since this route
+// needs multipart/form-data rather than urlencoded.
+func (s *server) multipartMarkdownRequest(t *testing.T, sess *session, root, content string) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if err := w.WriteField("root", root); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteField("csrf_token", s.CSRFToken(t, sess)); err != nil {
+		t.Fatal(err)
+	}
+	part, err := w.CreateFormFile("file", "notes.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("POST", "/notes/import", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	return req
+}
+
+func TestImportCreatesNodesUnderTheZoomRoot(t *testing.T) {
+	s := newServer(t)
+	req := s.multipartMarkdownRequest(t, s.Alice, "0", "- imported\n")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Location"); got != "/notes/" {
+		t.Fatalf("redirected to %q, want /notes/", got)
+	}
+
+	got := s.titlesAt(t, s.Alice, notes.RootID)
+	if len(got) != 1 || got[0] != "imported" {
+		t.Fatalf("top level = %v, want just imported", got)
+	}
+}
+
+func TestImportUnderAZoomedRoot(t *testing.T) {
+	s := newServer(t)
+	root := s.seed(t, s.Alice, notes.RootID, "zoomed root")
+	req := s.multipartMarkdownRequest(t, s.Alice, itoa(root), "- child\n")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body: %s", rec.Code, rec.Body.String())
+	}
+
+	got := s.titlesAt(t, s.Alice, root)
+	if len(got) != 1 || got[0] != "child" {
+		t.Fatalf("children of root = %v, want just child", got)
+	}
+}
+
+func TestImportRespondsWithAFragmentForHTMX(t *testing.T) {
+	s := newServer(t)
+	req := s.multipartMarkdownRequest(t, s.Alice, "0", "- imported\n")
+	req.Header.Set("HX-Request", "true")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "imported") {
+		t.Error("the imported bullet is not in the fragment")
+	}
+}
+
+func TestImportRejectsMalformedMarkdown(t *testing.T) {
+	s := newServer(t)
+	req := s.multipartMarkdownRequest(t, s.Alice, "0", "stray text with no bullet\n")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestImportRejectsAnOversizedFile checks the body against
+// MaxImportFileBytes specifically, not against the platform's own larger
+// 1 MiB ceiling — a file just over MaxImportFileBytes must still fail
+// even though it is comfortably under the platform's own cap.
+func TestImportRejectsAnOversizedFile(t *testing.T) {
+	s := newServer(t)
+	oversized := strings.Repeat("x", notes.MaxImportFileBytes+1)
+	req := s.multipartMarkdownRequest(t, s.Alice, "0", "- "+oversized+"\n")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestImportRequiresSignIn: like TestEveryMutationRequiresSignIn, a
+// tokenless anonymous POST never reaches the auth guard at all — CSRF's
+// middleware is outermost and answers first with a 403, regardless of
+// sign-in state. To exercise sign-in specifically, this uses a valid CSRF
+// token (from an anonymous GET) so CSRF passes and RequireUser is the one
+// that answers, with its usual 303 to the login page.
+func TestImportRequiresSignIn(t *testing.T) {
+	s := newServer(t)
+	anon := s.Anonymous(t)
+	req := s.multipartMarkdownRequest(t, anon, "0", "- x\n")
+
+	rec := s.Do(t, anon, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /notes/import anonymous = %d, want a 303 to the login page", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/login" {
+		t.Errorf("POST /notes/import anonymous redirected to %q, not the login page", got)
+	}
+}
+
+func TestOutlineToolbarHasAnImportForm(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/notes/")
+	form := doc.MustHave("form.notes-import")
+	if got, _ := htmlassert.Attr(form, "action"); got != "/notes/import" {
+		t.Errorf("import form action = %q, want /notes/import", got)
+	}
+	if got, _ := htmlassert.Attr(form, "enctype"); got != "multipart/form-data" {
+		t.Errorf("import form enctype = %q, want multipart/form-data", got)
+	}
+	doc.MustHave("form.notes-import input[type=file]")
 }

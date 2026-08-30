@@ -3,6 +3,7 @@ package notes
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -747,4 +748,67 @@ func exportRootFrom(r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// importNotes parses an uploaded Markdown file (spec §14) and creates its
+// bullets as new children of root — the outline's current zoom, per the
+// hidden root field every structural form already carries. It does not go
+// through mutate: uploading a file from the toolbar happens with no
+// outline row being edited, the same situation prefs and restore are
+// already in, so there is no focused bullet's text to save alongside it.
+//
+// No http.MaxBytesReader here: CSRF.Middleware (Task 1,
+// internal/platform/web/csrf.go) has already called r.ParseMultipartForm
+// on this request looking for the token, so r.Body is already fully
+// consumed by the time this handler runs — wrapping it now would protect
+// nothing. MaxImportFileBytes is enforced below by checking the uploaded
+// file's own reported size instead.
+func (a *App) importNotes(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+
+	if err := r.ParseMultipartForm(web.DefaultMaxBodyBytes); err != nil {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	root, ok := formID(r, "root")
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	defer func() { _ = file.Close() }()
+	if header.Size > MaxImportFileBytes {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	parsed, err := ParseMarkdown(string(data))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if _, err := a.store.ImportUnder(r.Context(), userID, root, parsed); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+
+	if web.IsHTMX(r) {
+		a.renderOutlineFragment(w, r, userID, root, showCompletedFrom(r))
+		return
+	}
+	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
 }
