@@ -11,11 +11,14 @@ import (
 // App is ON Notes. It is constructed before the platform exists, in the
 // registration slice in main, and receives everything it needs in Mount.
 //
-// The compile-time assertion is here rather than left implicit because the
-// registry takes an interface: a method with the wrong signature would
-// otherwise fail at the call site in main, several packages away from the
-// mistake.
-var _ app.App = (*App)(nil)
+// The compile-time assertions are here rather than left implicit because
+// the registry takes interfaces: a method with the wrong signature would
+// otherwise fail at the call site in main or in Registry.Export, several
+// packages away from the mistake.
+var (
+	_ app.App      = (*App)(nil)
+	_ app.Exporter = (*App)(nil)
+)
 
 //go:embed templates/*.html
 var templateFiles embed.FS

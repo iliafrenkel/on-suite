@@ -45,6 +45,32 @@ const (
 	// AUTOINCREMENT and start at 1, so 0 is never a real id, and callers never
 	// have to handle a nullable parent.
 	RootID = 0
+
+	// MaxImportNodes bounds how many bullets a single import or a pasted
+	// block may create — spec §14: rejected with a clear error rather
+	// than truncated silently.
+	MaxImportNodes = 5000
+	// MaxImportFileBytes bounds an uploaded Markdown file (POST
+	// /notes/import) — spec §14. web.DefaultMaxBodyBytes already caps
+	// every request body at 1 MiB before this app's handler ever runs
+	// (internal/platform/web/middleware.go); a multipart file part
+	// carries almost no encoding overhead of its own, so 768 KiB of file
+	// content leaves comfortable headroom under that ceiling for the
+	// multipart boundaries and the request's other fields.
+	MaxImportFileBytes = 768 << 10
+	// MaxPasteTextBytes bounds a pasted block posted as a plain form
+	// field (POST /notes/{id}/paste) — spec §14, the same bound applied
+	// to the other way this app's Markdown parser is reached. Unlike a
+	// file upload this field is application/x-www-form-urlencoded, which
+	// percent-encodes every non-ASCII UTF-8 byte as "%XX" — up to 3x
+	// expansion for Cyrillic, Hebrew or CJK text (see
+	// internal/apps/paste/store.go's MaxBodyBytes for the same reasoning
+	// applied to a snippet body — apps do not import each other, so this
+	// is an independent constant with the same justification, not a
+	// shared symbol). 256 KiB keeps the worst case (768 KiB encoded)
+	// safely under the platform's 1 MiB limit, with room left for the
+	// request's other fields.
+	MaxPasteTextBytes = 256 << 10
 )
 
 // parentArg converts the RootID sentinel to the NULL the column actually
