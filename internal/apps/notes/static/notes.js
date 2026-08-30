@@ -72,6 +72,16 @@
 			delete params._skipFocusOverride;
 			return;
 		}
+
+		// Issue #61: cleared unconditionally, not just where this function
+		// used to leave it alone. A request that never swaps #outline (e.g. a
+		// plain text autosave, answered with an OOB fragment targeting the
+		// input itself) never reaches restoreFocus, so a value set here would
+		// otherwise sit unconsumed until some later, unrelated #outline swap
+		// wrongly adopts it. Every branch below that still needs a value sets
+		// its own before returning.
+		pendingFocus = null;
+
 		if (!lastFocus) {
 			// The empty outline's bootstrap field is deliberately untracked
 			// (it has no data-id — see trackFocus), so a brand-new outline
