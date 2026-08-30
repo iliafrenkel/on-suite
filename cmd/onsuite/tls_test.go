@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
@@ -46,7 +47,7 @@ func TestTLSCacheDirIsInsideTheDataDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := cfg.TLSCacheDir(), "/var/lib/onsuite/certs"; got != want {
+	if got, want := cfg.TLSCacheDir(), filepath.Join("/var/lib/onsuite", "certs"); got != want {
 		t.Errorf("TLSCacheDir() = %q, want %q", got, want)
 	}
 }

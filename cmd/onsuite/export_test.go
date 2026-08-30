@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -74,8 +75,10 @@ func TestExportCmdWritesToAFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// An export holds everything the user has written.
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("file mode = %o, want 600", perm)
+	if runtime.GOOS != "windows" {
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("file mode = %o, want 600", perm)
+		}
 	}
 	data, err := os.ReadFile(target)
 	if err != nil {
