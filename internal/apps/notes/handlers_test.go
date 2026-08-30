@@ -2560,6 +2560,22 @@ func TestSearchWithNoQueryShowsNoResults(t *testing.T) {
 	doc.MustNotHave(".notes-search-item")
 }
 
+// TestSearchWithWhitespaceOnlyQueryShowsNoResults is issue #92: a
+// whitespace-only q must render exactly like a genuinely empty one — just
+// the bare search box — not "No matches for '  '", which is what happened
+// when the untrimmed query reached the template while the handler's own
+// guard (strings.TrimSpace(query) != "") correctly skipped running a search.
+func TestSearchWithWhitespaceOnlyQueryShowsNoResults(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "anything")
+
+	doc := s.Get(t, s.Alice, "/notes/search?q=%20%20")
+	doc.MustNotHave(".notes-search-item")
+	if strings.Contains(doc.Text(), "No matches") {
+		t.Error("a whitespace-only query rendered the no-matches message")
+	}
+}
+
 func TestSearchWithNoMatchesSaysSo(t *testing.T) {
 	s := newServer(t)
 	doc := s.Get(t, s.Alice, "/notes/search?q=nonexistent")
