@@ -135,6 +135,21 @@ func TestNestDropsARowWithNoParent(t *testing.T) {
 	}
 }
 
+// TestNestDropsARowWithNegativeDepth is issue #52: nest's second switch case
+// guards with "d > 0 &&" specifically so a negative Depth falls into the
+// same "no correct parent" branch as a skipped level, rather than indexing
+// open[d-1] with a negative index and panicking. Store.Outline never
+// produces a negative Depth today, so this is unreachable in practice — the
+// guard exists for the same reason TestNestDropsARowWithNoParent does, and
+// without a test a future refactor could read "d > 0" as redundant with the
+// "d == 0" case above it and remove it.
+func TestNestDropsARowWithNegativeDepth(t *testing.T) {
+	rows := nest([]Node{{ID: 1, Title: "negative", Depth: -1}}, RootID, "tok", "9999-12-31")
+	if len(rows) != 0 {
+		t.Errorf("nest kept %d rows, want the negative-depth row dropped", len(rows))
+	}
+}
+
 // TestNestResetsTheOpenChainAtEachTopLevelRow is the case open = open[:0]
 // exists for: without it, a child of a second top-level root would still find
 // the first root's chain sitting in open and attach to it instead.

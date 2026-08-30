@@ -1299,11 +1299,22 @@ func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
 		// Outline's descent leaking one user's bullets into the other's screen
 		// under one of them.
 		//
-		// It consumes no randomness, so the sequence is exactly the one the
-		// seed produced before this call was added.
-		out, err := f.store.Outline(ctx, userID, notes.RootID, false)
+		// zoomRoot alternates with RootID rather than always using it — issue
+		// #45: a zoomed descent (parent_id IS <id>) is a different query shape
+		// from the top level (parent_id IS NULL), and it is the only one that
+		// can ever reach a cycle at all, since every node has exactly one
+		// parent and a top-level descent can therefore never enter one.
+		// step%2, not rng, decides which: the id itself comes from mine, this
+		// user's own ids already produced by earlier steps' own randomness, so
+		// nothing here consumes an extra random number, and the sequence is
+		// exactly the one the seed has always produced.
+		zoomRoot := int64(notes.RootID)
+		if len(mine) > 0 && step%2 == 1 {
+			zoomRoot = mine[step%len(mine)]
+		}
+		out, err := f.store.Outline(ctx, userID, zoomRoot, false)
 		if err != nil {
-			fail("after step %d: Outline(user=%d): %v", step, userID, err)
+			fail("after step %d: Outline(user=%d, root=%d): %v", step, userID, zoomRoot, err)
 		}
 		for _, n := range out {
 			if n.UserID != userID {

@@ -451,6 +451,22 @@ func TestParentOfOnlyDoneChildRendersNoChevron(t *testing.T) {
 	got.MustHave("button.outline-chevron")
 }
 
+// TestLeafBulletRendersNoChevronButton is issue #63: notes.js's
+// collapseButton (and maybeDeleteEmptyBullet, which uses it to detect "has
+// children") finds a row's chevron via row.querySelector("button.outline-chevron")
+// — it depends on outline.html's childless-bullet branch rendering a plain
+// span, never a button. If that branch ever became a <button>, collapseButton
+// would report "has children" for every leaf and Backspace-to-delete would
+// silently stop working everywhere, with every other current test staying
+// green — nothing else pins this half of the contract.
+func TestLeafBulletRendersNoChevronButton(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.alice, notes.RootID, "leaf")
+
+	doc := s.get(t, s.alice, "/notes/")
+	doc.MustNotHave("button.outline-chevron")
+}
+
 // TestOutlinePageLoadsTheScript. notes.js was dead code for three commits
 // because nothing on the page loaded it: the route served it correctly the
 // whole time. Serving it and loading it are separate claims, so this asserts
@@ -530,6 +546,20 @@ func TestOutlineUsesNoInlineStyles(t *testing.T) {
 	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
 	if strings.Contains(rec.Body.String(), "style=") {
 		t.Error("the outline contains an inline style attribute, which the CSP blocks")
+	}
+}
+
+// TestEmptyOutlineUsesNoInlineStyles is issue #54: TestOutlineUsesNoInlineStyles
+// above only ever renders a populated outline, so it never exercises
+// outline-first, the empty-outline "Start typing…" placeholder added in N2
+// Task 6. Manually grep-verified to have no style= attribute, but nothing
+// pinned it.
+func TestEmptyOutlineUsesNoInlineStyles(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	if strings.Contains(rec.Body.String(), "style=") {
+		t.Error("the empty outline contains an inline style attribute, which the CSP blocks")
 	}
 }
 
@@ -1046,6 +1076,38 @@ func TestCreateUnderAnotherUsersFocusIs404(t *testing.T) {
 	}
 }
 
+// TestCreateUnderAnotherUsersForgedRootIs404 is issue #47, mirroring
+// TestCreateUnderAnotherUsersFocusIs404 above: POST /notes/new with no
+// focus_id uses the form-supplied root as the insertion parent directly
+// (mutation.Root), so a forged root needs its own ownership-check test, not
+// just the forged-focus_id case.
+func TestCreateUnderAnotherUsersForgedRootIs404(t *testing.T) {
+	s := newServer(t)
+	bobs := s.seed(t, s.bob, notes.RootID, "bob's")
+
+	rec := s.post(t, s.alice, "/notes/new", url.Values{
+		"root": {itoa(bobs)}, "new_title": {"stolen"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+
+	alices, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(alices) != 0 {
+		t.Errorf("alice gained %d bullets", len(alices))
+	}
+	n, err := s.store.ByID(context.Background(), s.bob.user.ID, bobs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Title != "bob's" {
+		t.Errorf("bob's bullet is now %q", n.Title)
+	}
+}
+
 func TestPlusButtonAddsAnEmptyBulletBelow(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.alice, notes.RootID, "Projects")
@@ -1471,12 +1533,22 @@ func TestTextInputsAutosaveOverHTMX(t *testing.T) {
 	}
 }
 
+// TestEmptyOutlineFormIsHTMXWired is issue #59: outline.html's empty-outline
+// form actually sets the full hx-post/hx-target="#outline"/hx-swap="innerHTML"
+// triple, matching every other structural form — but until now this only
+// asserted hx-post, leaving the other two an unpinned coverage gap.
 func TestEmptyOutlineFormIsHTMXWired(t *testing.T) {
 	s := newServer(t)
 	doc := s.get(t, s.alice, "/notes/")
 	form := doc.MustHave(`form[action=/notes/new]`)
 	if got, _ := htmlassert.Attr(form, "hx-post"); got != "/notes/new" {
 		t.Errorf("empty-outline form hx-post = %q", got)
+	}
+	if got, _ := htmlassert.Attr(form, "hx-target"); got != "#outline" {
+		t.Errorf("empty-outline form hx-target = %q, want #outline", got)
+	}
+	if got, _ := htmlassert.Attr(form, "hx-swap"); got != "innerHTML" {
+		t.Errorf("empty-outline form hx-swap = %q, want innerHTML", got)
 	}
 }
 
