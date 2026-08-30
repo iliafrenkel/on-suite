@@ -2423,6 +2423,31 @@ func TestArchiveListShowsArchivedNodesWithCrumbs(t *testing.T) {
 	}
 }
 
+// TestArchiveCrumbsRenderMarkdownButRowTitleStaysPlain is issue #120: the
+// crumb spans aren't links, so they render a bullet's Markdown; the row's
+// own title IS a link (to its zoom), so it deliberately stays on plain
+// DisplayTitle rather than risk nesting an <a> inside it.
+func TestArchiveCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.alice, notes.RootID, "**Projects**")
+	child := s.seed(t, s.alice, parent, "**Milk**")
+	if err := s.store.SetArchived(ctx, s.alice.user.ID, child, true); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.get(t, s.alice, "/notes/archive")
+	crumb := doc.MustHave(".notes-crumb-item")
+	if got := htmlassert.Text(crumb); got != "Projects" {
+		t.Errorf("archive crumb text = %q, want the rendered form", got)
+	}
+
+	title := doc.MustHave("a.notes-archive-title")
+	if got := htmlassert.Text(title); got != "**Milk**" {
+		t.Errorf("archive row title = %q, want the literal source (it's a link)", got)
+	}
+}
+
 func TestArchiveListWithNothingArchived(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.alice, notes.RootID, "never archived")
@@ -2516,6 +2541,27 @@ func TestSearchFindsABulletAndShowsItsBreadcrumb(t *testing.T) {
 	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
 	if got := htmlassert.Text(link); got != "Budget report" {
 		t.Errorf("search hit link text = %q", got)
+	}
+}
+
+// TestSearchCrumbsRenderMarkdownButRowTitleStaysPlain is issue #120: same
+// split as TestArchiveCrumbsRenderMarkdownButRowTitleStaysPlain — the crumb
+// spans aren't links and render Markdown; the row's own title IS a link, so
+// it stays on plain DisplayTitle.
+func TestSearchCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.alice, notes.RootID, "**Projects**")
+	child := s.seed(t, s.alice, parent, "**Milk**")
+
+	doc := s.get(t, s.alice, "/notes/search?q=milk")
+	crumb := doc.MustHave(".notes-crumb-item")
+	if got := htmlassert.Text(crumb); got != "Projects" {
+		t.Errorf("search crumb text = %q, want the rendered form", got)
+	}
+
+	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
+	if got := htmlassert.Text(link); got != "**Milk**" {
+		t.Errorf("search hit link text = %q, want the literal source (it's a link)", got)
 	}
 }
 

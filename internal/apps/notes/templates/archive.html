@@ -26,8 +26,13 @@
 	{{range .Rows}}
 	<li class="notes-archive-item">
 		{{if .Crumbs}}
+		{{/* Not links — see Node.DisplayTitleHTML's doc comment (issue
+		     #120) — so rendering Markdown here can't nest an <a>. The
+		     row's own title just below stays on DisplayTitle: it IS a
+		     link, so a title containing a link/autolink/#tag of its own
+		     would nest anchors. */}}
 		<span class="notes-archive-crumbs">
-			{{range .Crumbs}}<span class="notes-crumb-item" title="{{.DisplayTitle}}">{{.DisplayTitle}}</span> / {{end}}
+			{{range .Crumbs}}<span class="notes-crumb-item" title="{{.DisplayTitle}}">{{.DisplayTitleHTML}}</span> / {{end}}
 		</span>
 		{{end}}
 		<a href="/notes/{{.ID}}" class="notes-archive-title">{{.DisplayTitle}}</a>
