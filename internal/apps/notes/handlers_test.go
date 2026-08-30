@@ -2034,6 +2034,57 @@ func TestPrefsTogglesTheCookie(t *testing.T) {
 	}
 }
 
+// TestPrefsRedirectsBackToSearchWithItsQuery is issue #88: /notes/search's
+// own show-completed toggle is a plain (non-HTMX) form, so prefs must send
+// the browser back to /notes/search with its query preserved — not always
+// the outline, which is what every prefs redirect did before this.
+func TestPrefsRedirectsBackToSearchWithItsQuery(t *testing.T) {
+	s := newServer(t)
+	s.Submit(t, s.Alice, "/notes/prefs", url.Values{
+		"show_completed": {"1"}, "page": {"search"}, "q": {"foo"},
+	}, "/notes/search?q=foo")
+}
+
+// TestPrefsRedirectsToOutlineWithNoPage: the default (no page field, the
+// outline's own shape) must be unchanged — every existing outline test
+// submitting to /notes/prefs relies on this.
+func TestPrefsRedirectsToOutlineWithNoPage(t *testing.T) {
+	s := newServer(t)
+	s.Submit(t, s.Alice, "/notes/prefs", url.Values{
+		"root": {"0"}, "show_completed": {"1"},
+	}, "/notes/")
+}
+
+// TestSearchHasAShowCompletedToggle is issue #88: unlike /notes/due (which
+// excludes done nodes unconditionally, no preference to toggle), Search
+// actually takes showCompleted, so a completed match was silently
+// unfindable here with no way to see or change why. End to end: a done
+// bullet that matches is invisible until the toggle is used, and visible
+// once it is.
+func TestSearchHasAShowCompletedToggle(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "finished task")
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/done", url.Values{
+		"root": {"0"}, "done": {"1"},
+	}, "/notes/")
+
+	doc := s.Get(t, s.Alice, "/notes/search?q=finished")
+	doc.MustNotHave(".notes-search-item")
+	toggle := doc.MustHave("#show-completed-toggle")
+	if got, _ := htmlassert.Attr(toggle, "value"); got != "1" {
+		t.Errorf("toggle value = %q, want 1 (currently off)", got)
+	}
+
+	s.Submit(t, s.Alice, "/notes/prefs", url.Values{
+		"show_completed": {"1"}, "page": {"search"}, "q": {"finished"},
+	}, "/notes/search?q=finished")
+
+	req := httptest.NewRequest("GET", "/notes/search?q=finished", nil)
+	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
+	rec := s.Do(t, s.Alice, req)
+	htmlassert.Parse(t, rec.Body.String()).MustHave(".notes-search-item")
+}
+
 // TestPrefsRespondsWithTheFreshValueOverHTMX guards the staleness trap: the
 // fragment this returns must reflect the setting just toggled, not whatever
 // the request's own (pre-toggle) cookie said.

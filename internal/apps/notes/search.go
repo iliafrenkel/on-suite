@@ -18,6 +18,12 @@ type SearchRow struct {
 type searchView struct {
 	Query string
 	Rows  []SearchRow
+	// ShowCompleted is spec §12's preference, read once per request so the
+	// toolbar's toggle can show its own opposite action — issue #88: unlike
+	// /notes/due (which excludes done nodes unconditionally, no preference
+	// to toggle), Search actually takes showCompleted, so a completed match
+	// was silently unfindable here with no way to see or change why.
+	ShowCompleted bool
 }
 
 // ftsQuery turns free text into an FTS5 MATCH expression that can never be

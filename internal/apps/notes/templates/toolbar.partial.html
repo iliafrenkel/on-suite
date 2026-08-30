@@ -1,0 +1,34 @@
+{{/* notes-search-box is the toolbar search box, shared by every ON Notes
+     page's toolbar (outline, due, search, archive) — issue #89: it used to
+     be hand-copied verbatim across all of them, with no shared define
+     protecting the id notes.js's "/" binding looks up (#notes-search-input)
+     from drifting out of sync. *.partial.html (render.go's AddApp) is what
+     makes one define visible from every one of this app's own page files,
+     each of which is otherwise its own independent template set.
+
+     Takes a dict (issue #90's Query/Autofocus both vary: search.html alone
+     prefills the last query and autofocuses; every other page wants
+     neither), since a {{template}} call passes exactly one argument.
+     role="search" is the landmark WCAG asks for alongside the input's own
+     aria-label. */}}
+{{define "notes-search-box"}}<form method="get" action="/notes/search" class="notes-search" role="search">
+	<input type="search" id="notes-search-input" name="q" value="{{.Query}}"
+	       placeholder="Search…" aria-label="Search notes"{{if .Autofocus}} autofocus{{end}}>
+</form>{{end}}
+
+{{/* show-completed-toggle is the toolbar's button. Moved here (from
+     outline.html, where it originated) so /notes/search can share it too
+     (issue #88) — this app's own pages are otherwise independent template
+     sets, same reason notes-search-box above lives in a partial.
+
+     Shared between the page render and every HTMX fragment response, on
+     the same OOB discipline as rendered-title (outline.html): the fragment
+     sets .OOB, the page render does not. On the outline the button sits
+     outside #outline, so the hx-target="#outline" swap can never update it
+     — without the out-of-band copy its label and value stay frozen at
+     whatever the last full page load wrote, and a second click re-sends
+     the stale value and appears to do nothing. /notes/search's own toggle
+     is a plain (non-HTMX) form — that page does no partial swapping of its
+     own — so .OOB is always false there, harmlessly. */}}
+{{define "show-completed-toggle"}}<button type="submit" id="show-completed-toggle" class="toolbar-btn{{if .ShowCompleted}} toolbar-btn-active{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}
+        name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}">{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}</button>{{end}}
