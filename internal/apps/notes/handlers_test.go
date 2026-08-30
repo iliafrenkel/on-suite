@@ -2536,6 +2536,22 @@ func TestSearchCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
 	}
 }
 
+// TestSearchBoxPrefillsTheQueryAndAutofocuses is issue #90: search.html's
+// own copy of the search box carried value="{{.Data.Query}}" and autofocus,
+// attributes the outline's and due's copies don't have — neither was
+// pinned by a handler test before this, the least-protected of the (now
+// shared, per #89) copies against drift.
+func TestSearchBoxPrefillsTheQueryAndAutofocuses(t *testing.T) {
+	s := newServer(t)
+	in := s.Get(t, s.Alice, "/notes/search?q=foo").MustHave("#notes-search-input")
+	if got, _ := htmlassert.Attr(in, "value"); got != "foo" {
+		t.Errorf("search box value = %q, want foo", got)
+	}
+	if _, ok := htmlassert.Attr(in, "autofocus"); !ok {
+		t.Error("search.html's search box does not autofocus")
+	}
+}
+
 func TestSearchWithNoQueryShowsNoResults(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.Alice, notes.RootID, "anything")
@@ -2604,6 +2620,9 @@ func TestOutlineToolbarHasASearchBox(t *testing.T) {
 	}
 	if got, _ := htmlassert.Attr(form, "method"); !strings.EqualFold(got, "get") {
 		t.Errorf("search form method = %q, want get (no CSRF token needed)", got)
+	}
+	if got, _ := htmlassert.Attr(form, "role"); got != "search" {
+		t.Errorf("search form role = %q, want search", got)
 	}
 }
 

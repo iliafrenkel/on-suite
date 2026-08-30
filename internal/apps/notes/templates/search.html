@@ -1,10 +1,7 @@
 {{define "content"}}
 <div class="stack notes">
 	<div class="notes-toolbar">
-		<form method="get" action="/notes/search" class="notes-search">
-			<input type="search" id="notes-search-input" name="q" value="{{.Data.Query}}"
-			       placeholder="Search…" aria-label="Search notes" autofocus>
-		</form>
+		{{template "notes-search-box" (dict "Query" .Data.Query "Autofocus" true)}}
 		<div class="notes-toolbar-actions">
 			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav">Archive</a>
 			<a href="/notes/">All notes</a>
