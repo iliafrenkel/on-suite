@@ -649,10 +649,16 @@ func (a *App) search(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	query := r.URL.Query().Get("q")
+	// Trimmed once, here, rather than leaving the raw value to reach the
+	// template — issue #92: search.html's own "no matches" branch used to
+	// check the untrimmed Query, so a whitespace-only q rendered
+	// "No matches for '  '" instead of the bare search box a genuinely
+	// empty query gets, even though this guard already correctly skipped
+	// running a search for it.
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	var rows []SearchRow
-	if strings.TrimSpace(query) != "" {
+	if query != "" {
 		nodes, err := a.store.Search(r.Context(), userID, query, showCompletedFrom(r))
 		if err != nil {
 			a.deps.Errors.Internal(w, r, err)
