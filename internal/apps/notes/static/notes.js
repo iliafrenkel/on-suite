@@ -469,6 +469,126 @@
 		document.addEventListener("keydown", handleKeydown);
 	}
 
+	// ---- paste: outline-shaped blocks only ---------------------------------
+	//
+	// looksLikeOutline is a cheap client-side mirror of ParseMarkdown's own
+	// bullet-line rule (import.go): does at least one line start with an
+	// even number of spaces followed by "- ". It only decides WHETHER to
+	// intercept — the server runs the real parse once the request lands, so
+	// a mismatch between this regex and the Go one (this says yes,
+	// ParseMarkdown says no — a bad due date, oversized text, or some other
+	// shape this heuristic missed) surfaces to the user as a visible error
+	// (see initPasteErrors below), not as a silently discarded paste; it can
+	// never make the browser's own default paste behaviour do the wrong
+	// thing, since that path is untouched unless this test passes.
+	function looksLikeOutline(text) {
+		return /^(?: {2})*- /m.test(text);
+	}
+
+	// handlePaste is spec §14's "paste-a-multi-line-block-into-a-bullet":
+	// only intercepted when the clipboard content already looks like this
+	// app's own export format (see looksLikeOutline above) — anything else
+	// is left entirely to the browser's default paste, which is why every
+	// early return here happens before preventDefault.
+	function handlePaste(e) {
+		var el = e.target;
+		if (!isOutlineField(el)) return;
+
+		var clipboard = e.clipboardData || window.clipboardData;
+		var text = clipboard ? clipboard.getData("text/plain") : "";
+		if (!looksLikeOutline(text)) return;
+
+		var row = rowOf(el);
+		// The empty outline's bootstrap field has no data-id (see
+		// trackFocus) and so nothing to paste children under yet — left to
+		// the browser's default paste, the same as any other unmatched
+		// case, rather than swallowing the paste with nothing to show for
+		// it.
+		if (!row || !row.hasAttribute("data-id")) return;
+
+		e.preventDefault();
+		var id = row.getAttribute("data-id");
+		var rootField = row.querySelector('input[name="root"]');
+		var title = row.querySelector('input[name="title"]');
+		var note = row.querySelector('input[name="note"]');
+
+		htmx.ajax("POST", "/notes/" + id + "/paste", {
+			source: document.body,
+			target: "#outline",
+			swap: "innerHTML",
+			values: {
+				root: rootField.value,
+				focus_id: id,
+				title: title ? title.value : "",
+				note: note ? note.value : "",
+				text: text,
+				_skipFocusOverride: "1"
+			}
+		});
+	}
+
+	function initPaste() {
+		if (!document.getElementById("outline")) return;
+		document.addEventListener("paste", handlePaste);
+	}
+
+	// ---- paste: surface a server-side rejection ----------------------------
+	//
+	// htmx 2.0.10's default responseHandling treats any 4xx/5xx as
+	// swap:false ([{code:"[45]..",swap:false,error:true}] in
+	// internal/ui/static/htmx.min.js's own config) — so when POST
+	// /notes/{id}/paste answers 400 (not outline-shaped after all, an
+	// oversized paste, or a bad due date), nothing is rendered and, without
+	// a listener of its own, the user would see nothing happen at all: the
+	// pasted content just vanishes with no explanation. This is the one
+	// case handlePaste's own preventDefault cannot recover from — the
+	// browser's default paste already didn't happen, and there is no way to
+	// re-trigger it after the fact — so a clear, visible error is what
+	// stands in for the lost paste instead.
+	function pasteRequestPath(evt) {
+		var detail = evt.detail || {};
+		if (detail.pathInfo && detail.pathInfo.requestPath) return detail.pathInfo.requestPath;
+		if (detail.requestConfig && detail.requestConfig.path) return detail.requestConfig.path;
+		return "";
+	}
+
+	function showPasteError() {
+		var outline = document.getElementById("outline");
+		if (!outline || !outline.parentNode) return;
+		if (document.getElementById("notes-paste-error")) return; // already showing one
+		var notice = document.createElement("div");
+		notice.id = "notes-paste-error";
+		notice.className = "notice notice-error";
+		notice.setAttribute("role", "alert");
+		notice.textContent = "Couldn't paste that: it doesn't look like valid outline text, or it's too large.";
+		outline.parentNode.insertBefore(notice, outline);
+	}
+
+	function clearPasteError() {
+		var existing = document.getElementById("notes-paste-error");
+		if (existing) existing.remove();
+	}
+
+	function initPasteErrors() {
+		if (!document.getElementById("outline")) return;
+		document.body.addEventListener("htmx:responseError", function (evt) {
+			if (pasteRequestPath(evt).indexOf("/paste") === -1) return;
+			showPasteError();
+		});
+		// Any later successful swap of #outline — a retried paste, or any
+		// other structural action — clears a stale error rather than
+		// leaving it to sit there forever. A failed request never reaches
+		// htmx:afterSwap at all (responseHandling's swap:false means
+		// nothing swaps), so this never races with showPasteError above.
+		document.body.addEventListener("htmx:afterSwap", function (evt) {
+			if (evt && evt.detail && evt.detail.target && evt.detail.target.id === "outline") {
+				clearPasteError();
+			}
+		});
+	}
+
 	initFocusSync();
 	initKeyboard();
+	initPaste();
+	initPasteErrors();
 })();

@@ -1,7 +1,9 @@
 package notes_test
 
 import (
+	"bytes"
 	"context"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1598,6 +1600,7 @@ func TestEveryMutationRequiresSignIn(t *testing.T) {
 		"/notes/" + itoa(id) + "/collapse",
 		"/notes/" + itoa(id) + "/delete",
 		"/notes/" + itoa(id) + "/archive",
+		"/notes/" + itoa(id) + "/paste",
 	}
 
 	// No CSRF token: the CSRF middleware is outermost of the two and answers.
@@ -2724,11 +2727,353 @@ func TestArchiveToolbarHasASearchBox(t *testing.T) {
 	s.Get(t, s.Alice, "/notes/archive").MustHave("#notes-search-input")
 }
 
+func TestExportDownloadsTheWholeTree(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "top level bullet")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/export", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/markdown") {
+		t.Errorf("Content-Type = %q, want text/markdown", got)
+	}
+	if got := rec.Header().Get("Content-Disposition"); !strings.Contains(got, "attachment") {
+		t.Errorf("Content-Disposition = %q, want an attachment", got)
+	}
+	if !strings.Contains(rec.Body.String(), "- top level bullet\n") {
+		t.Errorf("export body = %q, missing the bullet", rec.Body.String())
+	}
+}
+
+func TestExportOfASubtree(t *testing.T) {
+	s := newServer(t)
+	root := s.seed(t, s.Alice, notes.RootID, "root")
+	s.seed(t, s.Alice, root, "child")
+	s.seed(t, s.Alice, notes.RootID, "unrelated")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/export?root="+itoa(root), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "- child\n") {
+		t.Errorf("export body = %q, missing the child", body)
+	}
+	// A loose strings.Contains(body, "root") / "unrelated") check would only
+	// happen to pass because no other fixture in this test contains those
+	// as a substring — it would not actually catch the root or unrelated
+	// bullet's own exported line being present. Assert the exact absence
+	// of each one's own line instead.
+	if strings.Contains(body, "- root\n") {
+		t.Errorf("export body = %q, must not include the excluded root's own bullet line", body)
+	}
+	if strings.Contains(body, "- unrelated\n") {
+		t.Errorf("export body = %q, must not include the unrelated bullet's own line", body)
+	}
+}
+
+func TestExportOnAnotherUsersRootIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/export?root="+itoa(id), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestExportRequiresSignIn(t *testing.T) {
+	s := newServer(t)
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/export", nil))
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("GET /notes/export anonymous = %d, want a 303 to the login page", rec.Code)
+	}
+}
+
+// TestOutlineToolbarHasAnExportLink looks the link up by its text rather
+// than by a compound selector: htmlassert matches only one qualifier per
+// selector part (see its own doc comment), so a combined
+// tag+class+attribute-prefix selector is not expressible here.
+func TestOutlineToolbarHasAnExportLink(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/notes/")
+
+	var link *html.Node
+	for _, a := range doc.QueryAll("a.toolbar-btn-nav") {
+		if htmlassert.Text(a) == "Export" {
+			link = a
+		}
+	}
+	if link == nil {
+		t.Fatal("no toolbar-btn-nav link reads \"Export\"")
+	}
+	if got, _ := htmlassert.Attr(link, "href"); got != "/notes/export?root=0" {
+		t.Errorf("export link href = %q, want /notes/export?root=0", got)
+	}
+}
+
 func TestOutlineToolbarHasAnArchiveLink(t *testing.T) {
 	s := newServer(t)
 	doc := s.Get(t, s.Alice, "/notes/")
 	link := doc.MustHave(`a[href="/notes/archive"]`)
 	if htmlassert.Text(link) != "Archive" {
 		t.Errorf("archive link text = %q, want Archive", htmlassert.Text(link))
+	}
+}
+
+// multipartMarkdownRequest builds a POST /notes/import request carrying
+// content as a file named "file", plus root and a valid CSRF token — the
+// shape s.Post's url.Values-based helper cannot produce, since this route
+// needs multipart/form-data rather than urlencoded.
+func (s *server) multipartMarkdownRequest(t *testing.T, sess *session, root, content string) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if err := w.WriteField("root", root); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteField("csrf_token", s.CSRFToken(t, sess)); err != nil {
+		t.Fatal(err)
+	}
+	part, err := w.CreateFormFile("file", "notes.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("POST", "/notes/import", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	return req
+}
+
+func TestImportCreatesNodesUnderTheZoomRoot(t *testing.T) {
+	s := newServer(t)
+	req := s.multipartMarkdownRequest(t, s.Alice, "0", "- imported\n")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Location"); got != "/notes/" {
+		t.Fatalf("redirected to %q, want /notes/", got)
+	}
+
+	got := s.titlesAt(t, s.Alice, notes.RootID)
+	if len(got) != 1 || got[0] != "imported" {
+		t.Fatalf("top level = %v, want just imported", got)
+	}
+}
+
+func TestImportUnderAZoomedRoot(t *testing.T) {
+	s := newServer(t)
+	root := s.seed(t, s.Alice, notes.RootID, "zoomed root")
+	req := s.multipartMarkdownRequest(t, s.Alice, itoa(root), "- child\n")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body: %s", rec.Code, rec.Body.String())
+	}
+
+	got := s.titlesAt(t, s.Alice, root)
+	if len(got) != 1 || got[0] != "child" {
+		t.Fatalf("children of root = %v, want just child", got)
+	}
+}
+
+func TestImportRespondsWithAFragmentForHTMX(t *testing.T) {
+	s := newServer(t)
+	req := s.multipartMarkdownRequest(t, s.Alice, "0", "- imported\n")
+	req.Header.Set("HX-Request", "true")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "imported") {
+		t.Error("the imported bullet is not in the fragment")
+	}
+}
+
+func TestImportRejectsMalformedMarkdown(t *testing.T) {
+	s := newServer(t)
+	req := s.multipartMarkdownRequest(t, s.Alice, "0", "stray text with no bullet\n")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestImportRejectsAnOversizedFile checks the body against
+// MaxImportFileBytes specifically, not against the platform's own larger
+// 1 MiB ceiling — a file just over MaxImportFileBytes must still fail
+// even though it is comfortably under the platform's own cap.
+func TestImportRejectsAnOversizedFile(t *testing.T) {
+	s := newServer(t)
+	oversized := strings.Repeat("x", notes.MaxImportFileBytes+1)
+	req := s.multipartMarkdownRequest(t, s.Alice, "0", "- "+oversized+"\n")
+
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestImportRequiresSignIn: like TestEveryMutationRequiresSignIn, a
+// tokenless anonymous POST never reaches the auth guard at all — CSRF's
+// middleware is outermost and answers first with a 403, regardless of
+// sign-in state. To exercise sign-in specifically, this uses a valid CSRF
+// token (from an anonymous GET) so CSRF passes and RequireUser is the one
+// that answers, with its usual 303 to the login page.
+func TestImportRequiresSignIn(t *testing.T) {
+	s := newServer(t)
+	anon := s.Anonymous(t)
+	req := s.multipartMarkdownRequest(t, anon, "0", "- x\n")
+
+	rec := s.Do(t, anon, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /notes/import anonymous = %d, want a 303 to the login page", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/login" {
+		t.Errorf("POST /notes/import anonymous redirected to %q, not the login page", got)
+	}
+}
+
+func TestOutlineToolbarHasAnImportForm(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/notes/")
+	form := doc.MustHave("form.notes-import")
+	if got, _ := htmlassert.Attr(form, "action"); got != "/notes/import" {
+		t.Errorf("import form action = %q, want /notes/import", got)
+	}
+	if got, _ := htmlassert.Attr(form, "enctype"); got != "multipart/form-data" {
+		t.Errorf("import form enctype = %q, want multipart/form-data", got)
+	}
+	doc.MustHave("form.notes-import input[type=file]")
+}
+
+func TestPasteCreatesASubtreeUnderTheBullet(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "target")
+
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "text": {"- child\n  - grandchild\n"},
+	}, "/notes/")
+
+	got := s.titlesAt(t, s.Alice, id)
+	if len(got) != 1 || got[0] != "child" {
+		t.Fatalf("children of the target = %v, want just child", got)
+	}
+	grandchildID := mustFindTitleUnder(t, s, id, "child")
+	grandchildren := s.titlesAt(t, s.Alice, grandchildID)
+	if len(grandchildren) != 1 || grandchildren[0] != "grandchild" {
+		t.Fatalf("children of child = %v, want just grandchild", grandchildren)
+	}
+}
+
+// mustFindTitleUnder returns the id of parentID's child titled title, for
+// a test asserting on a grandchild whose id the request never reports
+// back directly.
+func mustFindTitleUnder(t *testing.T, s *server, parentID int64, title string) int64 {
+	t.Helper()
+	children, err := s.Store.Children(context.Background(), s.Alice.User.ID, parentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range children {
+		if c.Title == title {
+			return c.ID
+		}
+	}
+	t.Fatalf("no child titled %q under %d", title, parentID)
+	return 0
+}
+
+// TestPasteSavesTheFocusedTextInTheSameTransaction is spec §7: pasting
+// into a bullet's title while the note field carries unsaved text must
+// not lose it, the same guarantee every other structural request already
+// gives every row.
+func TestPasteSavesTheFocusedTextInTheSameTransaction(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "target")
+
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "focus_id": {itoa(id)},
+		"title": {"target"}, "note": {"typed just before pasting"},
+		"text": {"- child\n"},
+	}, "/notes/")
+
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Note != "typed just before pasting" {
+		t.Errorf("note = %q, the concurrent text edit was lost", n.Note)
+	}
+}
+
+func TestPasteRejectsTextThatIsNotOutlineShaped(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "target")
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "text": {"just some ordinary text\nwith a second line\n"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPasteRejectsOversizedText(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "target")
+	oversized := strings.Repeat("x", notes.MaxPasteTextBytes+1)
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "text": {"- " + oversized},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestPasteRejectsOversizedTextButAnonymousStillGetsSentToLogin pins Minor
+// #5 from the review: every other mutation checks sign-in (via mutate,
+// through a.userID) before any other validation, so an anonymous request
+// with a valid CSRF token gets a 303 to the login page no matter what else
+// is wrong with the request — the paste route must behave the same way for
+// an oversized "text" field rather than 400ing before mutate ever runs.
+func TestPasteRejectsOversizedTextButAnonymousStillGetsSentToLogin(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "target")
+	oversized := strings.Repeat("x", notes.MaxPasteTextBytes+1)
+
+	anon := s.Anonymous(t)
+	rec := s.Post(t, anon, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "text": {"- " + oversized},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303 (sign-in required, checked before the size bound); body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Location"); got != "/login" {
+		t.Errorf("redirected to %q, not the login page", got)
+	}
+}
+
+func TestPasteOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "text": {"- child\n"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }

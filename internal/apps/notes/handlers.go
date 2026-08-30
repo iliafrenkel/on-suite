@@ -3,6 +3,8 @@ package notes
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -701,4 +703,143 @@ func (a *App) search(w http.ResponseWriter, r *http.Request) {
 	page := a.deps.Page(r, "Search")
 	page.Data = searchView{Query: query, Rows: rows, ShowCompleted: showCompletedFrom(r)}
 	a.render(w, r, http.StatusOK, "notes/search", page)
+}
+
+// export downloads userID's whole tree, or one subtree, as spec §14's
+// Markdown outline format.
+func (a *App) export(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	rootID, ok := exportRootFrom(r)
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusNotFound)
+		return
+	}
+	if rootID != RootID {
+		if _, err := a.store.ByID(r.Context(), userID, rootID); err != nil {
+			a.fail(w, r, err)
+			return
+		}
+	}
+
+	flat, err := a.store.Export(r.Context(), userID, rootID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="notes-export.md"`)
+	_, _ = w.Write([]byte(ExportMarkdown(flat)))
+}
+
+// exportRootFrom parses export's ?root= query parameter: RootID (the
+// whole tree) when absent, exactly like formID's "absent means none" rule
+// for a hidden form field, adapted to a query string instead of a POST
+// body.
+func exportRootFrom(r *http.Request) (int64, bool) {
+	raw := r.URL.Query().Get("root")
+	if raw == "" {
+		return RootID, true
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id < 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+// importNotes parses an uploaded Markdown file (spec §14) and creates its
+// bullets as new children of root — the outline's current zoom, per the
+// hidden root field every structural form already carries. It does not go
+// through mutate: uploading a file from the toolbar happens with no
+// outline row being edited, the same situation prefs and restore are
+// already in, so there is no focused bullet's text to save alongside it.
+//
+// No http.MaxBytesReader here: CSRF.Middleware (Task 1,
+// internal/platform/web/csrf.go) has already called r.ParseMultipartForm
+// on this request looking for the token, so r.Body is already fully
+// consumed by the time this handler runs — wrapping it now would protect
+// nothing. MaxImportFileBytes is enforced below by checking the uploaded
+// file's own reported size instead.
+func (a *App) importNotes(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+
+	if err := r.ParseMultipartForm(web.DefaultMaxBodyBytes); err != nil {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	root, ok := formID(r, "root")
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	defer func() { _ = file.Close() }()
+	if header.Size > MaxImportFileBytes {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	parsed, err := ParseMarkdown(string(data))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if _, err := a.store.ImportUnder(r.Context(), userID, root, parsed); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+
+	if web.IsHTMX(r) {
+		a.renderOutlineFragment(w, r, userID, root, showCompletedFrom(r))
+		return
+	}
+	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
+}
+
+// paste creates a subtree under NodeID from a clipboard block — spec §14,
+// "the same code path, reached from the editor instead of from a file"
+// as POST /notes/import (Task 5). See this task's own design notes in the
+// plan for why the shape decision is entirely notes.js's, why this goes
+// through mutate while import does not, and why there is no
+// http.MaxBytesReader here.
+//
+// The MaxPasteTextBytes check runs inside mutate's own closure, after
+// mutate has already resolved m.UserID, rather than before mutate is
+// called at all: every other mutation's own validation happens after
+// mutate's sign-in check, and paste is not an exception just because its
+// bound happens to be cheap to check up front. Returning ErrInvalid here
+// (rather than writing the response directly) reaches the same 400 through
+// a.fail, once mutate's own transaction has run and returned.
+func (a *App) paste(w http.ResponseWriter, r *http.Request) {
+	text := r.PostFormValue("text")
+
+	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		if len(text) > MaxPasteTextBytes {
+			return fmt.Errorf("%w: pasted text exceeds %d bytes", ErrInvalid, MaxPasteTextBytes)
+		}
+		parsed, err := ParseMarkdown(text)
+		if err != nil {
+			return err
+		}
+		_, err = o.ImportUnder(ctx, m.UserID, m.NodeID, parsed)
+		return err
+	})
 }

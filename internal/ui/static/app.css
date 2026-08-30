@@ -818,6 +818,16 @@ button.outline-chevron {
 	gap: var(--s-2);
 }
 
+.notes-import {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-1);
+}
+.notes-import input[type="file"] {
+	font-size: var(--fs-sm);
+	max-width: 10rem;
+}
+
 .toolbar-btn {
 	display: inline-flex;
 	align-items: center;
