@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -498,7 +499,29 @@ func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
 		a.renderOutlineFragment(w, r, userID, root, raw == "1")
 		return
 	}
-	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
+	http.Redirect(w, r, prefsRedirectTarget(r, root), http.StatusSeeOther)
+}
+
+// prefsRedirectTarget is where a non-HTMX prefs toggle sends the browser
+// back to. The outline's own toggle is HTMX (handled above); /notes/search's
+// plain-form toggle (issue #88) is not, since that page does no partial
+// swapping of its own, so it needs a real redirect back to itself — with
+// its query string preserved, or the toggle would silently reset the search.
+//
+// page is a closed enum read from a hidden field, not an arbitrary URL:
+// a forged value can only ever select one of these known-safe destinations,
+// never something open-redirect-shaped.
+func prefsRedirectTarget(r *http.Request, root int64) string {
+	switch r.PostFormValue("page") {
+	case "search":
+		q := r.PostFormValue("q")
+		if q == "" {
+			return "/notes/search"
+		}
+		return "/notes/search?q=" + url.QueryEscape(q)
+	default:
+		return outlinePath(root)
+	}
 }
 
 // idsOf is the ID column of a node slice — issue #77: the shared shape
@@ -676,6 +699,6 @@ func (a *App) search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page := a.deps.Page(r, "Search")
-	page.Data = searchView{Query: query, Rows: rows}
+	page.Data = searchView{Query: query, Rows: rows, ShowCompleted: showCompletedFrom(r)}
 	a.render(w, r, http.StatusOK, "notes/search", page)
 }

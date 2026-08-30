@@ -2,9 +2,27 @@
 <div class="stack notes">
 	<div class="notes-toolbar">
 		{{template "notes-search-box" (dict "Query" .Data.Query "Autofocus" true)}}
+		{{/* Issue #88: unlike /notes/due (which excludes done nodes
+		     unconditionally, no preference to toggle), Search actually
+		     takes showCompleted, so a completed match was silently
+		     unfindable here with no way to see or change why. A plain
+		     (non-HTMX) form: this page does no partial swapping of its
+		     own, so a real redirect back to itself — preserving the
+		     query, via the hidden q field prefsRedirectTarget reads
+		     (handlers.go) — is simpler than building one just for this. */}}
 		<div class="notes-toolbar-actions">
 			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav">Archive</a>
 			<a href="/notes/">All notes</a>
+			<form method="post" action="/notes/prefs">
+				<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
+				<input type="hidden" name="page" value="search">
+				<input type="hidden" name="q" value="{{.Data.Query}}">
+				{{/* dict, not .Data directly: show-completed-toggle also
+				     reads .OOB unconditionally, a field searchView has no
+				     reason to carry — this page never does an HTMX partial
+				     swap, so it's always false. */}}
+				{{template "show-completed-toggle" (dict "ShowCompleted" .Data.ShowCompleted "OOB" false)}}
+			</form>
 		</div>
 	</div>
 	<h1>Search</h1>
