@@ -101,6 +101,31 @@ func TestSearchTracksDeletes(t *testing.T) {
 	}
 }
 
+// TestSearchTracksCascadedDeletes is issue #91: Ops.Delete deletes only the
+// target row and relies on parent_id ... ON DELETE CASCADE to remove
+// descendants, so this pins that the notes_fts_ad AFTER DELETE trigger
+// (migrations/0003_search.sql) also fires for each FK-cascaded child row,
+// not just a directly deleted one — a driver upgrade could otherwise change
+// this silently, with nothing else in the suite to catch it.
+func TestSearchTracksCascadedDeletes(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent-marker")
+	f.mk(t, parent.ID, "child-marker")
+
+	if err := f.store.Delete(ctx, f.alice.ID, parent.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Search(ctx, f.alice.ID, "child-marker", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Search for the cascade-deleted child = %+v, want none", got)
+	}
+}
+
 func TestSearchDoesNotLeakAnotherUsersNodes(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
