@@ -162,12 +162,29 @@
 							<span class="outline-menu-shortcut">Ctrl+Enter</span>
 						</button>
 
+						{{/* Issue #74: the date input carries form="due-form-{{.ID}}"
+						     rather than belonging to the row's own .outline-main —
+						     a <form> cannot nest inside another, so a genuinely
+						     separate <form id="due-form-{{.ID}}"> sits just after
+						     outline-main's closing tag below, and the HTML `form`
+						     attribute associates these elements with it regardless
+						     of where they sit in the tree. That gives the date field
+						     its own implicit-submission target (the Save button,
+						     the only submit button in that separate form), so
+						     Enter here can no longer reach outline-main's own
+						     default button (#57's append button) and silently
+						     discard the edit. htmx respects the same attribute
+						     (see Nt() in htmx.min.js), so the JS-enabled path,
+						     unchanged below, keeps working exactly as before. */}}
 						<label class="outline-menu-due">
 							<span class="outline-menu-label">Due date</span>
 							<input type="date" class="outline-due-input" name="due" value="{{.DueOn}}"
-							       aria-label="Due date"
+							       aria-label="Due date" form="due-form-{{.ID}}"
 							       hx-post="/notes/{{.ID}}/due" hx-target="#outline" hx-swap="innerHTML"
 							       hx-trigger="change">
+							<button type="submit" class="quiet outline-due-save" form="due-form-{{.ID}}"
+							        hx-post="/notes/{{.ID}}/due" hx-target="#outline" hx-swap="innerHTML"
+							        aria-label="Save due date">Save</button>
 						</label>
 
 						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/move"
@@ -253,6 +270,16 @@
 						       hx-trigger="input changed delay:600ms, blur changed" hx-swap="none">
 					</span>
 				</span>
+			</form>
+
+			{{/* due-form-{{.ID}}: see the comment beside the due-date input
+			     above. Carries no visible content of its own — just the
+			     hidden fields the /due route needs — everything a viewer
+			     interacts with is form="due-form-{{.ID}}"-attributed markup
+			     living inside outline-main above. */}}
+			<form id="due-form-{{.ID}}" method="post" action="/notes/{{.ID}}/due">
+				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<input type="hidden" name="root" value="{{.RootID}}">
 			</form>
 		</div>
 
