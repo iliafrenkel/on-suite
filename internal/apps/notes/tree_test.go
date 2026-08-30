@@ -573,6 +573,82 @@ func TestCreateDoesNotRenumberAnotherUsersTopLevel(t *testing.T) {
 	checkInvariants(t, f.db)
 }
 
+// childTitles reads a parent's children straight from the table, in position
+// order. Structural assertions deliberately bypass the store, so a test of
+// Create cannot be fooled by a matching bug in a read method.
+//
+// Issue #46: this and childTitlesAndPositions below used to live in
+// store_test.go, the reads file, even though both assert tree *structure*
+// after a mutation — a writes-test concern, and (by the time this moved) the
+// only file that still called either of them.
+func (f *fixture) childTitles(t *testing.T, userID, parentID int64) []string {
+	t.Helper()
+
+	var parent any
+	if parentID != notes.RootID {
+		parent = parentID
+	}
+	rows, err := f.db.QueryContext(context.Background(),
+		`SELECT title FROM notes_nodes
+		  WHERE user_id = ? AND parent_id IS ? ORDER BY position`, userID, parent)
+	if err != nil {
+		t.Fatalf("reading child titles: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []string
+	for rows.Next() {
+		var title string
+		if err := rows.Scan(&title); err != nil {
+			t.Fatalf("scanning title: %v", err)
+		}
+		out = append(out, title)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("reading child titles: %v", err)
+	}
+	return out
+}
+
+// childTitlesAndPositions reads a parent's children straight from the table as
+// "title@position", in position order.
+//
+// childTitles alone cannot see a renumbering that leaked onto another user:
+// every statement in this package shifts a contiguous suffix of positions, and
+// a suffix shifted wholesale keeps its relative order, so the titles come back
+// looking untouched. The position is the part that moved.
+func (f *fixture) childTitlesAndPositions(t *testing.T, userID, parentID int64) []string {
+	t.Helper()
+
+	var parent any
+	if parentID != notes.RootID {
+		parent = parentID
+	}
+	rows, err := f.db.QueryContext(context.Background(),
+		`SELECT title, position FROM notes_nodes
+		  WHERE user_id = ? AND parent_id IS ? ORDER BY position`, userID, parent)
+	if err != nil {
+		t.Fatalf("reading child titles: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []string
+	for rows.Next() {
+		var (
+			title string
+			pos   int
+		)
+		if err := rows.Scan(&title, &pos); err != nil {
+			t.Fatalf("scanning title: %v", err)
+		}
+		out = append(out, fmt.Sprintf("%s@%d", title, pos))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("reading child titles: %v", err)
+	}
+	return out
+}
+
 // countRows is the total number of nodes in the table, for cascade tests.
 func countRows(t *testing.T, f *fixture) int {
 	t.Helper()

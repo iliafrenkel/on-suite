@@ -180,16 +180,38 @@ func TestUIIsALeaf(t *testing.T) {
 
 // TestHTMLAssertIsTestOnly. The helper lives in a normal package so several
 // test packages can share it, which means only this check stops it being used
-// in production code.
+// in production code. internal/apptest is exempted, not just internal/
+// htmlassert itself: it is the same kind of test-only helper (see
+// TestAppTestIsTestOnly below) and imports htmlassert for its own Get.
 func TestHTMLAssertIsTestOnly(t *testing.T) {
 	imports := scan(t)
 	for pkg, deps := range imports.prod {
-		if pkg == "internal/htmlassert" {
+		if pkg == "internal/htmlassert" || pkg == "internal/apptest" {
 			continue
 		}
 		for _, dep := range deps {
 			if dep == "internal/htmlassert" {
 				t.Errorf("non-test code in %q imports internal/htmlassert", pkg)
+			}
+		}
+	}
+}
+
+// TestAppTestIsTestOnly. internal/apptest (issue #50) is the shared handler-
+// test harness every app's tests build on, in a normal package for the same
+// reason internal/htmlassert is: several test packages need to import it, and
+// only a _test.go file can import a normal package's own _test.go-suffixed
+// files, so it cannot live in one. Only this check stops it being used in
+// production code.
+func TestAppTestIsTestOnly(t *testing.T) {
+	imports := scan(t)
+	for pkg, deps := range imports.prod {
+		if pkg == "internal/apptest" {
+			continue
+		}
+		for _, dep := range deps {
+			if dep == "internal/apptest" {
+				t.Errorf("non-test code in %q imports internal/apptest", pkg)
 			}
 		}
 	}

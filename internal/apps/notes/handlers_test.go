@@ -2,11 +2,9 @@ package notes_test
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,230 +13,34 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
+	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
-	"github.com/iliafrenkel/on-suite/internal/platform/app"
-	"github.com/iliafrenkel/on-suite/internal/platform/auth"
-	"github.com/iliafrenkel/on-suite/internal/platform/db"
-	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
-	"github.com/iliafrenkel/on-suite/internal/ui"
 )
 
-const testPassword = "a-sufficiently-long-password"
-
-// server is the whole stack over a real database file, with two accounts.
-// A real file, not ":memory:", for the reason given in N1's store tests: the
-// bugs worth catching live in SQLite's own behaviour.
+// server is notes' own test harness, built on the shared apptest.Server —
+// issue #50: this and internal/apps/paste's own handlers_test.go used to
+// each carry an almost line-for-line duplicate of newServer/session/do/
+// get/post/submit/logIn. seed and titlesAt below are notes-specific
+// shortcuts that stay here, alongside the rest of what only this package's
+// tests need — apptest has no notion of a "bullet".
 type server struct {
-	handler http.Handler
-	store   *notes.Store
-	alice   *session
-	bob     *session
+	*apptest.Server[*notes.Store]
 }
 
 // session holds one signed-in browser's cookies.
-type session struct {
-	user    auth.User
-	cookies []*http.Cookie
-}
+type session = apptest.Session
 
 func newServer(t *testing.T) *server {
 	t.Helper()
-	ctx := context.Background()
-
-	handle, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = handle.Close() })
-
-	registry, err := app.NewRegistry(notes.New())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	migrations, err := db.Collect(auth.Namespace, auth.Migrations())
-	if err != nil {
-		t.Fatal(err)
-	}
-	appMigrations, err := registry.Migrations()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Apply(ctx, handle, append(migrations, appMigrations...)); err != nil {
-		t.Fatal(err)
-	}
-
-	users := auth.NewStore(handle)
-	assets, err := web.NewAssets(ui.Static(), "/static")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rend, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	log := slog.New(slog.DiscardHandler)
-	errs := web.NewErrors(rend, log)
-	csrf := web.NewCSRF(false, errs)
-	authn := web.NewAuth(web.AuthOptions{
-		Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Secure: false,
-	})
-
-	mux := http.NewServeMux()
-	authn.Routes(mux, nil)
-	if err := registry.Mount(mux, app.Deps{
-		DB: handle, Render: rend, Users: users, Errors: errs, Log: log,
-	}, authn.RequireUser); err != nil {
-		t.Fatalf("Mount: %v", err)
-	}
-	mux.Handle("/", http.HandlerFunc(errs.NotFound))
-
-	s := &server{
-		handler: web.Stack(mux, log, errs, csrf, authn),
-		store:   notes.NewStore(handle),
-	}
-
-	hash, err := auth.HashPassword(testPassword)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"alice", "bob"} {
-		u, err := users.CreateUser(ctx, name, hash, false)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sess := s.logIn(t, u)
-		if name == "alice" {
-			s.alice = sess
-		} else {
-			s.bob = sess
-		}
-	}
-	return s
-}
-
-// do issues a request carrying a session's cookies.
-func (s *server) do(t *testing.T, sess *session, req *http.Request) *httptest.ResponseRecorder {
-	t.Helper()
-	if sess != nil {
-		for _, c := range sess.cookies {
-			req.AddCookie(c)
-		}
-	}
-	rec := httptest.NewRecorder()
-	s.handler.ServeHTTP(rec, req)
-	return rec
-}
-
-// get fetches a page and fails the test unless it is a 200.
-func (s *server) get(t *testing.T, sess *session, path string) *htmlassert.Doc {
-	t.Helper()
-	rec := s.do(t, sess, httptest.NewRequest("GET", path, nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET %s = %d, want 200; body: %s", path, rec.Code, rec.Body.String())
-	}
-	return htmlassert.Parse(t, rec.Body.String())
-}
-
-// post submits a form with the session's CSRF token attached.
-func (s *server) post(t *testing.T, sess *session, path string, form url.Values) *httptest.ResponseRecorder {
-	t.Helper()
-	form.Set(web.CSRFFormField, s.csrfToken(t, sess))
-	req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return s.do(t, sess, req)
-}
-
-// submit posts a structural request and asserts it redirected to wantLocation.
-// Almost every write test in this file goes through it, because "did it come
-// back to the outline I was looking at" is half of what each one checks.
-func (s *server) submit(t *testing.T, sess *session, path string, form url.Values, wantLocation string) {
-	t.Helper()
-	rec := s.post(t, sess, path, form)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST %s = %d, want 303; body: %s", path, rec.Code, rec.Body.String())
-	}
-	if got := rec.Header().Get("Location"); got != wantLocation {
-		t.Fatalf("POST %s redirected to %q, want %q", path, got, wantLocation)
-	}
-}
-
-// postHX submits a form the way notes.js's own requests always will: HTMX
-// itself sets this header on every request, and the platform's CSRF check
-// already accepts it in place of the hidden form field.
-func (s *server) postHX(t *testing.T, sess *session, path string, form url.Values) *httptest.ResponseRecorder {
-	t.Helper()
-	form.Set(web.CSRFFormField, s.csrfToken(t, sess))
-	req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("HX-Request", "true")
-	return s.do(t, sess, req)
-}
-
-func (s *server) csrfToken(t *testing.T, sess *session) string {
-	t.Helper()
-	for _, c := range sess.cookies {
-		if c.Name == web.CSRFCookieName {
-			return c.Value
-		}
-	}
-	t.Fatal("session has no CSRF cookie")
-	return ""
-}
-
-// logIn performs a real login so the tests use genuine session cookies.
-func (s *server) logIn(t *testing.T, u auth.User) *session {
-	t.Helper()
-
-	page := s.do(t, nil, httptest.NewRequest("GET", "/login", nil))
-	var csrfCookie *http.Cookie
-	for _, c := range page.Result().Cookies() {
-		if c.Name == web.CSRFCookieName {
-			csrfCookie = c
-		}
-	}
-	if csrfCookie == nil {
-		t.Fatal("GET /login issued no CSRF cookie")
-	}
-
-	form := url.Values{
-		"username":        {u.Username},
-		"password":        {testPassword},
-		web.CSRFFormField: {csrfCookie.Value},
-	}
-	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := s.do(t, &session{cookies: []*http.Cookie{csrfCookie}}, req)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("login for %s = %d", u.Username, rec.Code)
-	}
-	return &session{user: u, cookies: rec.Result().Cookies()}
-}
-
-// anonymous returns a "session" holding a valid CSRF cookie and no login
-// cookie. It is how a test gets past the CSRF middleware in order to assert on
-// the auth guard behind it, which is otherwise unreachable: a tokenless POST
-// never gets that far.
-func (s *server) anonymous(t *testing.T) *session {
-	t.Helper()
-
-	page := s.do(t, nil, httptest.NewRequest("GET", "/login", nil))
-	for _, c := range page.Result().Cookies() {
-		if c.Name == web.CSRFCookieName {
-			return &session{cookies: []*http.Cookie{c}}
-		}
-	}
-	t.Fatal("GET /login issued no CSRF cookie")
-	return nil
+	return &server{apptest.NewServer(t, notes.New(), notes.NewStore)}
 }
 
 // seed creates a bullet straight through the store, for tests about reading.
 // Tests about writing go through the routes instead.
 func (s *server) seed(t *testing.T, sess *session, parentID int64, title string) int64 {
 	t.Helper()
-	n, err := s.store.Create(context.Background(), sess.user.ID, parentID, 1<<30, title, "")
+	n, err := s.Store.Create(context.Background(), sess.User.ID, parentID, 1<<30, title, "")
 	if err != nil {
 		t.Fatalf("seeding %q: %v", title, err)
 	}
@@ -251,7 +53,7 @@ func itoa(id int64) string { return strconv.FormatInt(id, 10) }
 // assertion about creating, moving and deleting is really about.
 func (s *server) titlesAt(t *testing.T, sess *session, parentID int64) []string {
 	t.Helper()
-	children, err := s.store.Children(context.Background(), sess.user.ID, parentID)
+	children, err := s.Store.Children(context.Background(), sess.User.ID, parentID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +98,7 @@ func TestNotesRequiresSignIn(t *testing.T) {
 	s := newServer(t)
 
 	for _, path := range []string{"/notes/", "/notes/1"} {
-		rec := s.do(t, nil, httptest.NewRequest("GET", path, nil))
+		rec := s.Do(t, nil, httptest.NewRequest("GET", path, nil))
 		if rec.Code != http.StatusSeeOther {
 			t.Errorf("GET %s anonymous = %d, want a 303 to the login page", path, rec.Code)
 		}
@@ -305,7 +107,7 @@ func TestNotesRequiresSignIn(t *testing.T) {
 
 func TestOutlineRendersInsideTheShell(t *testing.T) {
 	s := newServer(t)
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 
 	doc.MustHave("#outline")
 
@@ -319,11 +121,11 @@ func TestOutlineRendersInsideTheShell(t *testing.T) {
 
 func TestOutlineRendersTheTreeNested(t *testing.T) {
 	s := newServer(t)
-	parent := s.seed(t, s.alice, notes.RootID, "Projects")
-	s.seed(t, s.alice, parent, "AtBudget")
-	s.seed(t, s.alice, notes.RootID, "Reading")
+	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, parent, "AtBudget")
+	s.seed(t, s.Alice, notes.RootID, "Reading")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 
 	// Two top-level bullets, and one of them has a nested list under it.
 	// htmlassert has descendant selectors but no child combinator, so
@@ -368,9 +170,9 @@ func TestOutlineRendersTheTreeNested(t *testing.T) {
 // menu action happens to come first (e.g. "Mark done").
 func TestRowFormDegradesEnterToAppend(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 
 	buttons := doc.QueryAll("form.outline-main button[type=submit]")
 	if len(buttons) == 0 {
@@ -383,9 +185,9 @@ func TestRowFormDegradesEnterToAppend(t *testing.T) {
 
 func TestOutlineRendersAnotherUsersTreeNowhere(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.bob, notes.RootID, "bob's secret")
+	s.seed(t, s.Bob, notes.RootID, "bob's secret")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	if strings.Contains(doc.Text(), "bob's secret") {
 		t.Error("another user's bullet is on the page")
 	}
@@ -402,14 +204,14 @@ func TestOutlineRendersAnotherUsersTreeNowhere(t *testing.T) {
 // not in the response at all.
 func TestCollapsedBulletHidesItsChildren(t *testing.T) {
 	s := newServer(t)
-	parent := s.seed(t, s.alice, notes.RootID, "Projects")
-	s.seed(t, s.alice, parent, "AtBudget")
+	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, parent, "AtBudget")
 
-	if err := s.store.SetCollapsed(context.Background(), s.alice.user.ID, parent, true); err != nil {
+	if err := s.Store.SetCollapsed(context.Background(), s.Alice.User.ID, parent, true); err != nil {
 		t.Fatal(err)
 	}
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	if strings.Contains(doc.Text(), "AtBudget") {
 		t.Error("a collapsed bullet's child is in the response")
 	}
@@ -435,18 +237,18 @@ func TestCollapsedBulletHidesItsChildren(t *testing.T) {
 // since hideDone (view.go) has already dropped that child from the render.
 func TestParentOfOnlyDoneChildRendersNoChevron(t *testing.T) {
 	s := newServer(t)
-	parent := s.seed(t, s.alice, notes.RootID, "parent")
-	child := s.seed(t, s.alice, parent, "child")
-	s.submit(t, s.alice, "/notes/"+itoa(child)+"/done", url.Values{
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	child := s.seed(t, s.Alice, parent, "child")
+	s.Submit(t, s.Alice, "/notes/"+itoa(child)+"/done", url.Values{
 		"root": {"0"}, "done": {"1"},
 	}, "/notes/")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	doc.MustNotHave("button.outline-chevron")
 
 	req := httptest.NewRequest("GET", "/notes/", nil)
 	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
-	rec := s.do(t, s.alice, req)
+	rec := s.Do(t, s.Alice, req)
 	got := htmlassert.Parse(t, rec.Body.String())
 	got.MustHave("button.outline-chevron")
 }
@@ -461,9 +263,9 @@ func TestParentOfOnlyDoneChildRendersNoChevron(t *testing.T) {
 // green — nothing else pins this half of the contract.
 func TestLeafBulletRendersNoChevronButton(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "leaf")
+	s.seed(t, s.Alice, notes.RootID, "leaf")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	doc.MustNotHave("button.outline-chevron")
 }
 
@@ -473,7 +275,7 @@ func TestLeafBulletRendersNoChevronButton(t *testing.T) {
 // the second one.
 func TestOutlinePageLoadsTheScript(t *testing.T) {
 	s := newServer(t)
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	doc.MustHave("script[src=/notes/notes.js]")
 }
 
@@ -482,10 +284,10 @@ func TestOutlinePageLoadsTheScript(t *testing.T) {
 // enforcement: a button that cannot do anything should not look like it can.
 func TestBulletControlsAreDisabledAtTheEdges(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "first")
-	s.seed(t, s.alice, notes.RootID, "second")
+	s.seed(t, s.Alice, notes.RootID, "first")
+	s.seed(t, s.Alice, notes.RootID, "second")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 
 	// Two flat bullets, each with move buttons in the "···" menu
 	// (.outline-menu-list). Rather than assume a DOM order for the flat list of
@@ -540,10 +342,10 @@ func TestBulletControlsAreDisabledAtTheEdges(t *testing.T) {
 // attribute would simply not apply, so indentation must come from nesting.
 func TestOutlineUsesNoInlineStyles(t *testing.T) {
 	s := newServer(t)
-	parent := s.seed(t, s.alice, notes.RootID, "Projects")
-	s.seed(t, s.alice, parent, "AtBudget")
+	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, parent, "AtBudget")
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/", nil))
 	if strings.Contains(rec.Body.String(), "style=") {
 		t.Error("the outline contains an inline style attribute, which the CSP blocks")
 	}
@@ -557,7 +359,7 @@ func TestOutlineUsesNoInlineStyles(t *testing.T) {
 func TestEmptyOutlineUsesNoInlineStyles(t *testing.T) {
 	s := newServer(t)
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/", nil))
 	if strings.Contains(rec.Body.String(), "style=") {
 		t.Error("the empty outline contains an inline style attribute, which the CSP blocks")
 	}
@@ -565,9 +367,9 @@ func TestEmptyOutlineUsesNoInlineStyles(t *testing.T) {
 
 func TestOutlineEscapesBulletText(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, `<script>alert(1)</script>`)
+	s.seed(t, s.Alice, notes.RootID, `<script>alert(1)</script>`)
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/", nil))
 	if strings.Contains(rec.Body.String(), "<script>alert(1)</script>") {
 		t.Error("bullet text reached the page unescaped")
 	}
@@ -584,9 +386,9 @@ func TestOutlineEscapesBulletText(t *testing.T) {
 // no-JS fallback keeps editing the literal text spec §7 already proved.
 func TestBulletRendersMarkdown(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "**bold** and #tag")
+	id := s.seed(t, s.Alice, notes.RootID, "**bold** and #tag")
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/", nil))
 	body := rec.Body.String()
 	if !strings.Contains(body, `id="rendered-title-`+itoa(id)+`"`) {
 		t.Fatalf("no rendered overlay for bullet %d in:\n%s", id, body)
@@ -618,10 +420,10 @@ func TestBulletRendersMarkdown(t *testing.T) {
 // every overlay and leave the bullets blank until a full reload.
 func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 	s := newServer(t)
-	first := s.seed(t, s.alice, notes.RootID, "**first**")
-	second := s.seed(t, s.alice, notes.RootID, "second")
+	first := s.seed(t, s.Alice, notes.RootID, "**first**")
+	second := s.seed(t, s.Alice, notes.RootID, "second")
 
-	page := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil)).Body.String()
+	page := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/", nil)).Body.String()
 	if !strings.Contains(page, `id="rendered-title-`+itoa(first)+`"`) {
 		t.Fatalf("no rendered overlay on the page for bullet %d", first)
 	}
@@ -630,7 +432,7 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 	}
 
 	// The same rows, this time as the fragment a structural operation returns.
-	frag := s.postHX(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+	frag := s.PostHX(t, s.Alice, "/notes/"+itoa(second)+"/indent", url.Values{
 		"root": {"0"}, "focus_id": {itoa(second)}, "title": {"second"}, "note": {""},
 	}).Body.String()
 	if !strings.Contains(frag, `id="rendered-title-`+itoa(first)+`"`) {
@@ -677,9 +479,9 @@ func oobOverlays(t *testing.T, body string) bool {
 // it looks like Markdown.
 func TestRenderedOverlayEscapesBulletText(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, `<script>alert(1)</script>`)
+	s.seed(t, s.Alice, notes.RootID, `<script>alert(1)</script>`)
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/", nil))
 	if strings.Contains(rec.Body.String(), "<script>alert(1)</script>") {
 		t.Error("bullet text reached the rendered overlay unescaped")
 	}
@@ -687,11 +489,11 @@ func TestRenderedOverlayEscapesBulletText(t *testing.T) {
 
 func TestZoomShowsOnlyTheSubtree(t *testing.T) {
 	s := newServer(t)
-	projects := s.seed(t, s.alice, notes.RootID, "Projects")
-	s.seed(t, s.alice, projects, "AtBudget")
-	s.seed(t, s.alice, notes.RootID, "Reading")
+	projects := s.seed(t, s.Alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, projects, "AtBudget")
+	s.seed(t, s.Alice, notes.RootID, "Reading")
 
-	doc := s.get(t, s.alice, "/notes/"+itoa(projects))
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(projects))
 
 	text := doc.Text()
 	if !strings.Contains(text, "Projects") {
@@ -711,11 +513,11 @@ func TestZoomShowsOnlyTheSubtree(t *testing.T) {
 
 func TestZoomRendersTheBreadcrumb(t *testing.T) {
 	s := newServer(t)
-	projects := s.seed(t, s.alice, notes.RootID, "Projects")
-	budget := s.seed(t, s.alice, projects, "AtBudget")
-	api := s.seed(t, s.alice, budget, "API")
+	projects := s.seed(t, s.Alice, notes.RootID, "Projects")
+	budget := s.seed(t, s.Alice, projects, "AtBudget")
+	api := s.seed(t, s.Alice, budget, "API")
 
-	doc := s.get(t, s.alice, "/notes/"+itoa(api))
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(api))
 	crumbs := doc.MustHave("nav.outline-crumbs")
 
 	// Outermost first, and every ancestor is a link back to its own zoom.
@@ -749,15 +551,15 @@ func TestZoomRendersTheBreadcrumb(t *testing.T) {
 // template comment beside them).
 func TestZoomedHeadingRendersMarkdown(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "**Projects**")
+	id := s.seed(t, s.Alice, notes.RootID, "**Projects**")
 
-	doc := s.get(t, s.alice, "/notes/"+itoa(id))
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(id))
 
 	h1 := doc.MustHave("h1")
 	if got := htmlassert.Text(h1); got != "Projects" {
 		t.Errorf("h1 text = %q, want the rendered form", got)
 	}
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/"+itoa(id), nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/"+itoa(id), nil))
 	if !strings.Contains(rec.Body.String(), "<h1><strong>Projects</strong></h1>") {
 		t.Error("the zoomed heading did not render as bold HTML")
 	}
@@ -774,10 +576,10 @@ func TestZoomedHeadingRendersMarkdown(t *testing.T) {
 // these deliberately do not render Markdown.
 func TestBreadcrumbAncestorLinksStayPlainText(t *testing.T) {
 	s := newServer(t)
-	projects := s.seed(t, s.alice, notes.RootID, "**Projects**")
-	child := s.seed(t, s.alice, projects, "child")
+	projects := s.seed(t, s.Alice, notes.RootID, "**Projects**")
+	child := s.seed(t, s.Alice, projects, "child")
 
-	doc := s.get(t, s.alice, "/notes/"+itoa(child))
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(child))
 	links := doc.QueryAll("nav.outline-crumbs a")
 	if len(links) < 2 {
 		t.Fatalf("got %d breadcrumb links, want at least 2", len(links))
@@ -789,16 +591,16 @@ func TestBreadcrumbAncestorLinksStayPlainText(t *testing.T) {
 
 func TestTopLevelHasNoBreadcrumb(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	s.get(t, s.alice, "/notes/").MustNotHave("nav.outline-crumbs")
+	s.Get(t, s.Alice, "/notes/").MustNotHave("nav.outline-crumbs")
 }
 
 func TestZoomingIntoAnotherUsersNodeIs404(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.bob, notes.RootID, "bob's secret")
+	id := s.seed(t, s.Bob, notes.RootID, "bob's secret")
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/"+itoa(id), nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/"+itoa(id), nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
 	}
@@ -810,7 +612,7 @@ func TestZoomingIntoAnotherUsersNodeIs404(t *testing.T) {
 func TestZoomingIntoNonsenseIs404(t *testing.T) {
 	s := newServer(t)
 	for _, path := range []string{"/notes/0", "/notes/-1", "/notes/abc", "/notes/999999"} {
-		rec := s.do(t, s.alice, httptest.NewRequest("GET", path, nil))
+		rec := s.Do(t, s.Alice, httptest.NewRequest("GET", path, nil))
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404", path, rec.Code)
 		}
@@ -819,9 +621,9 @@ func TestZoomingIntoNonsenseIs404(t *testing.T) {
 
 func TestBulletDotZoomsIn(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "Projects")
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	href, _ := htmlassert.Attr(doc.MustHave("a.outline-dot"), "href")
 	if href != "/notes/"+itoa(id) {
 		t.Errorf("the bullet dot points at %q, want /notes/%d", href, id)
@@ -830,14 +632,14 @@ func TestBulletDotZoomsIn(t *testing.T) {
 
 func TestSetTextSavesTheBullet(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "old")
+	id := s.seed(t, s.Alice, notes.RootID, "old")
 
-	s.submit(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/text", url.Values{
 		"root": {"0"}, "focus_id": {itoa(id)},
 		"title": {"new"}, "note": {"a note"},
 	}, "/notes/")
 
-	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -848,26 +650,26 @@ func TestSetTextSavesTheBullet(t *testing.T) {
 
 func TestSetTextReturnsToTheZoomItCameFrom(t *testing.T) {
 	s := newServer(t)
-	root := s.seed(t, s.alice, notes.RootID, "Projects")
-	child := s.seed(t, s.alice, root, "AtBudget")
+	root := s.seed(t, s.Alice, notes.RootID, "Projects")
+	child := s.seed(t, s.Alice, root, "AtBudget")
 
-	s.submit(t, s.alice, "/notes/"+itoa(child)+"/text", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(child)+"/text", url.Values{
 		"root": {itoa(root)}, "title": {"renamed"}, "note": {""},
 	}, "/notes/"+itoa(root))
 }
 
 func TestSetTextOnAnotherUsersBulletIs404(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.bob, notes.RootID, "bob's")
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/text", url.Values{
 		"root": {"0"}, "title": {"stolen"}, "note": {""},
 	})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
-	n, err := s.store.ByID(context.Background(), s.bob.user.ID, id)
+	n, err := s.Store.ByID(context.Background(), s.Bob.User.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -878,17 +680,17 @@ func TestSetTextOnAnotherUsersBulletIs404(t *testing.T) {
 
 func TestMutationsWithoutACSRFTokenAreRejected(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "Projects")
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
 
 	form := url.Values{"root": {"0"}, "title": {"changed"}, "note": {""}}
 	req := httptest.NewRequest("POST", "/notes/"+itoa(id)+"/text", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := s.do(t, s.alice, req)
+	rec := s.Do(t, s.Alice, req)
 
 	if rec.Code == http.StatusSeeOther {
 		t.Fatal("a POST with no CSRF token succeeded")
 	}
-	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -899,9 +701,9 @@ func TestMutationsWithoutACSRFTokenAreRejected(t *testing.T) {
 
 func TestMalformedRootIsRejected(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "Projects")
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/text", url.Values{
 		"root": {"not-a-number"}, "title": {"changed"}, "note": {""},
 	})
 	if rec.Code != http.StatusBadRequest {
@@ -913,9 +715,9 @@ func TestMalformedRootIsRejected(t *testing.T) {
 // carry maxlength. This is the backstop for anything that is not a browser.
 func TestOversizeTextIsRejected(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "Projects")
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/text", url.Values{
 		"root": {"0"}, "title": {strings.Repeat("a", notes.MaxTitleRunes+1)}, "note": {""},
 	})
 	if rec.Code != http.StatusBadRequest {
@@ -927,7 +729,7 @@ func TestOversizeTextIsRejected(t *testing.T) {
 // lands in the outline, not on a "create your first note" button.
 func TestEmptyOutlineOffersOneBullet(t *testing.T) {
 	s := newServer(t)
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 
 	form := doc.MustHave(`form[action=/notes/new]`)
 	if _, ok := htmlassert.Attr(form, "action"); !ok {
@@ -945,12 +747,12 @@ func TestEmptyOutlineOffersOneBullet(t *testing.T) {
 // a genuinely empty one — that reads as data loss, not "nothing left to do".
 func TestAllDoneOutlineDoesNotShowTheEmptyPlaceholder(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "task")
-	s.submit(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+	id := s.seed(t, s.Alice, notes.RootID, "task")
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/done", url.Values{
 		"root": {"0"}, "done": {"1"},
 	}, "/notes/")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	doc.MustNotHave(`input[name=new_title]`)
 	doc.MustHave(".outline-all-done")
 
@@ -965,7 +767,7 @@ func TestAllDoneOutlineDoesNotShowTheEmptyPlaceholder(t *testing.T) {
 	// Showing completed must bring the bullet back.
 	req := httptest.NewRequest("GET", "/notes/", nil)
 	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
-	rec := s.do(t, s.alice, req)
+	rec := s.Do(t, s.Alice, req)
 	got := htmlassert.Parse(t, rec.Body.String())
 	got.MustHave(`input[value=task]`)
 	got.MustNotHave(".outline-all-done")
@@ -974,11 +776,11 @@ func TestAllDoneOutlineDoesNotShowTheEmptyPlaceholder(t *testing.T) {
 func TestCreateFromTheEmptyOutline(t *testing.T) {
 	s := newServer(t)
 
-	s.submit(t, s.alice, "/notes/new", url.Values{
+	s.Submit(t, s.Alice, "/notes/new", url.Values{
 		"root": {"0"}, "new_title": {"first"},
 	}, "/notes/")
 
-	children, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	children, err := s.Store.Children(context.Background(), s.Alice.User.ID, notes.RootID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -992,13 +794,13 @@ func TestCreateFromTheEmptyOutline(t *testing.T) {
 // looking at, not at the top level.
 func TestCreateWithNoFocusAppendsToTheZoomRoot(t *testing.T) {
 	s := newServer(t)
-	root := s.seed(t, s.alice, notes.RootID, "Projects")
+	root := s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	s.submit(t, s.alice, "/notes/new", url.Values{
+	s.Submit(t, s.Alice, "/notes/new", url.Values{
 		"root": {itoa(root)}, "new_title": {"AtBudget"},
 	}, "/notes/"+itoa(root))
 
-	children, err := s.store.Children(context.Background(), s.alice.user.ID, root)
+	children, err := s.Store.Children(context.Background(), s.Alice.User.ID, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1011,16 +813,16 @@ func TestCreateWithNoFocusAppendsToTheZoomRoot(t *testing.T) {
 // one's next sibling, not the last child of anything.
 func TestCreateAfterTheFocusedBullet(t *testing.T) {
 	s := newServer(t)
-	first := s.seed(t, s.alice, notes.RootID, "first")
-	s.seed(t, s.alice, notes.RootID, "third")
+	first := s.seed(t, s.Alice, notes.RootID, "first")
+	s.seed(t, s.Alice, notes.RootID, "third")
 
-	s.submit(t, s.alice, "/notes/new", url.Values{
+	s.Submit(t, s.Alice, "/notes/new", url.Values{
 		"root": {"0"}, "focus_id": {itoa(first)},
 		"title": {"first"}, "note": {""},
 		"new_title": {"second"},
 	}, "/notes/")
 
-	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"first", "second", "third"}) {
+	if got := s.titlesAt(t, s.Alice, notes.RootID); !equalStrings(got, []string{"first", "second", "third"}) {
 		t.Fatalf("children = %v, want [first second third]", got)
 	}
 }
@@ -1029,15 +831,15 @@ func TestCreateAfterTheFocusedBullet(t *testing.T) {
 // keyboard that will send it: what stays and what moves are one write.
 func TestCreateSplitsTheFocusedBulletsText(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "hello world")
+	id := s.seed(t, s.Alice, notes.RootID, "hello world")
 
-	s.submit(t, s.alice, "/notes/new", url.Values{
+	s.Submit(t, s.Alice, "/notes/new", url.Values{
 		"root": {"0"}, "focus_id": {itoa(id)},
 		"title": {"hello"}, "note": {""},
 		"new_title": {"world"},
 	}, "/notes/")
 
-	children, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	children, err := s.Store.Children(context.Background(), s.Alice.User.ID, notes.RootID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1048,9 +850,9 @@ func TestCreateSplitsTheFocusedBulletsText(t *testing.T) {
 
 func TestCreateUnderAnotherUsersFocusIs404(t *testing.T) {
 	s := newServer(t)
-	bobs := s.seed(t, s.bob, notes.RootID, "bob's")
+	bobs := s.seed(t, s.Bob, notes.RootID, "bob's")
 
-	rec := s.post(t, s.alice, "/notes/new", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/new", url.Values{
 		"root": {"0"}, "focus_id": {itoa(bobs)},
 		"title": {"stolen"}, "note": {""}, "new_title": {"x"},
 	})
@@ -1060,14 +862,14 @@ func TestCreateUnderAnotherUsersFocusIs404(t *testing.T) {
 
 	// Nothing was created for alice, and nothing was changed for bob: the
 	// whole transaction rolled back.
-	alices, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	alices, err := s.Store.Children(context.Background(), s.Alice.User.ID, notes.RootID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(alices) != 0 {
 		t.Errorf("alice gained %d bullets", len(alices))
 	}
-	n, err := s.store.ByID(context.Background(), s.bob.user.ID, bobs)
+	n, err := s.Store.ByID(context.Background(), s.Bob.User.ID, bobs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1083,23 +885,23 @@ func TestCreateUnderAnotherUsersFocusIs404(t *testing.T) {
 // just the forged-focus_id case.
 func TestCreateUnderAnotherUsersForgedRootIs404(t *testing.T) {
 	s := newServer(t)
-	bobs := s.seed(t, s.bob, notes.RootID, "bob's")
+	bobs := s.seed(t, s.Bob, notes.RootID, "bob's")
 
-	rec := s.post(t, s.alice, "/notes/new", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/new", url.Values{
 		"root": {itoa(bobs)}, "new_title": {"stolen"},
 	})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
-	alices, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	alices, err := s.Store.Children(context.Background(), s.Alice.User.ID, notes.RootID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(alices) != 0 {
 		t.Errorf("alice gained %d bullets", len(alices))
 	}
-	n, err := s.store.ByID(context.Background(), s.bob.user.ID, bobs)
+	n, err := s.Store.ByID(context.Background(), s.Bob.User.ID, bobs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1110,9 +912,9 @@ func TestCreateUnderAnotherUsersForgedRootIs404(t *testing.T) {
 
 func TestPlusButtonAddsAnEmptyBulletBelow(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	btn := doc.MustHave(`button[formaction=/notes/new]`)
 	if btn == nil {
 		t.Fatal("a bullet offers no way to add one below it")
@@ -1121,15 +923,15 @@ func TestPlusButtonAddsAnEmptyBulletBelow(t *testing.T) {
 
 func TestIndentNestsUnderThePreviousSibling(t *testing.T) {
 	s := newServer(t)
-	first := s.seed(t, s.alice, notes.RootID, "first")
-	second := s.seed(t, s.alice, notes.RootID, "second")
+	first := s.seed(t, s.Alice, notes.RootID, "first")
+	second := s.seed(t, s.Alice, notes.RootID, "second")
 
-	s.submit(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(second)+"/indent", url.Values{
 		"root": {"0"}, "focus_id": {itoa(second)},
 		"title": {"second"}, "note": {""},
 	}, "/notes/")
 
-	children, err := s.store.Children(context.Background(), s.alice.user.ID, first)
+	children, err := s.Store.Children(context.Background(), s.Alice.User.ID, first)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1138,7 +940,7 @@ func TestIndentNestsUnderThePreviousSibling(t *testing.T) {
 	}
 
 	// And the page now shows it nested.
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	if n := len(doc.QueryAll(".outline-item .outline-item")); n != 1 {
 		t.Errorf("got %d nested bullets on the page, want 1", n)
 	}
@@ -1146,15 +948,15 @@ func TestIndentNestsUnderThePreviousSibling(t *testing.T) {
 
 func TestIndentOfTheFirstSiblingDoesNothing(t *testing.T) {
 	s := newServer(t)
-	first := s.seed(t, s.alice, notes.RootID, "first")
+	first := s.seed(t, s.Alice, notes.RootID, "first")
 
 	// Not an error: the caller is a keypress, and Tab on the first line of an
 	// outline should do nothing rather than complain.
-	s.submit(t, s.alice, "/notes/"+itoa(first)+"/indent", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(first)+"/indent", url.Values{
 		"root": {"0"}, "focus_id": {itoa(first)}, "title": {"first"}, "note": {""},
 	}, "/notes/")
 
-	n, err := s.store.ByID(context.Background(), s.alice.user.ID, first)
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, first)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1165,15 +967,15 @@ func TestIndentOfTheFirstSiblingDoesNothing(t *testing.T) {
 
 func TestOutdentPromotesToTheParentsNextSibling(t *testing.T) {
 	s := newServer(t)
-	parent := s.seed(t, s.alice, notes.RootID, "parent")
-	child := s.seed(t, s.alice, parent, "child")
-	s.seed(t, s.alice, notes.RootID, "after")
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	child := s.seed(t, s.Alice, parent, "child")
+	s.seed(t, s.Alice, notes.RootID, "after")
 
-	s.submit(t, s.alice, "/notes/"+itoa(child)+"/outdent", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(child)+"/outdent", url.Values{
 		"root": {"0"}, "focus_id": {itoa(child)}, "title": {"child"}, "note": {""},
 	}, "/notes/")
 
-	top, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	top, err := s.Store.Children(context.Background(), s.Alice.User.ID, notes.RootID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1188,13 +990,13 @@ func TestOutdentPromotesToTheParentsNextSibling(t *testing.T) {
 
 func TestOutdentAtTheTopLevelDoesNothing(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "only")
+	id := s.seed(t, s.Alice, notes.RootID, "only")
 
-	s.submit(t, s.alice, "/notes/"+itoa(id)+"/outdent", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/outdent", url.Values{
 		"root": {"0"}, "focus_id": {itoa(id)}, "title": {"only"}, "note": {""},
 	}, "/notes/")
 
-	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1214,30 +1016,30 @@ func TestIndentPastTheDepthLimitIsRejected(t *testing.T) {
 	var parent int64 = notes.RootID
 	var deepest int64
 	for d := 0; d <= notes.MaxDepth; d++ {
-		n, err := s.store.Create(ctx, s.alice.user.ID, parent, 1<<30, "d", "")
+		n, err := s.Store.Create(ctx, s.Alice.User.ID, parent, 1<<30, "d", "")
 		if err != nil {
 			t.Fatalf("building the chain at depth %d: %v", d, err)
 		}
 		parent, deepest = n.ID, n.ID
 	}
 	// A sibling of the deepest node; indenting it would put it one past the cap.
-	deepestNode, err := s.store.ByID(ctx, s.alice.user.ID, deepest)
+	deepestNode, err := s.Store.ByID(ctx, s.Alice.User.ID, deepest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sibling, err := s.store.Create(ctx, s.alice.user.ID, deepestNode.ParentID, 1<<30, "sibling", "")
+	sibling, err := s.Store.Create(ctx, s.Alice.User.ID, deepestNode.ParentID, 1<<30, "sibling", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(sibling.ID)+"/indent", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(sibling.ID)+"/indent", url.Values{
 		"root": {"0"}, "focus_id": {itoa(sibling.ID)}, "title": {"sibling"}, "note": {""},
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 
-	n, err := s.store.ByID(ctx, s.alice.user.ID, sibling.ID)
+	n, err := s.Store.ByID(ctx, s.Alice.User.ID, sibling.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1248,17 +1050,17 @@ func TestIndentPastTheDepthLimitIsRejected(t *testing.T) {
 
 func TestIndentingAnotherUsersBulletIs404(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.bob, notes.RootID, "bob's first")
-	second := s.seed(t, s.bob, notes.RootID, "bob's second")
+	s.seed(t, s.Bob, notes.RootID, "bob's first")
+	second := s.seed(t, s.Bob, notes.RootID, "bob's second")
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(second)+"/indent", url.Values{
 		"root": {"0"},
 	})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
-	n, err := s.store.ByID(context.Background(), s.bob.user.ID, second)
+	n, err := s.Store.ByID(context.Background(), s.Bob.User.ID, second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1269,51 +1071,51 @@ func TestIndentingAnotherUsersBulletIs404(t *testing.T) {
 
 func TestMoveUpAndDown(t *testing.T) {
 	s := newServer(t)
-	a := s.seed(t, s.alice, notes.RootID, "a")
-	b := s.seed(t, s.alice, notes.RootID, "b")
-	s.seed(t, s.alice, notes.RootID, "c")
+	a := s.seed(t, s.Alice, notes.RootID, "a")
+	b := s.seed(t, s.Alice, notes.RootID, "b")
+	s.seed(t, s.Alice, notes.RootID, "c")
 
-	s.submit(t, s.alice, "/notes/"+itoa(b)+"/move", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(b)+"/move", url.Values{
 		"root": {"0"}, "focus_id": {itoa(b)}, "title": {"b"}, "note": {""},
 		"dir": {"up"},
 	}, "/notes/")
-	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"b", "a", "c"}) {
+	if got := s.titlesAt(t, s.Alice, notes.RootID); !equalStrings(got, []string{"b", "a", "c"}) {
 		t.Fatalf("after move up: %v, want [b a c]", got)
 	}
 
-	s.submit(t, s.alice, "/notes/"+itoa(a)+"/move", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(a)+"/move", url.Values{
 		"root": {"0"}, "focus_id": {itoa(a)}, "title": {"a"}, "note": {""},
 		"dir": {"down"},
 	}, "/notes/")
-	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"b", "c", "a"}) {
+	if got := s.titlesAt(t, s.Alice, notes.RootID); !equalStrings(got, []string{"b", "c", "a"}) {
 		t.Fatalf("after move down: %v, want [b c a]", got)
 	}
 }
 
 func TestMoveAtTheEdgesDoesNothing(t *testing.T) {
 	s := newServer(t)
-	a := s.seed(t, s.alice, notes.RootID, "a")
-	b := s.seed(t, s.alice, notes.RootID, "b")
+	a := s.seed(t, s.Alice, notes.RootID, "a")
+	b := s.seed(t, s.Alice, notes.RootID, "b")
 
 	for _, tc := range []struct {
 		id  int64
 		dir string
 	}{{a, "up"}, {b, "down"}} {
-		s.submit(t, s.alice, "/notes/"+itoa(tc.id)+"/move", url.Values{
+		s.Submit(t, s.Alice, "/notes/"+itoa(tc.id)+"/move", url.Values{
 			"root": {"0"}, "dir": {tc.dir},
 		}, "/notes/")
 	}
-	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"a", "b"}) {
+	if got := s.titlesAt(t, s.Alice, notes.RootID); !equalStrings(got, []string{"a", "b"}) {
 		t.Fatalf("order changed to %v", got)
 	}
 }
 
 func TestMoveRejectsAnUnknownDirection(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "a")
+	id := s.seed(t, s.Alice, notes.RootID, "a")
 
 	for _, dir := range []string{"", "sideways", "UP", "1"} {
-		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/move", url.Values{
+		rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/move", url.Values{
 			"root": {"0"}, "dir": {dir},
 		})
 		if rec.Code != http.StatusBadRequest {
@@ -1325,30 +1127,30 @@ func TestMoveRejectsAnUnknownDirection(t *testing.T) {
 func TestCollapseAndExpand(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	parent := s.seed(t, s.alice, notes.RootID, "parent")
-	s.seed(t, s.alice, parent, "child")
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	s.seed(t, s.Alice, parent, "child")
 
-	s.submit(t, s.alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
 		"root": {"0"}, "focus_id": {itoa(parent)}, "title": {"parent"}, "note": {""},
 		"collapsed": {"1"},
 	}, "/notes/")
 
-	n, err := s.store.ByID(ctx, s.alice.user.ID, parent)
+	n, err := s.Store.ByID(ctx, s.Alice.User.ID, parent)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !n.Collapsed {
 		t.Fatal("the bullet is not collapsed")
 	}
-	if strings.Contains(s.get(t, s.alice, "/notes/").Text(), "child") {
+	if strings.Contains(s.Get(t, s.Alice, "/notes/").Text(), "child") {
 		t.Error("a collapsed bullet's child is still in the response")
 	}
 
-	s.submit(t, s.alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
 		"root": {"0"}, "collapsed": {"0"},
 	}, "/notes/")
 
-	n, err = s.store.ByID(ctx, s.alice.user.ID, parent)
+	n, err = s.Store.ByID(ctx, s.Alice.User.ID, parent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1361,15 +1163,15 @@ func TestCollapseAndExpand(t *testing.T) {
 // "flip it", so a double submit or a stale page cannot toggle it back.
 func TestCollapseIsIdempotent(t *testing.T) {
 	s := newServer(t)
-	parent := s.seed(t, s.alice, notes.RootID, "parent")
-	s.seed(t, s.alice, parent, "child")
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	s.seed(t, s.Alice, parent, "child")
 
 	for range 2 {
-		s.submit(t, s.alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
+		s.Submit(t, s.Alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
 			"root": {"0"}, "collapsed": {"1"},
 		}, "/notes/")
 	}
-	n, err := s.store.ByID(context.Background(), s.alice.user.ID, parent)
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, parent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1380,10 +1182,10 @@ func TestCollapseIsIdempotent(t *testing.T) {
 
 func TestCollapseRejectsAnUnknownValue(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "a")
+	id := s.seed(t, s.Alice, notes.RootID, "a")
 
 	for _, v := range []string{"", "true", "yes", "2"} {
-		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/collapse", url.Values{
+		rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/collapse", url.Values{
 			"root": {"0"}, "collapsed": {v},
 		})
 		if rec.Code != http.StatusBadRequest {
@@ -1394,17 +1196,17 @@ func TestCollapseRejectsAnUnknownValue(t *testing.T) {
 
 func TestMovingAnotherUsersBulletIs404(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.bob, notes.RootID, "bob's a")
-	second := s.seed(t, s.bob, notes.RootID, "bob's b")
+	s.seed(t, s.Bob, notes.RootID, "bob's a")
+	second := s.seed(t, s.Bob, notes.RootID, "bob's b")
 
 	for _, path := range []string{"/move", "/collapse"} {
 		form := url.Values{"root": {"0"}, "dir": {"up"}, "collapsed": {"1"}}
-		rec := s.post(t, s.alice, "/notes/"+itoa(second)+path, form)
+		rec := s.Post(t, s.Alice, "/notes/"+itoa(second)+path, form)
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("POST %s = %d, want 404", path, rec.Code)
 		}
 	}
-	if got := s.titlesAt(t, s.bob, notes.RootID); !equalStrings(got, []string{"bob's a", "bob's b"}) {
+	if got := s.titlesAt(t, s.Bob, notes.RootID); !equalStrings(got, []string{"bob's a", "bob's b"}) {
 		t.Errorf("bob's outline is now %v", got)
 	}
 }
@@ -1412,18 +1214,18 @@ func TestMovingAnotherUsersBulletIs404(t *testing.T) {
 func TestDeleteRemovesTheBulletAndItsSubtree(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	parent := s.seed(t, s.alice, notes.RootID, "parent")
-	child := s.seed(t, s.alice, parent, "child")
-	s.seed(t, s.alice, notes.RootID, "survivor")
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	child := s.seed(t, s.Alice, parent, "child")
+	s.seed(t, s.Alice, notes.RootID, "survivor")
 
-	s.submit(t, s.alice, "/notes/"+itoa(parent)+"/delete", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(parent)+"/delete", url.Values{
 		"root": {"0"},
 	}, "/notes/")
 
-	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"survivor"}) {
+	if got := s.titlesAt(t, s.Alice, notes.RootID); !equalStrings(got, []string{"survivor"}) {
 		t.Fatalf("top level = %v, want [survivor]", got)
 	}
-	if _, err := s.store.ByID(ctx, s.alice.user.ID, child); err == nil {
+	if _, err := s.Store.ByID(ctx, s.Alice.User.ID, child); err == nil {
 		t.Error("the child outlived its parent")
 	}
 }
@@ -1433,13 +1235,13 @@ func TestDeleteRemovesTheBulletAndItsSubtree(t *testing.T) {
 // place off — silently, three moves later.
 func TestDeleteRenumbersTheSurvivors(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "a")
-	b := s.seed(t, s.alice, notes.RootID, "b")
-	s.seed(t, s.alice, notes.RootID, "c")
+	s.seed(t, s.Alice, notes.RootID, "a")
+	b := s.seed(t, s.Alice, notes.RootID, "b")
+	s.seed(t, s.Alice, notes.RootID, "c")
 
-	s.submit(t, s.alice, "/notes/"+itoa(b)+"/delete", url.Values{"root": {"0"}}, "/notes/")
+	s.Submit(t, s.Alice, "/notes/"+itoa(b)+"/delete", url.Values{"root": {"0"}}, "/notes/")
 
-	children, err := s.store.Children(context.Background(), s.alice.user.ID, notes.RootID)
+	children, err := s.Store.Children(context.Background(), s.Alice.User.ID, notes.RootID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1452,23 +1254,23 @@ func TestDeleteRenumbersTheSurvivors(t *testing.T) {
 
 func TestDeleteReturnsToTheZoomItCameFrom(t *testing.T) {
 	s := newServer(t)
-	root := s.seed(t, s.alice, notes.RootID, "Projects")
-	child := s.seed(t, s.alice, root, "AtBudget")
+	root := s.seed(t, s.Alice, notes.RootID, "Projects")
+	child := s.seed(t, s.Alice, root, "AtBudget")
 
-	s.submit(t, s.alice, "/notes/"+itoa(child)+"/delete", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(child)+"/delete", url.Values{
 		"root": {itoa(root)},
 	}, "/notes/"+itoa(root))
 }
 
 func TestDeletingAnotherUsersBulletIs404(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.bob, notes.RootID, "bob's")
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/delete", url.Values{"root": {"0"}})
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/delete", url.Values{"root": {"0"}})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
-	if _, err := s.store.ByID(context.Background(), s.bob.user.ID, id); err != nil {
+	if _, err := s.Store.ByID(context.Background(), s.Bob.User.ID, id); err != nil {
 		t.Errorf("bob's bullet was deleted by alice: %v", err)
 	}
 }
@@ -1479,9 +1281,9 @@ func TestDeletingAnotherUsersBulletIs404(t *testing.T) {
 // declares — nothing in notes.js needs to know a URL.
 func TestEveryStructuralButtonMirrorsItsFormactionAsHTMX(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "a")
+	s.seed(t, s.Alice, notes.RootID, "a")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	buttons := doc.QueryAll("button[formaction]")
 	if len(buttons) == 0 {
 		t.Fatal("no formaction buttons found")
@@ -1503,9 +1305,9 @@ func TestEveryStructuralButtonMirrorsItsFormactionAsHTMX(t *testing.T) {
 
 func TestRowsCarryTheirNodeID(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "a")
+	id := s.seed(t, s.Alice, notes.RootID, "a")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	row := doc.MustHave(".outline-row")
 	if got, _ := htmlassert.Attr(row, "data-id"); got != itoa(id) {
 		t.Errorf("row data-id = %q, want %q", got, itoa(id))
@@ -1516,9 +1318,9 @@ func TestRowsCarryTheirNodeID(t *testing.T) {
 // change from a text-only save, the input already shows what was typed.
 func TestTextInputsAutosaveOverHTMX(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "a")
+	id := s.seed(t, s.Alice, notes.RootID, "a")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	for _, sel := range []string{"input.outline-title", "input.outline-note"} {
 		in := doc.MustHave(sel)
 		if got, _ := htmlassert.Attr(in, "hx-post"); got != "/notes/"+itoa(id)+"/text" {
@@ -1539,7 +1341,7 @@ func TestTextInputsAutosaveOverHTMX(t *testing.T) {
 // asserted hx-post, leaving the other two an unpinned coverage gap.
 func TestEmptyOutlineFormIsHTMXWired(t *testing.T) {
 	s := newServer(t)
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	form := doc.MustHave(`form[action=/notes/new]`)
 	if got, _ := htmlassert.Attr(form, "hx-post"); got != "/notes/new" {
 		t.Errorf("empty-outline form hx-post = %q", got)
@@ -1559,9 +1361,9 @@ func TestEmptyOutlineFormIsHTMXWired(t *testing.T) {
 // asking for confirmation too.
 func TestDeleteButtonIsIndividuallyConfirmed(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "Projects")
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	btn := doc.MustHave(`button[formaction=/notes/` + itoa(id) + `/delete]`)
 	if _, ok := htmlassert.Attr(btn, "hx-confirm"); !ok {
 		t.Error("the delete button asks for no confirmation")
@@ -1594,9 +1396,9 @@ func TestDeleteButtonIsIndividuallyConfirmed(t *testing.T) {
 // hovering the row.
 func TestOutlineMenuHoldsEveryAction(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "Projects")
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	menu := doc.MustHave(".outline-menu")
 	summary := doc.MustHave(".outline-menu-toggle")
 	if tag := summary.Data; tag != "summary" {
@@ -1639,9 +1441,9 @@ func TestOutlineMenuHoldsEveryAction(t *testing.T) {
 // delete, which stay menu-only.
 func TestHoverOverlayIsRemoved(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	doc.MustNotHave(".outline-overlay")
 }
 
@@ -1652,15 +1454,15 @@ func TestHoverOverlayIsRemoved(t *testing.T) {
 func TestStructuralRequestSavesTheFocusedText(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	first := s.seed(t, s.alice, notes.RootID, "first")
-	second := s.seed(t, s.alice, notes.RootID, "second")
+	first := s.seed(t, s.Alice, notes.RootID, "first")
+	second := s.seed(t, s.Alice, notes.RootID, "second")
 
-	s.submit(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(second)+"/indent", url.Values{
 		"root": {"0"}, "focus_id": {itoa(second)},
 		"title": {"typed after the last save"}, "note": {"and a note"},
 	}, "/notes/")
 
-	n, err := s.store.ByID(ctx, s.alice.user.ID, second)
+	n, err := s.Store.ByID(ctx, s.Alice.User.ID, second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1677,24 +1479,24 @@ func TestStructuralRequestSavesTheFocusedText(t *testing.T) {
 func TestFocusAndTargetCanDiffer(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	focused := s.seed(t, s.alice, notes.RootID, "focused")
-	parent := s.seed(t, s.alice, notes.RootID, "parent")
-	s.seed(t, s.alice, parent, "child")
+	focused := s.seed(t, s.Alice, notes.RootID, "focused")
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	s.seed(t, s.Alice, parent, "child")
 
-	s.submit(t, s.alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(parent)+"/collapse", url.Values{
 		"root": {"0"}, "focus_id": {itoa(focused)},
 		"title": {"edited elsewhere"}, "note": {""},
 		"collapsed": {"1"},
 	}, "/notes/")
 
-	f, err := s.store.ByID(ctx, s.alice.user.ID, focused)
+	f, err := s.Store.ByID(ctx, s.Alice.User.ID, focused)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if f.Title != "edited elsewhere" {
 		t.Errorf("the focused bullet is %q", f.Title)
 	}
-	p, err := s.store.ByID(ctx, s.alice.user.ID, parent)
+	p, err := s.Store.ByID(ctx, s.Alice.User.ID, parent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1710,12 +1512,12 @@ func TestFocusAndTargetCanDiffer(t *testing.T) {
 func TestAFailedStructuralOperationSavesNoText(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	mine := s.seed(t, s.alice, notes.RootID, "mine")
-	bobs := s.seed(t, s.bob, notes.RootID, "bob's")
+	mine := s.seed(t, s.Alice, notes.RootID, "mine")
+	bobs := s.seed(t, s.Bob, notes.RootID, "bob's")
 
 	// Indenting bob's bullet fails; alice's own text update came first and
 	// must not survive.
-	rec := s.post(t, s.alice, "/notes/"+itoa(bobs)+"/indent", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(bobs)+"/indent", url.Values{
 		"root": {"0"}, "focus_id": {itoa(mine)},
 		"title": {"should not be saved"}, "note": {""},
 	})
@@ -1723,7 +1525,7 @@ func TestAFailedStructuralOperationSavesNoText(t *testing.T) {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
-	n, err := s.store.ByID(ctx, s.alice.user.ID, mine)
+	n, err := s.Store.ByID(ctx, s.Alice.User.ID, mine)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1737,31 +1539,31 @@ func TestAFailedStructuralOperationSavesNoText(t *testing.T) {
 func TestAForgedFocusIsRejectedWholesale(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	bobs := s.seed(t, s.bob, notes.RootID, "bob's")
-	s.seed(t, s.alice, notes.RootID, "a")
-	b := s.seed(t, s.alice, notes.RootID, "b")
+	bobs := s.seed(t, s.Bob, notes.RootID, "bob's")
+	s.seed(t, s.Alice, notes.RootID, "a")
+	b := s.seed(t, s.Alice, notes.RootID, "b")
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(b)+"/move", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(b)+"/move", url.Values{
 		"root": {"0"}, "focus_id": {itoa(bobs)},
 		"title": {"overwritten"}, "note": {""}, "dir": {"up"},
 	})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
-	if n, err := s.store.ByID(ctx, s.bob.user.ID, bobs); err != nil || n.Title != "bob's" {
+	if n, err := s.Store.ByID(ctx, s.Bob.User.ID, bobs); err != nil || n.Title != "bob's" {
 		t.Errorf("bob's bullet is now %+v (err %v)", n, err)
 	}
-	if got := s.titlesAt(t, s.alice, notes.RootID); !equalStrings(got, []string{"a", "b"}) {
+	if got := s.titlesAt(t, s.Alice, notes.RootID); !equalStrings(got, []string{"a", "b"}) {
 		t.Errorf("the move happened anyway: %v", got)
 	}
 }
 
 func TestAMalformedFocusIsA400(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "a")
+	id := s.seed(t, s.Alice, notes.RootID, "a")
 
 	for _, v := range []string{"abc", "-1", "0.5"} {
-		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/indent", url.Values{
+		rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/indent", url.Values{
 			"root": {"0"}, "focus_id": {v}, "title": {"x"}, "note": {""},
 		})
 		if rec.Code != http.StatusBadRequest {
@@ -1785,7 +1587,7 @@ func TestAMalformedFocusIsA400(t *testing.T) {
 //     test is named for.
 func TestEveryMutationRequiresSignIn(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "a")
+	id := s.seed(t, s.Alice, notes.RootID, "a")
 
 	paths := []string{
 		"/notes/new",
@@ -1802,7 +1604,7 @@ func TestEveryMutationRequiresSignIn(t *testing.T) {
 	for _, path := range paths {
 		req := httptest.NewRequest("POST", path, strings.NewReader(""))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		rec := s.do(t, nil, req)
+		rec := s.Do(t, nil, req)
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("POST %s anonymous and tokenless = %d, want 403 from the CSRF check",
 				path, rec.Code)
@@ -1811,9 +1613,9 @@ func TestEveryMutationRequiresSignIn(t *testing.T) {
 
 	// A valid token, still anonymous: CSRF is satisfied, so the auth guard is
 	// what rejects, and it sends the browser to the login page.
-	anon := s.anonymous(t)
+	anon := s.Anonymous(t)
 	for _, path := range paths {
-		rec := s.post(t, anon, path, url.Values{"root": {"0"}})
+		rec := s.Post(t, anon, path, url.Values{"root": {"0"}})
 		if rec.Code != http.StatusSeeOther {
 			t.Errorf("POST %s anonymous with a valid token = %d, want 303", path, rec.Code)
 			continue
@@ -1823,7 +1625,7 @@ func TestEveryMutationRequiresSignIn(t *testing.T) {
 		}
 	}
 
-	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
 	if err != nil {
 		t.Fatalf("the bullet is gone: %v", err)
 	}
@@ -1838,10 +1640,10 @@ func TestEveryMutationRequiresSignIn(t *testing.T) {
 // have to follow with a second round trip.
 func TestStructuralMutationRespondsWithAFragmentForHTMX(t *testing.T) {
 	s := newServer(t)
-	first := s.seed(t, s.alice, notes.RootID, "first")
-	second := s.seed(t, s.alice, notes.RootID, "second")
+	first := s.seed(t, s.Alice, notes.RootID, "first")
+	second := s.seed(t, s.Alice, notes.RootID, "second")
 
-	rec := s.postHX(t, s.alice, "/notes/"+itoa(second)+"/indent", url.Values{
+	rec := s.PostHX(t, s.Alice, "/notes/"+itoa(second)+"/indent", url.Values{
 		"root": {"0"}, "focus_id": {itoa(second)}, "title": {"second"}, "note": {""},
 	})
 	if rec.Code != http.StatusOK {
@@ -1855,7 +1657,7 @@ func TestStructuralMutationRespondsWithAFragmentForHTMX(t *testing.T) {
 		t.Errorf("got %d nested bullets in the fragment, want 1", n)
 	}
 
-	children, err := s.store.Children(context.Background(), s.alice.user.ID, first)
+	children, err := s.Store.Children(context.Background(), s.Alice.User.ID, first)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1867,7 +1669,7 @@ func TestStructuralMutationRespondsWithAFragmentForHTMX(t *testing.T) {
 func TestCreateRespondsWithAFragmentForHTMX(t *testing.T) {
 	s := newServer(t)
 
-	rec := s.postHX(t, s.alice, "/notes/new", url.Values{
+	rec := s.PostHX(t, s.Alice, "/notes/new", url.Values{
 		"root": {"0"}, "new_title": {"first"},
 	})
 	if rec.Code != http.StatusOK {
@@ -1883,9 +1685,9 @@ func TestCreateRespondsWithAFragmentForHTMX(t *testing.T) {
 // no swap that can happen without a response body to swap in.
 func TestSetTextRespondsWithRenderedMarkdownForHTMX(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "old")
+	id := s.seed(t, s.Alice, notes.RootID, "old")
 
-	rec := s.postHX(t, s.alice, "/notes/"+itoa(id)+"/text", url.Values{
+	rec := s.PostHX(t, s.Alice, "/notes/"+itoa(id)+"/text", url.Values{
 		"root": {"0"}, "focus_id": {itoa(id)}, "title": {"**new**"}, "note": {"*n*"},
 	})
 	if rec.Code != http.StatusOK {
@@ -1904,7 +1706,7 @@ func TestSetTextRespondsWithRenderedMarkdownForHTMX(t *testing.T) {
 		t.Error("the response does not mark itself as an out-of-band swap")
 	}
 
-	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1915,9 +1717,9 @@ func TestSetTextRespondsWithRenderedMarkdownForHTMX(t *testing.T) {
 
 func TestAFailedStructuralOperationUnderHTMXIsAFragment(t *testing.T) {
 	s := newServer(t)
-	bobs := s.seed(t, s.bob, notes.RootID, "bob's")
+	bobs := s.seed(t, s.Bob, notes.RootID, "bob's")
 
-	rec := s.postHX(t, s.alice, "/notes/"+itoa(bobs)+"/indent", url.Values{"root": {"0"}})
+	rec := s.PostHX(t, s.Alice, "/notes/"+itoa(bobs)+"/indent", url.Values{"root": {"0"}})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
@@ -1928,13 +1730,13 @@ func TestAFailedStructuralOperationUnderHTMXIsAFragment(t *testing.T) {
 
 func TestDoneTogglesTheBullet(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "task")
+	id := s.seed(t, s.Alice, notes.RootID, "task")
 
-	s.submit(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/done", url.Values{
 		"root": {"0"}, "done": {"1"},
 	}, "/notes/")
 
-	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1942,11 +1744,11 @@ func TestDoneTogglesTheBullet(t *testing.T) {
 		t.Fatal("the bullet is not done")
 	}
 
-	s.submit(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/done", url.Values{
 		"root": {"0"}, "done": {"0"},
 	}, "/notes/")
 
-	n, err = s.store.ByID(context.Background(), s.alice.user.ID, id)
+	n, err = s.Store.ByID(context.Background(), s.Alice.User.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1957,10 +1759,10 @@ func TestDoneTogglesTheBullet(t *testing.T) {
 
 func TestDoneRejectsAnUnknownValue(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "a")
+	id := s.seed(t, s.Alice, notes.RootID, "a")
 
 	for _, v := range []string{"", "true", "yes", "2"} {
-		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+		rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/done", url.Values{
 			"root": {"0"}, "done": {v},
 		})
 		if rec.Code != http.StatusBadRequest {
@@ -1971,9 +1773,9 @@ func TestDoneRejectsAnUnknownValue(t *testing.T) {
 
 func TestDoneOnAnotherUsersBulletIs404(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.bob, notes.RootID, "bob's")
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/done", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/done", url.Values{
 		"root": {"0"}, "done": {"1"},
 	})
 	if rec.Code != http.StatusNotFound {
@@ -1989,14 +1791,14 @@ func TestDoneOnAnotherUsersBulletIs404(t *testing.T) {
 // done bullet is not rendered at all, so there would be no row to inspect.
 func TestDoneBulletRendersStruckThrough(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "task")
-	if err := s.store.SetDone(context.Background(), s.alice.user.ID, id, true); err != nil {
+	id := s.seed(t, s.Alice, notes.RootID, "task")
+	if err := s.Store.SetDone(context.Background(), s.Alice.User.ID, id, true); err != nil {
 		t.Fatal(err)
 	}
 
 	req := httptest.NewRequest("GET", "/notes/", nil)
 	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
-	rec := s.do(t, s.alice, req)
+	rec := s.Do(t, s.Alice, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /notes/ = %d, want 200", rec.Code)
 	}
@@ -2013,29 +1815,29 @@ func TestDoneBulletRendersStruckThrough(t *testing.T) {
 
 func TestDueSetsAndClearsTheChip(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "task")
+	id := s.seed(t, s.Alice, notes.RootID, "task")
 
-	s.submit(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{
 		"root": {"0"}, "due": {"2026-03-05"},
 	}, "/notes/")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	chip := doc.MustHave(".outline-due-chip")
 	if got := htmlassert.Text(chip); got != "2026-03-05" {
 		t.Errorf("chip text = %q, want 2026-03-05", got)
 	}
 
-	s.submit(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{
 		"root": {"0"}, "due": {""},
 	}, "/notes/")
-	s.get(t, s.alice, "/notes/").MustNotHave(".outline-due-chip")
+	s.Get(t, s.Alice, "/notes/").MustNotHave(".outline-due-chip")
 }
 
 func TestDueRejectsBadFormat(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "task")
+	id := s.seed(t, s.Alice, notes.RootID, "task")
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{
 		"root": {"0"}, "due": {"not-a-date"},
 	})
 	if rec.Code != http.StatusBadRequest {
@@ -2045,9 +1847,9 @@ func TestDueRejectsBadFormat(t *testing.T) {
 
 func TestDueOnAnotherUsersBulletIs404(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.bob, notes.RootID, "bob's")
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/due", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{
 		"root": {"0"}, "due": {"2026-03-05"},
 	})
 	if rec.Code != http.StatusNotFound {
@@ -2063,9 +1865,9 @@ func TestDueOnAnotherUsersBulletIs404(t *testing.T) {
 // <form>, rather than leaving them owned by outline-main.
 func TestDueDateHasANoJSSubmissionPath(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "task")
+	id := s.seed(t, s.Alice, notes.RootID, "task")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 
 	input := doc.MustHave("input.outline-due-input")
 	dueForm, ok := htmlassert.Attr(input, "form")
@@ -2098,24 +1900,24 @@ func TestDueDateHasANoJSSubmissionPath(t *testing.T) {
 // the entire lifetime of this test suite.
 func TestOverdueChipIsMarked(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "task")
-	if err := s.store.SetDue(context.Background(), s.alice.user.ID, id, "2000-01-01"); err != nil {
+	id := s.seed(t, s.Alice, notes.RootID, "task")
+	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, "2000-01-01"); err != nil {
 		t.Fatal(err)
 	}
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	doc.MustHave(".outline-due-overdue")
 }
 
 func TestAFutureDueChipIsNotMarkedOverdue(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "task")
+	id := s.seed(t, s.Alice, notes.RootID, "task")
 	future := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
-	if err := s.store.SetDue(context.Background(), s.alice.user.ID, id, future); err != nil {
+	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, future); err != nil {
 		t.Fatal(err)
 	}
 
-	s.get(t, s.alice, "/notes/").MustNotHave(".outline-due-overdue")
+	s.Get(t, s.Alice, "/notes/").MustNotHave(".outline-due-overdue")
 }
 
 // TestShowCompletedHidesAndReveals is spec §11 end to end: a done bullet's
@@ -2123,13 +1925,13 @@ func TestAFutureDueChipIsNotMarkedOverdue(t *testing.T) {
 func TestShowCompletedHidesAndReveals(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	parent := s.seed(t, s.alice, notes.RootID, "parent")
-	s.seed(t, s.alice, parent, "child")
-	if err := s.store.SetDone(ctx, s.alice.user.ID, parent, true); err != nil {
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	s.seed(t, s.Alice, parent, "child")
+	if err := s.Store.SetDone(ctx, s.Alice.User.ID, parent, true); err != nil {
 		t.Fatal(err)
 	}
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	if strings.Contains(doc.Text(), "child") {
 		t.Error("a done bullet's child is visible with show-completed off")
 	}
@@ -2137,7 +1939,7 @@ func TestShowCompletedHidesAndReveals(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/notes/", nil)
 	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
-	rec := s.do(t, s.alice, req)
+	rec := s.Do(t, s.Alice, req)
 	if !strings.Contains(rec.Body.String(), "child") {
 		t.Error("show-completed=1 still hides the done bullet's child")
 	}
@@ -2146,7 +1948,7 @@ func TestShowCompletedHidesAndReveals(t *testing.T) {
 func TestPrefsTogglesTheCookie(t *testing.T) {
 	s := newServer(t)
 
-	rec := s.post(t, s.alice, "/notes/prefs", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/prefs", url.Values{
 		"root": {"0"}, "show_completed": {"1"},
 	})
 	if rec.Code != http.StatusSeeOther {
@@ -2174,13 +1976,13 @@ func TestPrefsTogglesTheCookie(t *testing.T) {
 func TestPrefsRespondsWithTheFreshValueOverHTMX(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	parent := s.seed(t, s.alice, notes.RootID, "parent")
-	s.seed(t, s.alice, parent, "child")
-	if err := s.store.SetDone(ctx, s.alice.user.ID, parent, true); err != nil {
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	s.seed(t, s.Alice, parent, "child")
+	if err := s.Store.SetDone(ctx, s.Alice.User.ID, parent, true); err != nil {
 		t.Fatal(err)
 	}
 
-	rec := s.postHX(t, s.alice, "/notes/prefs", url.Values{
+	rec := s.PostHX(t, s.Alice, "/notes/prefs", url.Values{
 		"root": {"0"}, "show_completed": {"1"},
 	})
 	if rec.Code != http.StatusOK {
@@ -2200,7 +2002,7 @@ func TestPrefsRespondsWithTheFreshValueOverHTMX(t *testing.T) {
 func TestPrefsFragmentRefreshesTheToggleOutOfBand(t *testing.T) {
 	s := newServer(t)
 
-	rec := s.postHX(t, s.alice, "/notes/prefs", url.Values{
+	rec := s.PostHX(t, s.Alice, "/notes/prefs", url.Values{
 		"root": {"0"}, "show_completed": {"1"},
 	})
 	if rec.Code != http.StatusOK {
@@ -2220,7 +2022,7 @@ func TestPrefsFragmentRefreshesTheToggleOutOfBand(t *testing.T) {
 	}
 
 	// And back off again, so the block is not simply hardcoded one way.
-	rec = s.postHX(t, s.alice, "/notes/prefs", url.Values{
+	rec = s.PostHX(t, s.Alice, "/notes/prefs", url.Values{
 		"root": {"0"}, "show_completed": {"0"},
 	})
 	btn = htmlassert.Parse(t, rec.Body.String()).MustHave("#show-completed-toggle")
@@ -2237,7 +2039,7 @@ func TestPrefsFragmentRefreshesTheToggleOutOfBand(t *testing.T) {
 // hx-swap-oob, or htmx would lift the toggle out of a page it never swaps.
 func TestOutlinePageToggleIsNotOutOfBand(t *testing.T) {
 	s := newServer(t)
-	btn := s.get(t, s.alice, "/notes/").MustHave("#show-completed-toggle")
+	btn := s.Get(t, s.Alice, "/notes/").MustHave("#show-completed-toggle")
 	if _, ok := htmlassert.Attr(btn, "hx-swap-oob"); ok {
 		t.Error("the page render's toggle carries hx-swap-oob")
 	}
@@ -2248,14 +2050,14 @@ func TestOutlinePageToggleIsNotOutOfBand(t *testing.T) {
 // request came in with rather than flip it.
 func TestMutationFragmentCarriesTheToggleUnchanged(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "a")
+	id := s.seed(t, s.Alice, notes.RootID, "a")
 
 	req := httptest.NewRequest("POST", "/notes/"+itoa(id)+"/indent",
-		strings.NewReader(url.Values{"root": {"0"}, web.CSRFFormField: {s.csrfToken(t, s.alice)}}.Encode()))
+		strings.NewReader(url.Values{"root": {"0"}, web.CSRFFormField: {s.CSRFToken(t, s.Alice)}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
 	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
-	rec := s.do(t, s.alice, req)
+	rec := s.Do(t, s.Alice, req)
 
 	btn := htmlassert.Parse(t, rec.Body.String()).MustHave("#show-completed-toggle")
 	if got, _ := htmlassert.Attr(btn, "value"); got != "0" {
@@ -2266,7 +2068,7 @@ func TestMutationFragmentCarriesTheToggleUnchanged(t *testing.T) {
 func TestPrefsRejectsAnUnknownValue(t *testing.T) {
 	s := newServer(t)
 	for _, v := range []string{"", "true", "2"} {
-		rec := s.post(t, s.alice, "/notes/prefs", url.Values{
+		rec := s.Post(t, s.Alice, "/notes/prefs", url.Values{
 			"root": {"0"}, "show_completed": {v},
 		})
 		if rec.Code != http.StatusBadRequest {
@@ -2277,7 +2079,7 @@ func TestPrefsRejectsAnUnknownValue(t *testing.T) {
 
 func TestEveryMutationRequiresSignInIncludesDoneAndDue(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "a")
+	id := s.seed(t, s.Alice, notes.RootID, "a")
 
 	for _, path := range []string{
 		"/notes/" + itoa(id) + "/done",
@@ -2285,7 +2087,7 @@ func TestEveryMutationRequiresSignInIncludesDoneAndDue(t *testing.T) {
 	} {
 		req := httptest.NewRequest("POST", path, strings.NewReader(""))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		rec := s.do(t, nil, req)
+		rec := s.Do(t, nil, req)
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("POST %s anonymous and tokenless = %d, want 403 from the CSRF check", path, rec.Code)
 		}
@@ -2294,7 +2096,7 @@ func TestEveryMutationRequiresSignInIncludesDoneAndDue(t *testing.T) {
 
 func TestScriptIsServedWithAJavaScriptContentType(t *testing.T) {
 	s := newServer(t)
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/notes/notes.js", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/notes/notes.js", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /notes/notes.js = %d, want 200", rec.Code)
 	}
@@ -2309,13 +2111,13 @@ func TestScriptIsServedWithAJavaScriptContentType(t *testing.T) {
 func TestDueListGroupsAcrossTheWholeTree(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	parent := s.seed(t, s.alice, notes.RootID, "Projects")
-	child := s.seed(t, s.alice, parent, "AtBudget")
-	if err := s.store.SetDue(ctx, s.alice.user.ID, child, "2000-01-01"); err != nil {
+	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
+	child := s.seed(t, s.Alice, parent, "AtBudget")
+	if err := s.Store.SetDue(ctx, s.Alice.User.ID, child, "2000-01-01"); err != nil {
 		t.Fatal(err)
 	}
 
-	doc := s.get(t, s.alice, "/notes/due")
+	doc := s.Get(t, s.Alice, "/notes/due")
 	doc.MustHave(".outline-due-overdue")
 	if !strings.Contains(doc.Text(), "Projects") {
 		t.Error("the due bullet's ancestor breadcrumb is missing")
@@ -2334,13 +2136,13 @@ func TestDueListGroupsAcrossTheWholeTree(t *testing.T) {
 func TestDueListCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	parent := s.seed(t, s.alice, notes.RootID, "**Projects**")
-	child := s.seed(t, s.alice, parent, "**Milk**")
-	if err := s.store.SetDue(ctx, s.alice.user.ID, child, "2000-01-01"); err != nil {
+	parent := s.seed(t, s.Alice, notes.RootID, "**Projects**")
+	child := s.seed(t, s.Alice, parent, "**Milk**")
+	if err := s.Store.SetDue(ctx, s.Alice.User.ID, child, "2000-01-01"); err != nil {
 		t.Fatal(err)
 	}
 
-	doc := s.get(t, s.alice, "/notes/due")
+	doc := s.Get(t, s.Alice, "/notes/due")
 	crumb := doc.MustHave(".notes-crumb-item")
 	if got := htmlassert.Text(crumb); got != "Projects" {
 		t.Errorf("due-list crumb text = %q, want the rendered form", got)
@@ -2355,19 +2157,19 @@ func TestDueListCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
 func TestDueListRendersAnotherUsersNodesNowhere(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	bobs := s.seed(t, s.bob, notes.RootID, "bob's task")
-	if err := s.store.SetDue(ctx, s.bob.user.ID, bobs, "2000-01-01"); err != nil {
+	bobs := s.seed(t, s.Bob, notes.RootID, "bob's task")
+	if err := s.Store.SetDue(ctx, s.Bob.User.ID, bobs, "2000-01-01"); err != nil {
 		t.Fatal(err)
 	}
 
-	if strings.Contains(s.get(t, s.alice, "/notes/due").Text(), "bob's task") {
+	if strings.Contains(s.Get(t, s.Alice, "/notes/due").Text(), "bob's task") {
 		t.Error("another user's due bullet is on the page")
 	}
 }
 
 func TestDueListRequiresSignIn(t *testing.T) {
 	s := newServer(t)
-	rec := s.do(t, nil, httptest.NewRequest("GET", "/notes/due", nil))
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/due", nil))
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("GET /notes/due anonymous = %d, want a 303 to the login page", rec.Code)
 	}
@@ -2375,22 +2177,22 @@ func TestDueListRequiresSignIn(t *testing.T) {
 
 func TestDueListWithNothingDue(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "no date on this one")
+	s.seed(t, s.Alice, notes.RootID, "no date on this one")
 
-	if got := s.get(t, s.alice, "/notes/due").Text(); !strings.Contains(got, "Nothing is due") {
+	if got := s.Get(t, s.Alice, "/notes/due").Text(); !strings.Contains(got, "Nothing is due") {
 		t.Errorf("empty due list text = %q, want the empty-state line", got)
 	}
 }
 
 func TestArchiveHidesTheBulletAndRedirectsToTheOutline(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "put away")
+	id := s.seed(t, s.Alice, notes.RootID, "put away")
 
-	s.submit(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{
 		"root": {"0"}, "archived": {"1"},
 	}, "/notes/")
 
-	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2402,7 +2204,7 @@ func TestArchiveHidesTheBulletAndRedirectsToTheOutline(t *testing.T) {
 	// doc comment), so ".outline-row[data-id=...]" is not a valid selector
 	// here — this walks the (unqualified-by-id) rows instead and checks
 	// each one's own data-id attribute.
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	for _, row := range doc.QueryAll(".outline-row") {
 		if got, _ := htmlassert.Attr(row, "data-id"); got == itoa(id) {
 			t.Fatal("the archived bullet still appears in the outline")
@@ -2412,10 +2214,10 @@ func TestArchiveHidesTheBulletAndRedirectsToTheOutline(t *testing.T) {
 
 func TestArchiveRejectsAnUnknownValue(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "a")
+	id := s.seed(t, s.Alice, notes.RootID, "a")
 
 	for _, v := range []string{"", "true", "yes", "2"} {
-		rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{
+		rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{
 			"root": {"0"}, "archived": {v},
 		})
 		if rec.Code != http.StatusBadRequest {
@@ -2426,9 +2228,9 @@ func TestArchiveRejectsAnUnknownValue(t *testing.T) {
 
 func TestArchiveOnAnotherUsersBulletIs404(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.bob, notes.RootID, "bob's")
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{
 		"root": {"0"}, "archived": {"1"},
 	})
 	if rec.Code != http.StatusNotFound {
@@ -2441,12 +2243,12 @@ func TestArchiveOnAnotherUsersBulletIs404(t *testing.T) {
 // than mutate — see archive's design note in this plan.
 func TestRestoreBringsTheBulletBackAndRedirectsToTheArchivePage(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "put away")
-	if err := s.store.SetArchived(context.Background(), s.alice.user.ID, id, true); err != nil {
+	id := s.seed(t, s.Alice, notes.RootID, "put away")
+	if err := s.Store.SetArchived(context.Background(), s.Alice.User.ID, id, true); err != nil {
 		t.Fatal(err)
 	}
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{"archived": {"0"}})
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{"archived": {"0"}})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303; body: %s", rec.Code, rec.Body.String())
 	}
@@ -2454,7 +2256,7 @@ func TestRestoreBringsTheBulletBackAndRedirectsToTheArchivePage(t *testing.T) {
 		t.Fatalf("redirected to %q, want /notes/archive", got)
 	}
 
-	n, err := s.store.ByID(context.Background(), s.alice.user.ID, id)
+	n, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2465,12 +2267,12 @@ func TestRestoreBringsTheBulletBackAndRedirectsToTheArchivePage(t *testing.T) {
 
 func TestRestoreOnAnotherUsersBulletIs404(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.bob, notes.RootID, "bob's")
-	if err := s.store.SetArchived(context.Background(), s.bob.user.ID, id, true); err != nil {
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
+	if err := s.Store.SetArchived(context.Background(), s.Bob.User.ID, id, true); err != nil {
 		t.Fatal(err)
 	}
 
-	rec := s.post(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{"archived": {"0"}})
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{"archived": {"0"}})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
@@ -2478,12 +2280,12 @@ func TestRestoreOnAnotherUsersBulletIs404(t *testing.T) {
 
 func TestRestoreRespondsWithTheArchiveListFragmentForHTMX(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "put away")
-	if err := s.store.SetArchived(context.Background(), s.alice.user.ID, id, true); err != nil {
+	id := s.seed(t, s.Alice, notes.RootID, "put away")
+	if err := s.Store.SetArchived(context.Background(), s.Alice.User.ID, id, true); err != nil {
 		t.Fatal(err)
 	}
 
-	rec := s.postHX(t, s.alice, "/notes/"+itoa(id)+"/archive", url.Values{"archived": {"0"}})
+	rec := s.PostHX(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{"archived": {"0"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -2498,13 +2300,13 @@ func TestRestoreRespondsWithTheArchiveListFragmentForHTMX(t *testing.T) {
 func TestArchiveListShowsArchivedNodesWithCrumbs(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	parent := s.seed(t, s.alice, notes.RootID, "Projects")
-	child := s.seed(t, s.alice, parent, "old project")
-	if err := s.store.SetArchived(ctx, s.alice.user.ID, child, true); err != nil {
+	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
+	child := s.seed(t, s.Alice, parent, "old project")
+	if err := s.Store.SetArchived(ctx, s.Alice.User.ID, child, true); err != nil {
 		t.Fatal(err)
 	}
 
-	doc := s.get(t, s.alice, "/notes/archive")
+	doc := s.Get(t, s.Alice, "/notes/archive")
 	// htmlassert only matches one qualifier per selector part, so the class
 	// and the href check are two steps rather than one compound selector.
 	title := doc.MustHave("a.notes-archive-title")
@@ -2524,13 +2326,13 @@ func TestArchiveListShowsArchivedNodesWithCrumbs(t *testing.T) {
 func TestArchiveCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	parent := s.seed(t, s.alice, notes.RootID, "**Projects**")
-	child := s.seed(t, s.alice, parent, "**Milk**")
-	if err := s.store.SetArchived(ctx, s.alice.user.ID, child, true); err != nil {
+	parent := s.seed(t, s.Alice, notes.RootID, "**Projects**")
+	child := s.seed(t, s.Alice, parent, "**Milk**")
+	if err := s.Store.SetArchived(ctx, s.Alice.User.ID, child, true); err != nil {
 		t.Fatal(err)
 	}
 
-	doc := s.get(t, s.alice, "/notes/archive")
+	doc := s.Get(t, s.Alice, "/notes/archive")
 	crumb := doc.MustHave(".notes-crumb-item")
 	if got := htmlassert.Text(crumb); got != "Projects" {
 		t.Errorf("archive crumb text = %q, want the rendered form", got)
@@ -2544,9 +2346,9 @@ func TestArchiveCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
 
 func TestArchiveListWithNothingArchived(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "never archived")
+	s.seed(t, s.Alice, notes.RootID, "never archived")
 
-	doc := s.get(t, s.alice, "/notes/archive")
+	doc := s.Get(t, s.Alice, "/notes/archive")
 	doc.MustHave("body") // page renders at all
 	if strings.Contains(htmlassert.Text(doc.MustHave(".notes")), "never archived") {
 		t.Error("an unarchived bullet appears on the archive page")
@@ -2555,7 +2357,7 @@ func TestArchiveListWithNothingArchived(t *testing.T) {
 
 func TestArchiveListRequiresSignIn(t *testing.T) {
 	s := newServer(t)
-	rec := s.do(t, nil, httptest.NewRequest("GET", "/notes/archive", nil))
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/archive", nil))
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("GET /notes/archive anonymous = %d, want a 303 to the login page", rec.Code)
 	}
@@ -2572,13 +2374,13 @@ func TestArchiveListRequiresSignIn(t *testing.T) {
 func TestZoomingIntoAnArchivedNodeShowsABannerAndItsChildren(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	parent := s.seed(t, s.alice, notes.RootID, "put away")
-	child := s.seed(t, s.alice, parent, "still visible")
-	if err := s.store.SetArchived(ctx, s.alice.user.ID, parent, true); err != nil {
+	parent := s.seed(t, s.Alice, notes.RootID, "put away")
+	child := s.seed(t, s.Alice, parent, "still visible")
+	if err := s.Store.SetArchived(ctx, s.Alice.User.ID, parent, true); err != nil {
 		t.Fatal(err)
 	}
 
-	doc := s.get(t, s.alice, "/notes/"+itoa(parent))
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(parent))
 	banner := doc.MustHave(".notes-archived-banner")
 	if !strings.Contains(htmlassert.Text(banner), "archived") {
 		t.Errorf("banner text = %q, want it to mention the node is archived", htmlassert.Text(banner))
@@ -2599,36 +2401,36 @@ func TestZoomingIntoAnArchivedNodeShowsABannerAndItsChildren(t *testing.T) {
 // archived.
 func TestZoomingIntoANonArchivedNodeShowsNoBanner(t *testing.T) {
 	s := newServer(t)
-	parent := s.seed(t, s.alice, notes.RootID, "ordinary")
-	s.seed(t, s.alice, parent, "child")
+	parent := s.seed(t, s.Alice, notes.RootID, "ordinary")
+	s.seed(t, s.Alice, parent, "child")
 
-	s.get(t, s.alice, "/notes/"+itoa(parent)).MustNotHave(".notes-archived-banner")
+	s.Get(t, s.Alice, "/notes/"+itoa(parent)).MustNotHave(".notes-archived-banner")
 }
 
 // TestTopLevelOutlineShowsNoArchivedBanner: RootID is never archived, so the
 // top-level view must never carry the banner either.
 func TestTopLevelOutlineShowsNoArchivedBanner(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "top level")
+	s.seed(t, s.Alice, notes.RootID, "top level")
 
-	s.get(t, s.alice, "/notes/").MustNotHave(".notes-archived-banner")
+	s.Get(t, s.Alice, "/notes/").MustNotHave(".notes-archived-banner")
 }
 
 func TestTheOutlineLinksToTheDueList(t *testing.T) {
 	s := newServer(t)
-	s.get(t, s.alice, "/notes/").MustHave(`.notes-toolbar a[href=/notes/due]`)
+	s.Get(t, s.Alice, "/notes/").MustHave(`.notes-toolbar a[href=/notes/due]`)
 }
 
 func TestSearchFindsABulletAndShowsItsBreadcrumb(t *testing.T) {
 	s := newServer(t)
-	parent := s.seed(t, s.alice, notes.RootID, "Projects")
+	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
 	// A word FTS5's default unicode61 tokenizer treats as its own token, not
 	// "AtBudget report" (the plan's literal example): that camelCase run
 	// tokenizes as one "atbudget" token, which "budget" alone never matches.
 	// See task-2-report.md for the full account of this deviation.
-	child := s.seed(t, s.alice, parent, "Budget report")
+	child := s.seed(t, s.Alice, parent, "Budget report")
 
-	doc := s.get(t, s.alice, "/notes/search?q=budget")
+	doc := s.Get(t, s.Alice, "/notes/search?q=budget")
 	if !strings.Contains(doc.Text(), "Projects") {
 		t.Error("the hit's ancestor breadcrumb is missing")
 	}
@@ -2644,10 +2446,10 @@ func TestSearchFindsABulletAndShowsItsBreadcrumb(t *testing.T) {
 // it stays on plain DisplayTitle.
 func TestSearchCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
 	s := newServer(t)
-	parent := s.seed(t, s.alice, notes.RootID, "**Projects**")
-	child := s.seed(t, s.alice, parent, "**Milk**")
+	parent := s.seed(t, s.Alice, notes.RootID, "**Projects**")
+	child := s.seed(t, s.Alice, parent, "**Milk**")
 
-	doc := s.get(t, s.alice, "/notes/search?q=milk")
+	doc := s.Get(t, s.Alice, "/notes/search?q=milk")
 	crumb := doc.MustHave(".notes-crumb-item")
 	if got := htmlassert.Text(crumb); got != "Projects" {
 		t.Errorf("search crumb text = %q, want the rendered form", got)
@@ -2661,15 +2463,15 @@ func TestSearchCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
 
 func TestSearchWithNoQueryShowsNoResults(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "anything")
+	s.seed(t, s.Alice, notes.RootID, "anything")
 
-	doc := s.get(t, s.alice, "/notes/search")
+	doc := s.Get(t, s.Alice, "/notes/search")
 	doc.MustNotHave(".notes-search-item")
 }
 
 func TestSearchWithNoMatchesSaysSo(t *testing.T) {
 	s := newServer(t)
-	doc := s.get(t, s.alice, "/notes/search?q=nonexistent")
+	doc := s.Get(t, s.Alice, "/notes/search?q=nonexistent")
 	if !strings.Contains(doc.Text(), "No matches") {
 		t.Error("an empty result set shows no feedback")
 	}
@@ -2677,15 +2479,15 @@ func TestSearchWithNoMatchesSaysSo(t *testing.T) {
 
 func TestSearchDoesNotRenderAnotherUsersNodes(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.bob, notes.RootID, "bob's secret plan")
+	s.seed(t, s.Bob, notes.RootID, "bob's secret plan")
 
-	doc := s.get(t, s.alice, "/notes/search?q=secret")
+	doc := s.Get(t, s.Alice, "/notes/search?q=secret")
 	doc.MustNotHave(".notes-search-item")
 }
 
 func TestSearchRequiresSignIn(t *testing.T) {
 	s := newServer(t)
-	rec := s.do(t, nil, httptest.NewRequest("GET", "/notes/search", nil))
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/search", nil))
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("GET /notes/search anonymous = %d, want a 303 to the login page", rec.Code)
 	}
@@ -2696,13 +2498,13 @@ func TestSearchRequiresSignIn(t *testing.T) {
 // answer it.
 func TestTagChipNowResolves(t *testing.T) {
 	s := newServer(t)
-	s.seed(t, s.alice, notes.RootID, "check #urgent today")
+	s.seed(t, s.Alice, notes.RootID, "check #urgent today")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	chip := doc.MustHave(".outline-tag")
 	href, _ := htmlassert.Attr(chip, "href")
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", href, nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", href, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET %s = %d, want 200", href, rec.Code)
 	}
@@ -2716,7 +2518,7 @@ func TestTagChipNowResolves(t *testing.T) {
 // form, so it needs no CSRF token and works with JavaScript off.
 func TestOutlineToolbarHasASearchBox(t *testing.T) {
 	s := newServer(t)
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	in := doc.MustHave("#notes-search-input")
 	if got, _ := htmlassert.Attr(in, "name"); got != "q" {
 		t.Errorf("search input name = %q, want q", got)
@@ -2732,16 +2534,16 @@ func TestOutlineToolbarHasASearchBox(t *testing.T) {
 
 func TestDueToolbarHasASearchBox(t *testing.T) {
 	s := newServer(t)
-	s.get(t, s.alice, "/notes/due").MustHave("#notes-search-input")
+	s.Get(t, s.Alice, "/notes/due").MustHave("#notes-search-input")
 }
 
 // TestOutlineMenuHasAnArchiveAction extends the existing comprehensive-menu
 // check (TestOutlineMenuHoldsEveryAction) with this task's new action.
 func TestOutlineMenuHasAnArchiveAction(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.alice, notes.RootID, "Projects")
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
 
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	menu := doc.MustHave(".outline-menu")
 	list := doc.MustHave(".outline-menu-list")
 
@@ -2758,12 +2560,12 @@ func TestOutlineMenuHasAnArchiveAction(t *testing.T) {
 
 func TestArchiveToolbarHasASearchBox(t *testing.T) {
 	s := newServer(t)
-	s.get(t, s.alice, "/notes/archive").MustHave("#notes-search-input")
+	s.Get(t, s.Alice, "/notes/archive").MustHave("#notes-search-input")
 }
 
 func TestOutlineToolbarHasAnArchiveLink(t *testing.T) {
 	s := newServer(t)
-	doc := s.get(t, s.alice, "/notes/")
+	doc := s.Get(t, s.Alice, "/notes/")
 	link := doc.MustHave(`a[href="/notes/archive"]`)
 	if htmlassert.Text(link) != "Archive" {
 		t.Errorf("archive link text = %q, want Archive", htmlassert.Text(link))
