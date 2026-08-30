@@ -107,6 +107,34 @@ func TestRenderBareURLIsAutolinked(t *testing.T) {
 	}
 }
 
+// TestRenderBareURLWithOwnParenIsNotTruncated is issue #69: a bare autolink's
+// own single-level nested paren (common in Wikipedia/MSDN URLs) must stay
+// part of the link, not truncate the match at the first ")".
+func TestRenderBareURLWithOwnParenIsNotTruncated(t *testing.T) {
+	got := string(notes.Render("see https://en.wikipedia.org/wiki/Foo_(bar) ok"))
+	want := `<a href="https://en.wikipedia.org/wiki/Foo_(bar)" target="_blank" rel="noopener noreferrer">https://en.wikipedia.org/wiki/Foo_(bar)</a>`
+	if !strings.Contains(got, want) {
+		t.Errorf("got %q, want it to contain %q", got, want)
+	}
+	if !strings.HasSuffix(got, " ok") {
+		t.Errorf("got %q, trailing text should be untouched", got)
+	}
+}
+
+// TestRenderBareURLWrappedInProseParenIsNotExtended: a paren that merely
+// wraps the URL in surrounding prose, rather than belonging to the URL
+// itself, must still end the match — unchanged from before #69.
+func TestRenderBareURLWrappedInProseParenIsNotExtended(t *testing.T) {
+	got := string(notes.Render("(see https://example.com)"))
+	want := `<a href="https://example.com" target="_blank" rel="noopener noreferrer">https://example.com</a>`
+	if !strings.Contains(got, want) {
+		t.Errorf("got %q, want it to contain %q", got, want)
+	}
+	if !strings.HasSuffix(got, "</a>)") {
+		t.Errorf("got %q, the wrapping \")\" should stay outside the link", got)
+	}
+}
+
 func TestRenderTagChip(t *testing.T) {
 	got := string(notes.Render("check #urgent today"))
 	if !strings.Contains(got, `<a class="outline-tag" href="/notes/search?q=%23urgent">#urgent</a>`) {

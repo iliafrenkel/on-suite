@@ -27,7 +27,13 @@ var inlinePattern = regexp.MustCompile(
 		`|\*([^*]+)\*` + // 2: italic
 		`|~~([^~]+)~~` + // 3: strike
 		`|\[([^\]]+)\]\(([^)]+)\)` + // 4,5: link text, url
-		`|(https?://[^\s<>"')\]]+)` + // 6: bare autolink
+		// 6: bare autolink. The body alternates plain characters with whole
+		// balanced "(...)" groups, so a URL's own single-level nested paren
+		// (Wikipedia/MSDN URLs routinely have one, e.g. .../Foo_(bar)) stays
+		// part of the match, while a paren that merely wraps the URL in
+		// surrounding prose ("(see https://example.com)") still ends the
+		// match at its own unmatched ")", same as before — issue #69.
+		`|(https?://(?:\([^\s<>"')\]]*\)|[^\s<>"')\]])+)` +
 		`|([#@][\p{L}\p{N}_]+)`, // 7: #tag / @mention
 )
 
