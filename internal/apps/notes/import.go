@@ -106,6 +106,9 @@ func ParseMarkdown(text string) ([]ParsedNode, error) {
 		if lastBullet < 0 || indent < minIndent {
 			return nil, fmt.Errorf("%w: line %d: text is not indented under any bullet", ErrInvalid, i+1)
 		}
+		// Only minIndent characters are stripped, never more: indentation
+		// beyond the bullet's own minimum is the user's content, not
+		// structural whitespace, so it survives into the note verbatim.
 		noteLine := unescapeNoteLine(line[minIndent:])
 		if out[lastBullet].Note == "" {
 			out[lastBullet].Note = noteLine
