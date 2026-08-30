@@ -65,6 +65,12 @@ func (st *Store) Export(ctx context.Context, userID, rootID int64) ([]Node, erro
 // or a subtree export both feed it directly. ParseMarkdown (import.go) is
 // its exact inverse — see that function's own doc comment for why suffix
 // order must be stripped in the reverse of the order this appends them.
+//
+// A note line that would itself look like a bullet once indented (see
+// escapeNoteLine below) is escaped with a leading backslash before being
+// written — the only place this function's output is not a byte-for-byte
+// copy of the note's own text. Every other line, including every title, is
+// written completely unescaped, exactly as before this scheme existed.
 func ExportMarkdown(flat []Node) string {
 	var b strings.Builder
 	for _, n := range flat {
@@ -84,12 +90,48 @@ func ExportMarkdown(flat []Node) string {
 			for _, line := range strings.Split(n.Note, "\n") {
 				b.WriteString(indent)
 				b.WriteString("  ")
-				b.WriteString(line)
+				b.WriteString(escapeNoteLine(line))
 				b.WriteString("\n")
 			}
 		}
 	}
 	return b.String()
+}
+
+// escapeNoteLine escapes one line of a note so that, once ExportMarkdown
+// has indented it to sit under its bullet, it can never be mistaken for a
+// bullet marker (bulletLineRe, import.go) on re-import. unescapeNoteLine
+// (import.go) is its exact inverse.
+//
+// Without this, a note whose text is itself bullet-shaped breaks
+// round-tripping two different ways, both filed against this exact
+// function: a note reading "  - x" exports one level deeper than its own
+// bullet and makes ParseMarkdown reject the WHOLE file with "bullet is
+// indented deeper than its possible parent" (a 400 for the entire
+// upload/paste, not just this one node); a note reading "- shopping list
+// item" round-trips as TEXT but gets silently reparsed as a CHILD BULLET
+// instead, changing the tree shape with no error at all.
+//
+// A line only needs escaping when, after its own leading run of complete
+// two-space pairs — the same unit bulletLineRe's "(?:  )*" group consumes —
+// the very next thing is either:
+//   - "- ", bulletLineRe's own marker: left alone, ExportMarkdown's added
+//     indent would make the combined line match it; or
+//   - "\", the escape character this function itself uses: left alone,
+//     unescapeNoteLine would mistake it for one of its own insertions and
+//     strip a character of the user's actual text.
+//
+// Either case is fixed by inserting exactly one backslash right after that
+// leading pair-run: "  - x" becomes "  \- x", and "\odd" becomes "\\odd".
+// A line matching neither case — the overwhelming majority — is returned
+// completely unchanged.
+func escapeNoteLine(line string) string {
+	prefix := pairsPrefixRe.FindString(line)
+	rest := line[len(prefix):]
+	if strings.HasPrefix(rest, "- ") || strings.HasPrefix(rest, "\\") {
+		return prefix + "\\" + rest
+	}
+	return line
 }
 
 // exportedNode is the JSON on-disk shape of one node — the whole row,

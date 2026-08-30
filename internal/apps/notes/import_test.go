@@ -351,3 +351,66 @@ func TestExportThenImportRoundTrips(t *testing.T) {
 		t.Errorf("round-trip mismatch:\noriginal:\n%s\nafter round-trip:\n%s", md, got)
 	}
 }
+
+// TestExportThenImportRoundTripsABulletShapedNote pins the note-escaping
+// fix: a note whose text is deliberately bullet-shaped ("- x") must survive
+// ExportMarkdown -> ParseMarkdown as the literal string "- x" under its
+// bullet's own Note field — not become a child bullet of its own, and not
+// cause the whole file to be rejected.
+func TestExportThenImportRoundTripsABulletShapedNote(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	if err := f.store.SetText(ctx, f.alice.ID, parent.ID, "parent", "- x"); err != nil {
+		t.Fatal(err)
+	}
+
+	exported, err := f.store.Export(ctx, f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := notes.ExportMarkdown(exported)
+
+	parsed, err := notes.ParseMarkdown(md)
+	if err != nil {
+		t.Fatalf("re-parsing the export: %v", err)
+	}
+	if len(parsed) != 1 {
+		t.Fatalf("ParseMarkdown = %+v, want exactly one node (the note must not become a child bullet)", parsed)
+	}
+	if parsed[0].Note != "- x" {
+		t.Errorf("Note = %q, want the literal string %q", parsed[0].Note, "- x")
+	}
+}
+
+// TestExportThenImportRoundTripsADeeplyBulletShapedNote pins the other
+// failure mode the reviewer found: a note that is itself indented and
+// bullet-shaped ("  - x") used to export one level deeper than its own
+// bullet and make ParseMarkdown reject the WHOLE file with "bullet is
+// indented deeper than its possible parent" — a 400 for the entire
+// upload/paste, not just this one node. It must now import successfully.
+func TestExportThenImportRoundTripsADeeplyBulletShapedNote(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	if err := f.store.SetText(ctx, f.alice.ID, parent.ID, "parent", "  - x"); err != nil {
+		t.Fatal(err)
+	}
+
+	exported, err := f.store.Export(ctx, f.alice.ID, notes.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := notes.ExportMarkdown(exported)
+
+	parsed, err := notes.ParseMarkdown(md)
+	if err != nil {
+		t.Fatalf("re-parsing the export: %v (this used to reject the whole file)", err)
+	}
+	if len(parsed) != 1 {
+		t.Fatalf("ParseMarkdown = %+v, want exactly one node", parsed)
+	}
+	if parsed[0].Note != "  - x" {
+		t.Errorf("Note = %q, want the literal string %q", parsed[0].Note, "  - x")
+	}
+}

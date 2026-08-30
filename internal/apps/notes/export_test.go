@@ -158,6 +158,34 @@ func TestExportMarkdownOfNothingIsEmpty(t *testing.T) {
 	}
 }
 
+// TestExportMarkdownEscapesABulletShapedNote pins the fix for a note whose
+// text is itself a valid "- " bullet line: left unescaped, ExportMarkdown's
+// own indent would place it one level deeper than its own bullet, and
+// ParseMarkdown would reject the whole file with "bullet is indented deeper
+// than its possible parent" on re-import (see TestParseMarkdownRoundTripsABulletShapedNote).
+func TestExportMarkdownEscapesABulletShapedNote(t *testing.T) {
+	flat := []notes.Node{{ID: 1, Title: "task", Note: "  - x", Depth: 0}}
+	want := "- task\n    \\- x\n"
+	if got := notes.ExportMarkdown(flat); got != want {
+		t.Errorf("ExportMarkdown = %q, want %q", got, want)
+	}
+}
+
+// TestExportMarkdownDoesNotEscapeAnOrdinaryNote pins that a note NOT shaped
+// like a bullet is written completely unescaped — no backslash anywhere —
+// exactly as ExportMarkdown already behaved before this fix.
+func TestExportMarkdownDoesNotEscapeAnOrdinaryNote(t *testing.T) {
+	flat := []notes.Node{{ID: 1, Title: "task", Note: "just an ordinary note line", Depth: 0}}
+	got := notes.ExportMarkdown(flat)
+	if strings.Contains(got, "\\") {
+		t.Errorf("ExportMarkdown = %q, an ordinary note must not be escaped", got)
+	}
+	want := "- task\n  just an ordinary note line\n"
+	if got != want {
+		t.Errorf("ExportMarkdown = %q, want %q", got, want)
+	}
+}
+
 func TestJSONExportContainsEveryColumn(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

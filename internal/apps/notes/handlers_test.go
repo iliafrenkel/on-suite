@@ -2760,8 +2760,16 @@ func TestExportOfASubtree(t *testing.T) {
 	if !strings.Contains(body, "- child\n") {
 		t.Errorf("export body = %q, missing the child", body)
 	}
-	if strings.Contains(body, "root") || strings.Contains(body, "unrelated") {
-		t.Errorf("export body = %q, a subtree export must not include the root or unrelated bullets", body)
+	// A loose strings.Contains(body, "root") / "unrelated") check would only
+	// happen to pass because no other fixture in this test contains those
+	// as a substring — it would not actually catch the root or unrelated
+	// bullet's own exported line being present. Assert the exact absence
+	// of each one's own line instead.
+	if strings.Contains(body, "- root\n") {
+		t.Errorf("export body = %q, must not include the excluded root's own bullet line", body)
+	}
+	if strings.Contains(body, "- unrelated\n") {
+		t.Errorf("export body = %q, must not include the unrelated bullet's own line", body)
 	}
 }
 
@@ -3032,6 +3040,29 @@ func TestPasteRejectsOversizedText(t *testing.T) {
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestPasteRejectsOversizedTextButAnonymousStillGetsSentToLogin pins Minor
+// #5 from the review: every other mutation checks sign-in (via mutate,
+// through a.userID) before any other validation, so an anonymous request
+// with a valid CSRF token gets a 303 to the login page no matter what else
+// is wrong with the request — the paste route must behave the same way for
+// an oversized "text" field rather than 400ing before mutate ever runs.
+func TestPasteRejectsOversizedTextButAnonymousStillGetsSentToLogin(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "target")
+	oversized := strings.Repeat("x", notes.MaxPasteTextBytes+1)
+
+	anon := s.Anonymous(t)
+	rec := s.Post(t, anon, "/notes/"+itoa(id)+"/paste", url.Values{
+		"root": {"0"}, "text": {"- " + oversized},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303 (sign-in required, checked before the size bound); body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Location"); got != "/login" {
+		t.Errorf("redirected to %q, not the login page", got)
 	}
 }
 

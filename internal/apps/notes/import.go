@@ -35,6 +35,13 @@ var dueSuffixRe = regexp.MustCompile(`^(.*) @(\d{4}-\d{2}-\d{2})$`)
 
 const doneSuffix = " [x]"
 
+// pairsPrefixRe matches a line's leading run of complete two-space pairs —
+// the same unit bulletLineRe's own "(?:  )*" group consumes. escapeNoteLine
+// (export.go) and unescapeNoteLine below both anchor on this same prefix,
+// which is what makes them exact inverses of each other regardless of how
+// deeply indented the note's own bullet is.
+var pairsPrefixRe = regexp.MustCompile(`^(?:  )*`)
+
 // ParseMarkdown parses spec §14's outline format: a "- " line per node,
 // two spaces of indent per level, an optional "[x]" suffix for done and a
 // trailing "@YYYY-MM-DD" for a due date, with the note as unbulleted
@@ -53,6 +60,12 @@ const doneSuffix = " [x]"
 // recognised, and only an exactly-even number of leading spaces — no
 // other Markdown bullet syntax ("* ", "+ ") and no odd indentation are
 // accepted, matching exactly what ExportMarkdown ever produces.
+//
+// A note-continuation line is run through unescapeNoteLine before it is
+// stored, reversing escapeNoteLine's (export.go) backslash escape for a
+// note line that would otherwise look like a bullet — so the caller sees
+// the user's original note text, byte for byte, never the escaped form
+// that actually sat on disk.
 func ParseMarkdown(text string) ([]ParsedNode, error) {
 	var out []ParsedNode
 	lastBullet := -1 // index into out of the most recently seen bullet
@@ -93,7 +106,7 @@ func ParseMarkdown(text string) ([]ParsedNode, error) {
 		if lastBullet < 0 || indent < minIndent {
 			return nil, fmt.Errorf("%w: line %d: text is not indented under any bullet", ErrInvalid, i+1)
 		}
-		noteLine := line[minIndent:]
+		noteLine := unescapeNoteLine(line[minIndent:])
 		if out[lastBullet].Note == "" {
 			out[lastBullet].Note = noteLine
 		} else {
@@ -109,6 +122,21 @@ func leadingSpaces(s string) int {
 		n++
 	}
 	return n
+}
+
+// unescapeNoteLine reverses escapeNoteLine (export.go): a note-continuation
+// line whose content, after its own leading two-space-pair run, starts
+// with a backslash had exactly one such backslash inserted by
+// ExportMarkdown — stripping it recovers the user's original text, byte
+// for byte. A line that was never escaped (its content, at that same
+// position, starts with neither "- " nor "\") is returned unchanged.
+func unescapeNoteLine(line string) string {
+	prefix := pairsPrefixRe.FindString(line)
+	rest := line[len(prefix):]
+	if strings.HasPrefix(rest, "\\") {
+		return prefix + rest[1:]
+	}
+	return line
 }
 
 // parseTitleLine strips a bullet's optional "[x]" and "@YYYY-MM-DD"

@@ -3,6 +3,7 @@ package notes
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -819,14 +820,21 @@ func (a *App) importNotes(w http.ResponseWriter, r *http.Request) {
 // plan for why the shape decision is entirely notes.js's, why this goes
 // through mutate while import does not, and why there is no
 // http.MaxBytesReader here.
+//
+// The MaxPasteTextBytes check runs inside mutate's own closure, after
+// mutate has already resolved m.UserID, rather than before mutate is
+// called at all: every other mutation's own validation happens after
+// mutate's sign-in check, and paste is not an exception just because its
+// bound happens to be cheap to check up front. Returning ErrInvalid here
+// (rather than writing the response directly) reaches the same 400 through
+// a.fail, once mutate's own transaction has run and returned.
 func (a *App) paste(w http.ResponseWriter, r *http.Request) {
 	text := r.PostFormValue("text")
-	if len(text) > MaxPasteTextBytes {
-		a.deps.Errors.Status(w, r, http.StatusBadRequest)
-		return
-	}
 
 	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		if len(text) > MaxPasteTextBytes {
+			return fmt.Errorf("%w: pasted text exceeds %d bytes", ErrInvalid, MaxPasteTextBytes)
+		}
 		parsed, err := ParseMarkdown(text)
 		if err != nil {
 			return err
