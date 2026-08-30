@@ -11,10 +11,14 @@ type outlineView struct {
 	Zoomed bool
 	// Crumbs are Root's ancestors, outermost first. Empty unless Zoomed.
 	Crumbs []Node
-	// Rows is the visible outline, nested. Empty means the outline shows one
-	// empty bullet instead — spec §6.
-	Rows      []*outlineRow
-	CSRFToken string
+	// Rows is the visible outline, nested. Empty with HiddenCount == 0 means
+	// the outline shows one empty bullet instead — spec §6. Empty with
+	// HiddenCount > 0 means there are bullets here, but hideDone hid every
+	// one of them — issue #75: without this, that state was indistinguishable
+	// from a genuinely empty outline, and looked like data loss.
+	Rows        []*outlineRow
+	HiddenCount int
+	CSRFToken   string
 	// ShowCompleted is spec §11's preference, read once per request so the
 	// toolbar's toggle button can show its own opposite action.
 	ShowCompleted bool

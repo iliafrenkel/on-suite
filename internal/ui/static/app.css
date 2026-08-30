@@ -680,6 +680,24 @@ button.danger:hover { background: var(--c-danger-bg); }
 }
 .notes-archived-banner a { color: var(--c-accent); }
 
+/* Issue #75: every bullet at this level is done and hidden, which without
+ * this reads as the outline having been emptied — spec §6's placeholder
+ * below is for a genuinely empty outline, not this. */
+.outline-all-done {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-3);
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+	background: var(--c-bg-subtle);
+	border: var(--border);
+	border-radius: var(--radius);
+	padding: var(--s-2) var(--s-3);
+}
+.outline-all-done p { margin: 0; }
+.outline-all-done form { margin: 0; }
+
 .outline-list { margin: 0; padding: 0; list-style: none; }
 
 /* The nesting is the indentation. The CSP has no unsafe-inline, so a row

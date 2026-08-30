@@ -111,8 +111,9 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	flat = hideDone(flat, showCompleted)
-	view.Rows = nest(flat, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
+	visible := hideDone(flat, showCompleted)
+	view.HiddenCount = len(flat) - len(visible)
+	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
 
 	page := a.deps.Page(r, title)
 	page.Data = view
@@ -135,14 +136,15 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	flat = hideDone(flat, showCompleted)
+	visible := hideDone(flat, showCompleted)
 	view := outlineView{
 		CSRFToken:     web.CSRFToken(r.Context()),
 		Root:          Node{ID: rootID},
 		ShowCompleted: showCompleted,
+		HiddenCount:   len(flat) - len(visible),
 		OOB:           true,
 	}
-	view.Rows = nest(flat, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
+	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
 	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "outline-swap", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
