@@ -18,6 +18,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"html/template"
 	"io/fs"
 	"strings"
 	"time"
@@ -129,6 +130,19 @@ func (n Node) DisplayTitle() string {
 		return "Untitled"
 	}
 	return n.Title
+}
+
+// DisplayTitleHTML is DisplayTitle run through Render — spec §10 — for use
+// anywhere a bullet's title is shown outside the outline's own rows (the
+// zoomed heading, a non-link breadcrumb segment). Only outlineRow.RenderedTitle
+// had this before N5/N6 added other places a title appears — issues #65, #76.
+//
+// Deliberately not used inside an <a>: Render can itself emit an <a> for a
+// link, a bare autolink, or a #tag/@mention chip, and nesting anchors is
+// invalid HTML — a link whose visible text is a title (a breadcrumb
+// ancestor, a due-list row) stays on DisplayTitle instead.
+func (n Node) DisplayTitleHTML() template.HTML {
+	return Render(n.DisplayTitle())
 }
 
 // Validate bounds a bullet's user-supplied text. Exported because the handler
