@@ -226,6 +226,12 @@
 	}
 
 	function handleKeydown(e) {
+		// Issue #62: during an active IME composition (e.g. CJK input),
+		// Enter commits the composition rather than ending the line, so it
+		// must not reach splitAndCreate/maybeDeleteEmptyBullet/the arrow-key
+		// bindings below. keyCode 229 is the legacy fallback for browsers
+		// (older Safari) that don't set isComposing.
+		if (e.isComposing || e.keyCode === 229) return;
 		if (e.key === "Escape") {
 			handleEscape();
 			return;
