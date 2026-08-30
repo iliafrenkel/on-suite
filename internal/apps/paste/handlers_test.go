@@ -2,183 +2,40 @@ package paste_test
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/paste"
+	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
-	"github.com/iliafrenkel/on-suite/internal/platform/app"
-	"github.com/iliafrenkel/on-suite/internal/platform/auth"
-	"github.com/iliafrenkel/on-suite/internal/platform/db"
-	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
-	"github.com/iliafrenkel/on-suite/internal/ui"
 )
 
-const testPassword = "a-sufficiently-long-password"
-
-// server is the whole stack over a real database, with two accounts.
+// server is paste's own test harness, built on the shared apptest.Server —
+// issue #50: this and internal/apps/notes' own handlers_test.go used to
+// each carry an almost line-for-line duplicate of newServer/session/do/
+// post/logIn. createSnippet and shareAndGetSlug below are paste-specific
+// shortcuts that stay here, alongside the rest of what only this package's
+// tests need.
 type server struct {
-	handler http.Handler
-	store   *paste.Store
-	alice   *session
-	bob     *session
+	*apptest.Server[*paste.Store]
 }
 
 // session holds one signed-in browser's cookies.
-type session struct {
-	user    auth.User
-	cookies []*http.Cookie
-}
+type session = apptest.Session
 
 func newServer(t *testing.T) *server {
 	t.Helper()
-	ctx := context.Background()
-
-	handle, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = handle.Close() })
-
-	registry, err := app.NewRegistry(paste.New())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	migrations, err := db.Collect(auth.Namespace, auth.Migrations())
-	if err != nil {
-		t.Fatal(err)
-	}
-	appMigrations, err := registry.Migrations()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Apply(ctx, handle, append(migrations, appMigrations...)); err != nil {
-		t.Fatal(err)
-	}
-
-	users := auth.NewStore(handle)
-	assets, err := web.NewAssets(ui.Static(), "/static")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rend, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	log := slog.New(slog.DiscardHandler)
-	errs := web.NewErrors(rend, log)
-	csrf := web.NewCSRF(false, errs)
-	authn := web.NewAuth(web.AuthOptions{
-		Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Secure: false,
-	})
-
-	mux := http.NewServeMux()
-	authn.Routes(mux, nil)
-	if err := registry.Mount(mux, app.Deps{
-		DB: handle, Render: rend, Users: users, Errors: errs, Log: log,
-	}, authn.RequireUser); err != nil {
-		t.Fatalf("Mount: %v", err)
-	}
-	mux.Handle("/", http.HandlerFunc(errs.NotFound))
-
-	s := &server{
-		handler: web.Stack(mux, log, errs, csrf, authn),
-		store:   paste.NewStore(handle),
-	}
-
-	hash, err := auth.HashPassword(testPassword)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"alice", "bob"} {
-		u, err := users.CreateUser(ctx, name, hash, false)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sess := s.logIn(t, u)
-		if name == "alice" {
-			s.alice = sess
-		} else {
-			s.bob = sess
-		}
-	}
-	return s
-}
-
-// do issues a request carrying a session's cookies.
-func (s *server) do(t *testing.T, sess *session, req *http.Request) *httptest.ResponseRecorder {
-	t.Helper()
-	if sess != nil {
-		for _, c := range sess.cookies {
-			req.AddCookie(c)
-		}
-	}
-	rec := httptest.NewRecorder()
-	s.handler.ServeHTTP(rec, req)
-	return rec
-}
-
-// post submits a form with the session's CSRF token attached.
-func (s *server) post(t *testing.T, sess *session, path string, form url.Values) *httptest.ResponseRecorder {
-	t.Helper()
-	form.Set(web.CSRFFormField, s.csrfToken(t, sess))
-	req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return s.do(t, sess, req)
-}
-
-func (s *server) csrfToken(t *testing.T, sess *session) string {
-	t.Helper()
-	for _, c := range sess.cookies {
-		if c.Name == web.CSRFCookieName {
-			return c.Value
-		}
-	}
-	t.Fatal("session has no CSRF cookie")
-	return ""
-}
-
-// logIn performs a real login so the tests use genuine session cookies.
-func (s *server) logIn(t *testing.T, u auth.User) *session {
-	t.Helper()
-
-	page := s.do(t, nil, httptest.NewRequest("GET", "/login", nil))
-	var csrfCookie *http.Cookie
-	for _, c := range page.Result().Cookies() {
-		if c.Name == web.CSRFCookieName {
-			csrfCookie = c
-		}
-	}
-	if csrfCookie == nil {
-		t.Fatal("GET /login issued no CSRF cookie")
-	}
-
-	form := url.Values{
-		"username":        {u.Username},
-		"password":        {testPassword},
-		web.CSRFFormField: {csrfCookie.Value},
-	}
-	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := s.do(t, &session{cookies: []*http.Cookie{csrfCookie}}, req)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("login for %s = %d", u.Username, rec.Code)
-	}
-	return &session{user: u, cookies: rec.Result().Cookies()}
+	return &server{apptest.NewServer(t, paste.New(), paste.NewStore)}
 }
 
 // createSnippet is the shortcut other tests use.
 func (s *server) createSnippet(t *testing.T, sess *session, title, language, body string) int64 {
 	t.Helper()
-	rec := s.post(t, sess, "/paste/new", url.Values{
+	rec := s.Post(t, sess, "/paste/new", url.Values{
 		"title": {title}, "language": {language}, "body": {body},
 	})
 	if rec.Code != http.StatusSeeOther {
@@ -225,7 +82,7 @@ func (e errorString) Error() string { return string(e) }
 func TestPasteRequiresSignIn(t *testing.T) {
 	s := newServer(t)
 	for _, path := range []string{"/paste/", "/paste/new", "/paste/1", "/paste/raw/1"} {
-		rec := s.do(t, nil, httptest.NewRequest("GET", path, nil))
+		rec := s.Do(t, nil, httptest.NewRequest("GET", path, nil))
 		if rec.Code != http.StatusSeeOther {
 			t.Errorf("GET %s anonymous = %d, want a 303 to the login page", path, rec.Code)
 		}
@@ -234,7 +91,7 @@ func TestPasteRequiresSignIn(t *testing.T) {
 
 func TestNewFormRenders(t *testing.T) {
 	s := newServer(t)
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/new", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/new", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
@@ -257,9 +114,9 @@ func TestNewFormRenders(t *testing.T) {
 
 func TestCreateThenView(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "My config", "yaml", "key: value\nother: 2\n")
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\nother: 2\n")
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("view = %d", rec.Code)
 	}
@@ -291,9 +148,9 @@ func TestCreateThenView(t *testing.T) {
 // exists.
 func TestViewingSomeoneElsesSnippetIs404(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "alice's", "go", "secret\n")
+	id := s.createSnippet(t, s.Alice, "alice's", "go", "secret\n")
 
-	rec := s.do(t, s.bob, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	rec := s.Do(t, s.Bob, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
 	}
@@ -316,7 +173,7 @@ func TestCreateRejectsBadInput(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := s.post(t, s.alice, "/paste/new", tt.form)
+			rec := s.Post(t, s.Alice, "/paste/new", tt.form)
 			if rec.Code == http.StatusSeeOther {
 				t.Fatal("the snippet was created")
 			}
@@ -334,7 +191,7 @@ func TestCreatePreservesTypedInputOnFailure(t *testing.T) {
 	s := newServer(t)
 	const body = "a long snippet the user does not want to retype\n"
 
-	rec := s.post(t, s.alice, "/paste/new", url.Values{
+	rec := s.Post(t, s.Alice, "/paste/new", url.Values{
 		"title":    {strings.Repeat("a", paste.MaxTitleRunes+1)},
 		"language": {"go"}, "body": {body},
 	})
@@ -350,7 +207,7 @@ func TestCreateRequiresCSRF(t *testing.T) {
 	req := httptest.NewRequest("POST", "/paste/new", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	rec := s.do(t, s.alice, req) // no token in the form
+	rec := s.Do(t, s.Alice, req) // no token in the form
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("status = %d, want 403", rec.Code)
 	}
@@ -359,7 +216,7 @@ func TestCreateRequiresCSRF(t *testing.T) {
 func TestViewRejectsNonNumericAndMissingIDs(t *testing.T) {
 	s := newServer(t)
 	for _, path := range []string{"/paste/abc", "/paste/0", "/paste/-1", "/paste/99999"} {
-		rec := s.do(t, s.alice, httptest.NewRequest("GET", path, nil))
+		rec := s.Do(t, s.Alice, httptest.NewRequest("GET", path, nil))
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404", path, rec.Code)
 		}
@@ -371,9 +228,9 @@ func TestViewRejectsNonNumericAndMissingIDs(t *testing.T) {
 func TestSnippetBodyIsEscapedInTheView(t *testing.T) {
 	s := newServer(t)
 	const hostile = "<script>alert('xss')</script>\n"
-	id := s.createSnippet(t, s.alice, "<img src=x onerror=alert(1)>", "html", hostile)
+	id := s.createSnippet(t, s.Alice, "<img src=x onerror=alert(1)>", "html", hostile)
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
 	body := rec.Body.String()
 
 	if strings.Contains(body, "<script>alert('xss')</script>") {
@@ -395,7 +252,7 @@ func TestHighlightStylesheetIsServedAndCacheable(t *testing.T) {
 	s := newServer(t)
 
 	// Public: it must load on the shared page, where nobody is signed in.
-	rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/highlight.css", nil))
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/highlight.css", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -412,7 +269,7 @@ func TestHighlightStylesheetIsServedAndCacheable(t *testing.T) {
 	}
 	req := httptest.NewRequest("GET", "/paste/highlight.css", nil)
 	req.Header.Set("If-None-Match", etag)
-	rec = s.do(t, nil, req)
+	rec = s.Do(t, nil, req)
 	if rec.Code != http.StatusNotModified {
 		t.Errorf("revalidation = %d, want 304", rec.Code)
 	}
@@ -421,11 +278,11 @@ func TestHighlightStylesheetIsServedAndCacheable(t *testing.T) {
 func TestListShowsOnlyYourSnippetsNewestFirst(t *testing.T) {
 	s := newServer(t)
 
-	s.createSnippet(t, s.alice, "alice one", "go", "package one\n")
-	s.createSnippet(t, s.alice, "alice two", "go", "package two\n")
-	s.createSnippet(t, s.bob, "bob's secret", "go", "package bob\n")
+	s.createSnippet(t, s.Alice, "alice one", "go", "package one\n")
+	s.createSnippet(t, s.Alice, "alice two", "go", "package two\n")
+	s.createSnippet(t, s.Bob, "bob's secret", "go", "package bob\n")
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
@@ -445,7 +302,7 @@ func TestListShowsOnlyYourSnippetsNewestFirst(t *testing.T) {
 
 func TestListWhenEmpty(t *testing.T) {
 	s := newServer(t)
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/", nil))
 
 	doc := htmlassert.Parse(t, rec.Body.String())
 	doc.MustNotHave("ul.snippet-list")
@@ -460,10 +317,10 @@ func TestListWhenEmpty(t *testing.T) {
 // must not be.
 func TestListPreviewIsOneLine(t *testing.T) {
 	s := newServer(t)
-	s.createSnippet(t, s.alice, "tall", "plaintext",
+	s.createSnippet(t, s.Alice, "tall", "plaintext",
 		strings.Repeat("a line of text that goes on\n", 40))
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/", nil))
 	doc := htmlassert.Parse(t, rec.Body.String())
 
 	got := htmlassert.Text(doc.MustHave(".snippet-preview"))
@@ -483,9 +340,9 @@ func TestListPreviewIsOneLine(t *testing.T) {
 // colliding with it while exercising the handler's redirect and status code.
 func TestDeleteHandler(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "doomed", "go", "package main\n")
+	id := s.createSnippet(t, s.Alice, "doomed", "go", "package main\n")
 
-	rec := s.post(t, s.alice, "/paste/"+itoa(id)+"/delete", url.Values{})
+	rec := s.Post(t, s.Alice, "/paste/"+itoa(id)+"/delete", url.Values{})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("delete = %d, want 303", rec.Code)
 	}
@@ -493,7 +350,7 @@ func TestDeleteHandler(t *testing.T) {
 		t.Errorf("Location = %q, want /paste/", loc)
 	}
 
-	rec = s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	rec = s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("the snippet is still viewable: %d", rec.Code)
 	}
@@ -503,15 +360,15 @@ func TestDeleteHandler(t *testing.T) {
 // regressed.
 func TestDeleteSomeoneElsesSnippetFails(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "alice's", "go", "package main\n")
+	id := s.createSnippet(t, s.Alice, "alice's", "go", "package main\n")
 
-	rec := s.post(t, s.bob, "/paste/"+itoa(id)+"/delete", url.Values{})
+	rec := s.Post(t, s.Bob, "/paste/"+itoa(id)+"/delete", url.Values{})
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
 	}
 
 	// And it is genuinely still there.
-	rec = s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	rec = s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
 	if rec.Code != http.StatusOK {
 		t.Error("the owner's snippet was destroyed by another user's request")
 	}
@@ -519,21 +376,21 @@ func TestDeleteSomeoneElsesSnippetFails(t *testing.T) {
 
 func TestDeleteRequiresCSRFAndPOST(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "safe", "go", "package main\n")
+	id := s.createSnippet(t, s.Alice, "safe", "go", "package main\n")
 
 	// No token.
 	req := httptest.NewRequest("POST", "/paste/"+itoa(id)+"/delete", nil)
-	if rec := s.do(t, s.alice, req); rec.Code != http.StatusForbidden {
+	if rec := s.Do(t, s.Alice, req); rec.Code != http.StatusForbidden {
 		t.Errorf("delete without a CSRF token = %d, want 403", rec.Code)
 	}
 
 	// A GET must not delete: the route is POST-only, so ServeMux refuses it.
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id)+"/delete", nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id)+"/delete", nil))
 	if rec.Code == http.StatusSeeOther {
 		t.Error("a GET performed the deletion")
 	}
 
-	if rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil)); rec.Code != http.StatusOK {
+	if rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil)); rec.Code != http.StatusOK {
 		t.Error("the snippet was deleted by a request that should have been refused")
 	}
 }
@@ -543,11 +400,11 @@ func TestDeleteRequiresCSRFAndPOST(t *testing.T) {
 func (s *server) shareAndGetSlug(t *testing.T, sess *session, id int64) string {
 	t.Helper()
 
-	rec := s.post(t, sess, "/paste/"+itoa(id)+"/share", url.Values{})
+	rec := s.Post(t, sess, "/paste/"+itoa(id)+"/share", url.Values{})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("share = %d, want 303", rec.Code)
 	}
-	snippet, err := s.store.ByID(context.Background(), sess.user.ID, id)
+	snippet, err := s.Store.ByID(context.Background(), sess.User.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -559,11 +416,11 @@ func (s *server) shareAndGetSlug(t *testing.T, sess *session, id int64) string {
 
 func TestSharedSnippetIsReadableWhileSignedOut(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "Shared config", "yaml", "key: value\n")
-	slug := s.shareAndGetSlug(t, s.alice, id)
+	id := s.createSnippet(t, s.Alice, "Shared config", "yaml", "key: value\n")
+	slug := s.shareAndGetSlug(t, s.Alice, id)
 
 	// nil session: no cookies at all.
-	rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("anonymous shared view = %d, want 200", rec.Code)
 	}
@@ -583,8 +440,8 @@ func TestSharedSnippetIsReadableWhileSignedOut(t *testing.T) {
 // would defeat the revocation.
 func TestSharedEndpointsAreNotCachedOrIndexed(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "Shared config", "yaml", "key: value\n")
-	slug := s.shareAndGetSlug(t, s.alice, id)
+	id := s.createSnippet(t, s.Alice, "Shared config", "yaml", "key: value\n")
+	slug := s.shareAndGetSlug(t, s.Alice, id)
 
 	cases := []struct {
 		name string
@@ -595,7 +452,7 @@ func TestSharedEndpointsAreNotCachedOrIndexed(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rec := s.do(t, nil, httptest.NewRequest("GET", tc.path, nil))
+			rec := s.Do(t, nil, httptest.NewRequest("GET", tc.path, nil))
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d", rec.Code)
 			}
@@ -613,10 +470,10 @@ func TestSharedEndpointsAreNotCachedOrIndexed(t *testing.T) {
 // template rather than reusing the owner's with conditionals.
 func TestSharedPageOffersNoDestructiveControls(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "Shared", "go", "package main\n")
-	slug := s.shareAndGetSlug(t, s.alice, id)
+	id := s.createSnippet(t, s.Alice, "Shared", "go", "package main\n")
+	slug := s.shareAndGetSlug(t, s.Alice, id)
 
-	rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
 	doc := htmlassert.Parse(t, rec.Body.String())
 
 	doc.MustNotHave(`form[action=/paste/` + itoa(id) + `/delete]`)
@@ -632,41 +489,41 @@ func TestSharedPageOffersNoDestructiveControls(t *testing.T) {
 // TestUnshareKillsTheLink is the point of choosing a revocable share model.
 func TestUnshareKillsTheLink(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "Shared", "go", "package main\n")
-	slug := s.shareAndGetSlug(t, s.alice, id)
+	id := s.createSnippet(t, s.Alice, "Shared", "go", "package main\n")
+	slug := s.shareAndGetSlug(t, s.Alice, id)
 
-	if rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil)); rec.Code != http.StatusOK {
+	if rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil)); rec.Code != http.StatusOK {
 		t.Fatal("the link did not work before revoking it")
 	}
 
-	rec := s.post(t, s.alice, "/paste/"+itoa(id)+"/unshare", url.Values{})
+	rec := s.Post(t, s.Alice, "/paste/"+itoa(id)+"/unshare", url.Values{})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("unshare = %d", rec.Code)
 	}
 
-	if rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil)); rec.Code != http.StatusNotFound {
+	if rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil)); rec.Code != http.StatusNotFound {
 		t.Errorf("the revoked link still works: %d", rec.Code)
 	}
-	if rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug+"/raw", nil)); rec.Code != http.StatusNotFound {
+	if rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug+"/raw", nil)); rec.Code != http.StatusNotFound {
 		t.Errorf("the revoked raw link still works: %d", rec.Code)
 	}
 
 	// Re-sharing must produce a different link, leaving the old one dead.
-	second := s.shareAndGetSlug(t, s.alice, id)
+	second := s.shareAndGetSlug(t, s.Alice, id)
 	if second == slug {
 		t.Fatal("re-sharing reissued the revoked slug")
 	}
-	if rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil)); rec.Code != http.StatusNotFound {
+	if rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil)); rec.Code != http.StatusNotFound {
 		t.Error("the old link came back to life after re-sharing")
 	}
 }
 
 func TestUnsharedSnippetIsNotPubliclyReachable(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "Private", "go", "top secret\n")
+	id := s.createSnippet(t, s.Alice, "Private", "go", "top secret\n")
 
 	// The owner's own URL must not work for an anonymous visitor.
-	rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
 	if rec.Code != http.StatusSeeOther {
 		t.Errorf("anonymous access to a private snippet = %d, want a redirect to login", rec.Code)
 	}
@@ -676,7 +533,7 @@ func TestUnsharedSnippetIsNotPubliclyReachable(t *testing.T) {
 
 	// And a guessed share URL must not either.
 	for _, slug := range []string{itoa(id), "aaaaaaaaaaaaaaaaaaaaaa", ""} {
-		rec := s.do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
+		rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
 		if rec.Code == http.StatusOK {
 			t.Errorf("GET /paste/s/%q returned 200", slug)
 		}
@@ -685,10 +542,10 @@ func TestUnsharedSnippetIsNotPubliclyReachable(t *testing.T) {
 
 func TestShareStateIsShownToTheOwner(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "Shared", "go", "package main\n")
-	slug := s.shareAndGetSlug(t, s.alice, id)
+	id := s.createSnippet(t, s.Alice, "Shared", "go", "package main\n")
+	slug := s.shareAndGetSlug(t, s.Alice, id)
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
 	doc := htmlassert.Parse(t, rec.Body.String())
 
 	// The link is shown as a real, clickable link with a copy button, and
@@ -713,20 +570,20 @@ func TestRawIsPlainTextForOwnerAndShared(t *testing.T) {
 	// "plaintext" is the offered language value for plain text; "text" is not
 	// on the list and IsLanguage would reject it, so createSnippet would 400
 	// instead of storing the snippet.
-	id := s.createSnippet(t, s.alice, "Raw", "plaintext", body)
-	slug := s.shareAndGetSlug(t, s.alice, id)
+	id := s.createSnippet(t, s.Alice, "Raw", "plaintext", body)
+	slug := s.shareAndGetSlug(t, s.Alice, id)
 
 	cases := []struct {
 		name    string
 		path    string
 		session *session
 	}{
-		{"owner", "/paste/raw/" + itoa(id), s.alice},
+		{"owner", "/paste/raw/" + itoa(id), s.Alice},
 		{"shared, signed out", "/paste/s/" + slug + "/raw", nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rec := s.do(t, tc.session, httptest.NewRequest("GET", tc.path, nil))
+			rec := s.Do(t, tc.session, httptest.NewRequest("GET", tc.path, nil))
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d", rec.Code)
 			}
@@ -752,10 +609,10 @@ func TestRawIsPlainTextForOwnerAndShared(t *testing.T) {
 // one on this origin.
 func TestRawOfHTMLIsNotServedAsHTML(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "evil", "html",
+	id := s.createSnippet(t, s.Alice, "evil", "html",
 		"<html><body><script>alert(1)</script></body></html>\n")
 
-	rec := s.do(t, s.alice, httptest.NewRequest("GET", "/paste/raw/"+itoa(id), nil))
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/raw/"+itoa(id), nil))
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
 		t.Fatalf("Content-Type = %q; the browser could render this as a page", ct)
 	}
@@ -768,9 +625,9 @@ func TestRawOfHTMLIsNotServedAsHTML(t *testing.T) {
 
 func TestRawOfAnotherUsersSnippetIs404(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "alice's", "go", "secret\n")
+	id := s.createSnippet(t, s.Alice, "alice's", "go", "secret\n")
 
-	rec := s.do(t, s.bob, httptest.NewRequest("GET", "/paste/raw/"+itoa(id), nil))
+	rec := s.Do(t, s.Bob, httptest.NewRequest("GET", "/paste/raw/"+itoa(id), nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
 	}
@@ -781,11 +638,11 @@ func TestRawOfAnotherUsersSnippetIs404(t *testing.T) {
 
 func TestShareRequiresCSRF(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "t", "go", "package main\n")
+	id := s.createSnippet(t, s.Alice, "t", "go", "package main\n")
 
 	for _, action := range []string{"share", "unshare"} {
 		req := httptest.NewRequest("POST", "/paste/"+itoa(id)+"/"+action, nil)
-		if rec := s.do(t, s.alice, req); rec.Code != http.StatusForbidden {
+		if rec := s.Do(t, s.Alice, req); rec.Code != http.StatusForbidden {
 			t.Errorf("%s without a CSRF token = %d, want 403", action, rec.Code)
 		}
 	}
@@ -795,8 +652,8 @@ func TestShareRequiresCSRF(t *testing.T) {
 // design. If a future change makes a fourth path anonymous, this fails first.
 func TestPublicSurfaceIsExactlyThreeRoutes(t *testing.T) {
 	s := newServer(t)
-	id := s.createSnippet(t, s.alice, "shared", "go", "package main\n")
-	slug := s.shareAndGetSlug(t, s.alice, id)
+	id := s.createSnippet(t, s.Alice, "shared", "go", "package main\n")
+	slug := s.shareAndGetSlug(t, s.Alice, id)
 
 	reachable := []string{
 		"/paste/highlight.css",
@@ -811,12 +668,12 @@ func TestPublicSurfaceIsExactlyThreeRoutes(t *testing.T) {
 	}
 
 	for _, path := range reachable {
-		if rec := s.do(t, nil, httptest.NewRequest("GET", path, nil)); rec.Code != http.StatusOK {
+		if rec := s.Do(t, nil, httptest.NewRequest("GET", path, nil)); rec.Code != http.StatusOK {
 			t.Errorf("public path %s = %d, want 200", path, rec.Code)
 		}
 	}
 	for _, path := range blocked {
-		if rec := s.do(t, nil, httptest.NewRequest("GET", path, nil)); rec.Code == http.StatusOK {
+		if rec := s.Do(t, nil, httptest.NewRequest("GET", path, nil)); rec.Code == http.StatusOK {
 			t.Errorf("%s is reachable anonymously and must not be", path)
 		}
 	}
