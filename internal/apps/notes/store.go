@@ -295,7 +295,16 @@ func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
 // an arbitrary root — N9's share pages are the known case — will need to make
 // this same choice explicitly rather than assuming one behavior or the
 // other.
-func (st *Store) Outline(ctx context.Context, userID, rootID int64) ([]Node, error) {
+//
+// showCompleted governs HasChildren, not the ROWS this returns: a done node
+// is filtered by hideDone (view.go), a post-query step in Go, not here — the
+// same asymmetry Store.Search has between showCompleted and the unconditional
+// archived exclusion (see that method's own doc comment). Without this,
+// HasChildren reflected a node's actual children rather than what hideDone
+// will leave on screen, so a bullet whose only children were done still
+// showed a chevron that expanded into nothing — issue #81. The (? OR
+// k.done_at IS NULL) clause mirrors Store.Search's own.
+func (st *Store) Outline(ctx context.Context, userID, rootID int64, showCompleted bool) ([]Node, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`WITH RECURSIVE tree AS (
 		     SELECT `+nodeColumns+`, 0 AS depth, printf('%08d', position) AS path
@@ -311,9 +320,9 @@ func (st *Store) Outline(ctx context.Context, userID, rootID int64) ([]Node, err
 		 SELECT `+nodeColumns+`, depth,
 		        EXISTS (SELECT 1 FROM notes_nodes k
 		                 WHERE k.user_id = tree.user_id AND k.parent_id = tree.id
-		                   AND k.archived_at IS NULL)
+		                   AND k.archived_at IS NULL AND (? OR k.done_at IS NULL))
 		   FROM tree ORDER BY path`,
-		userID, parentArg(rootID), MaxDepth)
+		userID, parentArg(rootID), MaxDepth, showCompleted)
 	if err != nil {
 		return nil, fmt.Errorf("notes: outline of %d: %w", rootID, err)
 	}

@@ -307,7 +307,7 @@ func TestOutlineIsFlatDocumentOrder(t *testing.T) {
 	f := newFixture(t)
 	f.sample(t)
 
-	got, err := f.store.Outline(context.Background(), f.alice.ID, notes.RootID)
+	got, err := f.store.Outline(context.Background(), f.alice.ID, notes.RootID, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -325,7 +325,7 @@ func TestOutlineStopsAtACollapsedNode(t *testing.T) {
 		t.Fatalf("SetCollapsed: %v", err)
 	}
 
-	got, err := f.store.Outline(context.Background(), f.alice.ID, notes.RootID)
+	got, err := f.store.Outline(context.Background(), f.alice.ID, notes.RootID, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -341,7 +341,7 @@ func TestOutlineZoomsIntoANode(t *testing.T) {
 	f := newFixture(t)
 	a, _, _, _, _ := f.sample(t)
 
-	got, err := f.store.Outline(context.Background(), f.alice.ID, a.ID)
+	got, err := f.store.Outline(context.Background(), f.alice.ID, a.ID, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestOutlineExcludesAnotherUser(t *testing.T) {
 	f := newFixture(t)
 	f.sample(t)
 
-	got, err := f.store.Outline(context.Background(), f.bob.ID, notes.RootID)
+	got, err := f.store.Outline(context.Background(), f.bob.ID, notes.RootID, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -369,7 +369,7 @@ func TestOutlineOfAnotherUsersNodeIsEmpty(t *testing.T) {
 	f := newFixture(t)
 	a, _, _, _, _ := f.sample(t)
 
-	got, err := f.store.Outline(context.Background(), f.bob.ID, a.ID)
+	got, err := f.store.Outline(context.Background(), f.bob.ID, a.ID, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestOutlineDoesNotLeakAnotherUsersBulletsWhenI2IsBroken(t *testing.T) {
 		{"zoomed into the grafted parent", a.ID, "- a1\n- a2\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := f.store.Outline(ctx, f.alice.ID, tc.root)
+			got, err := f.store.Outline(ctx, f.alice.ID, tc.root, false)
 			if err != nil {
 				t.Fatalf("Outline: %v", err)
 			}
@@ -572,7 +572,7 @@ func TestOutlineTerminatesOnACycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), cycleDeadline)
 	defer cancel()
 
-	got, err := f.store.Outline(ctx, f.alice.ID, x.ID)
+	got, err := f.store.Outline(ctx, f.alice.ID, x.ID, false)
 	if err != nil {
 		if ctx.Err() != nil {
 			t.Fatalf("Outline did not return within %s: the MaxDepth cap is not ending the descent (%v)",
@@ -602,7 +602,7 @@ func TestOutlineExcludesAnArchivedNodeAndItsSubtree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -629,7 +629,7 @@ func TestOutlineHasChildrenIgnoresAnArchivedChild(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -638,5 +638,43 @@ func TestOutlineHasChildrenIgnoresAnArchivedChild(t *testing.T) {
 	}
 	if got[0].HasChildren {
 		t.Error("HasChildren is true, but the only child is archived")
+	}
+}
+
+// TestOutlineHasChildrenIgnoresADoneChildUnlessShowCompleted is issue #81: a
+// parent whose only child is done, with "show completed" off, must not
+// still claim it has children — hideDone (view.go), a step the handler
+// applies to Outline's result afterward, will hide that child, so the
+// chevron would expand into nothing. With showCompleted on, hideDone leaves
+// the child in, so HasChildren must say true again.
+func TestOutlineHasChildrenIgnoresADoneChildUnlessShowCompleted(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	child := f.mk(t, parent.ID, "child")
+	if err := f.store.SetDone(ctx, f.alice.ID, child.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Outline itself never filters a done row out — that is hideDone's job,
+	// a step the handler applies afterward (view.go) — so both rows come
+	// back either way; only HasChildren is what this test is about.
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != parent.ID {
+		t.Fatalf("Outline = %+v, want the parent and its done child", got)
+	}
+	if got[0].HasChildren {
+		t.Error("HasChildren is true, but the only child is done and would be hidden")
+	}
+
+	got, err = f.store.Outline(ctx, f.alice.ID, notes.RootID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || !got[0].HasChildren {
+		t.Error("HasChildren is false with showCompleted on, but the done child is visible")
 	}
 }

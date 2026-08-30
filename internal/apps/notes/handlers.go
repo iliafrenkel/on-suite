@@ -106,7 +106,7 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		title = root.DisplayTitle()
 	}
 
-	flat, err := a.store.Outline(r.Context(), userID, rootID)
+	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -131,7 +131,7 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 // that button lives outside #outline, so the swap cannot reach it, and after
 // a prefs toggle its label and value would otherwise stay stale.
 func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64, showCompleted bool) {
-	flat, err := a.store.Outline(r.Context(), userID, rootID)
+	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return

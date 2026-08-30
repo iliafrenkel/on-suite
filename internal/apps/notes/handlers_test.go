@@ -429,6 +429,28 @@ func TestCollapsedBulletHidesItsChildren(t *testing.T) {
 	}
 }
 
+// TestParentOfOnlyDoneChildRendersNoChevron is issue #81, end to end: with
+// "show completed" off, a parent whose only child is done must render no
+// expand chevron at all — one that did would toggle with no visible effect,
+// since hideDone (view.go) has already dropped that child from the render.
+func TestParentOfOnlyDoneChildRendersNoChevron(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.alice, notes.RootID, "parent")
+	child := s.seed(t, s.alice, parent, "child")
+	s.submit(t, s.alice, "/notes/"+itoa(child)+"/done", url.Values{
+		"root": {"0"}, "done": {"1"},
+	}, "/notes/")
+
+	doc := s.get(t, s.alice, "/notes/")
+	doc.MustNotHave("button.outline-chevron")
+
+	req := httptest.NewRequest("GET", "/notes/", nil)
+	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
+	rec := s.do(t, s.alice, req)
+	got := htmlassert.Parse(t, rec.Body.String())
+	got.MustHave("button.outline-chevron")
+}
+
 // TestOutlinePageLoadsTheScript. notes.js was dead code for three commits
 // because nothing on the page loaded it: the route served it correctly the
 // whole time. Serving it and loading it are separate claims, so this asserts

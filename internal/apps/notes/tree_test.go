@@ -797,7 +797,7 @@ func TestMoveCarriesTheSubtree(t *testing.T) {
 		t.Fatalf("Move: %v", err)
 	}
 
-	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -897,7 +897,7 @@ func TestIndentBecomesTheLastChildOfThePreviousSibling(t *testing.T) {
 		t.Fatalf("Indent: %v", err)
 	}
 
-	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -936,7 +936,7 @@ func TestOutdentBecomesTheNextSiblingOfItsParent(t *testing.T) {
 		t.Fatalf("Outdent: %v", err)
 	}
 
-	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -1149,7 +1149,7 @@ func TestDoKeepsInvariantsAcrossAMultiOperationTransaction(t *testing.T) {
 		t.Fatalf("Do: %v", err)
 	}
 
-	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID)
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -1301,7 +1301,7 @@ func TestRandomOperationSequencesPreserveInvariants(t *testing.T) {
 		//
 		// It consumes no randomness, so the sequence is exactly the one the
 		// seed produced before this call was added.
-		out, err := f.store.Outline(ctx, userID, notes.RootID)
+		out, err := f.store.Outline(ctx, userID, notes.RootID, false)
 		if err != nil {
 			fail("after step %d: Outline(user=%d): %v", step, userID, err)
 		}
