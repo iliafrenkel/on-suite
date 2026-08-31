@@ -146,7 +146,7 @@ type Node struct {
 	// Archived is archived_at's Go projection — spec §13. Same reasoning as
 	// Done: nothing in this app ever needs to show *when* a bullet was put
 	// away, only whether it is.
-	Archived  bool
+	Archived bool
 	// ShareSlug is "" when the bullet is not shared — spec §15. Unlike
 	// Done/DueOn/Archived it is not itself an *_at timestamp's Go
 	// projection: the slug's actual value is what a visitor's URL must

@@ -3268,7 +3268,7 @@ func TestZoomedBannerShowsNoShareLinkWhenNotShared(t *testing.T) {
 	id := s.seed(t, s.Alice, notes.RootID, "not shared")
 
 	doc := s.Get(t, s.Alice, "/notes/"+itoa(id))
-	doc.MustNotHave(".notice")
+	mustNotHaveShareBanner(t, doc)
 }
 
 func TestTopLevelOutlineShowsNoShareBanner(t *testing.T) {
@@ -3276,7 +3276,22 @@ func TestTopLevelOutlineShowsNoShareBanner(t *testing.T) {
 	s.seed(t, s.Alice, notes.RootID, "a bullet")
 
 	doc := s.Get(t, s.Alice, "/notes/")
-	doc.MustNotHave(".notice")
+	mustNotHaveShareBanner(t, doc)
+}
+
+// mustNotHaveShareBanner asserts the page has no link into the share-URL
+// route. ".notice" alone is too broad a selector for this — it is a
+// platform-wide class also used by admin/error/login pages — and
+// htmlassert's selector dialect has no "starts with" attribute match to
+// pin an exact "/notes/s/{slug}" prefix, so this walks the ".notice a"
+// matches by hand instead.
+func mustNotHaveShareBanner(t *testing.T, doc *htmlassert.Doc) {
+	t.Helper()
+	for _, a := range doc.QueryAll(".notice a") {
+		if href, ok := htmlassert.Attr(a, "href"); ok && strings.HasPrefix(href, "/notes/s/") {
+			t.Fatalf("found share-link banner: <a href=%q>", href)
+		}
+	}
 }
 
 func TestSharedPageIsReadableWhileSignedOut(t *testing.T) {
@@ -3383,9 +3398,20 @@ func TestSharedPageStaysUpIfTheRootIsLaterArchivedOrDone(t *testing.T) {
 func TestSharedPageHasNoLinksIntoThePrivateTree(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
-	root := s.seed(t, s.Alice, notes.RootID, "root")
-	s.seed(t, s.Alice, root, "child")
-	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root)
+	// A #tag or @mention in the root's or a descendant's title/note would,
+	// before the fix, render as an <a href="/notes/search?..."> — an
+	// authenticated route, so a link a signed-out visitor can never use for
+	// anything but bouncing off a login page, but still a link "into the
+	// owner's private tree" per spec §15. root/"child" alone (with no tag
+	// or mention) exercised none of that and let this test pass vacuously.
+	root, err := s.Store.Create(ctx, s.Alice.User.ID, notes.RootID, 1<<30, "root #root-tag", "root note @root-mention")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.Create(ctx, s.Alice.User.ID, root.ID, 1<<30, "child #child-tag", "child note @child-mention"); err != nil {
+		t.Fatal(err)
+	}
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3398,6 +3424,27 @@ func TestSharedPageHasNoLinksIntoThePrivateTree(t *testing.T) {
 		}
 	}
 	doc.MustNotHave("form")
+
+	// The tags/mentions must still render — just inert, not as links — so
+	// this doesn't degrade into "the feature silently vanished."
+	if n := len(doc.QueryAll(".outline-tag")); n != 4 {
+		t.Errorf("outline-tag chips = %d, want 4 (root tag+mention, child tag+mention)", n)
+	}
+}
+
+// TestOutlineTagsStillLinkOnThePrivateOutline guards the other side of the
+// fix: RenderShared's chips lost their href, but Render's own — used by the
+// ordinary, authenticated outline page (outline.html) — must keep linking
+// into /notes/search exactly as before.
+func TestOutlineTagsStillLinkOnThePrivateOutline(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "a #tag here")
+
+	doc := s.Get(t, s.Alice, "/notes/")
+	a := doc.MustHave("a.outline-tag")
+	if href, _ := htmlassert.Attr(a, "href"); !strings.HasPrefix(href, "/notes/search?q=") {
+		t.Errorf("outline-tag href = %q, want a /notes/search?q= link", href)
+	}
 }
 
 func TestSharedPageIsNotCachedOrIndexed(t *testing.T) {

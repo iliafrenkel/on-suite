@@ -943,8 +943,14 @@ func (a *App) viewShared(w http.ResponseWriter, r *http.Request) {
 	// crumb (the page title itself still shows, just not linked to the app
 	// root), which is what keeps this the one page in the app with no path
 	// back in.
+	page.Shell.ActiveApp = ""
 	page.Shell.ActiveAppName = ""
 	page.Shell.ActiveAppPath = ""
-	page.Data = sharedView{Root: root, RootRenderedNote: Render(root.Note), Rows: nestShared(flat)}
+	page.Data = sharedView{
+		Root:              root,
+		RootRenderedTitle: RenderShared(root.DisplayTitle()),
+		RootRenderedNote:  RenderShared(root.Note),
+		Rows:              nestShared(flat),
+	}
 	a.render(w, r, http.StatusOK, "notes/shared", page)
 }

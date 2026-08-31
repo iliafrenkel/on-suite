@@ -1,6 +1,6 @@
 {{define "content"}}
 <div class="stack notes">
-	<h1>{{.Data.Root.DisplayTitleHTML}}</h1>
+	<h1>{{.Data.RootRenderedTitle}}</h1>
 	{{with .Data.RootRenderedNote}}<div class="notes-shared-note">{{.}}</div>{{end}}
 	{{if .Data.Rows}}
 	{{template "shared-rows" .Data.Rows}}

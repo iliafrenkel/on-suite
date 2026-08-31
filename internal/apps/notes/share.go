@@ -167,7 +167,7 @@ func nestShared(flat []Node) []*sharedRow {
 	open := make([]*sharedRow, 0, MaxDepth+1)
 
 	for _, n := range flat {
-		row := &sharedRow{Node: n, RenderedTitle: Render(n.Title), RenderedNote: Render(n.Note)}
+		row := &sharedRow{Node: n, RenderedTitle: RenderShared(n.Title), RenderedNote: RenderShared(n.Note)}
 
 		switch d := n.Depth; {
 		case d == 0:
@@ -186,8 +186,15 @@ func nestShared(flat []Node) []*sharedRow {
 }
 
 // sharedView is what templates/shared.html renders.
+//
+// RootRenderedTitle and RootRenderedNote are rendered through RenderShared,
+// not Render/Node.DisplayTitleHTML — spec §15: a #tag/@mention in the
+// root's own title or note must not become a link into /notes/search
+// either, so the template uses these fields for the root instead of
+// calling Root.DisplayTitleHTML directly.
 type sharedView struct {
 	Root              Node
+	RootRenderedTitle template.HTML
 	RootRenderedNote  template.HTML
 	Rows              []*sharedRow
 }

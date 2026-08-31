@@ -49,29 +49,50 @@ var inlinePattern = regexp.MustCompile(
 // parsing bug can produce wrong-looking output but never inject markup —
 // there is no code path from user text to an unescaped byte in the result.
 func Render(s string) template.HTML {
+	return renderMarkdown(s, true)
+}
+
+// RenderShared is Render for the public share page (spec §15: "no link
+// leads anywhere into the owner's private tree"). #tag/@mention chips
+// still render — they keep their visual styling — but as an inert
+// <span class="outline-tag">, not an <a href="/notes/search?...">:
+// /notes/search is an authenticated route, so a link there from a page an
+// anonymous visitor can reach is a dead end into a login wall, not the
+// private tree itself, but it still violates the no-link invariant. Used
+// only by share.go's nestShared and handlers.go's viewShared — every other
+// caller renders the ordinary, authenticated outline and should keep using
+// Render so tags there stay real links into /notes/search.
+func RenderShared(s string) template.HTML {
+	return renderMarkdown(s, false)
+}
+
+// renderMarkdown is Render and RenderShared's shared implementation.
+// linkTags controls only how a #tag/@mention chip is rendered (writeTag);
+// every other construct is identical either way.
+func renderMarkdown(s string, linkTags bool) template.HTML {
 	var b strings.Builder
-	renderCodeSpans(&b, s)
+	renderCodeSpans(&b, s, linkTags)
 	return template.HTML(b.String())
 }
 
 // renderCodeSpans splits out `code` spans and renders everything between
 // them through renderInline. A code span's own content never reaches
 // renderInline, which is what makes it verbatim.
-func renderCodeSpans(b *strings.Builder, s string) {
+func renderCodeSpans(b *strings.Builder, s string, linkTags bool) {
 	last := 0
 	for _, m := range codePattern.FindAllStringSubmatchIndex(s, -1) {
-		renderInline(b, s[last:m[0]])
+		renderInline(b, s[last:m[0]], linkTags)
 		b.WriteString("<code>")
 		b.WriteString(html.EscapeString(s[m[2]:m[3]]))
 		b.WriteString("</code>")
 		last = m[1]
 	}
-	renderInline(b, s[last:])
+	renderInline(b, s[last:], linkTags)
 }
 
 // renderInline handles everything inlinePattern matches, in one left-to-right
 // pass, escaping the literal text in between.
-func renderInline(b *strings.Builder, s string) {
+func renderInline(b *strings.Builder, s string, linkTags bool) {
 	last := 0
 	for _, m := range inlinePattern.FindAllStringSubmatchIndex(s, -1) {
 		b.WriteString(html.EscapeString(s[last:m[0]]))
@@ -106,7 +127,7 @@ func renderInline(b *strings.Builder, s string) {
 				b.WriteString(html.EscapeString(s[m[14]:m[15]]))
 				break
 			}
-			writeTag(b, s[m[14]:m[15]])
+			writeTag(b, s[m[14]:m[15]], linkTags)
 		}
 		last = m[1]
 	}
@@ -147,12 +168,24 @@ func writeLink(b *strings.Builder, text, href, source string) {
 	b.WriteString(`</a>`)
 }
 
-// writeTag renders a #tag or @mention as a chip linking to a literal search
-// for that exact string — spec §10, §13. There is no tags table: this is a
-// rendering and linking behaviour of the Markdown renderer alone. The route
-// it links to, /notes/search, does not exist until N6 — until then this 404s,
-// and it starts working with no further change once N6 ships.
-func writeTag(b *strings.Builder, tag string) {
+// writeTag renders a #tag or @mention as a chip — spec §10, §13. There is
+// no tags table: this is a rendering and linking behaviour of the Markdown
+// renderer alone. When linkTags is true (Render, the ordinary authenticated
+// outline) the chip links to a literal search for that exact string,
+// /notes/search — that route does not exist until N6, so until then this
+// 404s, and it starts working with no further change once N6 ships. When
+// linkTags is false (RenderShared, the public share page) the chip keeps
+// its "outline-tag" styling but renders as an inert <span>, not a link —
+// spec §15's "no link leads anywhere into the owner's private tree", which
+// /notes/search would violate for an anonymous visitor even though it only
+// dead-ends them at a login wall rather than exposing private data.
+func writeTag(b *strings.Builder, tag string, linkTags bool) {
+	if !linkTags {
+		b.WriteString(`<span class="outline-tag">`)
+		b.WriteString(html.EscapeString(tag))
+		b.WriteString(`</span>`)
+		return
+	}
 	b.WriteString(`<a class="outline-tag" href="/notes/search?q=`)
 	b.WriteString(url.QueryEscape(tag))
 	b.WriteString(`">`)

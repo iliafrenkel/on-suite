@@ -142,15 +142,15 @@ func escapeNoteLine(line string) string {
 // (unlike paste's own JSON export, this one exists solely for onsuite
 // export's whole-account backup), so nothing needs to parse it back.
 type exportedNode struct {
-	ID        int64     `json:"id"`
-	ParentID  int64     `json:"parent_id"`
-	Position  int       `json:"position"`
-	Title     string    `json:"title"`
-	Note      string    `json:"note"`
-	Collapsed bool      `json:"collapsed"`
-	Done      bool      `json:"done"`
-	DueOn     string    `json:"due_on,omitempty"`
-	Archived  bool      `json:"archived"`
+	ID        int64  `json:"id"`
+	ParentID  int64  `json:"parent_id"`
+	Position  int    `json:"position"`
+	Title     string `json:"title"`
+	Note      string `json:"note"`
+	Collapsed bool   `json:"collapsed"`
+	Done      bool   `json:"done"`
+	DueOn     string `json:"due_on,omitempty"`
+	Archived  bool   `json:"archived"`
 	// ShareSlug is included because this type documents itself as "the
 	// whole row" — spec §14. This is the account owner's own backup, not
 	// something handed to anyone else, so including a live credential
