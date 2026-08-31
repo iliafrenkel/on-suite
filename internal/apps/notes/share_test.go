@@ -139,3 +139,84 @@ func TestUnshareRejectsAnotherUsersNode(t *testing.T) {
 		t.Fatalf("Unshare on another user's node = %v, want ErrNotFound", err)
 	}
 }
+
+func TestSharedSubtreeExcludesArchivedAndDoneDescendants(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	root := f.mk(t, notes.RootID, "root")
+	kept := f.mk(t, root.ID, "kept")
+	archived := f.mk(t, root.ID, "archived")
+	done := f.mk(t, root.ID, "done")
+
+	if err := f.store.SetArchived(ctx, f.alice.ID, archived.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetDone(ctx, f.alice.ID, done.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.SharedSubtree(ctx, f.alice.ID, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != kept.ID {
+		t.Fatalf("SharedSubtree = %+v, want only %d", got, kept.ID)
+	}
+}
+
+func TestSharedSubtreeIgnoresCollapsedState(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	root := f.mk(t, notes.RootID, "root")
+	child := f.mk(t, root.ID, "child")
+	f.mk(t, child.ID, "grandchild")
+
+	if err := f.store.SetCollapsed(ctx, f.alice.ID, child.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.SharedSubtree(ctx, f.alice.ID, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("SharedSubtree = %+v, want 2 rows despite the collapsed child", got)
+	}
+}
+
+func TestSharedSubtreeDoesNotIncludeTheRootItself(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	root := f.mk(t, notes.RootID, "root")
+	child := f.mk(t, root.ID, "child")
+
+	got, err := f.store.SharedSubtree(ctx, f.alice.ID, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != child.ID {
+		t.Fatalf("SharedSubtree = %+v, want only the child %d, not the root", got, child.ID)
+	}
+}
+
+func TestSharedSubtreeOrdersPreOrder(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	root := f.mk(t, notes.RootID, "root")
+	a := f.mk(t, root.ID, "a")
+	f.mk(t, a.ID, "a1")
+	f.mk(t, root.ID, "b")
+
+	got, err := f.store.SharedSubtree(ctx, f.alice.ID, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var titles []string
+	for _, n := range got {
+		titles = append(titles, n.Title)
+	}
+	want := []string{"a", "a1", "b"}
+	if !equalStrings(titles, want) {
+		t.Fatalf("order = %v, want %v", titles, want)
+	}
+}
