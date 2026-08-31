@@ -1,6 +1,8 @@
 package notes
 
 import (
+	"context"
+	"database/sql"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -18,6 +20,7 @@ import (
 var (
 	_ app.App      = (*App)(nil)
 	_ app.Exporter = (*App)(nil)
+	_ app.Stater   = (*App)(nil)
 )
 
 //go:embed templates/*.html
@@ -55,6 +58,14 @@ func (a *App) Templates() fs.FS {
 		panic("notes: embedded templates missing: " + err.Error())
 	}
 	return sub
+}
+
+// Stats implements app.Stater, so ON Notes appears on the admin page. It
+// takes the database directly, like Export, so it works on a handle the
+// platform already has without depending on Mount having run — the same
+// reasoning internal/apps/paste's own Stats documents.
+func (a *App) Stats(ctx context.Context, handle *sql.DB) ([]app.Stat, error) {
+	return NewStore(handle).Stats(ctx)
 }
 
 // script serves notes.js. It sits behind the same sign-in requirement as
