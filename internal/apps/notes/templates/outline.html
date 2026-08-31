@@ -160,7 +160,8 @@
 <ul class="outline-list">
 	{{range .}}
 	<li class="outline-item">
-		<div class="outline-row{{if .Done}} outline-row-done{{end}}" data-id="{{.ID}}">
+		<div class="outline-row{{if .Done}} outline-row-done{{end}}" data-id="{{.ID}}"
+		     data-parent-id="{{.ParentID}}" data-position="{{.Position}}">
 			<form method="post" action="/notes/{{.ID}}/text" class="outline-main">
 				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 				<input type="hidden" name="root" value="{{.RootID}}">
@@ -290,6 +291,7 @@
 
 				<a class="outline-dot{{if .Collapsed}} outline-dot-full{{end}}"
 				   href="/notes/{{.ID}}"
+				   draggable="false"
 				   aria-label="Zoom in to {{.DisplayTitle}}"><svg class="icon-dot" width="16" height="16" viewBox="0 0 16 16">{{if .Collapsed}}<circle class="icon-dot-halo" cx="8" cy="8" r="6.5"/><circle cx="8" cy="8" r="3" fill="currentColor"/>{{else}}<circle cx="8" cy="8" r="3" fill="currentColor"/>{{end}}</svg></a>
 
 				<span class="outline-text">
