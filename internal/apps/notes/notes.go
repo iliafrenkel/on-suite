@@ -72,6 +72,12 @@ const (
 	// safely under the platform's 1 MiB limit, with room left for the
 	// request's other fields.
 	MaxPasteTextBytes = 256 << 10
+	// shareSlugBytes is 16 bytes, 128 bits, base64url encoded to 22
+	// characters — spec §15: "an unguessable slug". Mirrors
+	// internal/apps/paste/store.go's own shareSlugBytes exactly; apps
+	// never import each other, so this is an independent constant with
+	// the same justification, not a shared symbol.
+	shareSlugBytes = 16
 )
 
 // parentArg converts the RootID sentinel to the NULL the column actually
@@ -140,6 +146,11 @@ type Node struct {
 	// Done: nothing in this app ever needs to show *when* a bullet was put
 	// away, only whether it is.
 	Archived  bool
+	// ShareSlug is "" when the bullet is not shared — spec §15. Unlike
+	// Done/DueOn/Archived it is not itself an *_at timestamp's Go
+	// projection: the slug's actual value is what a visitor's URL must
+	// match, so it is carried as-is rather than reduced to a bool.
+	ShareSlug string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
@@ -171,6 +182,9 @@ func (n Node) DisplayTitle() string {
 func (n Node) DisplayTitleHTML() template.HTML {
 	return Render(n.DisplayTitle())
 }
+
+// Shared reports whether the bullet currently has a live public link.
+func (n Node) Shared() bool { return n.ShareSlug != "" }
 
 // Validate bounds a bullet's user-supplied text. Exported because the handler
 // reports these messages back to the user.

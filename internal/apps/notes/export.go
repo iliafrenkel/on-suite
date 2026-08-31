@@ -151,6 +151,11 @@ type exportedNode struct {
 	Done      bool      `json:"done"`
 	DueOn     string    `json:"due_on,omitempty"`
 	Archived  bool      `json:"archived"`
+	// ShareSlug is included because this type documents itself as "the
+	// whole row" — spec §14. This is the account owner's own backup, not
+	// something handed to anyone else, so including a live credential
+	// here is not a new exposure.
+	ShareSlug string    `json:"share_slug,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -175,6 +180,7 @@ func (a *App) Export(ctx context.Context, handle *sql.DB, userID int64) (any, er
 			ID: n.ID, ParentID: n.ParentID, Position: n.Position,
 			Title: n.Title, Note: n.Note, Collapsed: n.Collapsed,
 			Done: n.Done, DueOn: n.DueOn, Archived: n.Archived,
+			ShareSlug: n.ShareSlug,
 			CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt,
 		})
 	}
