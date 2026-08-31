@@ -658,7 +658,16 @@
 		// show-completed is not visible in the DOM at all, so this check
 		// cannot see it either; the server-side check is what actually
 		// guards those.
-		if (draggedRow && draggedRow.contains(row)) return;
+		//
+		// A row's children live in a <ul> that is a *sibling* of its own
+		// .outline-row div inside the shared <li class="outline-item">
+		// (see outline.html's outline-rows template), not nested inside
+		// the row div itself — so draggedRow.contains(row) would never be
+		// true for a genuine descendant. Walk up to the dragged row's
+		// enclosing .outline-item instead, since that's what actually
+		// contains the descendant subtree.
+		var draggedItem = draggedRow && draggedRow.closest(".outline-item");
+		if (draggedItem && draggedItem.contains(row)) return;
 
 		var rect = row.getBoundingClientRect();
 		var relativeY = (y - rect.top) / rect.height;
