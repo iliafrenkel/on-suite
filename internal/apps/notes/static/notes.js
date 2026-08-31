@@ -590,8 +590,187 @@
 		});
 	}
 
+	// ---- drag-to-move -------------------------------------------------------
+	//
+	// Mouse only — spec §20 puts touch drag-and-drop out of scope, and this
+	// section adds no touch event listeners at all, so a touch device simply
+	// keeps whatever it already had (tap the dot to zoom in; Tab/Shift+Tab,
+	// the row menu's Move up/down, and Indent/Outdent for restructuring).
+	//
+	// This uses plain mousedown/mousemove/mouseup rather than the native
+	// HTML5 Drag and Drop API. The native API's own event sequence
+	// (dragstart/dragover/drop, with a DataTransfer object and a
+	// preventDefault-on-dragover requirement to even accept a drop) buys
+	// nothing here — there is no cross-window or cross-app drag to support —
+	// and costs the fine, continuous control this needs to compute a
+	// before/after/child zone from the cursor's exact position inside
+	// whatever row is currently under it, every few pixels of movement.
+	//
+	// DRAG_THRESHOLD_PX is what tells a drag apart from the plain click that
+	// already zooms in when you click the dot (outline.html's ".outline-dot"
+	// anchor): below this distance, mouseup on the same element still fires
+	// its native click as normal, since nothing here ever calls
+	// preventDefault on the initiating mousedown itself.
+	var DRAG_THRESHOLD_PX = 4;
+	// MAX_POSITION mirrors tree.go's own maxPosition (1 << 30) — "append as
+	// the last child", the same sentinel Ops.Indent already passes to
+	// Ops.Move for exactly this meaning.
+	var MAX_POSITION = 1 << 30;
+
+	// dragState is null between drags. While one is in progress it is
+	// { id, startX, startY, dragging, dropRow, dropMode } — dragging only
+	// becomes true once the pointer has moved past DRAG_THRESHOLD_PX, and
+	// dropRow/dropMode (set by updateDropTarget) are null until the pointer
+	// is over a valid destination.
+	var dragState = null;
+
+	function clearDropIndicator() {
+		var marked = document.querySelectorAll(".outline-drop-before, .outline-drop-after, .outline-drop-child");
+		for (var i = 0; i < marked.length; i++) {
+			marked[i].classList.remove("outline-drop-before", "outline-drop-after", "outline-drop-child");
+		}
+	}
+
+	// updateDropTarget recomputes dragState.dropRow/dropMode from the
+	// pointer's current position, and marks that row (if any) with the
+	// matching CSS class from Step 2. The top and bottom quarters of a row
+	// mean "insert as the previous/next sibling"; the middle half means
+	// "nest as the last child" — matching Workflowy's own three-zone
+	// behaviour, the reference spec §1 names for this whole app.
+	function updateDropTarget(x, y) {
+		clearDropIndicator();
+		dragState.dropRow = null;
+		dragState.dropMode = null;
+
+		var el = document.elementFromPoint(x, y);
+		var row = rowOf(el);
+		if (!row || !row.hasAttribute("data-id")) return;
+		var targetID = row.getAttribute("data-id");
+		if (targetID === dragState.id) return; // a row cannot become its own sibling/parent
+
+		var draggedRow = document.querySelector('.outline-row[data-id="' + dragState.id + '"]');
+		// A visible descendant of the dragged row: dropping onto one of
+		// these would be an obviously-invalid cycle. The server's own
+		// Ops.Move rejects the cycle regardless (ErrCycle) — this is a
+		// client-side courtesy so the drop indicator never invites a move
+		// that is only going to 400, not the source of truth for what is
+		// actually a cycle. A descendant hidden by collapse or by
+		// show-completed is not visible in the DOM at all, so this check
+		// cannot see it either; the server-side check is what actually
+		// guards those.
+		if (draggedRow && draggedRow.contains(row)) return;
+
+		var rect = row.getBoundingClientRect();
+		var relativeY = (y - rect.top) / rect.height;
+		var mode = relativeY < 0.25 ? "before" : relativeY > 0.75 ? "after" : "child";
+
+		row.classList.add("outline-drop-" + mode);
+		dragState.dropRow = row;
+		dragState.dropMode = mode;
+	}
+
+	// suppressNextClick is armed the moment a drag crosses the threshold,
+	// and fires at most once: if the pointer happens to come back to rest
+	// over the same dot it started on (a drag that ends up going nowhere),
+	// the browser still fires a native click there, which would otherwise
+	// zoom into that bullet immediately after the user tried to drag it.
+	function suppressNextClick(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		document.removeEventListener("click", suppressNextClick, true);
+	}
+
+	function handleDragMouseMove(e) {
+		if (!dragState) return;
+		if (!dragState.dragging) {
+			var dx = e.clientX - dragState.startX;
+			var dy = e.clientY - dragState.startY;
+			if (Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD_PX) return;
+			dragState.dragging = true;
+			var draggedRow = document.querySelector('.outline-row[data-id="' + dragState.id + '"]');
+			if (draggedRow) draggedRow.classList.add("outline-row-dragging");
+			document.body.classList.add("outline-dragging-active");
+			document.addEventListener("click", suppressNextClick, true);
+		}
+		e.preventDefault();
+		updateDropTarget(e.clientX, e.clientY);
+	}
+
+	// issueMove sends the drop as a POST /notes/{id}/move, dir=to — Task 2.
+	// _skipFocusOverride: nothing was being typed when this fired (the
+	// gesture starts on the dot, never a text field), so there is no
+	// focused row's text to substitute in — see augmentRequest's own
+	// handling of this flag.
+	function issueMove(id, targetRow, mode) {
+		var parent, position;
+		if (mode === "child") {
+			parent = targetRow.getAttribute("data-id");
+			position = MAX_POSITION;
+		} else {
+			parent = targetRow.getAttribute("data-parent-id");
+			position = parseInt(targetRow.getAttribute("data-position"), 10);
+			if (mode === "after") position += 1;
+		}
+
+		var row = document.querySelector('.outline-row[data-id="' + id + '"]');
+		var rootField = row && row.querySelector('input[name="root"]');
+
+		htmx.ajax("POST", "/notes/" + id + "/move", {
+			source: document.body,
+			target: "#outline",
+			swap: "innerHTML",
+			values: {
+				root: rootField ? rootField.value : "0",
+				dir: "to",
+				parent: parent,
+				position: position,
+				focus_id: "0",
+				_skipFocusOverride: "1"
+			}
+		});
+	}
+
+	function handleDragMouseUp() {
+		document.removeEventListener("mousemove", handleDragMouseMove);
+		document.removeEventListener("mouseup", handleDragMouseUp);
+		if (!dragState) return;
+
+		var state = dragState;
+		dragState = null;
+		clearDropIndicator();
+		document.body.classList.remove("outline-dragging-active");
+		var draggedRow = document.querySelector('.outline-row[data-id="' + state.id + '"]');
+		if (draggedRow) draggedRow.classList.remove("outline-row-dragging");
+
+		if (!state.dragging || !state.dropRow) return;
+		issueMove(state.id, state.dropRow, state.dropMode);
+	}
+
+	function handleDotMouseDown(e) {
+		if (e.button !== 0) return; // left button only
+		var dot = e.target.closest && e.target.closest(".outline-dot");
+		if (!dot) return;
+		var row = rowOf(dot);
+		if (!row || !row.hasAttribute("data-id")) return; // the empty-outline's bootstrap row has no dot with an id to drag
+
+		dragState = { id: row.getAttribute("data-id"), startX: e.clientX, startY: e.clientY, dragging: false, dropRow: null, dropMode: null };
+		document.addEventListener("mousemove", handleDragMouseMove);
+		document.addEventListener("mouseup", handleDragMouseUp);
+	}
+
+	// Delegated on document, not bound per-dot: hx-swap="innerHTML" replaces
+	// every row's markup (including every dot) on each structural response,
+	// so a listener attached to a specific dot element would stop working
+	// after the very first move. Every other keyboard/paste binding in this
+	// file already follows the same delegated pattern for the same reason.
+	function initDragToMove() {
+		if (!document.getElementById("outline")) return;
+		document.addEventListener("mousedown", handleDotMouseDown);
+	}
+
 	initFocusSync();
 	initKeyboard();
 	initPaste();
 	initPasteErrors();
+	initDragToMove();
 })();

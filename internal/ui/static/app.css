@@ -726,6 +726,41 @@ button.danger:hover { background: var(--c-danger-bg); }
 
 .outline-row:hover { background: var(--c-bg); }
 
+/* N10: drag-to-move (notes.js's "drag-to-move" section). The dragged row
+ * dims rather than disappearing, so its own drop zones (e.g. dragging it
+ * onto a sibling right next to where it started) stay visible and
+ * clickable-looking throughout the gesture. */
+.outline-dot { cursor: grab; }
+.outline-row-dragging { opacity: 0.4; }
+body.outline-dragging-active { cursor: grabbing; user-select: none; }
+
+/* Reordering: a thin line above/below the hovered row shows where the
+ * bullet would land as a sibling. Nesting: highlighting the whole row
+ * shows it would become that row's last child instead — the same
+ * three-zone (top third / middle third / bottom third) split Workflowy
+ * itself uses, named in updateDropTarget (notes.js). */
+.outline-drop-before,
+.outline-drop-after {
+	position: relative;
+}
+.outline-drop-before::before,
+.outline-drop-after::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 2px;
+	background: var(--c-accent);
+	pointer-events: none;
+}
+.outline-drop-before::before { top: -1px; }
+.outline-drop-after::after { bottom: -1px; }
+
+.outline-drop-child {
+	background: var(--c-bg-inset);
+	border-radius: var(--radius);
+}
+
 .outline-main {
 	display: flex;
 	align-items: flex-start;

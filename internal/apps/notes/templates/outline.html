@@ -160,7 +160,8 @@
 <ul class="outline-list">
 	{{range .}}
 	<li class="outline-item">
-		<div class="outline-row{{if .Done}} outline-row-done{{end}}" data-id="{{.ID}}">
+		<div class="outline-row{{if .Done}} outline-row-done{{end}}" data-id="{{.ID}}"
+		     data-parent-id="{{.ParentID}}" data-position="{{.Position}}">
 			<form method="post" action="/notes/{{.ID}}/text" class="outline-main">
 				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 				<input type="hidden" name="root" value="{{.RootID}}">
