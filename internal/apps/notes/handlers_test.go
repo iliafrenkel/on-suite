@@ -1281,6 +1281,13 @@ func TestDeletingAnotherUsersBulletIs404(t *testing.T) {
 // enhancement: hx-post always equals formaction, so a JS-disabled browser
 // and an HTMX one issue the exact same request the button already
 // declares — nothing in notes.js needs to know a URL.
+//
+// Share and Unshare are the one deliberate exception, skipped here: an
+// HTMX swap only ever replaces #outline's own content on the page the
+// browser already has, but the whole point of sharing is to show the
+// resulting link, which only appears on the shared node's own zoomed
+// page — reachable only through a real navigation. See mutateThen's own
+// doc comment in handlers.go for the full reasoning.
 func TestEveryStructuralButtonMirrorsItsFormactionAsHTMX(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.Alice, notes.RootID, "a")
@@ -1292,6 +1299,9 @@ func TestEveryStructuralButtonMirrorsItsFormactionAsHTMX(t *testing.T) {
 	}
 	for _, b := range buttons {
 		action, _ := htmlassert.Attr(b, "formaction")
+		if strings.HasSuffix(action, "/share") || strings.HasSuffix(action, "/unshare") {
+			continue
+		}
 		hxPost, ok := htmlassert.Attr(b, "hx-post")
 		if !ok || hxPost != action {
 			t.Errorf("button formaction=%q has hx-post=%q", action, hxPost)
@@ -1601,6 +1611,8 @@ func TestEveryMutationRequiresSignIn(t *testing.T) {
 		"/notes/" + itoa(id) + "/delete",
 		"/notes/" + itoa(id) + "/archive",
 		"/notes/" + itoa(id) + "/paste",
+		"/notes/" + itoa(id) + "/share",
+		"/notes/" + itoa(id) + "/unshare",
 	}
 
 	// No CSRF token: the CSRF middleware is outermost of the two and answers.
@@ -3104,5 +3116,404 @@ func TestPasteOnAnotherUsersBulletIs404(t *testing.T) {
 	})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestShareMintsALinkAndRedirectsToTheSharedNode(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "shared")
+
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/share", url.Values{"root": {"0"}}, "/notes/"+itoa(id))
+
+	got, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Shared() {
+		t.Fatal("the bullet is not shared after POST .../share")
+	}
+}
+
+func TestShareSavesTheFocusedTextInTheSameTransaction(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "old title")
+
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/share", url.Values{
+		"root": {"0"}, "focus_id": {itoa(id)}, "title": {"new title"}, "note": {"a note"},
+	}, "/notes/"+itoa(id))
+
+	got, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "new title" || got.Note != "a note" {
+		t.Fatalf("got Title=%q Note=%q, want the text saved alongside the share", got.Title, got.Note)
+	}
+}
+
+func TestUnshareRevokesTheLinkAndRedirectsToTheSharedNode(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "shared")
+	if _, err := s.Store.Share(context.Background(), s.Alice.User.ID, id); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/unshare", url.Values{"root": {"0"}}, "/notes/"+itoa(id))
+
+	got, err := s.Store.ByID(context.Background(), s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Shared() {
+		t.Fatal("the bullet is still shared after POST .../unshare")
+	}
+}
+
+func TestShareOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/share", url.Values{"root": {"0"}})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestUnshareOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
+	if _, err := s.Store.Share(context.Background(), s.Bob.User.ID, id); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/unshare", url.Values{"root": {"0"}})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestShareRespondsWithTheOutlineFragmentForHTMX(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "shared")
+
+	rec := s.PostHX(t, s.Alice, "/notes/"+itoa(id)+"/share", url.Values{"root": {"0"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOutlineMenuHasAShareAction(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "a bullet")
+
+	doc := s.Get(t, s.Alice, "/notes/")
+	found := false
+	for _, btn := range doc.QueryAll("button.quiet") {
+		if htmlassert.Text(btn) == "Share" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal(`the outline menu has no "Share" action`)
+	}
+}
+
+func TestOutlineMenuShowsStopSharingWhenAlreadyShared(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "a bullet")
+	if _, err := s.Store.Share(context.Background(), s.Alice.User.ID, id); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/notes/")
+	var texts []string
+	for _, btn := range doc.QueryAll("button.quiet") {
+		texts = append(texts, htmlassert.Text(btn))
+	}
+	if !containsShare(texts, "Stop sharing") {
+		t.Fatalf("menu button texts = %v, want one reading %q", texts, "Stop sharing")
+	}
+	if containsShare(texts, "Share") {
+		t.Fatalf("menu button texts = %v, still shows plain %q for an already-shared bullet", texts, "Share")
+	}
+}
+
+func containsShare(texts []string, want string) bool {
+	for _, t := range texts {
+		if t == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestZoomedBannerShowsTheShareLinkWhenShared(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "shared")
+	slug, err := s.Store.Share(context.Background(), s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(id))
+	link := doc.MustHave(".notice a")
+	if got, _ := htmlassert.Attr(link, "href"); got != "/notes/s/"+slug {
+		t.Errorf("share link href = %q, want %q", got, "/notes/s/"+slug)
+	}
+	doc.MustHave("[data-copy-link]")
+}
+
+func TestZoomedBannerShowsNoShareLinkWhenNotShared(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "not shared")
+
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(id))
+	mustNotHaveShareBanner(t, doc)
+}
+
+func TestTopLevelOutlineShowsNoShareBanner(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "a bullet")
+
+	doc := s.Get(t, s.Alice, "/notes/")
+	mustNotHaveShareBanner(t, doc)
+}
+
+// mustNotHaveShareBanner asserts the page has no link into the share-URL
+// route. ".notice" alone is too broad a selector for this — it is a
+// platform-wide class also used by admin/error/login pages — and
+// htmlassert's selector dialect has no "starts with" attribute match to
+// pin an exact "/notes/s/{slug}" prefix, so this walks the ".notice a"
+// matches by hand instead.
+func mustNotHaveShareBanner(t *testing.T, doc *htmlassert.Doc) {
+	t.Helper()
+	for _, a := range doc.QueryAll(".notice a") {
+		if href, ok := htmlassert.Attr(a, "href"); ok && strings.HasPrefix(href, "/notes/s/") {
+			t.Fatalf("found share-link banner: <a href=%q>", href)
+		}
+	}
+}
+
+func TestSharedPageIsReadableWhileSignedOut(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	id := s.seed(t, s.Alice, notes.RootID, "Shared root")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// nil session: no cookies at all.
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	if got := htmlassert.Text(doc.MustHave("h1")); got != "Shared root" {
+		t.Errorf("title = %q", got)
+	}
+}
+
+func TestSharedPageShowsTheSubtree(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	root := s.seed(t, s.Alice, notes.RootID, "root")
+	s.seed(t, s.Alice, root, "child one")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	if !strings.Contains(doc.Text(), "child one") {
+		t.Error("the shared subtree's child is not on the shared page")
+	}
+}
+
+func TestSharedPageExcludesArchivedAndDoneDescendants(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	root := s.seed(t, s.Alice, notes.RootID, "root")
+	kept := s.seed(t, s.Alice, root, "kept")
+	archived := s.seed(t, s.Alice, root, "put away")
+	done := s.seed(t, s.Alice, root, "finished")
+	if err := s.Store.SetArchived(ctx, s.Alice.User.ID, archived, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetDone(ctx, s.Alice.User.ID, done, true); err != nil {
+		t.Fatal(err)
+	}
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	if !strings.Contains(doc.Text(), "kept") {
+		t.Error("the non-archived, non-done child is missing")
+	}
+	if strings.Contains(doc.Text(), "put away") {
+		t.Error("the archived child leaked onto the shared page")
+	}
+	if strings.Contains(doc.Text(), "finished") {
+		t.Error("the done child leaked onto the shared page")
+	}
+	_ = kept
+}
+
+func TestSharedPageShowsTheFullSubtreeRegardlessOfCollapse(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	root := s.seed(t, s.Alice, notes.RootID, "root")
+	child := s.seed(t, s.Alice, root, "collapsed child")
+	s.seed(t, s.Alice, child, "grandchild")
+	if err := s.Store.SetCollapsed(ctx, s.Alice.User.ID, child, true); err != nil {
+		t.Fatal(err)
+	}
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	if !strings.Contains(doc.Text(), "grandchild") {
+		t.Error("the shared page hid content behind a collapsed node")
+	}
+}
+
+func TestSharedPageStaysUpIfTheRootIsLaterArchivedOrDone(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	id := s.seed(t, s.Alice, notes.RootID, "root")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetArchived(ctx, s.Alice.User.ID, id, true); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/s/"+slug, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shared page after the root was archived = %d, want 200", rec.Code)
+	}
+}
+
+func TestSharedPageHasNoLinksIntoThePrivateTree(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	// A #tag or @mention in the root's or a descendant's title/note would,
+	// before the fix, render as an <a href="/notes/search?..."> — an
+	// authenticated route, so a link a signed-out visitor can never use for
+	// anything but bouncing off a login page, but still a link "into the
+	// owner's private tree" per spec §15. root/"child" alone (with no tag
+	// or mention) exercised none of that and let this test pass vacuously.
+	root, err := s.Store.Create(ctx, s.Alice.User.ID, notes.RootID, 1<<30, "root #root-tag", "root note @root-mention")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.Create(ctx, s.Alice.User.ID, root.ID, 1<<30, "child #child-tag", "child note @child-mention"); err != nil {
+		t.Fatal(err)
+	}
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	for _, a := range doc.QueryAll("a") {
+		href, _ := htmlassert.Attr(a, "href")
+		if strings.HasPrefix(href, "/notes/") && !strings.HasPrefix(href, "/notes/s/") {
+			t.Errorf("the shared page links into the private tree: %q", href)
+		}
+	}
+	doc.MustNotHave("form")
+
+	// The tags/mentions must still render — just inert, not as links — so
+	// this doesn't degrade into "the feature silently vanished."
+	if n := len(doc.QueryAll(".outline-tag")); n != 4 {
+		t.Errorf("outline-tag chips = %d, want 4 (root tag+mention, child tag+mention)", n)
+	}
+}
+
+// TestOutlineTagsStillLinkOnThePrivateOutline guards the other side of the
+// fix: RenderShared's chips lost their href, but Render's own — used by the
+// ordinary, authenticated outline page (outline.html) — must keep linking
+// into /notes/search exactly as before.
+func TestOutlineTagsStillLinkOnThePrivateOutline(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "a #tag here")
+
+	doc := s.Get(t, s.Alice, "/notes/")
+	a := doc.MustHave("a.outline-tag")
+	if href, _ := htmlassert.Attr(a, "href"); !strings.HasPrefix(href, "/notes/search?q=") {
+		t.Errorf("outline-tag href = %q, want a /notes/search?q= link", href)
+	}
+}
+
+func TestSharedPageIsNotCachedOrIndexed(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	id := s.seed(t, s.Alice, notes.RootID, "root")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/s/"+slug, nil))
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", cc)
+	}
+	if rt := rec.Header().Get("X-Robots-Tag"); rt != "noindex" {
+		t.Errorf("X-Robots-Tag = %q, want noindex", rt)
+	}
+}
+
+func TestUnknownShareSlugIs404(t *testing.T) {
+	s := newServer(t)
+	for _, slug := range []string{"never-minted", ""} {
+		rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/s/"+slug, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET /notes/s/%q = %d, want 404", slug, rec.Code)
+		}
+	}
+}
+
+func TestUnshareKillsTheSharedPage(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	id := s.seed(t, s.Alice, notes.RootID, "root")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.Unshare(ctx, s.Alice.User.ID, id); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/s/"+slug, nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET a revoked share link = %d, want 404", rec.Code)
+	}
+}
+
+func TestSharedPageRendersRootNoteMarkdown(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	// Create a root note with markdown content
+	root, err := s.Store.Create(ctx, s.Alice.User.ID, notes.RootID, 1<<30, "root", "**bold** and [link](https://example.com)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	// The markdown should be rendered to HTML, not shown as raw text
+	if strings.Contains(doc.Text(), "**bold**") {
+		t.Error("the root note's markdown is shown as raw text instead of being rendered")
+	}
+	// Check that <strong> tag is present (from **bold**)
+	strongTags := doc.QueryAll("strong")
+	if len(strongTags) == 0 {
+		t.Error("the root note's markdown was not rendered: no <strong> tag found")
 	}
 }

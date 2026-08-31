@@ -28,7 +28,7 @@ func (st *Store) SetClock(now func() time.Time) { st.now = now }
 // column added to one of them and not the others is a silent scan error.
 //
 // aliasNodeColumns below parses this by splitting on ", " — that separator must stay exactly ", ".
-const nodeColumns = `id, user_id, parent_id, position, title, note, collapsed, created_at, updated_at, done_at, due_on, archived_at`
+const nodeColumns = `id, user_id, parent_id, position, title, note, collapsed, created_at, updated_at, done_at, due_on, archived_at, share_slug`
 
 // The recursive CTEs below need the same list qualified by a table alias, in
 // the same order. Writing it out again would put the column order in three
@@ -131,10 +131,11 @@ func scanNode(row rowScanner, extra ...any) (Node, error) {
 		doneAt     sql.NullString
 		dueOn      sql.NullString
 		archivedAt sql.NullString
+		shareSlug  sql.NullString
 	)
 	dest := append([]any{
 		&n.ID, &n.UserID, &parent, &n.Position, &n.Title, &n.Note,
-		&n.Collapsed, &createdAt, &updatedAt, &doneAt, &dueOn, &archivedAt,
+		&n.Collapsed, &createdAt, &updatedAt, &doneAt, &dueOn, &archivedAt, &shareSlug,
 	}, extra...)
 
 	err := row.Scan(dest...)
@@ -152,6 +153,7 @@ func scanNode(row rowScanner, extra ...any) (Node, error) {
 	// DueOn's own "none" sentinel — no extra branch needed.
 	n.DueOn = dueOn.String
 	n.Archived = archivedAt.Valid
+	n.ShareSlug = shareSlug.String
 
 	if n.CreatedAt, err = parseTime(createdAt); err != nil {
 		return Node{}, err

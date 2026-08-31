@@ -949,6 +949,25 @@ button.outline-chevron {
 .notes-archive-title:hover { color: var(--c-accent); }
 .notes-archive-restore { flex-shrink: 0; }
 
+/* The public share page (notes/templates/shared.html) has no forms, no
+ * dots and no menu, so it reuses none of .outline-list's flex layout —
+ * that layout exists to align a row's menu, chevron and dot, none of
+ * which this page has. Indentation and the nesting guide line reuse the
+ * same margin/border-left trick as .outline-item .outline-list above,
+ * simplified to one level since there is no dot to align a guide line
+ * under. */
+.notes-shared-list { margin: 0; padding: 0; list-style: none; }
+.notes-shared-list .notes-shared-list {
+	margin-left: var(--s-3);
+	padding-left: var(--s-3);
+	border-left: 1px solid var(--c-border);
+}
+.notes-shared-item { padding: var(--s-1) 0; }
+.notes-shared-title { color: var(--c-text); }
+.notes-shared-done .notes-shared-title { color: var(--c-text-dim); text-decoration: line-through; }
+.notes-shared-due { font-size: var(--fs-sm); color: var(--c-text-dim); }
+.notes-shared-note { font-size: var(--fs-sm); color: var(--c-text-dim); margin-top: 0.125rem; }
+
 .outline-dot { text-decoration: none; }
 .outline-dot:hover { color: var(--c-accent); }
 

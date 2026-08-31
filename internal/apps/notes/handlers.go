@@ -106,6 +106,9 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 			return
 		}
 		view.Root, view.Zoomed, view.Crumbs = root, true, crumbs
+		if root.Shared() {
+			view.ShareURL = "/notes/s/" + root.ShareSlug
+		}
 		title = root.DisplayTitle()
 	}
 
@@ -181,20 +184,41 @@ type mutation struct {
 	Root int64
 }
 
-// mutate is spec §7's single write.
-//
-// It saves the focused bullet's text and performs the structural operation
-// inside one transaction, so the two cannot interleave with anything and
-// cannot half-apply. Without it there are two writes, and a user who types and
-// then presses Tab loses whatever landed after the last save.
-//
-// op must reach the database only through the *Ops it is handed. The platform
-// opens SQLite with SetMaxOpenConns(1): a closure that calls a *Store method —
-// a.store.Outline, a.store.Indent, anything — waits for the connection its own
-// transaction is holding, and waits for ever. There is no write timeout in the
-// server, so that is a frozen process rather than a failed request. Rendering
-// and redirecting therefore happen out here, after Do has returned.
+// mutate is spec §7's single write. It sends a plain (non-HTMX) request
+// back to the zoom it came from — see mutateThen for the one pair of
+// routes that need something else.
 func (a *App) mutate(w http.ResponseWriter, r *http.Request, op func(context.Context, *Ops, mutation) error) {
+	a.mutateThen(w, r, op, false)
+}
+
+// mutateThen is mutate with the plain-request redirect target made
+// explicit. Every route before share and unshare (this task) wants
+// mutate's original behaviour — redirectToSelf false, sending a JS-off
+// browser back to the zoom the request came from (root). share and
+// unshare are the only two operations where that is the wrong place to
+// land: the whole point of sharing is to show the resulting link, and the
+// only page that shows it is the shared node's own zoomed view (its
+// banner, this task's outline.html change) — not whatever page the row
+// happened to be sitting on when Share was clicked.
+//
+// This does not change the HTMX branch: an HTMX swap only ever replaces
+// #outline's own content inside the page the browser already has, so
+// rendering some other root's rows into it would contradict that page's
+// still-unchanged breadcrumb and heading. An HTMX-driven share therefore
+// still refreshes root's own outline in place, exactly like every other
+// row action — which is also why this task's Share/Unshare buttons carry
+// no hx-post/hx-target at all (see outline.html): without a real
+// navigation, there is no page left carrying a banner for the newly
+// shared link to appear on.
+//
+// SetText and op run in one transaction, so a user who types some text and
+// then immediately triggers a structural action (e.g. presses Tab to indent)
+// doesn't lose whatever they just typed — it's saved atomically with the action.
+//
+// op must reach the database only through the *Ops it is handed — see
+// Store.Do's doc comment in tree.go for why (SetMaxOpenConns(1)); that
+// requirement is unchanged here.
+func (a *App) mutateThen(w http.ResponseWriter, r *http.Request, op func(context.Context, *Ops, mutation) error, redirectToSelf bool) {
 	userID, ok := a.userID(w, r)
 	if !ok {
 		return
@@ -249,7 +273,11 @@ func (a *App) mutate(w http.ResponseWriter, r *http.Request, op func(context.Con
 		a.renderOutlineFragment(w, r, userID, root, showCompletedFrom(r))
 		return
 	}
-	http.Redirect(w, r, outlinePath(root), http.StatusSeeOther)
+	target := root
+	if redirectToSelf {
+		target = nodeID
+	}
+	http.Redirect(w, r, outlinePath(target), http.StatusSeeOther)
 }
 
 // formID reads a form field as a node id.
@@ -842,4 +870,87 @@ func (a *App) paste(w http.ResponseWriter, r *http.Request) {
 		_, err = o.ImportUnder(ctx, m.UserID, m.NodeID, parsed)
 		return err
 	})
+}
+
+// share mints a fresh, unguessable link for a bullet and its subtree —
+// spec §15. It goes through mutateThen exactly like every other row-menu
+// action, so any unsaved text in the row's own title/note field is saved
+// in the same transaction, and redirects to the shared node's own zoomed
+// page (redirectToSelf: true) rather than back to root — see mutateThen's
+// own doc comment for why.
+//
+// Re-sharing an already-shared bullet mints a new slug, so a revoked
+// link can never come back — the same rule ON Paste already applies to
+// snippets (internal/apps/paste/store.go's own Share).
+func (a *App) share(w http.ResponseWriter, r *http.Request) {
+	a.mutateThen(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		_, err := o.Share(ctx, m.UserID, m.NodeID)
+		return err
+	}, true)
+}
+
+// unshare revokes a bullet's public link. See share for why this also
+// goes through mutateThen with redirectToSelf: true, rather than forking
+// to a separate non-mutate path the way archive's restore direction does
+// (archive.go's restore lives on a different page — /notes/archive —
+// with no row text of its own to save; share and unshare both fire from
+// the same outline row, so both need mutate's text-saving behaviour).
+func (a *App) unshare(w http.ResponseWriter, r *http.Request) {
+	a.mutateThen(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+		return o.Unshare(ctx, m.UserID, m.NodeID)
+	}, true)
+}
+
+// viewShared renders a shared bullet and its subtree for anyone holding
+// its slug — spec §15: no login, no breadcrumb, no link into the owner's
+// private tree. It uses its own template and its own row type (sharedRow,
+// share.go) rather than reusing outline.html's outlineRow and its forms —
+// the way to guarantee a public page can never carry a mutating control
+// is for the template not to contain one at all, the same reasoning ON
+// Paste's own shared.html documents.
+//
+// The root's own archived/done state is deliberately not checked here —
+// see SharedSubtree's doc comment and this plan's resolved design
+// question: a share link stays live even if its root is later archived
+// or marked done, the same way a direct zoom to an archived node already
+// renders instead of 404ing.
+//
+// A share slug is a revocable credential, so this page must never be
+// cached or indexed: a crawler or a shared cache holding onto it after
+// the owner unshares would defeat the revocation — the same concern ON
+// Paste's own viewShared documents.
+func (a *App) viewShared(w http.ResponseWriter, r *http.Request) {
+	root, err := a.store.ByShareSlug(r.Context(), r.PathValue("slug"))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+
+	flat, err := a.store.SharedSubtree(r.Context(), root.UserID, root.ID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Robots-Tag", "noindex")
+
+	page := a.deps.Page(r, root.DisplayTitle())
+	// The shared chrome's breadcrumb (base.html's "shell") turns the active
+	// app's name into a link to its own top-level page whenever the page has
+	// a Title — here that would be an <a href="/notes/">, straight into the
+	// owner's private tree. Clearing the active-app name here drops that one
+	// crumb (the page title itself still shows, just not linked to the app
+	// root), which is what keeps this the one page in the app with no path
+	// back in.
+	page.Shell.ActiveApp = ""
+	page.Shell.ActiveAppName = ""
+	page.Shell.ActiveAppPath = ""
+	page.Data = sharedView{
+		Root:              root,
+		RootRenderedTitle: RenderShared(root.DisplayTitle()),
+		RootRenderedNote:  RenderShared(root.Note),
+		Rows:              nestShared(flat),
+	}
+	a.render(w, r, http.StatusOK, "notes/shared", page)
 }

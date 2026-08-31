@@ -7,12 +7,13 @@
 // one line in cmd/onsuite/main.go.
 //
 // The design is in docs/superpowers/specs/2026-08-25-on-notes-design.md. This
-// package spans chunk N1 (schema and store) through N8 (export and
-// import): app.App, routes, templates, handlers, the keyboard layer in
+// package spans chunk N1 (schema and store) through N9 (public sharing):
+// app.App, routes, templates, handlers, the keyboard layer in
 // static/notes.js, the inline Markdown renderer in markdown.go, task
 // tracking in tree.go, prefs.go and due.go, full-text search in
-// search.go, archiving in archive.go, and Markdown/JSON export plus
-// Markdown import in export.go and import.go.
+// search.go, archiving in archive.go, Markdown/JSON export plus Markdown
+// import in export.go and import.go, and public read-only sharing in
+// share.go.
 package notes
 
 import (
@@ -72,6 +73,12 @@ const (
 	// safely under the platform's 1 MiB limit, with room left for the
 	// request's other fields.
 	MaxPasteTextBytes = 256 << 10
+	// shareSlugBytes is 16 bytes, 128 bits, base64url encoded to 22
+	// characters — spec §15: "an unguessable slug". Mirrors
+	// internal/apps/paste/store.go's own shareSlugBytes exactly; apps
+	// never import each other, so this is an independent constant with
+	// the same justification, not a shared symbol.
+	shareSlugBytes = 16
 )
 
 // parentArg converts the RootID sentinel to the NULL the column actually
@@ -139,7 +146,12 @@ type Node struct {
 	// Archived is archived_at's Go projection — spec §13. Same reasoning as
 	// Done: nothing in this app ever needs to show *when* a bullet was put
 	// away, only whether it is.
-	Archived  bool
+	Archived bool
+	// ShareSlug is "" when the bullet is not shared — spec §15. Unlike
+	// Done/DueOn/Archived it is not itself an *_at timestamp's Go
+	// projection: the slug's actual value is what a visitor's URL must
+	// match, so it is carried as-is rather than reduced to a bool.
+	ShareSlug string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
@@ -171,6 +183,9 @@ func (n Node) DisplayTitle() string {
 func (n Node) DisplayTitleHTML() template.HTML {
 	return Render(n.DisplayTitle())
 }
+
+// Shared reports whether the bullet currently has a live public link.
+func (n Node) Shared() bool { return n.ShareSlug != "" }
 
 // Validate bounds a bullet's user-supplied text. Exported because the handler
 // reports these messages back to the user.

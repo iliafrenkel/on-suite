@@ -223,3 +223,28 @@ func TestJSONExportContainsEveryColumn(t *testing.T) {
 		t.Error("the export contains another user's node")
 	}
 }
+
+// TestJSONExportIncludesTheShareSlug pins exportedNode's own claim to be
+// "the whole row" (its doc comment, export.go) now that the row has a
+// share_slug column.
+func TestJSONExportIncludesTheShareSlug(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "shared")
+	slug, err := f.store.Share(ctx, f.alice.ID, n.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := notes.New().Export(ctx, f.db, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), slug) {
+		t.Errorf("JSON export does not contain the share slug %q:\n%s", slug, data)
+	}
+}
