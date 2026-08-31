@@ -7,13 +7,13 @@
 // one line in cmd/onsuite/main.go.
 //
 // The design is in docs/superpowers/specs/2026-08-25-on-notes-design.md. This
-// package spans chunk N1 (schema and store) through N9 (public sharing):
-// app.App, routes, templates, handlers, the keyboard layer in
-// static/notes.js, the inline Markdown renderer in markdown.go, task
-// tracking in tree.go, prefs.go and due.go, full-text search in
-// search.go, archiving in archive.go, Markdown/JSON export plus Markdown
-// import in export.go and import.go, and public read-only sharing in
-// share.go.
+// package spans chunk N1 (schema and store) through N10 (polish): app.App,
+// routes, templates, handlers, the keyboard layer in static/notes.js, the
+// inline Markdown renderer in markdown.go, task tracking in tree.go,
+// prefs.go and due.go, full-text search in search.go, archiving in
+// archive.go, Markdown/JSON export plus Markdown import in export.go and
+// import.go, public read-only sharing in share.go, and the admin dashboard
+// card in stats.go.
 package notes
 
 import (

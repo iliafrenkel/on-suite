@@ -17,12 +17,13 @@ bet, optimised for "one binary, one data directory, nothing else to run."
 Of the four apps the "ON" prefix is reserved for, two are built and registered
 today. **ON Paste** holds snippets of code or text, with syntax highlighting
 and shareable links. **ON Notes** is a hierarchical outliner — one infinite
-tree per account, with zoom, collapse, every structural operation, a full
-keyboard layer, inline Markdown (bold, links, `#tags`), done/due tracking
-with a cross-tree due-date view, full-text search with ancestor
-breadcrumbs, archiving, Markdown/JSON export and import, and public
-read-only share links. ON Reader and ON Flash are future work: the
-platform and app framework are ready for them, but no code exists yet.
+tree per account, with zoom, collapse, every structural operation including
+mouse drag-to-move, a full keyboard layer, inline Markdown (bold, links,
+`#tags`), done/due tracking with a cross-tree due-date view, full-text
+search with ancestor breadcrumbs, archiving, Markdown/JSON export and
+import, and public read-only share links. ON Reader and ON Flash are
+future work: the platform and app framework are ready for them, but no
+code exists yet.
 
 ## Is this for you?
 
@@ -178,12 +179,11 @@ The three planned build phases are complete.
 | 2 — Web plumbing and app framework | Templates, middleware, CSRF, login, the `App` interface and router | **Done** |
 | 3 — ON Paste and operations | The first real app, backup, TLS, packaging, CI | **Done** |
 
-Work since then is per-app rather than per-phase. ON Notes is being built in
-ten small chunks under
-[`docs/superpowers/specs/2026-08-25-on-notes-design.md`](docs/superpowers/specs/2026-08-25-on-notes-design.md);
-N1 (schema and store), N2 (the outline), N3 (the keyboard layer), N4
-(Markdown), N5 (done + due dates), N6 (search and tags), N7 (archiving),
-N8 (export and import) and N9 (public sharing) are done.
+Work since then is per-app rather than per-phase. ON Notes was built in ten
+small chunks under
+[`docs/superpowers/specs/2026-08-25-on-notes-design.md`](docs/superpowers/specs/2026-08-25-on-notes-design.md) —
+N1 (schema and store) through N10 (polish: the admin dashboard card and
+mouse drag-to-move) — and all ten are done.
 
 See [the roadmap](docs/superpowers/plans/2026-08-18-on-suite-00-roadmap.md)
 for the full task list and the [design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md)
