@@ -211,8 +211,12 @@ func (a *App) mutate(w http.ResponseWriter, r *http.Request, op func(context.Con
 // navigation, there is no page left carrying a banner for the newly
 // shared link to appear on.
 //
+// SetText and op run in one transaction, so a user who types some text and
+// then immediately triggers a structural action (e.g. presses Tab to indent)
+// doesn't lose whatever they just typed — it's saved atomically with the action.
+//
 // op must reach the database only through the *Ops it is handed — see
-// mutate's own original doc comment for why (SetMaxOpenConns(1)); that
+// Store.Do's doc comment in tree.go for why (SetMaxOpenConns(1)); that
 // requirement is unchanged here.
 func (a *App) mutateThen(w http.ResponseWriter, r *http.Request, op func(context.Context, *Ops, mutation) error, redirectToSelf bool) {
 	userID, ok := a.userID(w, r)
