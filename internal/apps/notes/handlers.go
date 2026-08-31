@@ -395,11 +395,6 @@ func (a *App) outdent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// move swaps a bullet with the sibling above or below it.
-//
-// dir is exactly "up" or "down". The general Move — arbitrary parent, arbitrary
-// position — stays out of the HTTP surface until something needs it: N10's
-// drag-to-move is the only thing in the design that does.
 // move performs one of two distinct requests under the same route — spec
 // §9 lists only one /move, so both live here rather than as separate
 // endpoints:
