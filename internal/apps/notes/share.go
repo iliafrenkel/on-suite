@@ -187,6 +187,7 @@ func nestShared(flat []Node) []*sharedRow {
 
 // sharedView is what templates/shared.html renders.
 type sharedView struct {
-	Root Node
-	Rows []*sharedRow
+	Root              Node
+	RootRenderedNote  template.HTML
+	Rows              []*sharedRow
 }

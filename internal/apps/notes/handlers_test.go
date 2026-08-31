@@ -3445,3 +3445,28 @@ func TestUnshareKillsTheSharedPage(t *testing.T) {
 		t.Fatalf("GET a revoked share link = %d, want 404", rec.Code)
 	}
 }
+
+func TestSharedPageRendersRootNoteMarkdown(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	// Create a root note with markdown content
+	root, err := s.Store.Create(ctx, s.Alice.User.ID, notes.RootID, 1<<30, "root", "**bold** and [link](https://example.com)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	// The markdown should be rendered to HTML, not shown as raw text
+	if strings.Contains(doc.Text(), "**bold**") {
+		t.Error("the root note's markdown is shown as raw text instead of being rendered")
+	}
+	// Check that <strong> tag is present (from **bold**)
+	strongTags := doc.QueryAll("strong")
+	if len(strongTags) == 0 {
+		t.Error("the root note's markdown was not rendered: no <strong> tag found")
+	}
+}

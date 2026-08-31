@@ -945,6 +945,6 @@ func (a *App) viewShared(w http.ResponseWriter, r *http.Request) {
 	// back in.
 	page.Shell.ActiveAppName = ""
 	page.Shell.ActiveAppPath = ""
-	page.Data = sharedView{Root: root, Rows: nestShared(flat)}
+	page.Data = sharedView{Root: root, RootRenderedNote: Render(root.Note), Rows: nestShared(flat)}
 	a.render(w, r, http.StatusOK, "notes/shared", page)
 }
