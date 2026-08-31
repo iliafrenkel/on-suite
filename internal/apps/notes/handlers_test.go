@@ -3560,6 +3560,32 @@ func TestMoveToReordersAmongSiblings(t *testing.T) {
 	_ = ctx
 }
 
+// TestMoveToReordersAmongThreeSiblingsDownward exercises the case
+// TestMoveToReordersAmongSiblings' two siblings cannot: a downward
+// same-parent move where the server clamps nothing, so a wrong (too-high)
+// position sent by the client would actually land one slot lower than
+// intended. This mirrors what notes.js's issueMove now sends when the drop
+// indicator is "a after b" among three siblings [a, b, c] — the fixed
+// client subtracts 1 from b's pre-removal position (1) to send 1, and this
+// asserts the server produces the order the indicator promised: [b, a, c].
+func TestMoveToReordersAmongThreeSiblingsDownward(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	a := s.seed(t, s.Alice, parent, "a")
+	s.seed(t, s.Alice, parent, "b")
+	s.seed(t, s.Alice, parent, "c")
+
+	// Move "a" to position 1 (after "b") within the same parent.
+	s.Submit(t, s.Alice, "/notes/"+itoa(a)+"/move", url.Values{
+		"root": {"0"}, "dir": {"to"}, "parent": {itoa(parent)}, "position": {"1"},
+	}, "/notes/")
+
+	titles := s.titlesAt(t, s.Alice, parent)
+	if !equalStrings(titles, []string{"b", "a", "c"}) {
+		t.Fatalf("order = %v, want [b a c]", titles)
+	}
+}
+
 func TestMoveToRejectsACycle(t *testing.T) {
 	s := newServer(t)
 	parent := s.seed(t, s.Alice, notes.RootID, "parent")

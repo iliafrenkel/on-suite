@@ -719,6 +719,22 @@
 			parent = targetRow.getAttribute("data-parent-id");
 			position = parseInt(targetRow.getAttribute("data-position"), 10);
 			if (mode === "after") position += 1;
+
+			// Off-by-one on downward same-parent drags: data-position
+			// reflects the target row's position *before* the dragged row
+			// is removed, but Ops.Move (tree.go) closes the gap left by the
+			// dragged bullet's removal before inserting at the given
+			// position. When the dragged row's own current parent is this
+			// same destination parent and its own current position is
+			// below the computed position, that gap-close shifts everything
+			// after it up by one, so the position sent here must be
+			// decremented to land where the drop indicator promised.
+			var draggedRowForPosition = document.querySelector('.outline-row[data-id="' + id + '"]');
+			if (draggedRowForPosition &&
+				draggedRowForPosition.getAttribute("data-parent-id") === parent &&
+				parseInt(draggedRowForPosition.getAttribute("data-position"), 10) < position) {
+				position -= 1;
+			}
 		}
 
 		var row = document.querySelector('.outline-row[data-id="' + id + '"]');
