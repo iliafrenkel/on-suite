@@ -29,6 +29,10 @@ type outlineView struct {
 	// the page was loaded in. A full page render must leave this false —
 	// see the note above "show-completed-toggle" in outline.html.
 	OOB bool
+	// ShareURL is "/notes/s/{slug}" when Zoomed and Root is shared, ""
+	// otherwise. Computed once here so the template does not concatenate
+	// a path from user-controlled data itself.
+	ShareURL string
 }
 
 // outlineRow is one bullet, and exactly the inputs of the one form that edits

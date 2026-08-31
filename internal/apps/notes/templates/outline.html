@@ -103,6 +103,12 @@
 	{{if .Data.Root.Archived}}
 	<p class="notes-archived-banner">This bullet is archived. Its still-visible children can be edited here, but consider <a href="/notes/archive">restoring it</a> first.</p>
 	{{end}}
+	{{if .Data.Root.Shared}}
+	<div class="notice row">
+		<span>Anyone with this link can read this bullet and its subtree: <a href="{{.Data.ShareURL}}">{{.Data.ShareURL}}</a></span>
+		<button type="button" class="button" data-copy-link="{{.Data.ShareURL}}">Copy link</button>
+	</div>
+	{{end}}
 	<h1>{{.Data.Root.DisplayTitleHTML}}</h1>
 	{{with .Data.Root.Note}}<p class="dim">{{.}}</p>{{end}}
 	{{else}}
@@ -249,6 +255,18 @@
 						        aria-label="Archive">
 							<span class="outline-menu-label">Archive</span>
 						</button>
+
+						{{if .ShareSlug}}
+						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/unshare"
+						        aria-label="Stop sharing">
+							<span class="outline-menu-label">Stop sharing</span>
+						</button>
+						{{else}}
+						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/share"
+						        aria-label="Share">
+							<span class="outline-menu-label">Share</span>
+						</button>
+						{{end}}
 
 						<button type="submit" class="quiet outline-menu-delete" formaction="/notes/{{.ID}}/delete"
 						        hx-post="/notes/{{.ID}}/delete" hx-target="#outline" hx-swap="innerHTML"
