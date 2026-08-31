@@ -400,19 +400,50 @@ func (a *App) outdent(w http.ResponseWriter, r *http.Request) {
 // dir is exactly "up" or "down". The general Move — arbitrary parent, arbitrary
 // position — stays out of the HTTP surface until something needs it: N10's
 // drag-to-move is the only thing in the design that does.
+// move performs one of two distinct requests under the same route — spec
+// §9 lists only one /move, so both live here rather than as separate
+// endpoints:
+//
+//   - dir=up / dir=down (N2): swap with the adjacent sibling.
+//   - dir=to (N10): the general reparent behind drag-to-move. parent and
+//     position name the exact destination; see notes.js's own
+//     "drag-to-move" section (Task 3) for how it computes them from
+//     wherever the mouse was released.
+//
+// Ops.Move (tree.go) has existed since N1 — Indent and Outdent are
+// already expressed in terms of it — but nothing on the HTTP surface
+// exposed an arbitrary destination until dir=to. Ops.Move's own doc
+// comment, unchanged by this chunk, is what makes accepting an arbitrary
+// destination from the client safe at all: the cycle check (ErrCycle) and
+// the depth check (ErrTooDeep) both run inside the same transaction as
+// the move itself.
 func (a *App) move(w http.ResponseWriter, r *http.Request) {
 	dir := r.PostFormValue("dir")
-	if dir != "up" && dir != "down" {
-		a.deps.Errors.Status(w, r, http.StatusBadRequest)
-		return
-	}
-
-	a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
-		if dir == "up" {
-			return o.MoveUp(ctx, m.UserID, m.NodeID)
+	switch dir {
+	case "up", "down":
+		a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+			if dir == "up" {
+				return o.MoveUp(ctx, m.UserID, m.NodeID)
+			}
+			return o.MoveDown(ctx, m.UserID, m.NodeID)
+		})
+	case "to":
+		parentID, ok := formID(r, "parent")
+		if !ok {
+			a.deps.Errors.Status(w, r, http.StatusBadRequest)
+			return
 		}
-		return o.MoveDown(ctx, m.UserID, m.NodeID)
-	})
+		position, err := strconv.Atoi(r.PostFormValue("position"))
+		if err != nil {
+			a.deps.Errors.Status(w, r, http.StatusBadRequest)
+			return
+		}
+		a.mutate(w, r, func(ctx context.Context, o *Ops, m mutation) error {
+			return o.Move(ctx, m.UserID, m.NodeID, parentID, position)
+		})
+	default:
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+	}
 }
 
 // collapse sets a bullet's collapse state.

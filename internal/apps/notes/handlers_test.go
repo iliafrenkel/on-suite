@@ -3517,3 +3517,96 @@ func TestSharedPageRendersRootNoteMarkdown(t *testing.T) {
 		t.Error("the root note's markdown was not rendered: no <strong> tag found")
 	}
 }
+
+func TestMoveToReparentsABulletAsAChild(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	oldParent := s.seed(t, s.Alice, notes.RootID, "old parent")
+	id := s.seed(t, s.Alice, oldParent, "moved")
+	newParent := s.seed(t, s.Alice, notes.RootID, "new parent")
+
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/move", url.Values{
+		"root": {"0"}, "dir": {"to"}, "parent": {itoa(newParent)}, "position": {"0"},
+	}, "/notes/")
+
+	got, err := s.Store.ByID(ctx, s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ParentID != newParent {
+		t.Fatalf("ParentID = %d, want %d", got.ParentID, newParent)
+	}
+	if got.Position != 0 {
+		t.Fatalf("Position = %d, want 0", got.Position)
+	}
+}
+
+func TestMoveToReordersAmongSiblings(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	a := s.seed(t, s.Alice, parent, "a")
+	s.seed(t, s.Alice, parent, "b")
+
+	// Move "a" to position 1 (after "b") within the same parent.
+	s.Submit(t, s.Alice, "/notes/"+itoa(a)+"/move", url.Values{
+		"root": {"0"}, "dir": {"to"}, "parent": {itoa(parent)}, "position": {"1"},
+	}, "/notes/")
+
+	titles := s.titlesAt(t, s.Alice, parent)
+	if !equalStrings(titles, []string{"b", "a"}) {
+		t.Fatalf("order = %v, want [b a]", titles)
+	}
+	_ = ctx
+}
+
+func TestMoveToRejectsACycle(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	child := s.seed(t, s.Alice, parent, "child")
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(parent)+"/move", url.Values{
+		"root": {"0"}, "dir": {"to"}, "parent": {itoa(child)}, "position": {"0"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("moving a bullet into its own child = %d, want 400", rec.Code)
+	}
+}
+
+func TestMoveToRejectsAMalformedPosition(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "a")
+
+	for _, pos := range []string{"", "abc", "1.5"} {
+		rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/move", url.Values{
+			"root": {"0"}, "dir": {"to"}, "parent": {"0"}, "position": {pos},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("position=%q = %d, want 400", pos, rec.Code)
+		}
+	}
+}
+
+func TestMoveToOnAnotherUsersBulletIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Bob, notes.RootID, "bob's")
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/move", url.Values{
+		"root": {"0"}, "dir": {"to"}, "parent": {"0"}, "position": {"0"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestMoveRejectsAnUnknownDir(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "a")
+
+	rec := s.Post(t, s.Alice, "/notes/"+itoa(id)+"/move", url.Values{
+		"root": {"0"}, "dir": {"sideways"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("dir=sideways = %d, want 400", rec.Code)
+	}
+}
