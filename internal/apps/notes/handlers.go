@@ -900,3 +900,51 @@ func (a *App) unshare(w http.ResponseWriter, r *http.Request) {
 		return o.Unshare(ctx, m.UserID, m.NodeID)
 	}, true)
 }
+
+// viewShared renders a shared bullet and its subtree for anyone holding
+// its slug — spec §15: no login, no breadcrumb, no link into the owner's
+// private tree. It uses its own template and its own row type (sharedRow,
+// share.go) rather than reusing outline.html's outlineRow and its forms —
+// the way to guarantee a public page can never carry a mutating control
+// is for the template not to contain one at all, the same reasoning ON
+// Paste's own shared.html documents.
+//
+// The root's own archived/done state is deliberately not checked here —
+// see SharedSubtree's doc comment and this plan's resolved design
+// question: a share link stays live even if its root is later archived
+// or marked done, the same way a direct zoom to an archived node already
+// renders instead of 404ing.
+//
+// A share slug is a revocable credential, so this page must never be
+// cached or indexed: a crawler or a shared cache holding onto it after
+// the owner unshares would defeat the revocation — the same concern ON
+// Paste's own viewShared documents.
+func (a *App) viewShared(w http.ResponseWriter, r *http.Request) {
+	root, err := a.store.ByShareSlug(r.Context(), r.PathValue("slug"))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+
+	flat, err := a.store.SharedSubtree(r.Context(), root.UserID, root.ID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Robots-Tag", "noindex")
+
+	page := a.deps.Page(r, root.DisplayTitle())
+	// The shared chrome's breadcrumb (base.html's "shell") turns the active
+	// app's name into a link to its own top-level page whenever the page has
+	// a Title — here that would be an <a href="/notes/">, straight into the
+	// owner's private tree. Clearing the active-app name here drops that one
+	// crumb (the page title itself still shows, just not linked to the app
+	// root), which is what keeps this the one page in the app with no path
+	// back in.
+	page.Shell.ActiveAppName = ""
+	page.Shell.ActiveAppPath = ""
+	page.Data = sharedView{Root: root, Rows: nestShared(flat)}
+	a.render(w, r, http.StatusOK, "notes/shared", page)
+}

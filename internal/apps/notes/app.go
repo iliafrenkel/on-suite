@@ -97,6 +97,8 @@ func (a *App) script(w http.ResponseWriter, r *http.Request) {
 //	                         list is a prefix of another
 //	POST /notes/{id}/share, POST /notes/{id}/unshare
 //	                         N9's share links
+//	GET  /notes/s/{slug}     N9's public share page — the app's only
+//	                         Public route
 func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.deps = deps
 	a.store = NewStore(deps.DB)
@@ -123,4 +125,11 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /{id}/paste", a.paste)
 	r.HandleFunc("POST /{id}/share", a.share)
 	r.HandleFunc("POST /{id}/unshare", a.unshare)
+
+	// The one public route in this app — spec §9/§15. Every other route in
+	// this file goes through HandleFunc, which requires sign-in; this is
+	// the sole deliberate exception, the same asymmetry
+	// internal/apps/paste/paste.go's own Mount documents for its three
+	// public routes.
+	r.PublicFunc("GET /s/{slug}", a.viewShared)
 }

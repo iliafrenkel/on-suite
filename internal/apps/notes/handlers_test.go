@@ -3278,3 +3278,170 @@ func TestTopLevelOutlineShowsNoShareBanner(t *testing.T) {
 	doc := s.Get(t, s.Alice, "/notes/")
 	doc.MustNotHave(".notice")
 }
+
+func TestSharedPageIsReadableWhileSignedOut(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	id := s.seed(t, s.Alice, notes.RootID, "Shared root")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// nil session: no cookies at all.
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	if got := htmlassert.Text(doc.MustHave("h1")); got != "Shared root" {
+		t.Errorf("title = %q", got)
+	}
+}
+
+func TestSharedPageShowsTheSubtree(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	root := s.seed(t, s.Alice, notes.RootID, "root")
+	s.seed(t, s.Alice, root, "child one")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	if !strings.Contains(doc.Text(), "child one") {
+		t.Error("the shared subtree's child is not on the shared page")
+	}
+}
+
+func TestSharedPageExcludesArchivedAndDoneDescendants(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	root := s.seed(t, s.Alice, notes.RootID, "root")
+	kept := s.seed(t, s.Alice, root, "kept")
+	archived := s.seed(t, s.Alice, root, "put away")
+	done := s.seed(t, s.Alice, root, "finished")
+	if err := s.Store.SetArchived(ctx, s.Alice.User.ID, archived, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetDone(ctx, s.Alice.User.ID, done, true); err != nil {
+		t.Fatal(err)
+	}
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	if !strings.Contains(doc.Text(), "kept") {
+		t.Error("the non-archived, non-done child is missing")
+	}
+	if strings.Contains(doc.Text(), "put away") {
+		t.Error("the archived child leaked onto the shared page")
+	}
+	if strings.Contains(doc.Text(), "finished") {
+		t.Error("the done child leaked onto the shared page")
+	}
+	_ = kept
+}
+
+func TestSharedPageShowsTheFullSubtreeRegardlessOfCollapse(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	root := s.seed(t, s.Alice, notes.RootID, "root")
+	child := s.seed(t, s.Alice, root, "collapsed child")
+	s.seed(t, s.Alice, child, "grandchild")
+	if err := s.Store.SetCollapsed(ctx, s.Alice.User.ID, child, true); err != nil {
+		t.Fatal(err)
+	}
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	if !strings.Contains(doc.Text(), "grandchild") {
+		t.Error("the shared page hid content behind a collapsed node")
+	}
+}
+
+func TestSharedPageStaysUpIfTheRootIsLaterArchivedOrDone(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	id := s.seed(t, s.Alice, notes.RootID, "root")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetArchived(ctx, s.Alice.User.ID, id, true); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/s/"+slug, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shared page after the root was archived = %d, want 200", rec.Code)
+	}
+}
+
+func TestSharedPageHasNoLinksIntoThePrivateTree(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	root := s.seed(t, s.Alice, notes.RootID, "root")
+	s.seed(t, s.Alice, root, "child")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, nil, "/notes/s/"+slug)
+	for _, a := range doc.QueryAll("a") {
+		href, _ := htmlassert.Attr(a, "href")
+		if strings.HasPrefix(href, "/notes/") && !strings.HasPrefix(href, "/notes/s/") {
+			t.Errorf("the shared page links into the private tree: %q", href)
+		}
+	}
+	doc.MustNotHave("form")
+}
+
+func TestSharedPageIsNotCachedOrIndexed(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	id := s.seed(t, s.Alice, notes.RootID, "root")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/s/"+slug, nil))
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", cc)
+	}
+	if rt := rec.Header().Get("X-Robots-Tag"); rt != "noindex" {
+		t.Errorf("X-Robots-Tag = %q, want noindex", rt)
+	}
+}
+
+func TestUnknownShareSlugIs404(t *testing.T) {
+	s := newServer(t)
+	for _, slug := range []string{"never-minted", ""} {
+		rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/s/"+slug, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET /notes/s/%q = %d, want 404", slug, rec.Code)
+		}
+	}
+}
+
+func TestUnshareKillsTheSharedPage(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	id := s.seed(t, s.Alice, notes.RootID, "root")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.Unshare(ctx, s.Alice.User.ID, id); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/s/"+slug, nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET a revoked share link = %d, want 404", rec.Code)
+	}
+}

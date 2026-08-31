@@ -1,0 +1,28 @@
+{{define "content"}}
+<div class="stack notes">
+	<h1>{{.Data.Root.DisplayTitleHTML}}</h1>
+	{{with .Data.Root.Note}}<p class="dim">{{.}}</p>{{end}}
+	{{if .Data.Rows}}
+	{{template "shared-rows" .Data.Rows}}
+	{{else}}
+	<p class="dim">Nothing here.</p>
+	{{end}}
+</div>
+{{end}}
+
+{{/* shared-rows is deliberately not outline-rows (outline.html): no dot,
+     no chevron, no menu, no forms — spec §15: "no link leads anywhere
+     into the owner's private tree", and the way to guarantee a mutating
+     control can never appear here is for this template not to contain
+     one at all. */}}
+{{define "shared-rows"}}
+<ul class="notes-shared-list">
+	{{range .}}
+	<li class="notes-shared-item{{if .Done}} notes-shared-done{{end}}">
+		<span class="notes-shared-title">{{.RenderedTitle}}{{if .DueOn}} <span class="notes-shared-due">@{{.DueOn}}</span>{{end}}</span>
+		{{with .RenderedNote}}<div class="notes-shared-note">{{.}}</div>{{end}}
+		{{with .Children}}{{template "shared-rows" .}}{{end}}
+	</li>
+	{{end}}
+</ul>
+{{end}}
