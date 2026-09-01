@@ -112,6 +112,13 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		title = root.DisplayTitle()
 	}
 
+	dueRows, err := a.store.Due(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	view.DueCount = DueBadgeCount(dueRows, time.Now())
+
 	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
@@ -142,12 +149,18 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
+	dueRows, err := a.store.Due(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
 	visible := hideDone(flat, showCompleted)
 	view := outlineView{
 		CSRFToken:     web.CSRFToken(r.Context()),
 		Root:          Node{ID: rootID},
 		ShowCompleted: showCompleted,
 		HiddenCount:   len(flat) - len(visible),
+		DueCount:      DueBadgeCount(dueRows, time.Now()),
 		OOB:           true,
 	}
 	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))

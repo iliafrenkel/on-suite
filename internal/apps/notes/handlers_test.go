@@ -446,17 +446,19 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 	assertOnlyToggleIsOOB(t, frag)
 }
 
-// assertOnlyToggleIsOOB asserts that the show-completed toggle is the only
-// element anywhere in body carrying hx-swap-oob. A structural fragment
-// legitimately marks that one toolbar button out of band — see
-// renderOutlineFragment — but nothing else should ever be: an accidental
-// hx-swap-oob on, say, .outline-list or an .outline-row would make htmx
-// silently strip that chunk out of the response before swapping it in.
+// assertOnlyToggleIsOOB asserts that the show-completed toggle and the
+// due-count badge are the only elements anywhere in body carrying
+// hx-swap-oob. Both toolbar elements legitimately get marked out of band —
+// see renderOutlineFragment — but nothing else should ever be: an
+// accidental hx-swap-oob on, say, .outline-list or an .outline-row would
+// make htmx silently strip that chunk out of the response before swapping
+// it in.
 func assertOnlyToggleIsOOB(t *testing.T, body string) {
 	t.Helper()
+	allowed := map[string]bool{"show-completed-toggle": true, "due-badge": true}
 	for _, n := range htmlassert.Parse(t, body).QueryAll("[hx-swap-oob]") {
-		if id, _ := htmlassert.Attr(n, "id"); id != "show-completed-toggle" {
-			t.Errorf("unexpected hx-swap-oob element (id=%q); only show-completed-toggle may be out of band", id)
+		if id, _ := htmlassert.Attr(n, "id"); !allowed[id] {
+			t.Errorf("unexpected hx-swap-oob element (id=%q); only show-completed-toggle and due-badge may be out of band", id)
 		}
 	}
 }
@@ -3634,5 +3636,67 @@ func TestMoveRejectsAnUnknownDir(t *testing.T) {
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("dir=sideways = %d, want 400", rec.Code)
+	}
+}
+
+// TestDueBadgeShowsOverdueAndTodayCount is spec-driven: the toolbar's Due
+// button shows a count of items needing attention now (overdue + today),
+// on both the full page and the HTMX fragment a structural op returns.
+func TestDueBadgeShowsOverdueAndTodayCount(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	overdue := s.seed(t, s.Alice, notes.RootID, "overdue task")
+	if err := s.Store.SetDue(ctx, s.Alice.User.ID, overdue, "2000-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	other := s.seed(t, s.Alice, notes.RootID, "no date")
+
+	doc := s.Get(t, s.Alice, "/notes/")
+	badge := doc.MustHave("#due-badge")
+	if got := htmlassert.Text(badge); got != "1" {
+		t.Errorf("due badge = %q, want \"1\"", got)
+	}
+
+	// A structural fragment carries the same badge, out of band, so it
+	// stays in sync after e.g. an indent that doesn't touch due dates.
+	frag := s.PostHX(t, s.Alice, "/notes/"+itoa(other)+"/indent", url.Values{
+		"root": {"0"}, "focus_id": {itoa(other)}, "title": {"no date"}, "note": {""},
+	}).Body.String()
+	fragBadge := htmlassert.Parse(t, frag).MustHave("#due-badge")
+	if got := htmlassert.Text(fragBadge); got != "1" {
+		t.Errorf("fragment due badge = %q, want \"1\"", got)
+	}
+	if got, ok := htmlassert.Attr(fragBadge, "hx-swap-oob"); !ok || got != "true" {
+		t.Errorf("fragment due badge hx-swap-oob = %q, ok=%v, want \"true\"", got, ok)
+	}
+}
+
+// TestDueBadgeIsEmptyWithNothingDue: the badge element is always present
+// (so an OOB swap can always find it and clear it) but empty, so
+// .toolbar-due-badge:empty hides it.
+func TestDueBadgeIsEmptyWithNothingDue(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "no date")
+
+	badge := s.Get(t, s.Alice, "/notes/").MustHave("#due-badge")
+	if got := htmlassert.Text(badge); got != "" {
+		t.Errorf("due badge = %q, want empty", got)
+	}
+}
+
+// TestDueBadgeExcludesFutureItems: only overdue + today count, not "this
+// week" or "later" — the badge would otherwise be on almost all the time,
+// diluting the orange accent's meaning.
+func TestDueBadgeExcludesFutureItems(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "next month")
+	future := time.Now().AddDate(0, 1, 0).Format("2006-01-02")
+	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, future); err != nil {
+		t.Fatal(err)
+	}
+
+	badge := s.Get(t, s.Alice, "/notes/").MustHave("#due-badge")
+	if got := htmlassert.Text(badge); got != "" {
+		t.Errorf("due badge = %q, want empty — the only due item is a month out", got)
 	}
 }
