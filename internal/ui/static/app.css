@@ -1070,6 +1070,40 @@ button.outline-chevron {
 .outline-dot { text-decoration: none; }
 .outline-dot:hover { color: var(--c-accent); }
 
+/* Bullet dot save status indication */
+.outline-row[data-status="dirty"] .outline-dot {
+	color: var(--c-accent-attention);
+}
+
+.outline-row[data-status="saving"] .outline-dot {
+	color: var(--c-accent-attention);
+	animation: outline-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.outline-row[data-status="saved"] .outline-dot {
+	color: #16a34a;
+	transition: color 0.3s ease;
+}
+
+.outline-row[data-status="error"] .outline-dot {
+	color: var(--c-danger);
+}
+
+@keyframes outline-dot-pulse {
+	0%, 100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.45;
+		transform: scale(1.25);
+	}
+}
+
+.icon-dot {
+	transform-origin: center;
+}
+
 /* A collapsed bullet keeps its subtree out of the response entirely, so the
  * dot gets a halo: the bullet is not as empty as it looks. */
 .icon-dot-halo {
