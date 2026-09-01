@@ -2149,8 +2149,8 @@ func TestPrefsFragmentRefreshesTheToggleOutOfBand(t *testing.T) {
 	if got, _ := htmlassert.Attr(btn, "value"); got != "0" {
 		t.Errorf("toggle value = %q, want \"0\" — it still offers to turn completed back on", got)
 	}
-	if got := strings.TrimSpace(htmlassert.Text(btn)); got != "Hide completed" {
-		t.Errorf("toggle label = %q, want \"Hide completed\"", got)
+	if got := strings.TrimSpace(htmlassert.Text(btn)); got != "Completed" {
+		t.Errorf("toggle label = %q, want \"Completed\"", got)
 	}
 
 	// And back off again, so the block is not simply hardcoded one way.
@@ -2161,8 +2161,8 @@ func TestPrefsFragmentRefreshesTheToggleOutOfBand(t *testing.T) {
 	if got, _ := htmlassert.Attr(btn, "value"); got != "1" {
 		t.Errorf("toggle value after turning off = %q, want \"1\"", got)
 	}
-	if got := strings.TrimSpace(htmlassert.Text(btn)); got != "Show completed" {
-		t.Errorf("toggle label after turning off = %q, want \"Show completed\"", got)
+	if got := strings.TrimSpace(htmlassert.Text(btn)); got != "Completed" {
+		t.Errorf("toggle label after turning off = %q, want \"Completed\"", got)
 	}
 }
 

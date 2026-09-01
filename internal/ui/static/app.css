@@ -10,7 +10,7 @@
 	 * (links, buttons, active states); --c-accent-attention (orange) is
 	 * deliberately separate and used only for things that need attention —
 	 * a due/overdue badge — so it stays meaningful by staying rare. */
-	--c-bg:          #faf3ea;
+	--c-bg:          #fefefe;
 	--c-bg-subtle:   #f2e9db;
 	--c-bg-inset:    #efe0cf;
 	--c-border:      #e3d3bf;
@@ -282,6 +282,14 @@ kbd {
 	width: 100%;
 	text-align: left;
 	margin-bottom: var(--s-3);
+	transition: transform 0.15s ease;
+}
+
+/* Points the other way once collapsed, so the glyph itself shows which
+ * way the next click will go rather than staying static regardless of
+ * state. */
+.app-sidebar[data-collapsed] .sidebar-toggle {
+	transform: rotate(180deg);
 }
 
 .shell-nav { display: flex; flex-direction: column; gap: var(--s-1); }
@@ -736,7 +744,7 @@ button.danger:hover { background: var(--c-danger-bg); }
  * dims rather than disappearing, so its own drop zones (e.g. dragging it
  * onto a sibling right next to where it started) stay visible and
  * clickable-looking throughout the gesture. */
-.outline-dot { cursor: grab; }
+.outline-dot { cursor: pointer; }
 .outline-row-dragging { opacity: 0.4; }
 body.outline-dragging-active { cursor: grabbing; user-select: none; }
 
@@ -951,6 +959,7 @@ button.outline-chevron {
  * behave like the button it visually is. */
 .notes-import-label {
 	cursor: pointer;
+	margin: 0;
 }
 
 /* The hidden file input (.visually-hidden clips, it doesn't remove from the
@@ -1009,8 +1018,8 @@ button.outline-chevron {
 	font: inherit;
 	font-size: var(--fs-sm);
 	color: var(--c-text);
-	background: var(--c-bg-inset);
-	border: none;
+	background: var(--c-bg-subtle);
+	border: solid 1px var(--c-border);
 	border-radius: var(--radius);
 	padding: var(--s-1) var(--s-2);
 	width: 12rem;
@@ -1188,6 +1197,7 @@ input.outline-note:focus { outline: none; }
 	color: var(--c-text-faint);
 	list-style: none;
 	cursor: pointer;
+	border-radius: var(--radius);
 }
 .outline-menu-toggle::-webkit-details-marker { display: none; }
 .outline-menu-toggle:hover { color: var(--c-text); }

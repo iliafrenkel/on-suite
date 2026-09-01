@@ -31,7 +31,7 @@
      is a plain (non-HTMX) form — that page does no partial swapping of its
      own — so .OOB is always false there, harmlessly. */}}
 {{define "show-completed-toggle"}}<button type="submit" id="show-completed-toggle" class="toolbar-btn{{if .ShowCompleted}} toolbar-btn-active{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}
-        name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}</button>{{end}}
+        name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}" title="{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>Completed</button>{{end}}
 
 {{/* due-badge is the toolbar Due button's count of overdue+today items
      (outlineView.DueCount, notes.DueBadgeCount). Always rendered, even at
