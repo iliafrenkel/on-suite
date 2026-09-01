@@ -1,4 +1,4 @@
-/* ON Suite — quiet, calm, and a little more spacious than it used to be.
+/* ON Suite — warm and a little more alive than it used to be.
  *
  * Everything is driven by the tokens in :root. Apps must not introduce new
  * colours or spacing values; they compose these. That constraint is what
@@ -6,18 +6,22 @@
  */
 
 :root {
-	/* Greys carry the interface; the accent is a muted slate/teal, used
-	 * sparingly and on purpose. */
-	--c-bg:          #ffffff;
-	--c-bg-subtle:   #f4f3f1;
-	--c-bg-inset:    #eceae6;
-	--c-border:      #e2e0dc;
-	--c-border-firm: #c9c7c1;
-	--c-text:        #2b2a28;
-	--c-text-dim:    #6b6a67;
-	--c-text-faint:  #8a8983;
-	--c-accent:      #4d7570;
-	--c-accent-bg:   #e4ecea;
+	/* A warm cream base carries the interface. Teal is the everyday accent
+	 * (links, buttons, active states); --c-accent-attention (orange) is
+	 * deliberately separate and used only for things that need attention —
+	 * a due/overdue badge — so it stays meaningful by staying rare. */
+	--c-bg:          #faf3ea;
+	--c-bg-subtle:   #f2e9db;
+	--c-bg-inset:    #efe0cf;
+	--c-border:      #e3d3bf;
+	--c-border-firm: #c9b49a;
+	--c-text:        #3a2f26;
+	--c-text-dim:    #6b5d4f;
+	--c-text-faint:  #948573;
+	--c-accent:      #2f6f6a;
+	--c-accent-bg:   #d9e8e6;
+	--c-accent-attention:    #d9773f;
+	--c-accent-attention-bg: #f7e4d5;
 	--c-danger:      #a51d2d;
 	--c-danger-bg:   #fbeaec;
 
@@ -91,16 +95,18 @@
  * unset, there is no need for a prefers-color-scheme fallback here — every
  * response already carries the attribute this selector keys off. */
 :root[data-theme="dark"] {
-	--c-bg:          #1c1d1f;
-	--c-bg-subtle:   #242527;
-	--c-bg-inset:    #2b2c2f;
-	--c-border:      #34373a;
-	--c-border-firm: #4a4d51;
-	--c-text:        #e8e6e2;
-	--c-text-dim:    #a3a29c;
-	--c-text-faint:  #79786f;
-	--c-accent:      #7fa39d;
-	--c-accent-bg:   #233330;
+	--c-bg:          #241d17;
+	--c-bg-subtle:   #2b231b;
+	--c-bg-inset:    #2e2621;
+	--c-border:      #3d322a;
+	--c-border-firm: #52443a;
+	--c-text:        #efe6da;
+	--c-text-dim:    #b8a996;
+	--c-text-faint:  #8f8071;
+	--c-accent:      #3d8983;
+	--c-accent-bg:   #1e3532;
+	--c-accent-attention:    #e08a52;
+	--c-accent-attention-bg: #3d2a1c;
 	--c-danger:      #f08c95;
 	--c-danger-bg:   #3a1e22;
 }
