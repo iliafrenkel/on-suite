@@ -956,11 +956,24 @@ button.outline-chevron {
 /* The hidden file input (.visually-hidden clips, it doesn't remove from the
  * tab order) still gets keyboard focus, but with no box to show it. Mirror
  * that focus onto its label — the visible stand-in for the button — so a
- * keyboard user tabbing to the input sees where they landed. */
-.notes-import:focus-within .notes-import-label {
+ * keyboard user tabbing to the input sees where they landed. Scoped to the
+ * file input's own :focus-visible (not the form's :focus-within) so tabbing
+ * to or clicking the no-JS fallback submit button below doesn't also ring
+ * this label, and so a mouse click doesn't ring it either. */
+.notes-import:has(#notes-import-file:focus-visible) .notes-import-label {
 	outline: var(--ring);
 	outline-offset: 2px;
 	border-radius: var(--radius);
+}
+
+/* No-JS fallback: outline.html keeps a real submit button in the import
+ * form so choosing a file still works with JavaScript disabled (a lone
+ * file input doesn't trigger implicit form submission). Once notes.js's
+ * initJSClass confirms JS is running, hide that button — the icon+label
+ * above already auto-submits on file choice, so a visible second "Import"
+ * control would just be a duplicate. */
+.js .notes-import button[type="submit"] {
+	display: none;
 }
 
 .notes-due-group + .notes-due-group { margin-top: var(--s-4); }

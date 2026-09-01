@@ -53,20 +53,20 @@
 				<input type="hidden" name="root" value="{{.Data.Root.ID}}">
 				{{/* The file input is visually hidden but stays in the layout and
 				     the accessibility tree (.visually-hidden, app.css) — its
-				     label is what's visible, styled as a toolbar-btn. Choosing
-				     a file submits the form immediately (notes.js's
-				     initImportAutoSubmit), so there is no separate "Import"
-				     click step. */}}
+				     label is what's visible, styled as a toolbar-btn. This
+				     label is the primary path: choosing a file submits the
+				     form immediately (notes.js's initImportAutoSubmit). */}}
 				<label for="notes-import-file" class="toolbar-btn notes-import-label">
 					<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg>Import
 				</label>
 				<input type="file" id="notes-import-file" name="file" accept=".md,text/markdown" aria-label="Import a Markdown file" required class="visually-hidden">
 				{{/* No-JS fallback: a lone file input doesn't trigger implicit
 				     form submission, so a real submit button is required to
-				     keep this form usable with JavaScript disabled. Once JS
-				     runs, notes.js's initImportAutoSubmit submits the form as
-				     soon as a file is chosen, so this button is never seen or
-				     needed in practice — it's a no-op safety net. */}}
+				     keep this form usable with JavaScript disabled. With JS
+				     enabled, notes.js's initJSClass marks <html class="js">
+				     and app.css's ".js .notes-import button" rule hides this
+				     button, so JS users see only the label above — this
+				     button stays in the markup for no-JS users only. */}}
 				<button type="submit" class="toolbar-btn">Import</button>
 			</form>
 			<form method="post" action="/notes/prefs"
