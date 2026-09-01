@@ -128,7 +128,11 @@
 		if (title) params.title = title.value;
 		if (note) params.note = note.value;
 
-		pendingFocus = { id: lastFocus.id, field: lastFocus.field, offset: input.selectionStart || 0 };
+		if (requestPath(e).indexOf("/notes/new") !== -1) {
+			pendingFocus = { afterID: lastFocus.id, field: "title", offset: 0 };
+		} else {
+			pendingFocus = { id: lastFocus.id, field: lastFocus.field, offset: input.selectionStart || 0 };
+		}
 	}
 
 	// restoreFocus runs after every HTMX swap of #outline. hx-swap=innerHTML
@@ -873,6 +877,7 @@
 
 	function requestPath(evt) {
 		var detail = (evt && evt.detail) || {};
+		if (detail.path) return detail.path;
 		if (detail.pathInfo && detail.pathInfo.requestPath) return detail.pathInfo.requestPath;
 		if (detail.requestConfig && detail.requestConfig.path) return detail.requestConfig.path;
 		return "";
