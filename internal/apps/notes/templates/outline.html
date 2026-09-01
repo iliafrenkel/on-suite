@@ -61,6 +61,13 @@
 					<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg>Import
 				</label>
 				<input type="file" id="notes-import-file" name="file" accept=".md,text/markdown" aria-label="Import a Markdown file" required class="visually-hidden">
+				{{/* No-JS fallback: a lone file input doesn't trigger implicit
+				     form submission, so a real submit button is required to
+				     keep this form usable with JavaScript disabled. Once JS
+				     runs, notes.js's initImportAutoSubmit submits the form as
+				     soon as a file is chosen, so this button is never seen or
+				     needed in practice — it's a no-op safety net. */}}
+				<button type="submit" class="toolbar-btn">Import</button>
 			</form>
 			<form method="post" action="/notes/prefs"
 			      hx-post="/notes/prefs" hx-target="#outline" hx-swap="innerHTML">

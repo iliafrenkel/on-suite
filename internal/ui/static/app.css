@@ -20,7 +20,7 @@
 	--c-text-faint:  #948573;
 	--c-accent:      #2f6f6a;
 	--c-accent-bg:   #d9e8e6;
-	--c-accent-attention:    #d9773f;
+	--c-accent-attention:    #b8551f;
 	--c-accent-attention-bg: #f7e4d5;
 	--c-danger:      #a51d2d;
 	--c-danger-bg:   #fbeaec;
@@ -105,7 +105,7 @@
 	--c-text-faint:  #8f8071;
 	--c-accent:      #3d8983;
 	--c-accent-bg:   #1e3532;
-	--c-accent-attention:    #e08a52;
+	--c-accent-attention:    #b05a29;
 	--c-accent-attention-bg: #3d2a1c;
 	--c-danger:      #f08c95;
 	--c-danger-bg:   #3a1e22;
@@ -951,6 +951,16 @@ button.outline-chevron {
  * behave like the button it visually is. */
 .notes-import-label {
 	cursor: pointer;
+}
+
+/* The hidden file input (.visually-hidden clips, it doesn't remove from the
+ * tab order) still gets keyboard focus, but with no box to show it. Mirror
+ * that focus onto its label — the visible stand-in for the button — so a
+ * keyboard user tabbing to the input sees where they landed. */
+.notes-import:focus-within .notes-import-label {
+	outline: var(--ring);
+	outline-offset: 2px;
+	border-radius: var(--radius);
 }
 
 .notes-due-group + .notes-due-group { margin-top: var(--s-4); }
