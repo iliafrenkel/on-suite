@@ -793,9 +793,24 @@
 		document.addEventListener("mousedown", handleDotMouseDown);
 	}
 
+	// Choosing a file submits the form immediately — there is no visible
+	// native file input to show a separate "Import" button next to (CSP has
+	// no unsafe-inline, so this can't be an inline onchange attribute; see
+	// outline.html's notes-import form).
+	function initImportAutoSubmit() {
+		var input = document.getElementById("notes-import-file");
+		if (!input) return;
+		input.addEventListener("change", function () {
+			if (input.files.length > 0) {
+				input.form.requestSubmit();
+			}
+		});
+	}
+
 	initFocusSync();
 	initKeyboard();
 	initPaste();
 	initPasteErrors();
 	initDragToMove();
+	initImportAutoSubmit();
 })();
