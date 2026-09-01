@@ -818,6 +818,107 @@
 		});
 	}
 
+	// ---- save status tracking -----------------------------------------------
+	//
+	// Visual indication when a bullet is dirty (unsaved local changes), saving
+	// (in-flight AJAX request), saved (successful 2xx response), or error.
+	var statusTimers = {};
+
+	function setRowStatus(row, status) {
+		if (!row) return;
+		var id = row.getAttribute("data-id");
+		if (id && statusTimers[id]) {
+			clearTimeout(statusTimers[id]);
+			delete statusTimers[id];
+		}
+		if (!status || status === "clean") {
+			row.removeAttribute("data-status");
+		} else {
+			row.setAttribute("data-status", status);
+		}
+
+		var dot = row.querySelector(".outline-dot");
+		if (!dot) return;
+
+		if (!dot.hasAttribute("data-base-label")) {
+			dot.setAttribute("data-base-label", dot.getAttribute("aria-label") || "");
+		}
+		var baseLabel = dot.getAttribute("data-base-label");
+
+		if (status === "dirty") {
+			dot.setAttribute("title", "Unsaved changes");
+			dot.setAttribute("aria-label", "Unsaved changes — " + baseLabel);
+		} else if (status === "saving") {
+			dot.setAttribute("title", "Saving…");
+			dot.setAttribute("aria-label", "Saving — " + baseLabel);
+		} else if (status === "saved") {
+			dot.setAttribute("title", "Saved");
+			dot.setAttribute("aria-label", "Saved — " + baseLabel);
+			if (id) {
+				statusTimers[id] = setTimeout(function () {
+					delete statusTimers[id];
+					if (row.getAttribute("data-status") === "saved") {
+						setRowStatus(row, "clean");
+					}
+				}, 800);
+			}
+		} else if (status === "error") {
+			dot.setAttribute("title", "Save failed");
+			dot.setAttribute("aria-label", "Save failed — " + baseLabel);
+		} else {
+			dot.removeAttribute("title");
+			dot.setAttribute("aria-label", baseLabel);
+		}
+	}
+
+	function requestPath(evt) {
+		var detail = (evt && evt.detail) || {};
+		if (detail.pathInfo && detail.pathInfo.requestPath) return detail.pathInfo.requestPath;
+		if (detail.requestConfig && detail.requestConfig.path) return detail.requestConfig.path;
+		return "";
+	}
+
+	function initSaveStatusTracking() {
+		if (!document.getElementById("outline")) return;
+
+		document.addEventListener("input", function (e) {
+			if (!isOutlineField(e.target)) return;
+			var row = rowOf(e.target);
+			if (!row || !row.hasAttribute("data-id")) return;
+			setRowStatus(row, "dirty");
+		});
+
+		document.addEventListener("htmx:configRequest", function (e) {
+			if (requestPath(e).indexOf("/text") === -1) return;
+			var row = rowOf(e.detail && e.detail.elt);
+			if (row) setRowStatus(row, "saving");
+		});
+
+		document.addEventListener("htmx:afterRequest", function (e) {
+			if (requestPath(e).indexOf("/text") === -1) return;
+			var row = rowOf(e.detail && e.detail.elt);
+			if (!row) return;
+
+			if (e.detail && e.detail.successful) {
+				setRowStatus(row, "saved");
+			} else {
+				setRowStatus(row, "error");
+			}
+		});
+
+		document.addEventListener("htmx:responseError", function (e) {
+			if (requestPath(e).indexOf("/text") === -1) return;
+			var row = rowOf(e.detail && e.detail.elt);
+			if (row) setRowStatus(row, "error");
+		});
+
+		document.addEventListener("htmx:sendError", function (e) {
+			if (requestPath(e).indexOf("/text") === -1) return;
+			var row = rowOf(e.detail && e.detail.elt);
+			if (row) setRowStatus(row, "error");
+		});
+	}
+
 	initJSClass();
 	initFocusSync();
 	initKeyboard();
@@ -825,4 +926,5 @@
 	initPasteErrors();
 	initDragToMove();
 	initImportAutoSubmit();
+	initSaveStatusTracking();
 })();
