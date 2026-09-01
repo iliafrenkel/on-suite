@@ -29,7 +29,7 @@
 
 {{/* outline-swap is the whole HTMX response for a structural op or a prefs
      toggle: #outline's new content, plus the toolbar toggle out of band. */}}
-{{define "outline-swap"}}{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{end}}
+{{define "outline-swap"}}{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{template "due-badge" .}}{{end}}
 
 {{define "content"}}
 <div class="stack notes">
@@ -43,14 +43,30 @@
 		     above: htmx finds #show-completed-toggle by id anywhere in the
 		     document, whatever it is wrapped in. */}}
 		<div class="notes-toolbar-actions">
-			<a href="/notes/due" class="toolbar-btn toolbar-btn-nav">Due</a>
-			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav">Archive</a>
-			<a href="/notes/export?root={{.Data.Root.ID}}" class="toolbar-btn toolbar-btn-nav">Export</a>
+			<a href="/notes/due" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Due{{template "due-badge" .Data}}</a>
+			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8H3l2-4h14z"/><path d="M5 8v11h14V8"/><path d="M10 12h4"/></svg>Archive</a>
+			<a href="/notes/export?root={{.Data.Root.ID}}" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Export</a>
+			<span class="toolbar-sep" aria-hidden="true"></span>
 			<form method="post" action="/notes/import" enctype="multipart/form-data" class="notes-import"
 			      hx-post="/notes/import" hx-target="#outline" hx-swap="innerHTML" hx-encoding="multipart/form-data">
 				<input type="hidden" name="csrf_token" value="{{.Data.CSRFToken}}">
 				<input type="hidden" name="root" value="{{.Data.Root.ID}}">
-				<input type="file" name="file" accept=".md,text/markdown" aria-label="Import a Markdown file" required>
+				{{/* The file input is visually hidden but stays in the layout and
+				     the accessibility tree (.visually-hidden, app.css) — its
+				     label is what's visible, styled as a toolbar-btn. This
+				     label is the primary path: choosing a file submits the
+				     form immediately (notes.js's initImportAutoSubmit). */}}
+				<label for="notes-import-file" class="toolbar-btn notes-import-label">
+					<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg>Import
+				</label>
+				<input type="file" id="notes-import-file" name="file" accept=".md,text/markdown" aria-label="Import a Markdown file" required class="visually-hidden">
+				{{/* No-JS fallback: a lone file input doesn't trigger implicit
+				     form submission, so a real submit button is required to
+				     keep this form usable with JavaScript disabled. With JS
+				     enabled, notes.js's initJSClass marks <html class="js">
+				     and app.css's ".js .notes-import button" rule hides this
+				     button, so JS users see only the label above — this
+				     button stays in the markup for no-JS users only. */}}
 				<button type="submit" class="toolbar-btn">Import</button>
 			</form>
 			<form method="post" action="/notes/prefs"
@@ -60,7 +76,7 @@
 				{{template "show-completed-toggle" .Data}}
 			</form>
 			<details class="notes-help-menu">
-				<summary class="toolbar-btn toolbar-btn-disclosure notes-help-toggle" aria-label="Keyboard shortcuts">Shortcuts</summary>
+				<summary class="toolbar-btn toolbar-btn-disclosure notes-help-toggle" aria-label="Keyboard shortcuts">Shortcuts<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
 				<div class="notes-help-panel">
 					<div class="notes-help-header">
 						<h3>Keyboard Shortcuts</h3>

@@ -168,3 +168,25 @@ func TestDueExcludesADescendantOfAnArchivedNode(t *testing.T) {
 		t.Fatalf("Due = %+v, want none — it sits under an archived node", got)
 	}
 }
+
+func TestDueBadgeCountCountsOverdueAndToday(t *testing.T) {
+	today := time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC)
+	rows := []notes.Node{
+		{ID: 1, DueOn: "2026-03-01"}, // overdue
+		{ID: 2, DueOn: "2026-03-10"}, // today
+		{ID: 3, DueOn: "2026-03-14"}, // this week, not counted
+		{ID: 4, DueOn: "2026-04-01"}, // later, not counted
+	}
+
+	got := notes.DueBadgeCount(rows, today)
+	if got != 2 {
+		t.Errorf("DueBadgeCount = %d, want 2 (overdue + today only)", got)
+	}
+}
+
+func TestDueBadgeCountOfNoRowsIsZero(t *testing.T) {
+	got := notes.DueBadgeCount(nil, time.Now())
+	if got != 0 {
+		t.Errorf("DueBadgeCount(nil) = %d, want 0", got)
+	}
+}

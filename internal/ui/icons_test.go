@@ -40,3 +40,15 @@ func TestIconForIsDistinctPerApp(t *testing.T) {
 		seen[svg] = true
 	}
 }
+
+func TestIconStrokeWidthIsConsistent(t *testing.T) {
+	for _, id := range []string{"paste", "notes", "reader", "admin", "flash"} {
+		got := string(ui.IconFor(id))
+		if strings.Contains(got, `stroke-width="1.8"`) {
+			t.Errorf("IconFor(%q) still uses stroke-width 1.8, want the shared 1.5 line-icon weight", id)
+		}
+		if !strings.Contains(got, `stroke-width="1.5"`) {
+			t.Errorf("IconFor(%q) has no stroke-width=1.5 stroke", id)
+		}
+	}
+}

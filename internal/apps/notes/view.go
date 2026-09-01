@@ -33,6 +33,10 @@ type outlineView struct {
 	// otherwise. Computed once here so the template does not concatenate
 	// a path from user-controlled data itself.
 	ShareURL string
+	// DueCount is DueBadgeCount's result, computed once per request for the
+	// toolbar's Due button badge — see renderOutline/renderOutlineFragment
+	// (handlers.go).
+	DueCount int
 }
 
 // outlineRow is one bullet, and exactly the inputs of the one form that edits

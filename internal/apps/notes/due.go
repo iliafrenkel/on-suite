@@ -66,6 +66,21 @@ func GroupByDue(rows []DueRow, today time.Time) DueGroups {
 	return g
 }
 
+// DueBadgeCount reports how many rows are overdue or due today — the
+// "needs attention now" subset of GroupByDue's four buckets, without
+// needing the ancestor crumbs DueRow carries for the /notes/due page
+// itself. Used for the toolbar's due-count badge (outline.html).
+func DueBadgeCount(rows []Node, today time.Time) int {
+	todayStr := today.Format("2006-01-02")
+	count := 0
+	for _, n := range rows {
+		if n.DueOn <= todayStr {
+			count++
+		}
+	}
+	return count
+}
+
 // Due returns every one of userID's nodes with a due date set, excluding
 // done ones and archived ones — spec §11's "done and archived nodes are
 // excluded". A node that sits under an archived ancestor is excluded too,

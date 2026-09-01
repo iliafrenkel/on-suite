@@ -31,4 +31,12 @@
      is a plain (non-HTMX) form — that page does no partial swapping of its
      own — so .OOB is always false there, harmlessly. */}}
 {{define "show-completed-toggle"}}<button type="submit" id="show-completed-toggle" class="toolbar-btn{{if .ShowCompleted}} toolbar-btn-active{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}
-        name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}">{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}</button>{{end}}
+        name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}</button>{{end}}
+
+{{/* due-badge is the toolbar Due button's count of overdue+today items
+     (outlineView.DueCount, notes.DueBadgeCount). Always rendered, even at
+     zero, so an out-of-band swap can always find #due-badge to update —
+     .toolbar-due-badge:empty (app.css) hides it when there's nothing to
+     show. Same OOB discipline as show-completed-toggle: the fragment sets
+     .OOB, a full-page render does not. */}}
+{{define "due-badge"}}<span id="due-badge" class="toolbar-due-badge"{{if .OOB}} hx-swap-oob="true"{{end}}>{{if .DueCount}}{{.DueCount}}{{end}}</span>{{end}}

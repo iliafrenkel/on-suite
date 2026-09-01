@@ -793,9 +793,36 @@
 		document.addEventListener("mousedown", handleDotMouseDown);
 	}
 
+	// Marks <html> once JS is confirmed running, so app.css can hide
+	// no-JS-only fallback markup (e.g. the notes-import form's real submit
+	// button — see outline.html and the ".js .notes-import button" rule)
+	// without ever removing it from the HTML itself. Must live in this file
+	// rather than an inline <script>: CSP is script-src 'self' with no
+	// unsafe-inline, which blocks inline script blocks too, not just
+	// attributes.
+	function initJSClass() {
+		document.documentElement.classList.add("js");
+	}
+
+	// Choosing a file submits the form immediately — there is no visible
+	// native file input to show a separate "Import" button next to (CSP has
+	// no unsafe-inline, so this can't be an inline onchange attribute; see
+	// outline.html's notes-import form).
+	function initImportAutoSubmit() {
+		var input = document.getElementById("notes-import-file");
+		if (!input) return;
+		input.addEventListener("change", function () {
+			if (input.files.length > 0) {
+				input.form.requestSubmit();
+			}
+		});
+	}
+
+	initJSClass();
 	initFocusSync();
 	initKeyboard();
 	initPaste();
 	initPasteErrors();
 	initDragToMove();
+	initImportAutoSubmit();
 })();
