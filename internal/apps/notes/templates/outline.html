@@ -56,9 +56,7 @@
 				     label is what's visible, styled as a toolbar-btn. This
 				     label is the primary path: choosing a file submits the
 				     form immediately (notes.js's initImportAutoSubmit). */}}
-				<label for="notes-import-file" class="toolbar-btn notes-import-label">
-					<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg>Import
-				</label>
+				<label for="notes-import-file" class="toolbar-btn notes-import-label"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/></svg>Import</label>
 				<input type="file" id="notes-import-file" name="file" accept=".md,text/markdown" aria-label="Import a Markdown file" required class="visually-hidden">
 				{{/* No-JS fallback: a lone file input doesn't trigger implicit
 				     form submission, so a real submit button is required to
