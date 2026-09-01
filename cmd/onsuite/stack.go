@@ -63,6 +63,10 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	routes.Handle(mux, "GET /healthz", true, healthzHandler(deps.Version, deps.DB))
+	routes.Handle(mux, "GET /favicon.ico", true, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = "/favicon.ico"
+		assets.Handler().ServeHTTP(w, r)
+	}))
 	routes.Handle(mux, "GET /static/", true, http.StripPrefix("/static", assets.Handler()))
 	authn.Routes(mux, routes)
 
