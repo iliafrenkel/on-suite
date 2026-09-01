@@ -959,6 +959,7 @@ button.outline-chevron {
  * behave like the button it visually is. */
 .notes-import-label {
 	cursor: pointer;
+	margin: 0;
 }
 
 /* The hidden file input (.visually-hidden clips, it doesn't remove from the
@@ -1017,8 +1018,8 @@ button.outline-chevron {
 	font: inherit;
 	font-size: var(--fs-sm);
 	color: var(--c-text);
-	background: var(--c-bg-inset);
-	border: none;
+	background: var(--c-bg-subtle);
+	border: solid 1px var(--c-border);
 	border-radius: var(--radius);
 	padding: var(--s-1) var(--s-2);
 	width: 12rem;
