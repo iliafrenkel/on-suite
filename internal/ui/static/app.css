@@ -10,7 +10,7 @@
 	 * (links, buttons, active states); --c-accent-attention (orange) is
 	 * deliberately separate and used only for things that need attention —
 	 * a due/overdue badge — so it stays meaningful by staying rare. */
-	--c-bg:          #faf3ea;
+	--c-bg:          #fefefe;
 	--c-bg-subtle:   #f2e9db;
 	--c-bg-inset:    #efe0cf;
 	--c-border:      #e3d3bf;
@@ -736,7 +736,7 @@ button.danger:hover { background: var(--c-danger-bg); }
  * dims rather than disappearing, so its own drop zones (e.g. dragging it
  * onto a sibling right next to where it started) stay visible and
  * clickable-looking throughout the gesture. */
-.outline-dot { cursor: grab; }
+.outline-dot { cursor: pointer; }
 .outline-row-dragging { opacity: 0.4; }
 body.outline-dragging-active { cursor: grabbing; user-select: none; }
 
@@ -1188,6 +1188,7 @@ input.outline-note:focus { outline: none; }
 	color: var(--c-text-faint);
 	list-style: none;
 	cursor: pointer;
+	border-radius: var(--radius);
 }
 .outline-menu-toggle::-webkit-details-marker { display: none; }
 .outline-menu-toggle:hover { color: var(--c-text); }
