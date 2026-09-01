@@ -282,6 +282,14 @@ kbd {
 	width: 100%;
 	text-align: left;
 	margin-bottom: var(--s-3);
+	transition: transform 0.15s ease;
+}
+
+/* Points the other way once collapsed, so the glyph itself shows which
+ * way the next click will go rather than staying static regardless of
+ * state. */
+.app-sidebar[data-collapsed] .sidebar-toggle {
+	transform: rotate(180deg);
 }
 
 .shell-nav { display: flex; flex-direction: column; gap: var(--s-1); }
