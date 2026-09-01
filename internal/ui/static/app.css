@@ -905,26 +905,56 @@ button.outline-chevron {
 	background: var(--c-accent-bg);
 }
 
-/* Checkbox prefix for toggle button */
-#show-completed-toggle::before {
-	content: "☐ ";
-}
-#show-completed-toggle.toolbar-btn-active::before {
-	content: "☑ ";
+/* Every toolbar icon shares one size/weight, set once here rather than per
+ * icon — the whole point of Task 2's redraw is that these no longer need
+ * per-icon tuning. */
+.toolbar-icon {
+	width: 1rem;
+	height: 1rem;
+	flex-shrink: 0;
+	stroke: currentColor;
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
 }
 
-/* Trailing arrow for navigation links */
-.toolbar-btn-nav::after {
-	content: " →";
-	font-size: 0.85em;
-	opacity: 0.7;
+/* A thin divider between a toolbar's action groups — see outline.html's
+ * .notes-toolbar-actions, which puts one between the view actions (Due,
+ * Archive, Export) and the data action (Import). */
+.toolbar-sep {
+	width: 1px;
+	align-self: stretch;
+	background: var(--c-border);
+	margin: 0 var(--s-1);
 }
 
-/* Trailing chevron for popover disclosures */
-.toolbar-btn-disclosure::after {
-	content: " ▾";
-	font-size: 0.85em;
-	opacity: 0.7;
+/* The Due button's due-count badge. Orange (--c-accent-attention) is used
+ * nowhere else in the toolbar, so its appearance here stays meaningful.
+ * :empty, not a Go-side conditional class, because the OOB-swapped copy
+ * (renderOutlineFragment) and the full-page copy must look identical
+ * whether or not there happen to be any due items right now. */
+.toolbar-due-badge {
+	display: inline-block;
+	background: var(--c-accent-attention);
+	color: #fff;
+	border-radius: 999px;
+	font-size: var(--fs-2xs);
+	font-weight: 600;
+	line-height: 1.5;
+	padding: 0 0.45em;
+	margin-left: 0.1em;
+}
+.toolbar-due-badge:empty {
+	display: none;
+}
+
+/* Import's icon-button trigger for the hidden file input — see
+ * outline.html and notes.js's initImportAutoSubmit. Shares .toolbar-btn's
+ * look via that class on the <label> itself; this just makes the label
+ * behave like the button it visually is. */
+.notes-import-label {
+	cursor: pointer;
 }
 
 .notes-due-group + .notes-due-group { margin-top: var(--s-4); }
