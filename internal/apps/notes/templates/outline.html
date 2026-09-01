@@ -308,7 +308,7 @@
 				<a class="outline-dot{{if .Collapsed}} outline-dot-full{{end}}"
 				   href="/notes/{{.ID}}"
 				   draggable="false"
-				   aria-label="Zoom in to {{.DisplayTitle}}"><svg class="icon-dot" width="16" height="16" viewBox="0 0 16 16">{{if .Collapsed}}<circle class="icon-dot-halo" cx="8" cy="8" r="6.5"/><circle cx="8" cy="8" r="3" fill="currentColor"/>{{else}}<circle cx="8" cy="8" r="3" fill="currentColor"/>{{end}}</svg></a>
+				   aria-label="Zoom in to {{.DisplayTitle}}"><svg class="icon-dot" width="16" height="16" viewBox="0 0 16 16">{{if .Collapsed}}<circle class="icon-dot-halo" cx="8" cy="8" r="8"/><circle cx="8" cy="8" r="4" fill="currentColor"/>{{else}}<circle cx="8" cy="8" r="4" fill="currentColor"/>{{end}}</svg></a>
 
 				<span class="outline-text">
 					<span class="outline-field">
@@ -360,7 +360,7 @@
 				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 				<input type="hidden" name="root" value="{{.Root.ID}}">
 				<span class="outline-chevron" aria-hidden="true"></span>
-				<span class="outline-dot" aria-hidden="true"><svg class="icon-dot" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="currentColor"/></svg></span>
+				<span class="outline-dot" aria-hidden="true"><svg class="icon-dot" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4" fill="currentColor"/></svg></span>
 				<span class="outline-text">
 					<input class="outline-title" type="text" name="new_title"
 					       maxlength="2000" autofocus
