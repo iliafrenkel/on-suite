@@ -19,7 +19,7 @@
 <ul class="notes-shared-list">
 	{{range .}}
 	<li class="notes-shared-item{{if .Done}} notes-shared-done{{end}}">
-		<span class="notes-shared-title">{{.RenderedTitle}}{{if .DueOn}} <span class="notes-shared-due">@{{.DueOn}}</span>{{end}}</span>
+		<span class="notes-shared-title">{{.RenderedTitle}}{{if and .DueOn (not .Done)}} <span class="notes-shared-due">@{{.DueOn}}</span>{{end}}</span>
 		{{with .RenderedNote}}<div class="notes-shared-note">{{.}}</div>{{end}}
 		{{with .Children}}{{template "shared-rows" .}}{{end}}
 	</li>
