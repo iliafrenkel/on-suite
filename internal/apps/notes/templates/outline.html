@@ -17,7 +17,7 @@
      (WCAG 1.4.1) — the leading "!" is a visual mark for a colour-blind or
      greyscale-display sighted reader, and aria-label overrides what a
      screen reader announces for one who can't see it at all. */}}
-{{define "rendered-title"}}<span id="rendered-title-{{.ID}}" class="outline-rendered outline-title-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedTitle}}{{if and .DueOn (not .Done)}} <a class="outline-due-chip{{if .Overdue}} outline-due-overdue{{end}}" href="/notes/due"{{if .Overdue}} aria-label="Overdue: {{.DueOn}}"{{end}}>{{if .Overdue}}&#33; {{end}}{{.DueOn}}</a>{{end}}</span>{{end}}
+{{define "rendered-title"}}<span id="rendered-title-{{.ID}}" class="outline-rendered outline-title-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedTitle}}{{if gt .ChildCount 0}} <span class="outline-children-badge{{if eq .DoneChildCount .ChildCount}} outline-children-all-done{{end}}" aria-label="{{.DoneChildCount}} of {{.ChildCount}} sub-tasks completed">{{.DoneChildCount}}/{{.ChildCount}}</span>{{end}}{{if and .DueOn (not .Done)}} <a class="outline-due-chip{{if .Overdue}} outline-due-overdue{{end}}" href="/notes/due"{{if .Overdue}} aria-label="Overdue: {{.DueOn}}"{{end}}>{{if .Overdue}}&#33; {{end}}{{.DueOn}}</a>{{end}}</span>{{end}}
 {{define "rendered-note"}}<span id="rendered-note-{{.ID}}" class="outline-rendered outline-note-rendered"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.RenderedNote}}</span>{{end}}
 
 {{/* text-update is setText's whole HTMX response: both fields' rendered

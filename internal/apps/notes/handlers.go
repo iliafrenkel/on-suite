@@ -379,7 +379,18 @@ func (a *App) setText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if web.IsHTMX(r) {
-		row := &outlineRow{Node: Node{ID: id}, OOB: true, RenderedTitle: Render(title), RenderedNote: Render(note)}
+		n, err := a.store.ByID(r.Context(), userID, id)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		row := &outlineRow{
+			Node:          n,
+			OOB:           true,
+			RenderedTitle: Render(title),
+			RenderedNote:  Render(note),
+			Overdue:       n.DueOn != "" && n.DueOn < time.Now().Format("2006-01-02"),
+		}
 		if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "text-update", row); err != nil {
 			a.deps.Errors.Internal(w, r, err)
 		}

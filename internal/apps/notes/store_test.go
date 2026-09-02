@@ -666,3 +666,39 @@ func TestOutlineHasChildrenIgnoresADoneChildUnlessShowCompleted(t *testing.T) {
 		t.Error("HasChildren is false with showCompleted on, but the done child is visible")
 	}
 }
+
+func TestOutlineChildAndDoneCounts(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	c1 := f.mk(t, parent.ID, "c1")
+	_ = f.mk(t, parent.ID, "c2")
+	_ = f.mk(t, parent.ID, "c3")
+
+	if err := f.store.SetDone(ctx, f.alice.ID, c1.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 || got[0].ID != parent.ID {
+		t.Fatalf("Outline returned %+v, want parent at top", got)
+	}
+	if got[0].ChildCount != 3 {
+		t.Errorf("got ChildCount %d, want 3", got[0].ChildCount)
+	}
+	if got[0].DoneChildCount != 1 {
+		t.Errorf("got DoneChildCount %d, want 1", got[0].DoneChildCount)
+	}
+
+	// Verify ByID also returns correct child counts.
+	byID, err := f.store.ByID(ctx, f.alice.ID, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byID.ChildCount != 3 || byID.DoneChildCount != 1 {
+		t.Errorf("ByID child counts = (%d, %d), want (3, 1)", byID.ChildCount, byID.DoneChildCount)
+	}
+}

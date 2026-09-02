@@ -94,12 +94,23 @@ type querier interface {
 
 // nodeByID is the SQL behind Store.ByID and Ops.ByID.
 func nodeByID(ctx context.Context, q querier, userID, id int64) (Node, error) {
+	var (
+		childCount     int
+		doneChildCount int
+	)
 	n, err := scanNode(q.QueryRowContext(ctx,
-		`SELECT `+nodeColumns+` FROM notes_nodes WHERE id = ? AND user_id = ?`, id, userID))
+		`SELECT `+nodeColumns+`,
+		        (SELECT count(*) FROM notes_nodes k WHERE k.user_id = notes_nodes.user_id AND k.parent_id = notes_nodes.id AND k.archived_at IS NULL) AS child_count,
+		        (SELECT count(*) FROM notes_nodes k WHERE k.user_id = notes_nodes.user_id AND k.parent_id = notes_nodes.id AND k.archived_at IS NULL AND k.done_at IS NOT NULL) AS done_child_count
+		   FROM notes_nodes WHERE id = ? AND user_id = ?`, id, userID), &childCount, &doneChildCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Node{}, ErrNotFound
 	}
-	return n, err
+	if err != nil {
+		return Node{}, err
+	}
+	n.ChildCount, n.DoneChildCount = childCount, doneChildCount
+	return n, nil
 }
 
 // siblingAt fetches the child of parentID sitting at a given position. Only
@@ -381,7 +392,13 @@ func (st *Store) Outline(ctx context.Context, userID, rootID int64, showComplete
 		 SELECT `+nodeColumns+`, depth,
 		        EXISTS (SELECT 1 FROM notes_nodes k
 		                 WHERE k.user_id = tree.user_id AND k.parent_id = tree.id
-		                   AND k.archived_at IS NULL AND (? OR k.done_at IS NULL))
+		                   AND k.archived_at IS NULL AND (? OR k.done_at IS NULL)),
+		        (SELECT count(*) FROM notes_nodes k
+		          WHERE k.user_id = tree.user_id AND k.parent_id = tree.id
+		            AND k.archived_at IS NULL) AS child_count,
+		        (SELECT count(*) FROM notes_nodes k
+		          WHERE k.user_id = tree.user_id AND k.parent_id = tree.id
+		            AND k.archived_at IS NULL AND k.done_at IS NOT NULL) AS done_child_count
 		   FROM tree ORDER BY path`,
 		userID, parentArg(rootID), MaxDepth, showCompleted)
 	if err != nil {
@@ -392,14 +409,16 @@ func (st *Store) Outline(ctx context.Context, userID, rootID int64, showComplete
 	var out []Node
 	for rows.Next() {
 		var (
-			depth       int
-			hasChildren bool
+			depth          int
+			hasChildren    bool
+			childCount     int
+			doneChildCount int
 		)
-		n, err := scanNode(rows, &depth, &hasChildren)
+		n, err := scanNode(rows, &depth, &hasChildren, &childCount, &doneChildCount)
 		if err != nil {
 			return nil, err
 		}
-		n.Depth, n.HasChildren = depth, hasChildren
+		n.Depth, n.HasChildren, n.ChildCount, n.DoneChildCount = depth, hasChildren, childCount, doneChildCount
 		out = append(out, n)
 	}
 	if err := rows.Err(); err != nil {
