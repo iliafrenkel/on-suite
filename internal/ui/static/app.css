@@ -867,16 +867,15 @@ button.outline-chevron {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.25em;
-	font-size: var(--fs-2xs);
-	text-transform: uppercase;
+	font-size: var(--fs-xs);
+	font-variant: small-caps;
 	letter-spacing: 0.04em;
-	background: var(--c-accent-bg);
-	color: var(--c-accent);
+	background: var(--c-accent-attention-bg);
+	color: var(--c-accent-attention);
 	padding: 0 0.4em;
 	border-radius: var(--radius);
 	text-decoration: none;
 	white-space: nowrap;
-	font-weight: 600;
 }
 .outline-share-chip:hover {
 	color: var(--c-accent);
