@@ -3766,3 +3766,50 @@ func TestOutlineRendersChildrenProgressBadge(t *testing.T) {
 		t.Errorf("setText OOB children badge text = %q, want \"1/3\"", got)
 	}
 }
+
+func TestOutlineRendersSharedBadge(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Shared Task")
+
+	// Initially no share badge.
+	doc := s.Get(t, s.Alice, "/notes/")
+	if len(doc.QueryAll(".outline-share-chip")) != 0 {
+		t.Error("bullet unshared, but .outline-share-chip is present")
+	}
+
+	slug, err := s.Store.Share(context.Background(), s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc = s.Get(t, s.Alice, "/notes/")
+	chip := doc.MustHave(".outline-share-chip")
+	if got := htmlassert.Text(chip); got != "Shared" {
+		t.Errorf("share chip text = %q, want \"Shared\"", got)
+	}
+	if href, ok := htmlassert.Attr(chip, "href"); !ok || href != "/notes/s/"+slug {
+		t.Errorf("share chip href = %q, want \"/notes/s/%s\"", href, slug)
+	}
+
+	// Test setText OOB update preserves the share badge.
+	form := url.Values{"csrf_token": {s.CSRFToken(t, s.Alice)}, "root": {"0"}, "title": {"Shared Task Updated"}, "note": {""}}
+	req := httptest.NewRequest("POST", "/notes/"+itoa(id)+"/text", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	rec := s.Do(t, s.Alice, req)
+	oobDoc := htmlassert.Parse(t, rec.Body.String())
+	oobChip := oobDoc.MustHave(".outline-share-chip")
+	if href, ok := htmlassert.Attr(oobChip, "href"); !ok || href != "/notes/s/"+slug {
+		t.Errorf("setText OOB share chip href = %q, want \"/notes/s/%s\"", href, slug)
+	}
+
+	if err := s.Store.Unshare(context.Background(), s.Alice.User.ID, id); err != nil {
+		t.Fatal(err)
+	}
+
+	doc = s.Get(t, s.Alice, "/notes/")
+	if len(doc.QueryAll(".outline-share-chip")) != 0 {
+		t.Error("bullet unshared, but .outline-share-chip is still present")
+	}
+}
