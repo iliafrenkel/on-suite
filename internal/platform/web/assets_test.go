@@ -171,9 +171,11 @@ func TestFontsAreEmbedded(t *testing.T) {
 	for _, want := range []string{
 		"fonts/inter.woff2",
 		"fonts/jetbrains-mono.woff2",
-		"fonts/literata.woff2",
-		"fonts/public-sans.woff2",
-		"fonts/space-grotesk.woff2",
+		"fonts/source-serif-4.woff2",
+		"fonts/ia-writer-duo-s-regular.woff2",
+		"fonts/ia-writer-duo-s-bold.woff2",
+		"fonts/ia-writer-duo-s-italic.woff2",
+		"fonts/ia-writer-duo-s-bold-italic.woff2",
 	} {
 		if !strings.Contains(strings.Join(a.Names(), ","), want) {
 			t.Errorf("%s is not embedded; got %v", want, a.Names())

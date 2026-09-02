@@ -230,7 +230,7 @@ func TestRegistryEmptyIsUsable(t *testing.T) {
 func TestNewPageFillsPreferencesAndActiveAppFromRequest(t *testing.T) {
 	r := httptest.NewRequest("GET", "/paste/", nil)
 	r.AddCookie(&http.Cookie{Name: web.ThemeCookieName, Value: "dark"})
-	r.AddCookie(&http.Cookie{Name: web.FontCookieName, Value: "literata"})
+	r.AddCookie(&http.Cookie{Name: web.FontCookieName, Value: "serif"})
 	r.AddCookie(&http.Cookie{Name: web.SidebarCookieName, Value: "collapsed"})
 	r = r.WithContext(web.WithActiveApp(r.Context(), "paste"))
 
@@ -243,8 +243,8 @@ func TestNewPageFillsPreferencesAndActiveAppFromRequest(t *testing.T) {
 	if page.Shell.Theme != "dark" {
 		t.Errorf("Theme = %q, want dark", page.Shell.Theme)
 	}
-	if page.Shell.Font != "literata" {
-		t.Errorf("Font = %q, want literata", page.Shell.Font)
+	if page.Shell.Font != "serif" {
+		t.Errorf("Font = %q, want serif", page.Shell.Font)
 	}
 	if !page.Shell.SidebarCollapsed {
 		t.Error("SidebarCollapsed = false, want true")

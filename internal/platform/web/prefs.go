@@ -25,8 +25,12 @@ func ThemeFrom(r *http.Request) string {
 func FontFrom(r *http.Request) string {
 	if c, err := r.Cookie(FontCookieName); err == nil {
 		switch c.Value {
-		case "literata", "grotesk":
+		case "serif", "duo":
 			return c.Value
+		case "literata":
+			return "serif"
+		case "grotesk":
+			return "duo"
 		}
 	}
 	return "default"
