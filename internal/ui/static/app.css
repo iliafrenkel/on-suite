@@ -37,7 +37,7 @@
 
 	/* --font-ui drives headings and UI chrome; --font-body drives prose.
 	 * They're equal in the default and literary pairings and differ only in
-	 * the "grotesk" one. --font-mono never changes with the pairing. */
+	 * specialized pairings. --font-mono never changes with the pairing. */
 	--font-ui: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--font-body: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
@@ -63,14 +63,14 @@
 /* Runtime font switcher. data-font is set on <html> from a cookie, read
  * server-side on every request (internal/platform/web/prefs.go) so the first
  * paint already has the right fonts — no flash of the wrong typeface. */
-[data-font="literata"] {
-	--font-ui: 'Literata', Georgia, "Times New Roman", serif;
-	--font-body: 'Literata', Georgia, "Times New Roman", serif;
+[data-font="serif"] {
+	--font-ui: 'Source Serif 4', Georgia, "Times New Roman", serif;
+	--font-body: 'Source Serif 4', Georgia, "Times New Roman", serif;
 }
 
-[data-font="grotesk"] {
-	--font-ui: 'Space Grotesk', system-ui, sans-serif;
-	--font-body: 'Public Sans', system-ui, sans-serif;
+[data-font="duo"] {
+	--font-ui: 'iA Writer Duo S', monospace, sans-serif;
+	--font-body: 'iA Writer Duo S', monospace, sans-serif;
 }
 
 /* Self-hosted fonts. One file per family; Google's own served CSS declares
@@ -81,12 +81,15 @@
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2"); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/jetbrains-mono.woff2") format("woff2"); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/jetbrains-mono.woff2") format("woff2"); }
-@font-face { font-family: 'Literata'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/literata.woff2") format("woff2"); }
-@font-face { font-family: 'Literata'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/literata.woff2") format("woff2"); }
-@font-face { font-family: 'Public Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/public-sans.woff2") format("woff2"); }
-@font-face { font-family: 'Public Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/public-sans.woff2") format("woff2"); }
-@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/space-grotesk.woff2") format("woff2"); }
-@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/space-grotesk.woff2") format("woff2"); }
+@font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/source-serif-4.woff2") format("woff2"); }
+@font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/source-serif-4.woff2") format("woff2"); }
+@font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/source-serif-4.woff2") format("woff2"); }
+@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-regular.woff2") format("woff2"); }
+@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-regular.woff2") format("woff2"); }
+@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-bold.woff2") format("woff2"); }
+@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 700; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-bold.woff2") format("woff2"); }
+@font-face { font-family: 'iA Writer Duo S'; font-style: italic; font-weight: 400; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-italic.woff2") format("woff2"); }
+@font-face { font-family: 'iA Writer Duo S'; font-style: italic; font-weight: 700; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-bold-italic.woff2") format("woff2"); }
 
 /* Dark mode is a real toggle, not prefers-color-scheme: data-theme is set
  * server-side from a cookie (internal/platform/web/prefs.go, ThemeFrom)

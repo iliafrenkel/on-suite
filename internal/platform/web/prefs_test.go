@@ -43,8 +43,10 @@ func TestFontFrom(t *testing.T) {
 	}{
 		{"no cookie defaults to default", "", "default"},
 		{"explicit default", "default", "default"},
-		{"explicit literata", "literata", "literata"},
-		{"explicit grotesk", "grotesk", "grotesk"},
+		{"explicit serif", "serif", "serif"},
+		{"explicit duo", "duo", "duo"},
+		{"legacy literata maps to serif", "literata", "serif"},
+		{"legacy grotesk maps to duo", "grotesk", "duo"},
 		{"garbage value defaults to default", "comic-sans", "default"},
 	}
 	for _, tt := range tests {

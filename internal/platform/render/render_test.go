@@ -322,7 +322,7 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 			LoggedIn:      true,
 			Username:      "ilia",
 			Theme:         "dark",
-			Font:          "literata",
+			Font:          "serif",
 			ActiveApp:     "paste",
 			ActiveAppName: "ON Paste",
 			ActiveAppPath: "/paste/",
@@ -343,8 +343,8 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-theme"); v != "dark" {
 		t.Errorf("data-theme = %q, want dark", v)
 	}
-	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-font"); v != "literata" {
-		t.Errorf("data-font = %q, want literata", v)
+	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-font"); v != "serif" {
+		t.Errorf("data-font = %q, want serif", v)
 	}
 
 	// Breadcrumbs: Home / ON Paste / New snippet.
