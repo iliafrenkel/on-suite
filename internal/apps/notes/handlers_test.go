@@ -1856,6 +1856,38 @@ func TestDueSetsAndClearsTheChip(t *testing.T) {
 	s.Get(t, s.Alice, "/notes/").MustNotHave(".outline-due-chip")
 }
 
+func TestDueChipOmittedWhenDone(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	id := s.seed(t, s.Alice, notes.RootID, "task")
+
+	future := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+	if err := s.Store.SetDue(ctx, s.Alice.User.ID, id, future); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/notes/")
+	doc.MustHave(".outline-due-chip")
+
+	// Mark bullet done.
+	if err := s.Store.SetDone(ctx, s.Alice.User.ID, id, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// With show_completed=1, the done bullet is rendered, but the chip must be omitted.
+	req := httptest.NewRequest("GET", "/notes/", nil)
+	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
+	rec := s.Do(t, s.Alice, req)
+	docDone := htmlassert.Parse(t, rec.Body.String())
+	docDone.MustNotHave(".outline-due-chip")
+
+	// Mark bullet not done.
+	if err := s.Store.SetDone(ctx, s.Alice.User.ID, id, false); err != nil {
+		t.Fatal(err)
+	}
+	s.Get(t, s.Alice, "/notes/").MustHave(".outline-due-chip")
+}
+
 func TestDueRejectsBadFormat(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.Alice, notes.RootID, "task")
