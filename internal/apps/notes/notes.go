@@ -155,10 +155,13 @@ type Node struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	// Depth and HasChildren are filled in by Outline and are zero elsewhere.
-	// Depth is relative to the outline's root: its direct children are 0.
-	Depth       int
-	HasChildren bool
+	// Depth, HasChildren, ChildCount and DoneChildCount are filled in by Outline
+	// and are zero elsewhere. Depth is relative to the outline's root: its
+	// direct children are 0.
+	Depth          int
+	HasChildren    bool
+	ChildCount     int
+	DoneChildCount int
 }
 
 // DisplayTitle is what to show for a bullet saved with no text. An empty

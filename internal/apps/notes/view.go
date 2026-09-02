@@ -45,8 +45,8 @@ type outlineView struct {
 // itself, and a recursive block can only be handed one argument: the slice of
 // children. Denormalising two fields is the cheaper half of that trade.
 type outlineRow struct {
-	// Node carries ID, Title, Note, Position, Depth, Collapsed and
-	// HasChildren, all set by Store.Outline.
+	// Node carries ID, Title, Note, Position, Depth, Collapsed,
+	// HasChildren, ChildCount and DoneChildCount, all set by Store.Outline.
 	Node
 	// Last is true for the final row of a sibling list, which is what decides
 	// whether "move down" renders disabled.

@@ -3732,3 +3732,37 @@ func TestDueBadgeExcludesFutureItems(t *testing.T) {
 		t.Errorf("due badge = %q, want empty — the only due item is a month out", got)
 	}
 }
+
+func TestOutlineRendersChildrenProgressBadge(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.Alice, notes.RootID, "Parent Task")
+	c1 := s.seed(t, s.Alice, parent, "Child 1")
+	_ = s.seed(t, s.Alice, parent, "Child 2")
+	_ = s.seed(t, s.Alice, parent, "Child 3")
+
+	if err := s.Store.SetDone(context.Background(), s.Alice.User.ID, c1, true); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/notes/")
+	badge := doc.MustHave(".outline-children-badge")
+	if got := htmlassert.Text(badge); got != "1/3" {
+		t.Errorf("children badge text = %q, want \"1/3\"", got)
+	}
+	if got, ok := htmlassert.Attr(badge, "aria-label"); !ok || got != "1 of 3 sub-tasks completed" {
+		t.Errorf("children badge aria-label = %q, want \"1 of 3 sub-tasks completed\"", got)
+	}
+
+	// Test setText OOB update preserves the badge.
+	form := url.Values{"csrf_token": {s.CSRFToken(t, s.Alice)}, "root": {"0"}, "title": {"Parent Task Updated"}, "note": {""}}
+	req := httptest.NewRequest("POST", "/notes/"+itoa(parent)+"/text", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	rec := s.Do(t, s.Alice, req)
+	oobDoc := htmlassert.Parse(t, rec.Body.String())
+	oobBadge := oobDoc.MustHave(".outline-children-badge")
+	if got := htmlassert.Text(oobBadge); got != "1/3" {
+		t.Errorf("setText OOB children badge text = %q, want \"1/3\"", got)
+	}
+}

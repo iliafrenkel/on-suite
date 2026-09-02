@@ -848,6 +848,21 @@ button.outline-chevron {
 }
 .outline-due-overdue:hover { color: var(--c-danger); }
 
+.outline-children-badge {
+	display: inline-block;
+	font-size: var(--fs-2xs);
+	background: var(--c-bg-subtle);
+	color: var(--c-text-dim);
+	padding: 0 0.4em;
+	border-radius: var(--radius);
+	white-space: nowrap;
+	font-weight: 500;
+}
+.outline-children-all-done {
+	background: var(--c-accent-bg);
+	color: var(--c-accent);
+}
+
 .outline-due-input {
 	font: inherit;
 	font-size: var(--fs-sm);
