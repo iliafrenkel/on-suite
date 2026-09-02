@@ -71,6 +71,7 @@
 [data-font="duo"] {
 	--font-ui: 'iA Writer Duo S', monospace, sans-serif;
 	--font-body: 'iA Writer Duo S', monospace, sans-serif;
+	--fs-base: 0.875rem;
 }
 
 /* Self-hosted fonts. One file per family; Google's own served CSS declares
