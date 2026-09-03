@@ -162,7 +162,7 @@ h1 { font-size: var(--fs-2xl); }
 h2 { font-size: var(--fs-xl); }
 h3 { font-size: var(--fs-lg); }
 
-code, pre, kbd { font-family: var(--font-mono); font-size: 0.9em; }
+code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 
 /* Filled, no border: a passive block of content to read, distinct from the
  * bordered treatment on things you act on (buttons, inputs, cards). Uniform
