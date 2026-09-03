@@ -547,6 +547,7 @@ button.danger:hover { background: var(--c-danger-bg); }
 	white-space: nowrap;
 	color: var(--c-text-dim);
 	font-size: var(--fs-base);
+	font-weight: 400;
 }
 
 /* Distinct from .snippet-preview on purpose: at equal size and colour, the
@@ -555,6 +556,7 @@ button.danger:hover { background: var(--c-danger-bg); }
 .snippet-meta {
 	font-size: var(--fs-xs);
 	color: var(--c-text-faint);
+	font-weight: 400;
 }
 
 /* ---- ON Paste split view ------------------------------------------------ */

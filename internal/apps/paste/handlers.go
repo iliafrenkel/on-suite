@@ -13,8 +13,8 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
-// viewModel is what the view and shared templates render. It carries the
-// already-highlighted body so a template never calls into Chroma.
+// viewModel is what the shared template renders. It carries the
+// already-highlighted body so the template never calls into Chroma.
 type viewModel struct {
 	Snippet   Snippet
 	Highlight template.HTML
