@@ -148,6 +148,63 @@ func TestCreateOverHTMXUpdatesListAndDetailTogether(t *testing.T) {
 	}
 }
 
+// TestCreateValidationFailureOverHTMXReturns200: htmx's default
+// responseHandling config does not swap 4xx responses into the DOM, so a
+// validation failure rendered at 400 over HTMX would silently vanish
+// instead of showing the user why Save did nothing. The fragment must come
+// back at 200 so htmx actually swaps the re-populated form and its error.
+func TestCreateValidationFailureOverHTMXReturns200(t *testing.T) {
+	s := newServer(t)
+	rec := s.PostHX(t, s.Alice, "/paste/new", url.Values{
+		"title": {"t"}, "language": {"go"}, "body": {""},
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 so htmx will swap the error in", rec.Code)
+	}
+	doc := htmlassert.Parse(t, "<html><body>"+rec.Body.String()+"</body></html>")
+	doc.MustHave(".notice-error")
+}
+
+// TestUpdateValidationFailureOverHTMXReturns200 is TestCreateValidationFailureOverHTMXReturns200's
+// counterpart for the edit form.
+func TestUpdateValidationFailureOverHTMXReturns200(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Original", "go", "package a\n")
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id), url.Values{
+		"title": {"Original"}, "language": {"go"}, "body": {"   \n"},
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 so htmx will swap the error in", rec.Code)
+	}
+	doc := htmlassert.Parse(t, "<html><body>"+rec.Body.String()+"</body></html>")
+	doc.MustHave(".notice-error")
+}
+
+// TestCreateOverHTMXPushesTheNewURL: the design requires /paste/{id} to be
+// bookmarkable after any action. Without HX-Push-Url, the address bar stays
+// at /paste/new after a create over HTMX, and reloading throws the user
+// back to a blank form.
+func TestCreateOverHTMXPushesTheNewURL(t *testing.T) {
+	s := newServer(t)
+	rec := s.PostHX(t, s.Alice, "/paste/new", url.Values{
+		"title": {"Fresh"}, "language": {"go"}, "body": {"package c\n"},
+	})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body: %s", rec.Code, rec.Body.String())
+	}
+	push := rec.Header().Get("HX-Push-Url")
+	if push == "" || push == "/paste/new" || !strings.HasPrefix(push, "/paste/") {
+		t.Errorf("HX-Push-Url = %q, want /paste/{new-id}", push)
+	}
+	if push == "/paste/" {
+		t.Errorf("HX-Push-Url = %q, want it to include the new snippet's id", push)
+	}
+}
+
 func TestCreateThenView(t *testing.T) {
 	s := newServer(t)
 	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\nother: 2\n")
@@ -961,6 +1018,23 @@ func TestDeleteOverHTMXClearsDetailAndRemovesRow(t *testing.T) {
 	}
 	doc := htmlassert.Parse(t, "<html><body>"+body+"</body></html>")
 	doc.MustHave(".paste-detail-empty")
+}
+
+// TestDeleteOverHTMXPushesTheListURL: the browser was at /paste/{id}, but
+// that snippet no longer exists after the delete, so without HX-Push-Url a
+// reload would 404 instead of landing back on the list.
+func TestDeleteOverHTMXPushesTheListURL(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Doomed", "go", "package a\n")
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id)+"/delete", url.Values{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	if push := rec.Header().Get("HX-Push-Url"); push != "/paste/" {
+		t.Errorf("HX-Push-Url = %q, want /paste/", push)
+	}
 }
 
 func itoa(n int64) string {

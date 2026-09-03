@@ -105,6 +105,12 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/paste/"+strconv.FormatInt(s.ID, 10), http.StatusSeeOther)
 		return
 	}
+	// The request was to /paste/new, but the browser now has a real snippet
+	// at a new id; without this, reloading after a create over HTMX throws
+	// the user back to a blank new-snippet form. HX-Push-Url must be set
+	// before the render call writes the response, since headers cannot
+	// change after that.
+	w.Header().Set("HX-Push-Url", "/paste/"+strconv.FormatInt(s.ID, 10))
 	a.renderDetailWithList(w, r, userID, http.StatusCreated, a.viewDetail(r, s))
 }
 
@@ -366,7 +372,15 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, 
 			List:   listFragment{Items: items, ActiveID: detail.Snippet.ID, OOB: true},
 			Detail: detail,
 		}
-		if err := a.deps.Render.Fragment(w, status, "paste/index", "detail-with-list", view); err != nil {
+		// htmx's default responseHandling config only swaps 2xx/3xx
+		// responses into the DOM; a 4xx (e.g. a validation failure) is
+		// otherwise silently discarded, and the freshly re-rendered form
+		// with its error message never reaches the page. The HTTP status
+		// code has no swap-relevant meaning for a partial response the way
+		// it does for a full navigation, so this always renders 200 for an
+		// HTMX fragment — the non-HTMX branch below still uses the real
+		// status, which is correct HTTP semantics for a full page.
+		if err := a.deps.Render.Fragment(w, http.StatusOK, "paste/index", "detail-with-list", view); err != nil {
 			a.deps.Errors.Internal(w, r, err)
 		}
 		return
@@ -423,6 +437,10 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/paste/", http.StatusSeeOther)
 		return
 	}
+	// The browser was at /paste/{id}, but that snippet no longer exists;
+	// without this, reloading after a delete over HTMX 404s. Must be set
+	// before the render call writes the response.
+	w.Header().Set("HX-Push-Url", "/paste/")
 	a.renderDetailWithList(w, r, userID, http.StatusOK, detailView{})
 }
 

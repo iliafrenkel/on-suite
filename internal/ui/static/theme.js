@@ -99,12 +99,17 @@
 		setTimeout(function () { btn.textContent = original; }, 1500);
 	}
 
+	// Delegated on document rather than attached per-button via
+	// querySelectorAll at load time, for the same reason as initConfirm
+	// below: a Copy/Copy-link button can arrive later via an htmx swap
+	// (e.g. the paste split-view's detail pane) and would otherwise never
+	// get a listener.
 	function initCopyLink() {
-		document.querySelectorAll("[data-copy-link]").forEach(function (btn) {
-			btn.addEventListener("click", function () {
-				var url = location.origin + btn.getAttribute("data-copy-link");
-				copyText(url).then(function () { flashCopied(btn); });
-			});
+		document.addEventListener("click", function (e) {
+			var btn = e.target.closest("[data-copy-link]");
+			if (!btn) return;
+			var url = location.origin + btn.getAttribute("data-copy-link");
+			copyText(url).then(function () { flashCopied(btn); });
 		});
 	}
 
@@ -112,19 +117,21 @@
 	// same raw endpoint the "Raw" link points to rather than duplicating the
 	// body into the page, so this works from the copy verbatim (no
 	// highlighting markup) with no risk of drifting from what "Raw" shows.
+	//
+	// Delegated on document for the same reason as initCopyLink above.
 	function initCopyRaw() {
-		document.querySelectorAll("[data-copy-raw]").forEach(function (btn) {
-			btn.addEventListener("click", function () {
-				fetch(btn.getAttribute("data-copy-raw"))
-					.then(function (res) { return res.text(); })
-					.then(function (text) { return copyText(text); })
-					.then(function () { flashCopied(btn); })
-					.catch(function () {
-						var original = btn.textContent;
-						btn.textContent = "Copy failed";
-						setTimeout(function () { btn.textContent = original; }, 1500);
-					});
-			});
+		document.addEventListener("click", function (e) {
+			var btn = e.target.closest("[data-copy-raw]");
+			if (!btn) return;
+			fetch(btn.getAttribute("data-copy-raw"))
+				.then(function (res) { return res.text(); })
+				.then(function (text) { return copyText(text); })
+				.then(function () { flashCopied(btn); })
+				.catch(function () {
+					var original = btn.textContent;
+					btn.textContent = "Copy failed";
+					setTimeout(function () { btn.textContent = original; }, 1500);
+				});
 		});
 	}
 
