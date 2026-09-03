@@ -626,7 +626,14 @@ button.danger:hover { background: var(--c-danger-bg); }
 	border: 1px solid var(--c-border-firm);
 	border-radius: var(--radius);
 	color: var(--c-text-dim);
-	font-size: var(--fs-sm);
+	background-color: var(--c-accent-attention-bg);
+	font-size: var(--fs-xs);
+	font-weight: 400;
+	font-variant: small-caps;
+}
+.tag .chip-icon {
+    width: 0.75em;
+    height: 0.75em;
 }
 
 /* ---- Admin --------------------------------------------------------------- */

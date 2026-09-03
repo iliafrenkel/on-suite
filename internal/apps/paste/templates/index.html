@@ -144,7 +144,9 @@
 		<a class="snippet-row{{if eq $s.ID $.ActiveID}} snippet-row-active{{end}}" href="/paste/{{$s.ID}}" hx-get="/paste/{{$s.ID}}" hx-target="#detail" hx-push-url="true">
 			<div class="row snippet-row-head">
 				<span>{{$s.DisplayTitle}}</span>
-				{{if $s.Shared}}<span class="tag" title="Shared with a public link">shared</span>{{end}}
+				{{if $s.Shared}}<span class="tag" title="Shared with a public link">
+				<svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+				shared</span>{{end}}
 			</div>
 			<p class="snippet-preview">{{.Preview}}</p>
 			<p class="snippet-meta">
