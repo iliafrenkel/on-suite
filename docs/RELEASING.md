@@ -30,17 +30,21 @@ GitHub Release — there's no separate release script or manual build step.
 3. Watch the run under the repo's Actions tab. Goreleaser will:
    - re-run `go mod tidy` and `go test ./... -race` as a final gate
      ([`.goreleaser.yaml`](../.goreleaser.yaml) `before.hooks`),
-   - cross-compile `onsuite` for `linux/amd64`, `linux/arm64`, `darwin/amd64`,
-     `darwin/arm64` with `CGO_ENABLED=0`, stamping the tag into
+   - cross-compile `onsuite` for `linux/amd64`, `linux/arm64`, `darwin/arm64`,
+     `windows/amd64` with `CGO_ENABLED=0`, stamping the tag into
      `main.version`,
-   - package each binary into a `.tar.gz` alongside `README.md`, `LICENSE`,
-     `docs/DEPLOYING.md`, and `docs/onsuite.service`, plus a `checksums.txt`,
+   - package each binary into a `.tar.gz` (`.zip` for Windows) alongside
+     `README.md`, `LICENSE`, `docs/DEPLOYING.md`, and `docs/onsuite.service`,
+     plus a `checksums.txt`,
    - sign `checksums.txt` with [cosign](https://docs.sigstore.dev/cosign/overview/)
      using keyless (Sigstore) signing, producing `checksums.txt.sig` and
      `checksums.txt.pem`,
-   - generate release notes from `git log` (commits starting with `docs:`,
-     `test:`, or that are merge commits are filtered out — keep that in mind
-     when writing commit messages for anything you want in the changelog),
+   - generate release notes from `git log`, grouped into New Features, Bug
+     Fixes, Improvements, and Everything Else (for the curious) based on each
+     commit's Conventional Commits type — see
+     [`CONTRIBUTING.md`](../CONTRIBUTING.md#commit-messages) for the type-to-section
+     mapping. Commits starting with `docs:` or `test:`, and merge commits,
+     are dropped entirely,
    - publish everything as a GitHub Release named after the tag.
 
 `actions/checkout` and `goreleaser-action` use `permissions: contents:

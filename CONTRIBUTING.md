@@ -34,6 +34,39 @@ against a real SQLite file in a temp directory rather than a mock or
 `:memory:` database, because the interesting bugs live in the SQL and in WAL
 behaviour that `:memory:` doesn't reproduce.
 
+## Commit messages
+
+Commit subjects follow [Conventional Commits](https://www.conventionalcommits.org/):
+`type(scope): summary`, e.g. `fix(notes): trim search query before it reaches
+the template`. The scope is usually an app name (`notes`, `paste`) or
+`platform`; omit it for repo-wide changes.
+
+The `type` decides which section of the release notes a commit lands in —
+[`.goreleaser.yaml`](.goreleaser.yaml)'s `changelog.groups` sorts on it when a
+tagged release is cut (see [docs/RELEASING.md](docs/RELEASING.md)):
+
+| Type                                 | Release notes section          |
+| ------------------------------------ | ------------------------------- |
+| `feat`                                | New Features                    |
+| `fix`                                 | Bug Fixes                       |
+| `refactor`, `perf`, `chore`, `style`  | Improvements                    |
+| `docs`, `test`                        | *(excluded — not shown at all)* |
+| anything else                         | Everything Else (for the curious) |
+
+A few things that matter for how a commit gets classified:
+
+- **`feat` is for user-visible new capability**, not polish on an existing
+  one — a new app, a new page, a new command. Incremental work on something
+  that already shipped (new field on an existing form, a better error
+  message, a faster query) is `refactor`/`perf`/`chore`/`style`, not `feat`.
+- A commit whose message doesn't start with a recognized type (or that
+  doesn't follow this convention at all) still ends up in the release notes
+  — just in the catch-all "Everything Else" section — so nothing silently
+  vanishes; it just won't be sorted into the section it probably belongs in.
+- `docs:` and `test:` commits are the only ones dropped from release notes
+  entirely, on the assumption that repo maintenance isn't news to users of
+  the binary.
+
 ## Adding a new app
 
 Adding an app (ON Notes, ON Reader, ON Flash, or anything else) means writing

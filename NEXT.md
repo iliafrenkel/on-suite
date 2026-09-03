@@ -43,3 +43,8 @@ Other features and ideas that need to be fleshed out:
 - [x] Completed items should have fainter text.
 - [x] Add a context menu with actions
 - [x] Remove the checkbox on the left.
+
+## Infrastructure
+
+- [x] Remove `darwin_amd64` builds and add `windows_amd64` builds.
+- [x] Formalise commit messages format so that goreleaser can produce better release notes.

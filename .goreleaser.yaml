@@ -22,13 +22,24 @@ builds:
     goos:
       - linux
       - darwin
+      - windows
     goarch:
       - amd64
       - arm64
+    ignore:
+      # Intel Macs have been out of production since 2020; not worth building for.
+      - goos: darwin
+        goarch: amd64
+      # Only amd64 is requested for Windows; arm64 Windows is niche enough to skip for now.
+      - goos: windows
+        goarch: arm64
 
 archives:
   - id: onsuite
     formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     files:
@@ -67,8 +78,23 @@ signs:
 changelog:
   use: git
   sort: asc
+  # Commit types map to release-note sections; see CONTRIBUTING.md for the
+  # full convention. docs:/test: commits are filtered out entirely below —
+  # they're not release notes, they're repo maintenance.
+  groups:
+    - title: New Features
+      regexp: '(?i)^feat(\(.+\))?!?:'
+      order: 0
+    - title: Bug Fixes
+      regexp: '(?i)^fix(\(.+\))?!?:'
+      order: 100
+    - title: Improvements
+      regexp: '(?i)^(refactor|perf|chore|style)(\(.+\))?!?:'
+      order: 200
+    - title: Everything Else (for the curious)
+      order: 999
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
+      - '(?i)^docs(\(.+\))?:'
+      - '(?i)^test(\(.+\))?:'
       - Merge pull request
