@@ -501,7 +501,30 @@ button.danger:hover { background: var(--c-danger-bg); }
 	border-radius: var(--radius);
 	background: var(--c-bg-subtle);
 	padding: var(--s-2) var(--s-3);
-	font-size: var(--fs-sm);
+}
+
+/* Stacked title/metadata/toolbar for the detail pane's view mode (as
+ * opposed to .notes-toolbar's side-by-side layout, shared with Notes and
+ * with Paste's own edit/new forms): a long title has nowhere to push the
+ * toolbar into, since there's no second column to crowd. */
+.paste-detail-header {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+}
+
+.paste-toolbar-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--s-2);
+}
+
+/* Delete alone on the right: every other action is a low-stakes read/edit
+ * operation, so the one destructive control gets visual distance from an
+ * accidental click near the rest. */
+.paste-toolbar-actions-end {
+	margin-left: auto;
 }
 
 .snippet-body pre { margin: 0; padding: 0; border: none; background: none; }

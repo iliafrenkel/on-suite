@@ -29,15 +29,13 @@
 
 {{define "detail-view"}}
 <div class="stack" id="detail-view">
-	<div class="notes-toolbar">
-		<div>
-			<h1>{{.Snippet.DisplayTitle}}</h1>
-			<p class="faint">
-				{{.Language}} · {{.Snippet.LinesLabel}} · saved
-				<time datetime="{{.Snippet.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{.Snippet.CreatedAt.Format "2 Jan 2006 15:04"}}">{{.Snippet.CreatedAt.Format "2 Jan 2006 15:04"}}</time>
-			</p>
-		</div>
-		<div class="notes-toolbar-actions">
+	<div class="paste-detail-header">
+		<h1>{{.Snippet.DisplayTitle}}</h1>
+		<p class="faint">
+			{{.Language}} · {{.Snippet.LinesLabel}} · saved
+			<time datetime="{{.Snippet.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{.Snippet.CreatedAt.Format "2 Jan 2006 15:04"}}">{{.Snippet.CreatedAt.Format "2 Jan 2006 15:04"}}</time>
+		</p>
+		<div class="paste-toolbar-actions">
 			<a class="toolbar-btn paste-back-btn" href="/paste/" hx-get="/paste/" hx-target="#detail" hx-push-url="true"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Back</a>
 			<a class="toolbar-btn" href="/paste/edit/{{.Snippet.ID}}" hx-get="/paste/edit/{{.Snippet.ID}}" hx-target="#detail" hx-push-url="true"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Edit</a>
 			<a class="toolbar-btn" href="{{.RawURL}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 9h8"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>Raw</a>
@@ -54,7 +52,8 @@
 			</form>
 			{{end}}
 			<form method="post" action="/paste/{{.Snippet.ID}}/delete" hx-post="/paste/{{.Snippet.ID}}/delete" hx-target="#detail" hx-swap="innerHTML"
-			      data-confirm="Delete “{{.Snippet.DisplayTitle}}”? This cannot be undone.">
+			      data-confirm="Delete “{{.Snippet.DisplayTitle}}”? This cannot be undone."
+			      class="paste-toolbar-actions-end">
 				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 				<button type="submit" class="toolbar-btn danger"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Delete</button>
 			</form>
