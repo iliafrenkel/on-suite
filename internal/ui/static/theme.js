@@ -157,13 +157,40 @@
 	// A generic confirmation gate for any destructive form — data-confirm
 	// carries the message, so a new destructive action anywhere in the
 	// suite gets this for free instead of needing its own JS.
+	//
+	// This is delegated on document rather than attached per-form via
+	// querySelectorAll at load time, because forms can arrive later via an
+	// htmx swap (e.g. the paste split-view's detail pane) and would
+	// otherwise never get a listener.
+	//
+	// A form with hx-post/hx-get is handled entirely through htmx's own
+	// "htmx:confirm" event rather than the plain "submit" event: htmx
+	// registers its own submit-interception on such forms, and calling
+	// preventDefault() from a *different* submit listener does not stop
+	// that other listener from running, so the plain-submit path alone
+	// cannot actually block an HTMX-driven request. Routing HTMX-enhanced
+	// forms through "htmx:confirm" instead (and never through both) avoids
+	// double dialogs and makes Cancel actually cancel.
+	function isHtmxForm(form) {
+		return form.hasAttribute("hx-post") || form.hasAttribute("hx-get");
+	}
+
 	function initConfirm() {
-		document.querySelectorAll("form[data-confirm]").forEach(function (form) {
-			form.addEventListener("submit", function (e) {
-				if (!window.confirm(form.getAttribute("data-confirm"))) {
-					e.preventDefault();
-				}
-			});
+		document.addEventListener("submit", function (e) {
+			var form = e.target.closest("form[data-confirm]");
+			if (!form || isHtmxForm(form)) return;
+			if (!window.confirm(form.getAttribute("data-confirm"))) {
+				e.preventDefault();
+			}
+		});
+
+		document.addEventListener("htmx:confirm", function (e) {
+			var form = e.target.closest("form[data-confirm]");
+			if (!form || !isHtmxForm(form)) return;
+			e.preventDefault();
+			if (window.confirm(form.getAttribute("data-confirm"))) {
+				e.detail.issueRequest();
+			}
 		});
 	}
 
