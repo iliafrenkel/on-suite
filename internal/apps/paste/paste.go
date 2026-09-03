@@ -74,10 +74,10 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 
 	// See the route map at the top of this plan before changing any pattern:
 	// several obvious-looking alternatives make ServeMux panic at startup.
-	r.HandleFunc("GET /{$}", a.list)
+	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("GET /new", a.newForm)
 	r.HandleFunc("POST /new", a.create)
-	r.HandleFunc("GET /{id}", a.view)
+	r.HandleFunc("GET /{id}", a.index)
 	r.HandleFunc("GET /raw/{id}", a.raw)
 	r.HandleFunc("POST /{id}/delete", a.delete)
 	r.HandleFunc("POST /{id}/share", a.share)

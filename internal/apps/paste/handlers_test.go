@@ -144,6 +144,86 @@ func TestCreateThenView(t *testing.T) {
 	}
 }
 
+func TestIndexShowsListAndEmptyDetail(t *testing.T) {
+	s := newServer(t)
+	s.createSnippet(t, s.Alice, "First", "go", "package a\n")
+	s.createSnippet(t, s.Alice, "Second", "python", "print(1)\n")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	rows := doc.QueryAll(".snippet-row")
+	if len(rows) != 2 {
+		t.Fatalf("got %d snippet rows, want 2", len(rows))
+	}
+	if doc.Query(".snippet-row-active") != nil {
+		t.Error("nothing is selected, but a row is marked active")
+	}
+	doc.MustHave(".paste-detail-empty")
+}
+
+func TestIndexSelectsSnippetAndMarksActiveRow(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+	s.createSnippet(t, s.Alice, "Other", "go", "package b\n")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(doc.MustHave("h1")); got != "My config" {
+		t.Errorf("title = %q", got)
+	}
+	doc.MustHave(".chroma")
+
+	active := doc.MustHave(".snippet-row-active")
+	if !strings.Contains(htmlassert.Text(active), "My config") {
+		t.Errorf("the active row is not the selected snippet: %q", htmlassert.Text(active))
+	}
+	// It is still one page: the list must be present alongside the detail.
+	if len(doc.QueryAll(".snippet-row")) != 2 {
+		t.Error("the list pane is missing on the detail page")
+	}
+}
+
+// TestSelectingOverHTMXReturnsOnlyTheFragment: a fragment response must not
+// repeat the shell (nav, sidebar) — only what belongs inside #detail.
+func TestSelectingOverHTMXReturnsOnlyTheFragment(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+
+	req := httptest.NewRequest("GET", "/paste/"+itoa(id), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "shell-bar") || strings.Contains(body, "app-sidebar") {
+		t.Error("an HTMX fragment response repeated the page shell")
+	}
+	if !strings.Contains(body, "My config") {
+		t.Error("the fragment does not contain the snippet")
+	}
+}
+
+func TestIndexingSomeoneElsesSnippetIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "alice's", "go", "secret\n")
+
+	rec := s.Do(t, s.Bob, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "secret") {
+		t.Error("the snippet body leaked to another user")
+	}
+}
+
 // TestViewingSomeoneElsesSnippetIs404 — not a 403, which would confirm it
 // exists.
 func TestViewingSomeoneElsesSnippetIs404(t *testing.T) {
@@ -288,11 +368,14 @@ func TestListShowsOnlyYourSnippetsNewestFirst(t *testing.T) {
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
 
-	links := doc.QueryAll("ul.snippet-list li a")
-	if len(links) != 2 {
-		t.Fatalf("the list has %d entries, want 2 (alice's only)", len(links))
+	// The split-view list wraps each row's whole title/preview/meta block in
+	// one .snippet-row link now (index.html's "list-items" block), so the
+	// row's title is only a prefix of its text rather than all of it.
+	rows := doc.QueryAll(".snippet-row")
+	if len(rows) != 2 {
+		t.Fatalf("the list has %d entries, want 2 (alice's only)", len(rows))
 	}
-	if got := htmlassert.Text(links[0]); got != "alice two" {
+	if got := htmlassert.Text(rows[0]); !strings.HasPrefix(got, "alice two") {
 		t.Errorf("first entry = %q, want the newest", got)
 	}
 	if text := doc.Text(); strings.Contains(text, "bob") {
@@ -305,7 +388,12 @@ func TestListWhenEmpty(t *testing.T) {
 	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/", nil))
 
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustNotHave("ul.snippet-list")
+	// The split-view list always renders its <ul> (index.html's "list-items"
+	// block falls back to a single "No snippets yet" <li> instead of omitting
+	// the list), so assert on the absence of rows rather than the <ul> itself.
+	if rows := doc.QueryAll(".snippet-row"); len(rows) != 0 {
+		t.Errorf("got %d snippet rows, want 0", len(rows))
+	}
 	if !strings.Contains(doc.Text(), "No snippets yet") {
 		t.Errorf("no empty-state message: %q", doc.Text())
 	}

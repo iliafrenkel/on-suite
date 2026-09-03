@@ -527,7 +527,7 @@ button.danger:hover { background: var(--c-danger-bg); }
 /* ---- Snippet list ------------------------------------------------------ */
 
 .list-head { justify-content: space-between; }
-.list-head h1 { margin: 0; }
+.list-head h1, .list-head h2 { margin: 0; }
 
 .snippet-list { margin: 0; padding: 0; list-style: none; }
 
@@ -556,6 +556,45 @@ button.danger:hover { background: var(--c-danger-bg); }
 	font-size: var(--fs-xs);
 	color: var(--c-text-faint);
 }
+
+/* ---- ON Paste split view ------------------------------------------------ */
+
+.paste-shell {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--s-5);
+}
+
+.paste-list-pane {
+	flex: 0 0 20rem;
+	min-width: 0;
+}
+
+.paste-detail-pane {
+	flex: 1;
+	min-width: 0;
+}
+
+.paste-detail-empty {
+	padding: var(--s-4) 0;
+}
+
+.snippet-row {
+	display: block;
+	padding: var(--s-2);
+	margin: 0 calc(var(--s-2) * -1);
+	border-radius: var(--radius);
+	text-decoration: none;
+	color: inherit;
+}
+.snippet-row:hover { background: var(--c-bg-subtle); }
+.snippet-row-active,
+.snippet-row-active:hover {
+	background: var(--c-accent-bg);
+}
+.snippet-row-active .snippet-row-head span:first-child { color: var(--c-accent); }
+
+.paste-back-btn { display: none; }
 
 .tag {
 	padding: 0 var(--s-1);
@@ -1450,5 +1489,31 @@ kbd {
 	 * instead. */
 	.home-grid {
 		grid-template-columns: 1fr;
+	}
+
+	/* Below this width the two panes can't sit side by side. #paste-detail-open
+	 * is checked by the server whenever the detail pane has something to show
+	 * (see index.html's "content" block) and replaced via hx-swap-oob whenever
+	 * that changes, so this needs no JavaScript. */
+	.paste-shell {
+		flex-direction: column;
+	}
+	.paste-list-pane {
+		flex: none;
+		width: 100%;
+	}
+	.paste-detail-pane {
+		flex: none;
+		width: 100%;
+		display: none;
+	}
+	#paste-detail-open:checked ~ .paste-list-pane {
+		display: none;
+	}
+	#paste-detail-open:checked ~ .paste-detail-pane {
+		display: block;
+	}
+	.paste-back-btn {
+		display: inline-flex;
 	}
 }

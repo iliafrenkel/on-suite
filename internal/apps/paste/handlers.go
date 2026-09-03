@@ -1,6 +1,7 @@
 package paste
 
 import (
+	"context"
 	"errors"
 	"html/template"
 	"io"
@@ -99,34 +100,6 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/paste/"+strconv.FormatInt(s.ID, 10), http.StatusSeeOther)
 }
 
-func (a *App) view(w http.ResponseWriter, r *http.Request) {
-	userID, ok := a.userID(w, r)
-	if !ok {
-		return
-	}
-	id, ok := a.snippetID(w, r)
-	if !ok {
-		return
-	}
-
-	s, err := a.store.ByID(r.Context(), userID, id)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-
-	page := a.deps.Page(r, s.DisplayTitle())
-	page.Data = viewModel{
-		Snippet:   s,
-		Highlight: Highlight(s.Body, s.Language),
-		Language:  LanguageLabel(s.Language),
-		RawURL:    "/paste/raw/" + strconv.FormatInt(s.ID, 10),
-		ShareURL:  shareURL(s),
-		Owner:     true,
-	}
-	a.render(w, r, http.StatusOK, "paste/view", page)
-}
-
 // renderNew draws the create form, carrying back whatever the user typed so a
 // validation failure never loses their snippet.
 func (a *App) renderNew(w http.ResponseWriter, r *http.Request, status int, message, title, language, body string) {
@@ -188,18 +161,63 @@ type listItem struct {
 
 const previewRunes = 100
 
-func (a *App) list(w http.ResponseWriter, r *http.Request) {
-	userID, ok := a.userID(w, r)
-	if !ok {
-		return
-	}
+// paneMode values for detailView.Mode. modeView is added here; Task 3 adds
+// modeNew, Task 4 adds modeEdit.
+const modeView = "view"
 
-	snippets, err := a.store.List(r.Context(), userID, 0)
+// detailView is what the detail pane renders, in any mode. Fields below
+// Language belong to the edit/new forms (Tasks 3-4); they are zero-valued in
+// view mode.
+type detailView struct {
+	Mode      string
+	Snippet   Snippet
+	Highlight template.HTML
+	Language  string
+	ShareURL  string
+	RawURL    string
+	CSRFToken string
+
+	TitleValue    string
+	LanguageValue string
+	BodyValue     string
+	Languages     []Language
+	Error         string
+}
+
+// listFragment is what "list-items" renders. OOB marks a response that rides
+// along with a detail-pane update rather than the initial page load.
+type listFragment struct {
+	Items    []listItem
+	ActiveID int64
+	OOB      bool
+}
+
+// indexView is the whole split-view page: the list plus whichever thing the
+// detail pane is showing.
+type indexView struct {
+	List   listFragment
+	Detail detailView
+}
+
+// viewDetail builds the detail pane's view-mode data for one snippet.
+func (a *App) viewDetail(r *http.Request, s Snippet) detailView {
+	return detailView{
+		Mode:      modeView,
+		Snippet:   s,
+		Highlight: Highlight(s.Body, s.Language),
+		Language:  LanguageLabel(s.Language),
+		RawURL:    "/paste/raw/" + strconv.FormatInt(s.ID, 10),
+		ShareURL:  shareURL(s),
+		CSRFToken: web.CSRFToken(r.Context()),
+	}
+}
+
+// listItems loads userID's snippets as the list pane's rows.
+func (a *App) listItems(ctx context.Context, userID int64) ([]listItem, error) {
+	snippets, err := a.store.List(ctx, userID, 0)
 	if err != nil {
-		a.deps.Errors.Internal(w, r, err)
-		return
+		return nil, err
 	}
-
 	items := make([]listItem, 0, len(snippets))
 	for _, s := range snippets {
 		items = append(items, listItem{
@@ -208,10 +226,90 @@ func (a *App) list(w http.ResponseWriter, r *http.Request) {
 			Language: LanguageLabel(s.Language),
 		})
 	}
+	return items, nil
+}
 
-	page := a.deps.Page(r, "Snippets")
-	page.Data = map[string]any{"Items": items}
-	a.render(w, r, http.StatusOK, "paste/list", page)
+// pageTitle is the <title> for a full-page render of the index, which
+// depends on what the detail pane is showing.
+func pageTitle(d detailView) string {
+	switch d.Mode {
+	case modeView:
+		return d.Snippet.DisplayTitle()
+	default:
+		return "Snippets"
+	}
+}
+
+// index renders the split-view page: the list on the left, and whichever
+// snippet {id} selects (or nothing) on the right. It backs both GET /{$}
+// (PathValue("id") is "") and GET /{id}.
+func (a *App) index(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+
+	var detail detailView
+	if r.PathValue("id") != "" {
+		id, ok := a.snippetID(w, r)
+		if !ok {
+			return
+		}
+		s, err := a.store.ByID(r.Context(), userID, id)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		detail = a.viewDetail(r, s)
+	}
+
+	a.renderIndex(w, r, userID, http.StatusOK, detail)
+}
+
+// renderIndex draws the whole split-view page, or — over HTMX — just the
+// detail pane. Every handler that lands the user on some detail pane
+// (selecting a snippet, opening the new-snippet form, opening the editor, or
+// failing validation on either form) goes through here.
+func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, status int, detail detailView) {
+	items, err := a.listItems(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	view := indexView{
+		List:   listFragment{Items: items, ActiveID: detail.Snippet.ID},
+		Detail: detail,
+	}
+
+	if web.IsHTMX(r) {
+		if err := a.deps.Render.Fragment(w, status, "paste/index", "detail-body", view.Detail); err != nil {
+			a.deps.Errors.Internal(w, r, err)
+		}
+		return
+	}
+
+	page := a.deps.Page(r, pageTitle(detail))
+	page.Data = view
+	a.render(w, r, status, "paste/index", page)
+}
+
+// renderDetailWithList replies for anything that can also change a row in
+// the list: creating, saving an edit, sharing, unsharing, or deleting a
+// snippet (Tasks 3-5). Callers only reach this over HTMX — a non-HTMX
+// request redirects instead, before renderDetailWithList is ever called.
+func (a *App) renderDetailWithList(w http.ResponseWriter, r *http.Request, userID int64, status int, detail detailView) {
+	items, err := a.listItems(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	view := indexView{
+		List:   listFragment{Items: items, ActiveID: detail.Snippet.ID, OOB: true},
+		Detail: detail,
+	}
+	if err := a.deps.Render.Fragment(w, status, "paste/index", "detail-with-list", view); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
 }
 
 func (a *App) delete(w http.ResponseWriter, r *http.Request) {
