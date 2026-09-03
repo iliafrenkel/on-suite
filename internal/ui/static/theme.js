@@ -99,12 +99,17 @@
 		setTimeout(function () { btn.textContent = original; }, 1500);
 	}
 
+	// Delegated on document rather than attached per-button via
+	// querySelectorAll at load time, for the same reason as initConfirm
+	// below: a Copy/Copy-link button can arrive later via an htmx swap
+	// (e.g. the paste split-view's detail pane) and would otherwise never
+	// get a listener.
 	function initCopyLink() {
-		document.querySelectorAll("[data-copy-link]").forEach(function (btn) {
-			btn.addEventListener("click", function () {
-				var url = location.origin + btn.getAttribute("data-copy-link");
-				copyText(url).then(function () { flashCopied(btn); });
-			});
+		document.addEventListener("click", function (e) {
+			var btn = e.target.closest("[data-copy-link]");
+			if (!btn) return;
+			var url = location.origin + btn.getAttribute("data-copy-link");
+			copyText(url).then(function () { flashCopied(btn); });
 		});
 	}
 
@@ -112,19 +117,21 @@
 	// same raw endpoint the "Raw" link points to rather than duplicating the
 	// body into the page, so this works from the copy verbatim (no
 	// highlighting markup) with no risk of drifting from what "Raw" shows.
+	//
+	// Delegated on document for the same reason as initCopyLink above.
 	function initCopyRaw() {
-		document.querySelectorAll("[data-copy-raw]").forEach(function (btn) {
-			btn.addEventListener("click", function () {
-				fetch(btn.getAttribute("data-copy-raw"))
-					.then(function (res) { return res.text(); })
-					.then(function (text) { return copyText(text); })
-					.then(function () { flashCopied(btn); })
-					.catch(function () {
-						var original = btn.textContent;
-						btn.textContent = "Copy failed";
-						setTimeout(function () { btn.textContent = original; }, 1500);
-					});
-			});
+		document.addEventListener("click", function (e) {
+			var btn = e.target.closest("[data-copy-raw]");
+			if (!btn) return;
+			fetch(btn.getAttribute("data-copy-raw"))
+				.then(function (res) { return res.text(); })
+				.then(function (text) { return copyText(text); })
+				.then(function () { flashCopied(btn); })
+				.catch(function () {
+					var original = btn.textContent;
+					btn.textContent = "Copy failed";
+					setTimeout(function () { btn.textContent = original; }, 1500);
+				});
 		});
 	}
 
@@ -157,13 +164,40 @@
 	// A generic confirmation gate for any destructive form — data-confirm
 	// carries the message, so a new destructive action anywhere in the
 	// suite gets this for free instead of needing its own JS.
+	//
+	// This is delegated on document rather than attached per-form via
+	// querySelectorAll at load time, because forms can arrive later via an
+	// htmx swap (e.g. the paste split-view's detail pane) and would
+	// otherwise never get a listener.
+	//
+	// A form with hx-post/hx-get is handled entirely through htmx's own
+	// "htmx:confirm" event rather than the plain "submit" event: htmx
+	// registers its own submit-interception on such forms, and calling
+	// preventDefault() from a *different* submit listener does not stop
+	// that other listener from running, so the plain-submit path alone
+	// cannot actually block an HTMX-driven request. Routing HTMX-enhanced
+	// forms through "htmx:confirm" instead (and never through both) avoids
+	// double dialogs and makes Cancel actually cancel.
+	function isHtmxForm(form) {
+		return form.hasAttribute("hx-post") || form.hasAttribute("hx-get");
+	}
+
 	function initConfirm() {
-		document.querySelectorAll("form[data-confirm]").forEach(function (form) {
-			form.addEventListener("submit", function (e) {
-				if (!window.confirm(form.getAttribute("data-confirm"))) {
-					e.preventDefault();
-				}
-			});
+		document.addEventListener("submit", function (e) {
+			var form = e.target.closest("form[data-confirm]");
+			if (!form || isHtmxForm(form)) return;
+			if (!window.confirm(form.getAttribute("data-confirm"))) {
+				e.preventDefault();
+			}
+		});
+
+		document.addEventListener("htmx:confirm", function (e) {
+			var form = e.target.closest("form[data-confirm]");
+			if (!form || !isHtmxForm(form)) return;
+			e.preventDefault();
+			if (window.confirm(form.getAttribute("data-confirm"))) {
+				e.detail.issueRequest();
+			}
 		});
 	}
 

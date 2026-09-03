@@ -172,6 +172,32 @@ func (st *Store) Create(ctx context.Context, userID int64, title, language, body
 	return s, nil
 }
 
+// Update overwrites userID's own snippet's editable fields: title, language,
+// and body. It never touches ShareSlug or CreatedAt — sharing and editing are
+// independent actions, and preserving the timestamp is what lets a snippet's
+// "saved <time>" caption keep meaning the original save.
+func (st *Store) Update(ctx context.Context, userID, id int64, title, language, body string) (Snippet, error) {
+	title = strings.TrimSpace(title)
+	if err := Validate(title, body); err != nil {
+		return Snippet{}, err
+	}
+
+	res, err := st.db.ExecContext(ctx,
+		`UPDATE paste_snippets SET title = ?, language = ?, body = ? WHERE id = ? AND user_id = ?`,
+		title, language, body, id, userID)
+	if err != nil {
+		return Snippet{}, fmt.Errorf("paste: update: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return Snippet{}, fmt.Errorf("paste: update: %w", err)
+	}
+	if n == 0 {
+		return Snippet{}, ErrNotFound
+	}
+	return st.ByID(ctx, userID, id)
+}
+
 // ByID fetches one of userID's own snippets.
 func (st *Store) ByID(ctx context.Context, userID, id int64) (Snippet, error) {
 	return scanSnippet(st.db.QueryRowContext(ctx,

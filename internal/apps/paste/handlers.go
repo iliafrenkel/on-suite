@@ -1,6 +1,7 @@
 package paste
 
 import (
+	"context"
 	"errors"
 	"html/template"
 	"io"
@@ -12,8 +13,8 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
-// viewModel is what the view and shared templates render. It carries the
-// already-highlighted body so a template never calls into Chroma.
+// viewModel is what the shared template renders. It carries the
+// already-highlighted body so the template never calls into Chroma.
 type viewModel struct {
 	Snippet   Snippet
 	Highlight template.HTML
@@ -61,7 +62,11 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func (a *App) newForm(w http.ResponseWriter, r *http.Request) {
-	a.renderNew(w, r, http.StatusOK, "", "", "", "")
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	a.renderIndex(w, r, userID, http.StatusOK, a.newDetail(r, "", "", "", ""))
 }
 
 func (a *App) create(w http.ResponseWriter, r *http.Request) {
@@ -78,67 +83,35 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 	// post cannot store an arbitrary string that later renders as plain text
 	// with no explanation.
 	if !IsLanguage(language) {
-		a.renderNew(w, r, http.StatusBadRequest, "That is not a language I know.", title, language, body)
+		a.renderIndex(w, r, userID, http.StatusBadRequest, a.newDetail(r, "That is not a language I know.", title, language, body))
 		return
 	}
 	if err := Validate(title, body); err != nil {
-		a.renderNew(w, r, http.StatusBadRequest, userMessage(err), title, language, body)
+		a.renderIndex(w, r, userID, http.StatusBadRequest, a.newDetail(r, userMessage(err), title, language, body))
 		return
 	}
 
 	s, err := a.store.Create(r.Context(), userID, title, language, body)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
-			a.renderNew(w, r, http.StatusBadRequest, userMessage(err), title, language, body)
+			a.renderIndex(w, r, userID, http.StatusBadRequest, a.newDetail(r, userMessage(err), title, language, body))
 			return
 		}
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
 
-	http.Redirect(w, r, "/paste/"+strconv.FormatInt(s.ID, 10), http.StatusSeeOther)
-}
-
-func (a *App) view(w http.ResponseWriter, r *http.Request) {
-	userID, ok := a.userID(w, r)
-	if !ok {
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/paste/"+strconv.FormatInt(s.ID, 10), http.StatusSeeOther)
 		return
 	}
-	id, ok := a.snippetID(w, r)
-	if !ok {
-		return
-	}
-
-	s, err := a.store.ByID(r.Context(), userID, id)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-
-	page := a.deps.Page(r, s.DisplayTitle())
-	page.Data = viewModel{
-		Snippet:   s,
-		Highlight: Highlight(s.Body, s.Language),
-		Language:  LanguageLabel(s.Language),
-		RawURL:    "/paste/raw/" + strconv.FormatInt(s.ID, 10),
-		ShareURL:  shareURL(s),
-		Owner:     true,
-	}
-	a.render(w, r, http.StatusOK, "paste/view", page)
-}
-
-// renderNew draws the create form, carrying back whatever the user typed so a
-// validation failure never loses their snippet.
-func (a *App) renderNew(w http.ResponseWriter, r *http.Request, status int, message, title, language, body string) {
-	page := a.deps.Page(r, "New snippet")
-	page.Data = map[string]any{
-		"Error":     message,
-		"Title":     title,
-		"Language":  language,
-		"Body":      body,
-		"Languages": Languages(),
-	}
-	a.render(w, r, status, "paste/new", page)
+	// The request was to /paste/new, but the browser now has a real snippet
+	// at a new id; without this, reloading after a create over HTMX throws
+	// the user back to a blank new-snippet form. HX-Push-Url must be set
+	// before the render call writes the response, since headers cannot
+	// change after that.
+	w.Header().Set("HX-Push-Url", "/paste/"+strconv.FormatInt(s.ID, 10))
+	a.renderDetailWithList(w, r, userID, http.StatusCreated, a.viewDetail(r, s))
 }
 
 func (a *App) render(w http.ResponseWriter, r *http.Request, status int, name string, page render.Page) {
@@ -188,18 +161,150 @@ type listItem struct {
 
 const previewRunes = 100
 
-func (a *App) list(w http.ResponseWriter, r *http.Request) {
+// paneMode values for detailView.Mode. modeView is added here; Task 3 adds
+// modeNew, Task 4 adds modeEdit.
+const modeView = "view"
+const modeNew = "new"
+const modeEdit = "edit"
+
+// detailView is what the detail pane renders, in any mode. Fields below
+// Language belong to the edit/new forms (Tasks 3-4); they are zero-valued in
+// view mode.
+type detailView struct {
+	Mode      string
+	Snippet   Snippet
+	Highlight template.HTML
+	Language  string
+	ShareURL  string
+	RawURL    string
+	CSRFToken string
+
+	TitleValue    string
+	LanguageValue string
+	BodyValue     string
+	Languages     []Language
+	Error         string
+}
+
+// listFragment is what "list-items" renders. OOB marks a response that rides
+// along with a detail-pane update rather than the initial page load.
+type listFragment struct {
+	Items    []listItem
+	ActiveID int64
+	OOB      bool
+}
+
+// indexView is the whole split-view page: the list plus whichever thing the
+// detail pane is showing.
+type indexView struct {
+	List   listFragment
+	Detail detailView
+}
+
+// viewDetail builds the detail pane's view-mode data for one snippet.
+func (a *App) viewDetail(r *http.Request, s Snippet) detailView {
+	return detailView{
+		Mode:      modeView,
+		Snippet:   s,
+		Highlight: Highlight(s.Body, s.Language),
+		Language:  LanguageLabel(s.Language),
+		RawURL:    "/paste/raw/" + strconv.FormatInt(s.ID, 10),
+		ShareURL:  shareURL(s),
+		CSRFToken: web.CSRFToken(r.Context()),
+	}
+}
+
+// editDetail builds the detail pane's data for editing an existing snippet.
+func (a *App) editDetail(r *http.Request, s Snippet, errMsg, title, language, body string) detailView {
+	return detailView{
+		Mode:          modeEdit,
+		Snippet:       s,
+		TitleValue:    title,
+		LanguageValue: language,
+		BodyValue:     body,
+		Languages:     Languages(),
+		Error:         errMsg,
+		CSRFToken:     web.CSRFToken(r.Context()),
+	}
+}
+
+func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
 		return
 	}
-
-	snippets, err := a.store.List(r.Context(), userID, 0)
+	id, ok := a.snippetID(w, r)
+	if !ok {
+		return
+	}
+	s, err := a.store.ByID(r.Context(), userID, id)
 	if err != nil {
-		a.deps.Errors.Internal(w, r, err)
+		a.fail(w, r, err)
+		return
+	}
+	a.renderIndex(w, r, userID, http.StatusOK, a.editDetail(r, s, "", s.Title, s.Language, s.Body))
+}
+
+func (a *App) update(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.snippetID(w, r)
+	if !ok {
+		return
+	}
+	s, err := a.store.ByID(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
 		return
 	}
 
+	title := r.PostFormValue("title")
+	language := r.PostFormValue("language")
+	body := r.PostFormValue("body")
+
+	if !IsLanguage(language) {
+		a.renderIndex(w, r, userID, http.StatusBadRequest, a.editDetail(r, s, "That is not a language I know.", title, language, body))
+		return
+	}
+	if err := Validate(title, body); err != nil {
+		a.renderIndex(w, r, userID, http.StatusBadRequest, a.editDetail(r, s, userMessage(err), title, language, body))
+		return
+	}
+
+	updated, err := a.store.Update(r.Context(), userID, id, title, language, body)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
+	}
+	a.renderDetailWithList(w, r, userID, http.StatusOK, a.viewDetail(r, updated))
+}
+
+// newDetail builds the detail pane's data for the new-snippet form.
+func (a *App) newDetail(r *http.Request, errMsg, title, language, body string) detailView {
+	return detailView{
+		Mode:          modeNew,
+		TitleValue:    title,
+		LanguageValue: language,
+		BodyValue:     body,
+		Languages:     Languages(),
+		Error:         errMsg,
+		CSRFToken:     web.CSRFToken(r.Context()),
+	}
+}
+
+// listItems loads userID's snippets as the list pane's rows.
+func (a *App) listItems(ctx context.Context, userID int64) ([]listItem, error) {
+	snippets, err := a.store.List(ctx, userID, 0)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]listItem, 0, len(snippets))
 	for _, s := range snippets {
 		items = append(items, listItem{
@@ -208,10 +313,106 @@ func (a *App) list(w http.ResponseWriter, r *http.Request) {
 			Language: LanguageLabel(s.Language),
 		})
 	}
+	return items, nil
+}
 
-	page := a.deps.Page(r, "Snippets")
-	page.Data = map[string]any{"Items": items}
-	a.render(w, r, http.StatusOK, "paste/list", page)
+// pageTitle is the <title> for a full-page render of the index, which
+// depends on what the detail pane is showing.
+func pageTitle(d detailView) string {
+	switch d.Mode {
+	case modeView:
+		return d.Snippet.DisplayTitle()
+	case modeEdit:
+		return "Edit " + d.Snippet.DisplayTitle()
+	case modeNew:
+		return "New snippet"
+	default:
+		return "Snippets"
+	}
+}
+
+// index renders the split-view page: the list on the left, and whichever
+// snippet {id} selects (or nothing) on the right. It backs both GET /{$}
+// (PathValue("id") is "") and GET /{id}.
+func (a *App) index(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+
+	var detail detailView
+	if r.PathValue("id") != "" {
+		id, ok := a.snippetID(w, r)
+		if !ok {
+			return
+		}
+		s, err := a.store.ByID(r.Context(), userID, id)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		detail = a.viewDetail(r, s)
+	}
+
+	a.renderIndex(w, r, userID, http.StatusOK, detail)
+}
+
+// renderIndex draws the whole split-view page, or — over HTMX — just the
+// detail pane. Every handler that lands the user on some detail pane
+// (selecting a snippet, opening the new-snippet form, opening the editor, or
+// failing validation on either form) goes through here.
+func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, status int, detail detailView) {
+	items, err := a.listItems(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	if web.IsHTMX(r) {
+		view := indexView{
+			List:   listFragment{Items: items, ActiveID: detail.Snippet.ID, OOB: true},
+			Detail: detail,
+		}
+		// htmx's default responseHandling config only swaps 2xx/3xx
+		// responses into the DOM; a 4xx (e.g. a validation failure) is
+		// otherwise silently discarded, and the freshly re-rendered form
+		// with its error message never reaches the page. The HTTP status
+		// code has no swap-relevant meaning for a partial response the way
+		// it does for a full navigation, so this always renders 200 for an
+		// HTMX fragment — the non-HTMX branch below still uses the real
+		// status, which is correct HTTP semantics for a full page.
+		if err := a.deps.Render.Fragment(w, http.StatusOK, "paste/index", "detail-with-list", view); err != nil {
+			a.deps.Errors.Internal(w, r, err)
+		}
+		return
+	}
+
+	view := indexView{
+		List:   listFragment{Items: items, ActiveID: detail.Snippet.ID},
+		Detail: detail,
+	}
+
+	page := a.deps.Page(r, pageTitle(detail))
+	page.Data = view
+	a.render(w, r, status, "paste/index", page)
+}
+
+// renderDetailWithList replies for anything that can also change a row in
+// the list: creating, saving an edit, sharing, unsharing, or deleting a
+// snippet (Tasks 3-5). Callers only reach this over HTMX — a non-HTMX
+// request redirects instead, before renderDetailWithList is ever called.
+func (a *App) renderDetailWithList(w http.ResponseWriter, r *http.Request, userID int64, status int, detail detailView) {
+	items, err := a.listItems(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	view := indexView{
+		List:   listFragment{Items: items, ActiveID: detail.Snippet.ID, OOB: true},
+		Detail: detail,
+	}
+	if err := a.deps.Render.Fragment(w, status, "paste/index", "detail-with-list", view); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
 }
 
 func (a *App) delete(w http.ResponseWriter, r *http.Request) {
@@ -232,7 +433,15 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 
 	// Back to the list: the snippet the user was looking at no longer exists,
 	// so there is nowhere else sensible to land.
-	http.Redirect(w, r, "/paste/", http.StatusSeeOther)
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/paste/", http.StatusSeeOther)
+		return
+	}
+	// The browser was at /paste/{id}, but that snippet no longer exists;
+	// without this, reloading after a delete over HTMX 404s. Must be set
+	// before the render call writes the response.
+	w.Header().Set("HX-Push-Url", "/paste/")
+	a.renderDetailWithList(w, r, userID, http.StatusOK, detailView{})
 }
 
 // preview is a single-line excerpt for the list page. Newlines and runs of
@@ -264,7 +473,16 @@ func (a *App) share(w http.ResponseWriter, r *http.Request) {
 	// The slug itself is a credential, so it is not written to the log.
 	a.deps.Log.Info("snippet shared", "app", ID, "user_id", userID, "snippet_id", id)
 
-	http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
+	}
+	s, err := a.store.ByID(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.renderDetailWithList(w, r, userID, http.StatusOK, a.viewDetail(r, s))
 }
 
 func (a *App) unshare(w http.ResponseWriter, r *http.Request) {
@@ -283,7 +501,16 @@ func (a *App) unshare(w http.ResponseWriter, r *http.Request) {
 	}
 	a.deps.Log.Info("snippet unshared", "app", ID, "user_id", userID, "snippet_id", id)
 
-	http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
+	}
+	s, err := a.store.ByID(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.renderDetailWithList(w, r, userID, http.StatusOK, a.viewDetail(r, s))
 }
 
 // viewShared renders a snippet for anyone holding its slug. Note the separate

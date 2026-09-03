@@ -1,0 +1,189 @@
+{{define "head"}}
+<link rel="stylesheet" href="/paste/highlight.css">
+{{end}}
+
+{{/* detail-body dispatches on the pane's mode. It is also the whole HTMX
+     response for a plain selection (GET /paste/{id} or /paste/edit/{id}
+     over HTMX): exactly what belongs inside #detail, nothing more. Tasks 3
+     and 4 add the "new" and "edit" branches alongside their blocks. */}}
+{{define "detail-body"}}
+{{if eq .Mode "view"}}{{template "detail-view" .}}
+{{else if eq .Mode "edit"}}{{template "detail-edit" .}}
+{{else if eq .Mode "new"}}{{template "detail-new" .}}
+{{else}}{{template "detail-empty" .}}
+{{end}}
+{{end}}
+
+{{/* detail-with-list is the whole HTMX response for anything that can also
+     change a row in the list beside it: creating, saving, sharing,
+     unsharing, or deleting a snippet (Tasks 3-5). The list rides along out
+     of band, the same convention internal/apps/notes uses for its toolbar
+     toggle. The mobile pane-toggle checkbox (see "content" below) rides
+     along out of band too, so a narrow viewport actually flips to showing
+     the detail pane (or back to the list) after one of these actions. */}}
+{{define "detail-with-list"}}{{template "detail-body" .Detail}}{{template "list-items" .List}}<input type="checkbox" id="paste-detail-open" class="visually-hidden" hx-swap-oob="true"{{if .Detail.Mode}} checked{{end}} aria-hidden="true" tabindex="-1">{{end}}
+
+{{define "detail-empty"}}
+<p class="dim paste-detail-empty">Select a snippet to view it.</p>
+{{end}}
+
+{{define "detail-view"}}
+<div class="stack" id="detail-view">
+	<div class="paste-detail-header">
+		<h1>{{.Snippet.DisplayTitle}}</h1>
+		<p class="faint">
+			{{.Language}} · {{.Snippet.LinesLabel}} · saved
+			<time datetime="{{.Snippet.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{.Snippet.CreatedAt.Format "2 Jan 2006 15:04"}}">{{.Snippet.CreatedAt.Format "2 Jan 2006 15:04"}}</time>
+		</p>
+		<div class="paste-toolbar-actions">
+			<a class="toolbar-btn paste-back-btn" href="/paste/" hx-get="/paste/" hx-target="#detail" hx-push-url="true"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Back</a>
+			<a class="toolbar-btn" href="/paste/edit/{{.Snippet.ID}}" hx-get="/paste/edit/{{.Snippet.ID}}" hx-target="#detail" hx-push-url="true"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Edit</a>
+			<a class="toolbar-btn" href="{{.RawURL}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 9h8"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>Raw</a>
+			<button type="button" class="toolbar-btn" data-copy-raw="{{.RawURL}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy</button>
+			{{if .Snippet.Shared}}
+			<form method="post" action="/paste/{{.Snippet.ID}}/unshare" hx-post="/paste/{{.Snippet.ID}}/unshare" hx-target="#detail" hx-swap="innerHTML">
+				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<button type="submit" class="toolbar-btn"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Stop sharing</button>
+			</form>
+			{{else}}
+			<form method="post" action="/paste/{{.Snippet.ID}}/share" hx-post="/paste/{{.Snippet.ID}}/share" hx-target="#detail" hx-swap="innerHTML">
+				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<button type="submit" class="toolbar-btn"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share</button>
+			</form>
+			{{end}}
+			<form method="post" action="/paste/{{.Snippet.ID}}/delete" hx-post="/paste/{{.Snippet.ID}}/delete" hx-target="#detail" hx-swap="innerHTML"
+			      data-confirm="Delete “{{.Snippet.DisplayTitle}}”? This cannot be undone."
+			      class="paste-toolbar-actions-end">
+				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<button type="submit" class="toolbar-btn danger"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Delete</button>
+			</form>
+		</div>
+	</div>
+
+	{{with .ShareURL}}
+	<div class="notice row">
+		<span>Anyone with this link can read this snippet: <a href="{{.}}">{{.}}</a></span>
+		<button type="button" class="button" data-copy-link="{{.}}">Copy link</button>
+	</div>
+	{{end}}
+
+	<div class="scroll-x snippet-body">{{.Highlight}}</div>
+</div>
+{{end}}
+
+{{define "detail-new"}}
+<form class="stack" id="detail-new" method="post" action="/paste/new" hx-post="/paste/new" hx-target="#detail" hx-swap="innerHTML">
+	<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+	<div class="notes-toolbar">
+		<input type="text" name="title" value="{{.TitleValue}}" placeholder="Untitled (optional)" autocomplete="off" spellcheck="false" class="paste-title-input">
+		<div class="notes-toolbar-actions">
+			<a class="toolbar-btn paste-back-btn" href="/paste/" hx-get="/paste/" hx-target="#detail" hx-push-url="true"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Back</a>
+			<button type="submit" class="toolbar-btn toolbar-btn-active"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>Save</button>
+			<a class="toolbar-btn" href="/paste/" hx-get="/paste/" hx-target="#detail" hx-push-url="true">Cancel</a>
+		</div>
+	</div>
+
+	{{with .Error}}
+	<div class="notice notice-error" role="alert">{{.}}</div>
+	{{end}}
+
+	<div class="field">
+		<label for="new-language">Language</label>
+		<select id="new-language" name="language">
+			{{range .Languages}}
+			<option value="{{.Value}}"{{if eq .Value $.LanguageValue}} selected{{end}}>{{.Label}}</option>
+			{{end}}
+		</select>
+	</div>
+
+	<div class="field">
+		<label for="new-body">Snippet</label>
+		<textarea id="new-body" name="body" rows="20" required spellcheck="false" autocapitalize="none">{{.BodyValue}}</textarea>
+	</div>
+</form>
+{{end}}
+
+{{define "detail-edit"}}
+<form class="stack" id="detail-edit" method="post" action="/paste/{{.Snippet.ID}}" hx-post="/paste/{{.Snippet.ID}}" hx-target="#detail" hx-swap="innerHTML">
+	<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+	<div class="notes-toolbar">
+		<input type="text" name="title" value="{{.TitleValue}}" placeholder="Untitled" autocomplete="off" spellcheck="false" class="paste-title-input">
+		<div class="notes-toolbar-actions">
+			<a class="toolbar-btn paste-back-btn" href="/paste/{{.Snippet.ID}}" hx-get="/paste/{{.Snippet.ID}}" hx-target="#detail" hx-push-url="true"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Back</a>
+			<button type="submit" class="toolbar-btn toolbar-btn-active"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>Save</button>
+			<a class="toolbar-btn" href="/paste/{{.Snippet.ID}}" hx-get="/paste/{{.Snippet.ID}}" hx-target="#detail" hx-push-url="true">Cancel</a>
+		</div>
+	</div>
+
+	{{with .Error}}
+	<div class="notice notice-error" role="alert">{{.}}</div>
+	{{end}}
+
+	<div class="field">
+		<label for="edit-language-{{.Snippet.ID}}">Language</label>
+		<select id="edit-language-{{.Snippet.ID}}" name="language">
+			{{range .Languages}}
+			<option value="{{.Value}}"{{if eq .Value $.LanguageValue}} selected{{end}}>{{.Label}}</option>
+			{{end}}
+		</select>
+	</div>
+
+	<div class="field">
+		<label for="edit-body-{{.Snippet.ID}}">Snippet</label>
+		<textarea id="edit-body-{{.Snippet.ID}}" name="body" rows="20" required spellcheck="false" autocapitalize="none">{{.BodyValue}}</textarea>
+	</div>
+</form>
+{{end}}
+
+{{define "list-items"}}
+<ul class="snippet-list" id="snippet-list"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	{{if .Items}}
+	{{range .Items}}
+	{{$s := .Snippet}}
+	<li>
+		<a class="snippet-row{{if eq $s.ID $.ActiveID}} snippet-row-active{{end}}" href="/paste/{{$s.ID}}" hx-get="/paste/{{$s.ID}}" hx-target="#detail" hx-push-url="true">
+			<div class="row snippet-row-head">
+				<span>{{$s.DisplayTitle}}</span>
+				{{if $s.Shared}}<span class="tag" title="Shared with a public link">
+				<svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+				shared</span>{{end}}
+			</div>
+			<p class="snippet-preview">{{.Preview}}</p>
+			<p class="snippet-meta">
+				{{.Language}} · {{$s.LinesLabel}} ·
+				<time datetime="{{$s.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{$s.CreatedAt.Format "2 Jan 2006 15:04"}}">{{$s.CreatedAt.Format "2 Jan 2006 15:04"}}</time>
+			</p>
+		</a>
+	</li>
+	{{end}}
+	{{else}}
+	<li class="dim">No snippets yet.</li>
+	{{end}}
+</ul>
+{{end}}
+
+{{define "content"}}
+<div class="paste-shell">
+	{{/* A CSS-only mobile toggle: checked whenever a snippet (or a form) is
+	     open, so app.css can show the detail pane in place of the list below
+	     the narrow-viewport breakpoint without any JS. Task 3/4/5 responses
+	     replace this element (its id, via hx-swap-oob) whenever Mode changes,
+	     the same way they replace #snippet-list. */}}
+	<input type="checkbox" id="paste-detail-open" class="visually-hidden"{{if .Data.Detail.Mode}} checked{{end}} aria-hidden="true" tabindex="-1">
+	<div class="paste-list-pane">
+		<div class="row list-head">
+			{{/* The detail pane's own heading (detail-view's <h1>) is the
+			     page's single <h1>, matching the rest of the app's
+			     convention (see notes/outline.html): this pane's heading is
+			     an <h2> so a query for "h1" always lands on the snippet
+			     currently selected rather than this static label. */}}
+			<h2>Snippets</h2>
+			<a class="toolbar-btn" href="/paste/new" hx-get="/paste/new" hx-target="#detail" hx-push-url="true"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>New</a>
+		</div>
+		{{template "list-items" .Data.List}}
+	</div>
+	<div id="detail" class="paste-detail-pane">
+		{{template "detail-body" .Data.Detail}}
+	</div>
+</div>
+{{end}}

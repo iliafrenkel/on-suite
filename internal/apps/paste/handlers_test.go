@@ -89,7 +89,7 @@ func TestPasteRequiresSignIn(t *testing.T) {
 	}
 }
 
-func TestNewFormRenders(t *testing.T) {
+func TestNewFormRendersInsideTheSplitView(t *testing.T) {
 	s := newServer(t)
 	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/new", nil))
 
@@ -97,18 +97,111 @@ func TestNewFormRenders(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustHave("textarea[name=body]")
-	doc.MustHave("input[name=title]")
-	doc.MustHave("select[name=language]")
+	doc.MustHave(".paste-list-pane")
+	doc.MustHave("#detail textarea[name=body]")
+	doc.MustHave("#detail input[name=title]")
+	doc.MustHave("#detail select[name=language]")
 	doc.MustHave("input[name=" + web.CSRFFormField + "]")
 
-	// The active app must be marked in the nav, which the router sets.
 	nav := doc.MustHave(`nav.shell-nav a[aria-current=page]`)
 	if got := htmlassert.Text(nav); got != "ON Paste" {
 		t.Errorf("the marked nav item is %q, want ON Paste", got)
 	}
 	if n := len(doc.QueryAll("select[name=language] option")); n < 10 {
 		t.Errorf("the language picker has only %d options", n)
+	}
+}
+
+func TestNewFormOverHTMXReturnsOnlyTheFragment(t *testing.T) {
+	s := newServer(t)
+	req := httptest.NewRequest("GET", "/paste/new", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "shell-bar") {
+		t.Error("an HTMX fragment response repeated the page shell")
+	}
+	htmlassert.Parse(t, "<html><body>"+body+"</body></html>").MustHave("textarea[name=body]")
+}
+
+// TestCreateOverHTMXUpdatesListAndDetailTogether: the new row must appear in
+// the list at the same time the detail pane shows the new snippet.
+func TestCreateOverHTMXUpdatesListAndDetailTogether(t *testing.T) {
+	s := newServer(t)
+	rec := s.PostHX(t, s.Alice, "/paste/new", url.Values{
+		"title": {"Fresh"}, "language": {"go"}, "body": {"package c\n"},
+	})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Fresh") {
+		t.Error("the new snippet is not in the detail response")
+	}
+	if !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Error("the list was not refreshed out of band")
+	}
+}
+
+// TestCreateValidationFailureOverHTMXReturns200: htmx's default
+// responseHandling config does not swap 4xx responses into the DOM, so a
+// validation failure rendered at 400 over HTMX would silently vanish
+// instead of showing the user why Save did nothing. The fragment must come
+// back at 200 so htmx actually swaps the re-populated form and its error.
+func TestCreateValidationFailureOverHTMXReturns200(t *testing.T) {
+	s := newServer(t)
+	rec := s.PostHX(t, s.Alice, "/paste/new", url.Values{
+		"title": {"t"}, "language": {"go"}, "body": {""},
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 so htmx will swap the error in", rec.Code)
+	}
+	doc := htmlassert.Parse(t, "<html><body>"+rec.Body.String()+"</body></html>")
+	doc.MustHave(".notice-error")
+}
+
+// TestUpdateValidationFailureOverHTMXReturns200 is TestCreateValidationFailureOverHTMXReturns200's
+// counterpart for the edit form.
+func TestUpdateValidationFailureOverHTMXReturns200(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Original", "go", "package a\n")
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id), url.Values{
+		"title": {"Original"}, "language": {"go"}, "body": {"   \n"},
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 so htmx will swap the error in", rec.Code)
+	}
+	doc := htmlassert.Parse(t, "<html><body>"+rec.Body.String()+"</body></html>")
+	doc.MustHave(".notice-error")
+}
+
+// TestCreateOverHTMXPushesTheNewURL: the design requires /paste/{id} to be
+// bookmarkable after any action. Without HX-Push-Url, the address bar stays
+// at /paste/new after a create over HTMX, and reloading throws the user
+// back to a blank form.
+func TestCreateOverHTMXPushesTheNewURL(t *testing.T) {
+	s := newServer(t)
+	rec := s.PostHX(t, s.Alice, "/paste/new", url.Values{
+		"title": {"Fresh"}, "language": {"go"}, "body": {"package c\n"},
+	})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body: %s", rec.Code, rec.Body.String())
+	}
+	push := rec.Header().Get("HX-Push-Url")
+	if push == "" || push == "/paste/new" || !strings.HasPrefix(push, "/paste/") {
+		t.Errorf("HX-Push-Url = %q, want /paste/{new-id}", push)
+	}
+	if push == "/paste/" {
+		t.Errorf("HX-Push-Url = %q, want it to include the new snippet's id", push)
 	}
 }
 
@@ -141,6 +234,130 @@ func TestCreateThenView(t *testing.T) {
 	doc.MustHave(`form[action=/paste/` + itoa(id) + `/share]`)
 	if strings.Contains(doc.Text(), "Anyone with this link") {
 		t.Error("a private snippet advertises a share link")
+	}
+}
+
+func TestIndexShowsListAndEmptyDetail(t *testing.T) {
+	s := newServer(t)
+	s.createSnippet(t, s.Alice, "First", "go", "package a\n")
+	s.createSnippet(t, s.Alice, "Second", "python", "print(1)\n")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	rows := doc.QueryAll(".snippet-row")
+	if len(rows) != 2 {
+		t.Fatalf("got %d snippet rows, want 2", len(rows))
+	}
+	if doc.Query(".snippet-row-active") != nil {
+		t.Error("nothing is selected, but a row is marked active")
+	}
+	doc.MustHave(".paste-detail-empty")
+}
+
+func TestIndexSelectsSnippetAndMarksActiveRow(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+	s.createSnippet(t, s.Alice, "Other", "go", "package b\n")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(doc.MustHave("h1")); got != "My config" {
+		t.Errorf("title = %q", got)
+	}
+	doc.MustHave(".chroma")
+
+	active := doc.MustHave(".snippet-row-active")
+	if !strings.Contains(htmlassert.Text(active), "My config") {
+		t.Errorf("the active row is not the selected snippet: %q", htmlassert.Text(active))
+	}
+	// It is still one page: the list must be present alongside the detail.
+	if len(doc.QueryAll(".snippet-row")) != 2 {
+		t.Error("the list pane is missing on the detail page")
+	}
+}
+
+// TestSelectingOverHTMXReturnsOnlyTheFragment: a fragment response must not
+// repeat the shell (nav, sidebar) — only what belongs inside #detail.
+func TestSelectingOverHTMXReturnsOnlyTheFragment(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+
+	req := httptest.NewRequest("GET", "/paste/"+itoa(id), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "shell-bar") || strings.Contains(body, "app-sidebar") {
+		t.Error("an HTMX fragment response repeated the page shell")
+	}
+	if !strings.Contains(body, "My config") {
+		t.Error("the fragment does not contain the snippet")
+	}
+}
+
+// TestSelectingOverHTMXRefreshesTheListsActiveRow: selecting a second snippet
+// over HTMX must ride the list along out of band, so the active row moves off
+// the first snippet and onto the second one — otherwise the list still shows
+// the previous selection until the next full page load.
+func TestSelectingOverHTMXRefreshesTheListsActiveRow(t *testing.T) {
+	s := newServer(t)
+	firstID := s.createSnippet(t, s.Alice, "First", "go", "package a\n")
+	secondID := s.createSnippet(t, s.Alice, "Second", "python", "print(1)\n")
+
+	// Select the first snippet.
+	req := httptest.NewRequest("GET", "/paste/"+itoa(firstID), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("selecting the first snippet = %d", rec.Code)
+	}
+
+	// Now select the second snippet over HTMX.
+	req = httptest.NewRequest("GET", "/paste/"+itoa(secondID), nil)
+	req.Header.Set("HX-Request", "true")
+	rec = s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("selecting the second snippet = %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Fatalf("the response does not carry the list out of band: %s", body)
+	}
+
+	doc := htmlassert.Parse(t, "<html><body>"+body+"</body></html>")
+	active := doc.MustHave(".snippet-row-active")
+	if got := htmlassert.Text(active); !strings.Contains(got, "Second") {
+		t.Errorf("the active row is %q, want it to be Second", got)
+	}
+	if strings.Contains(htmlassert.Text(active), "First") {
+		t.Error("the active row is still First")
+	}
+	rows := doc.QueryAll(".snippet-row-active")
+	if len(rows) != 1 {
+		t.Fatalf("got %d active rows, want exactly 1", len(rows))
+	}
+}
+
+func TestIndexingSomeoneElsesSnippetIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "alice's", "go", "secret\n")
+
+	rec := s.Do(t, s.Bob, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "secret") {
+		t.Error("the snippet body leaked to another user")
 	}
 }
 
@@ -288,11 +505,14 @@ func TestListShowsOnlyYourSnippetsNewestFirst(t *testing.T) {
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
 
-	links := doc.QueryAll("ul.snippet-list li a")
-	if len(links) != 2 {
-		t.Fatalf("the list has %d entries, want 2 (alice's only)", len(links))
+	// The split-view list wraps each row's whole title/preview/meta block in
+	// one .snippet-row link now (index.html's "list-items" block), so the
+	// row's title is only a prefix of its text rather than all of it.
+	rows := doc.QueryAll(".snippet-row")
+	if len(rows) != 2 {
+		t.Fatalf("the list has %d entries, want 2 (alice's only)", len(rows))
 	}
-	if got := htmlassert.Text(links[0]); got != "alice two" {
+	if got := htmlassert.Text(rows[0]); !strings.HasPrefix(got, "alice two") {
 		t.Errorf("first entry = %q, want the newest", got)
 	}
 	if text := doc.Text(); strings.Contains(text, "bob") {
@@ -305,7 +525,12 @@ func TestListWhenEmpty(t *testing.T) {
 	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/", nil))
 
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustNotHave("ul.snippet-list")
+	// The split-view list always renders its <ul> (index.html's "list-items"
+	// block falls back to a single "No snippets yet" <li> instead of omitting
+	// the list), so assert on the absence of rows rather than the <ul> itself.
+	if rows := doc.QueryAll(".snippet-row"); len(rows) != 0 {
+		t.Errorf("got %d snippet rows, want 0", len(rows))
+	}
 	if !strings.Contains(doc.Text(), "No snippets yet") {
 		t.Errorf("no empty-state message: %q", doc.Text())
 	}
@@ -676,6 +901,139 @@ func TestPublicSurfaceIsExactlyThreeRoutes(t *testing.T) {
 		if rec := s.Do(t, nil, httptest.NewRequest("GET", path, nil)); rec.Code == http.StatusOK {
 			t.Errorf("%s is reachable anonymously and must not be", path)
 		}
+	}
+}
+
+func TestEditFormRendersExistingValues(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/edit/"+itoa(id), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got, _ := htmlassert.Attr(doc.MustHave("input[name=title]"), "value"); got != "My config" {
+		t.Errorf("title value = %q", got)
+	}
+	if got := htmlassert.Text(doc.MustHave("textarea[name=body]")); !strings.Contains(got, "key: value") {
+		t.Errorf("body = %q", got)
+	}
+	// htmlassert's selector syntax does not chain two bracket qualifiers
+	// (`[value=yaml][selected]` is not supported), so this checks the value
+	// match and the boolean attribute as two separate steps.
+	if _, ok := htmlassert.Attr(doc.MustHave("option[value=yaml]"), "selected"); !ok {
+		t.Error("the current language is not selected")
+	}
+}
+
+func TestEditingSomeoneElsesSnippetIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "alice's", "go", "secret\n")
+
+	rec := s.Do(t, s.Bob, httptest.NewRequest("GET", "/paste/edit/"+itoa(id), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestSaveEditUpdatesSnippetAndListRow(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Original", "go", "package a\n")
+
+	rec := s.Post(t, s.Alice, "/paste/"+itoa(id), url.Values{
+		"title": {"Renamed"}, "language": {"python"}, "body": {"print(1)\n"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body: %s", rec.Code, rec.Body.String())
+	}
+
+	rec2 := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	doc := htmlassert.Parse(t, rec2.Body.String())
+	if got := htmlassert.Text(doc.MustHave("h1")); got != "Renamed" {
+		t.Errorf("title = %q", got)
+	}
+	if !strings.Contains(doc.Text(), "print(1)") {
+		t.Error("the body was not saved")
+	}
+}
+
+func TestSaveEditRejectsBadInputAndStaysInEditMode(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Original", "go", "package a\n")
+
+	rec := s.Post(t, s.Alice, "/paste/"+itoa(id), url.Values{
+		"title": {"Original"}, "language": {"go"}, "body": {"   \n"},
+	})
+	if rec.Code == http.StatusSeeOther {
+		t.Fatal("an empty body was accepted")
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave(".notice-error")
+	doc.MustHave("textarea[name=body]")
+}
+
+func TestSaveEditRejectsSomeoneElsesSnippet(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "alice's", "go", "secret\n")
+
+	rec := s.Post(t, s.Bob, "/paste/"+itoa(id), url.Values{
+		"title": {"hijacked"}, "language": {"go"}, "body": {"x\n"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestShareOverHTMXUpdatesDetailAndListTag(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id)+"/share", url.Values{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Stop sharing") {
+		t.Error("the detail pane does not reflect the new shared state")
+	}
+	if !strings.Contains(body, `hx-swap-oob="true"`) || !strings.Contains(body, "shared") {
+		t.Error("the list's \"shared\" tag was not refreshed")
+	}
+}
+
+func TestDeleteOverHTMXClearsDetailAndRemovesRow(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Doomed", "go", "package a\n")
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id)+"/delete", url.Values{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "Doomed") {
+		t.Error("the deleted snippet is still in the response")
+	}
+	doc := htmlassert.Parse(t, "<html><body>"+body+"</body></html>")
+	doc.MustHave(".paste-detail-empty")
+}
+
+// TestDeleteOverHTMXPushesTheListURL: the browser was at /paste/{id}, but
+// that snippet no longer exists after the delete, so without HX-Push-Url a
+// reload would 404 instead of landing back on the list.
+func TestDeleteOverHTMXPushesTheListURL(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Doomed", "go", "package a\n")
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id)+"/delete", url.Values{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	if push := rec.Header().Get("HX-Push-Url"); push != "/paste/" {
+		t.Errorf("HX-Push-Url = %q, want /paste/", push)
 	}
 }
 

@@ -162,7 +162,7 @@ h1 { font-size: var(--fs-2xl); }
 h2 { font-size: var(--fs-xl); }
 h3 { font-size: var(--fs-lg); }
 
-code, pre, kbd { font-family: var(--font-mono); font-size: 0.9em; }
+code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 
 /* Filled, no border: a passive block of content to read, distinct from the
  * bordered treatment on things you act on (buttons, inputs, cards). Uniform
@@ -501,7 +501,30 @@ button.danger:hover { background: var(--c-danger-bg); }
 	border-radius: var(--radius);
 	background: var(--c-bg-subtle);
 	padding: var(--s-2) var(--s-3);
-	font-size: var(--fs-sm);
+}
+
+/* Stacked title/metadata/toolbar for the detail pane's view mode (as
+ * opposed to .notes-toolbar's side-by-side layout, shared with Notes and
+ * with Paste's own edit/new forms): a long title has nowhere to push the
+ * toolbar into, since there's no second column to crowd. */
+.paste-detail-header {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+}
+
+.paste-toolbar-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--s-2);
+}
+
+/* Delete alone on the right: every other action is a low-stakes read/edit
+ * operation, so the one destructive control gets visual distance from an
+ * accidental click near the rest. */
+.paste-toolbar-actions-end {
+	margin-left: auto;
 }
 
 .snippet-body pre { margin: 0; padding: 0; border: none; background: none; }
@@ -527,7 +550,7 @@ button.danger:hover { background: var(--c-danger-bg); }
 /* ---- Snippet list ------------------------------------------------------ */
 
 .list-head { justify-content: space-between; }
-.list-head h1 { margin: 0; }
+.list-head h1, .list-head h2 { margin: 0; }
 
 .snippet-list { margin: 0; padding: 0; list-style: none; }
 
@@ -547,6 +570,7 @@ button.danger:hover { background: var(--c-danger-bg); }
 	white-space: nowrap;
 	color: var(--c-text-dim);
 	font-size: var(--fs-base);
+	font-weight: 400;
 }
 
 /* Distinct from .snippet-preview on purpose: at equal size and colour, the
@@ -555,14 +579,61 @@ button.danger:hover { background: var(--c-danger-bg); }
 .snippet-meta {
 	font-size: var(--fs-xs);
 	color: var(--c-text-faint);
+	font-weight: 400;
 }
+
+/* ---- ON Paste split view ------------------------------------------------ */
+
+.paste-shell {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--s-5);
+}
+
+.paste-list-pane {
+	flex: 0 0 20rem;
+	min-width: 0;
+}
+
+.paste-detail-pane {
+	flex: 1;
+	min-width: 0;
+}
+
+.paste-detail-empty {
+	padding: var(--s-4) 0;
+}
+
+.snippet-row {
+	display: block;
+	padding: var(--s-2);
+	margin: 0 calc(var(--s-2) * -1);
+	border-radius: var(--radius);
+	text-decoration: none;
+	color: inherit;
+}
+.snippet-row:hover { background: var(--c-bg-subtle); }
+.snippet-row-active,
+.snippet-row-active:hover {
+	background: var(--c-accent-bg);
+}
+.snippet-row-active .snippet-row-head span:first-child { color: var(--c-accent); }
+
+.paste-back-btn { display: none; }
 
 .tag {
 	padding: 0 var(--s-1);
 	border: 1px solid var(--c-border-firm);
 	border-radius: var(--radius);
 	color: var(--c-text-dim);
-	font-size: var(--fs-sm);
+	background-color: var(--c-accent-attention-bg);
+	font-size: var(--fs-xs);
+	font-weight: 400;
+	font-variant: small-caps;
+}
+.tag .chip-icon {
+    width: 0.75em;
+    height: 0.75em;
 }
 
 /* ---- Admin --------------------------------------------------------------- */
@@ -1450,5 +1521,31 @@ kbd {
 	 * instead. */
 	.home-grid {
 		grid-template-columns: 1fr;
+	}
+
+	/* Below this width the two panes can't sit side by side. #paste-detail-open
+	 * is checked by the server whenever the detail pane has something to show
+	 * (see index.html's "content" block) and replaced via hx-swap-oob whenever
+	 * that changes, so this needs no JavaScript. */
+	.paste-shell {
+		flex-direction: column;
+	}
+	.paste-list-pane {
+		flex: none;
+		width: 100%;
+	}
+	.paste-detail-pane {
+		flex: none;
+		width: 100%;
+		display: none;
+	}
+	#paste-detail-open:checked ~ .paste-list-pane {
+		display: none;
+	}
+	#paste-detail-open:checked ~ .paste-detail-pane {
+		display: block;
+	}
+	.paste-back-btn {
+		display: inline-flex;
 	}
 }
