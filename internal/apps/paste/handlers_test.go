@@ -928,6 +928,41 @@ func TestSaveEditRejectsSomeoneElsesSnippet(t *testing.T) {
 	}
 }
 
+func TestShareOverHTMXUpdatesDetailAndListTag(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id)+"/share", url.Values{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Stop sharing") {
+		t.Error("the detail pane does not reflect the new shared state")
+	}
+	if !strings.Contains(body, `hx-swap-oob="true"`) || !strings.Contains(body, "shared") {
+		t.Error("the list's \"shared\" tag was not refreshed")
+	}
+}
+
+func TestDeleteOverHTMXClearsDetailAndRemovesRow(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Doomed", "go", "package a\n")
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id)+"/delete", url.Values{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "Doomed") {
+		t.Error("the deleted snippet is still in the response")
+	}
+	doc := htmlassert.Parse(t, "<html><body>"+body+"</body></html>")
+	doc.MustHave(".paste-detail-empty")
+}
+
 func itoa(n int64) string {
 	if n == 0 {
 		return "0"

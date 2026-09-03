@@ -419,7 +419,11 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 
 	// Back to the list: the snippet the user was looking at no longer exists,
 	// so there is nowhere else sensible to land.
-	http.Redirect(w, r, "/paste/", http.StatusSeeOther)
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/paste/", http.StatusSeeOther)
+		return
+	}
+	a.renderDetailWithList(w, r, userID, http.StatusOK, detailView{})
 }
 
 // preview is a single-line excerpt for the list page. Newlines and runs of
@@ -451,7 +455,16 @@ func (a *App) share(w http.ResponseWriter, r *http.Request) {
 	// The slug itself is a credential, so it is not written to the log.
 	a.deps.Log.Info("snippet shared", "app", ID, "user_id", userID, "snippet_id", id)
 
-	http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
+	}
+	s, err := a.store.ByID(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.renderDetailWithList(w, r, userID, http.StatusOK, a.viewDetail(r, s))
 }
 
 func (a *App) unshare(w http.ResponseWriter, r *http.Request) {
@@ -470,7 +483,16 @@ func (a *App) unshare(w http.ResponseWriter, r *http.Request) {
 	}
 	a.deps.Log.Info("snippet unshared", "app", ID, "user_id", userID, "snippet_id", id)
 
-	http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
+	}
+	s, err := a.store.ByID(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.renderDetailWithList(w, r, userID, http.StatusOK, a.viewDetail(r, s))
 }
 
 // viewShared renders a snippet for anyone holding its slug. Note the separate
