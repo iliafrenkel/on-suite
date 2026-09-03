@@ -276,16 +276,20 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, 
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	view := indexView{
-		List:   listFragment{Items: items, ActiveID: detail.Snippet.ID},
-		Detail: detail,
-	}
-
 	if web.IsHTMX(r) {
-		if err := a.deps.Render.Fragment(w, status, "paste/index", "detail-body", view.Detail); err != nil {
+		view := indexView{
+			List:   listFragment{Items: items, ActiveID: detail.Snippet.ID, OOB: true},
+			Detail: detail,
+		}
+		if err := a.deps.Render.Fragment(w, status, "paste/index", "detail-with-list", view); err != nil {
 			a.deps.Errors.Internal(w, r, err)
 		}
 		return
+	}
+
+	view := indexView{
+		List:   listFragment{Items: items, ActiveID: detail.Snippet.ID},
+		Detail: detail,
 	}
 
 	page := a.deps.Page(r, pageTitle(detail))

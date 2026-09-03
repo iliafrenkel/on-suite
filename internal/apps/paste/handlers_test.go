@@ -211,6 +211,50 @@ func TestSelectingOverHTMXReturnsOnlyTheFragment(t *testing.T) {
 	}
 }
 
+// TestSelectingOverHTMXRefreshesTheListsActiveRow: selecting a second snippet
+// over HTMX must ride the list along out of band, so the active row moves off
+// the first snippet and onto the second one — otherwise the list still shows
+// the previous selection until the next full page load.
+func TestSelectingOverHTMXRefreshesTheListsActiveRow(t *testing.T) {
+	s := newServer(t)
+	firstID := s.createSnippet(t, s.Alice, "First", "go", "package a\n")
+	secondID := s.createSnippet(t, s.Alice, "Second", "python", "print(1)\n")
+
+	// Select the first snippet.
+	req := httptest.NewRequest("GET", "/paste/"+itoa(firstID), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("selecting the first snippet = %d", rec.Code)
+	}
+
+	// Now select the second snippet over HTMX.
+	req = httptest.NewRequest("GET", "/paste/"+itoa(secondID), nil)
+	req.Header.Set("HX-Request", "true")
+	rec = s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("selecting the second snippet = %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Fatalf("the response does not carry the list out of band: %s", body)
+	}
+
+	doc := htmlassert.Parse(t, "<html><body>"+body+"</body></html>")
+	active := doc.MustHave(".snippet-row-active")
+	if got := htmlassert.Text(active); !strings.Contains(got, "Second") {
+		t.Errorf("the active row is %q, want it to be Second", got)
+	}
+	if strings.Contains(htmlassert.Text(active), "First") {
+		t.Error("the active row is still First")
+	}
+	rows := doc.QueryAll(".snippet-row-active")
+	if len(rows) != 1 {
+		t.Fatalf("got %d active rows, want exactly 1", len(rows))
+	}
+}
+
 func TestIndexingSomeoneElsesSnippetIs404(t *testing.T) {
 	s := newServer(t)
 	id := s.createSnippet(t, s.Alice, "alice's", "go", "secret\n")
