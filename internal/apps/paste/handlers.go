@@ -159,6 +159,7 @@ const previewRunes = 100
 // modeNew, Task 4 adds modeEdit.
 const modeView = "view"
 const modeNew = "new"
+const modeEdit = "edit"
 
 // detailView is what the detail pane renders, in any mode. Fields below
 // Language belong to the edit/new forms (Tasks 3-4); they are zero-valued in
@@ -207,6 +208,78 @@ func (a *App) viewDetail(r *http.Request, s Snippet) detailView {
 	}
 }
 
+// editDetail builds the detail pane's data for editing an existing snippet.
+func (a *App) editDetail(r *http.Request, s Snippet, errMsg, title, language, body string) detailView {
+	return detailView{
+		Mode:          modeEdit,
+		Snippet:       s,
+		TitleValue:    title,
+		LanguageValue: language,
+		BodyValue:     body,
+		Languages:     Languages(),
+		Error:         errMsg,
+		CSRFToken:     web.CSRFToken(r.Context()),
+	}
+}
+
+func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.snippetID(w, r)
+	if !ok {
+		return
+	}
+	s, err := a.store.ByID(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.renderIndex(w, r, userID, http.StatusOK, a.editDetail(r, s, "", s.Title, s.Language, s.Body))
+}
+
+func (a *App) update(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.snippetID(w, r)
+	if !ok {
+		return
+	}
+	s, err := a.store.ByID(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+
+	title := r.PostFormValue("title")
+	language := r.PostFormValue("language")
+	body := r.PostFormValue("body")
+
+	if !IsLanguage(language) {
+		a.renderIndex(w, r, userID, http.StatusBadRequest, a.editDetail(r, s, "That is not a language I know.", title, language, body))
+		return
+	}
+	if err := Validate(title, body); err != nil {
+		a.renderIndex(w, r, userID, http.StatusBadRequest, a.editDetail(r, s, userMessage(err), title, language, body))
+		return
+	}
+
+	updated, err := a.store.Update(r.Context(), userID, id, title, language, body)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
+	}
+	a.renderDetailWithList(w, r, userID, http.StatusOK, a.viewDetail(r, updated))
+}
+
 // newDetail builds the detail pane's data for the new-snippet form.
 func (a *App) newDetail(r *http.Request, errMsg, title, language, body string) detailView {
 	return detailView{
@@ -243,6 +316,8 @@ func pageTitle(d detailView) string {
 	switch d.Mode {
 	case modeView:
 		return d.Snippet.DisplayTitle()
+	case modeEdit:
+		return "Edit " + d.Snippet.DisplayTitle()
 	case modeNew:
 		return "New snippet"
 	default:

@@ -78,6 +78,14 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /new", a.newForm)
 	r.HandleFunc("POST /new", a.create)
 	r.HandleFunc("GET /{id}", a.index)
+	// GET /edit/{id}, not /{id}/edit: a wildcard-then-literal GET pattern here
+	// would be genuinely ambiguous to ServeMux against the existing literal-
+	// then-wildcard GET patterns below and the public GET /s/{slug} (e.g. both
+	// "/raw/{id}" and "/{id}/edit" would match "/paste/raw/edit", and neither
+	// is more specific), which panics at startup. Matching raw's verb-first
+	// shape keeps every GET pattern in the same, non-conflicting family.
+	r.HandleFunc("GET /edit/{id}", a.editForm)
+	r.HandleFunc("POST /{id}", a.update)
 	r.HandleFunc("GET /raw/{id}", a.raw)
 	r.HandleFunc("POST /{id}/delete", a.delete)
 	r.HandleFunc("POST /{id}/share", a.share)

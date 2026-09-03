@@ -847,6 +847,87 @@ func TestPublicSurfaceIsExactlyThreeRoutes(t *testing.T) {
 	}
 }
 
+func TestEditFormRendersExistingValues(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/edit/"+itoa(id), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got, _ := htmlassert.Attr(doc.MustHave("input[name=title]"), "value"); got != "My config" {
+		t.Errorf("title value = %q", got)
+	}
+	if got := htmlassert.Text(doc.MustHave("textarea[name=body]")); !strings.Contains(got, "key: value") {
+		t.Errorf("body = %q", got)
+	}
+	// htmlassert's selector syntax does not chain two bracket qualifiers
+	// (`[value=yaml][selected]` is not supported), so this checks the value
+	// match and the boolean attribute as two separate steps.
+	if _, ok := htmlassert.Attr(doc.MustHave("option[value=yaml]"), "selected"); !ok {
+		t.Error("the current language is not selected")
+	}
+}
+
+func TestEditingSomeoneElsesSnippetIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "alice's", "go", "secret\n")
+
+	rec := s.Do(t, s.Bob, httptest.NewRequest("GET", "/paste/edit/"+itoa(id), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestSaveEditUpdatesSnippetAndListRow(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Original", "go", "package a\n")
+
+	rec := s.Post(t, s.Alice, "/paste/"+itoa(id), url.Values{
+		"title": {"Renamed"}, "language": {"python"}, "body": {"print(1)\n"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body: %s", rec.Code, rec.Body.String())
+	}
+
+	rec2 := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	doc := htmlassert.Parse(t, rec2.Body.String())
+	if got := htmlassert.Text(doc.MustHave("h1")); got != "Renamed" {
+		t.Errorf("title = %q", got)
+	}
+	if !strings.Contains(doc.Text(), "print(1)") {
+		t.Error("the body was not saved")
+	}
+}
+
+func TestSaveEditRejectsBadInputAndStaysInEditMode(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Original", "go", "package a\n")
+
+	rec := s.Post(t, s.Alice, "/paste/"+itoa(id), url.Values{
+		"title": {"Original"}, "language": {"go"}, "body": {"   \n"},
+	})
+	if rec.Code == http.StatusSeeOther {
+		t.Fatal("an empty body was accepted")
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave(".notice-error")
+	doc.MustHave("textarea[name=body]")
+}
+
+func TestSaveEditRejectsSomeoneElsesSnippet(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "alice's", "go", "secret\n")
+
+	rec := s.Post(t, s.Bob, "/paste/"+itoa(id), url.Values{
+		"title": {"hijacked"}, "language": {"go"}, "body": {"x\n"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+}
+
 func itoa(n int64) string {
 	if n == 0 {
 		return "0"
