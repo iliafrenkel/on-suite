@@ -62,7 +62,11 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func (a *App) newForm(w http.ResponseWriter, r *http.Request) {
-	a.renderNew(w, r, http.StatusOK, "", "", "", "")
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	a.renderIndex(w, r, userID, http.StatusOK, a.newDetail(r, "", "", "", ""))
 }
 
 func (a *App) create(w http.ResponseWriter, r *http.Request) {
@@ -79,39 +83,29 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 	// post cannot store an arbitrary string that later renders as plain text
 	// with no explanation.
 	if !IsLanguage(language) {
-		a.renderNew(w, r, http.StatusBadRequest, "That is not a language I know.", title, language, body)
+		a.renderIndex(w, r, userID, http.StatusBadRequest, a.newDetail(r, "That is not a language I know.", title, language, body))
 		return
 	}
 	if err := Validate(title, body); err != nil {
-		a.renderNew(w, r, http.StatusBadRequest, userMessage(err), title, language, body)
+		a.renderIndex(w, r, userID, http.StatusBadRequest, a.newDetail(r, userMessage(err), title, language, body))
 		return
 	}
 
 	s, err := a.store.Create(r.Context(), userID, title, language, body)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
-			a.renderNew(w, r, http.StatusBadRequest, userMessage(err), title, language, body)
+			a.renderIndex(w, r, userID, http.StatusBadRequest, a.newDetail(r, userMessage(err), title, language, body))
 			return
 		}
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
 
-	http.Redirect(w, r, "/paste/"+strconv.FormatInt(s.ID, 10), http.StatusSeeOther)
-}
-
-// renderNew draws the create form, carrying back whatever the user typed so a
-// validation failure never loses their snippet.
-func (a *App) renderNew(w http.ResponseWriter, r *http.Request, status int, message, title, language, body string) {
-	page := a.deps.Page(r, "New snippet")
-	page.Data = map[string]any{
-		"Error":     message,
-		"Title":     title,
-		"Language":  language,
-		"Body":      body,
-		"Languages": Languages(),
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/paste/"+strconv.FormatInt(s.ID, 10), http.StatusSeeOther)
+		return
 	}
-	a.render(w, r, status, "paste/new", page)
+	a.renderDetailWithList(w, r, userID, http.StatusCreated, a.viewDetail(r, s))
 }
 
 func (a *App) render(w http.ResponseWriter, r *http.Request, status int, name string, page render.Page) {
@@ -164,6 +158,7 @@ const previewRunes = 100
 // paneMode values for detailView.Mode. modeView is added here; Task 3 adds
 // modeNew, Task 4 adds modeEdit.
 const modeView = "view"
+const modeNew = "new"
 
 // detailView is what the detail pane renders, in any mode. Fields below
 // Language belong to the edit/new forms (Tasks 3-4); they are zero-valued in
@@ -212,6 +207,19 @@ func (a *App) viewDetail(r *http.Request, s Snippet) detailView {
 	}
 }
 
+// newDetail builds the detail pane's data for the new-snippet form.
+func (a *App) newDetail(r *http.Request, errMsg, title, language, body string) detailView {
+	return detailView{
+		Mode:          modeNew,
+		TitleValue:    title,
+		LanguageValue: language,
+		BodyValue:     body,
+		Languages:     Languages(),
+		Error:         errMsg,
+		CSRFToken:     web.CSRFToken(r.Context()),
+	}
+}
+
 // listItems loads userID's snippets as the list pane's rows.
 func (a *App) listItems(ctx context.Context, userID int64) ([]listItem, error) {
 	snippets, err := a.store.List(ctx, userID, 0)
@@ -235,6 +243,8 @@ func pageTitle(d detailView) string {
 	switch d.Mode {
 	case modeView:
 		return d.Snippet.DisplayTitle()
+	case modeNew:
+		return "New snippet"
 	default:
 		return "Snippets"
 	}

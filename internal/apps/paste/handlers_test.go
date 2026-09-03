@@ -89,7 +89,7 @@ func TestPasteRequiresSignIn(t *testing.T) {
 	}
 }
 
-func TestNewFormRenders(t *testing.T) {
+func TestNewFormRendersInsideTheSplitView(t *testing.T) {
 	s := newServer(t)
 	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/new", nil))
 
@@ -97,18 +97,54 @@ func TestNewFormRenders(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustHave("textarea[name=body]")
-	doc.MustHave("input[name=title]")
-	doc.MustHave("select[name=language]")
+	doc.MustHave(".paste-list-pane")
+	doc.MustHave("#detail textarea[name=body]")
+	doc.MustHave("#detail input[name=title]")
+	doc.MustHave("#detail select[name=language]")
 	doc.MustHave("input[name=" + web.CSRFFormField + "]")
 
-	// The active app must be marked in the nav, which the router sets.
 	nav := doc.MustHave(`nav.shell-nav a[aria-current=page]`)
 	if got := htmlassert.Text(nav); got != "ON Paste" {
 		t.Errorf("the marked nav item is %q, want ON Paste", got)
 	}
 	if n := len(doc.QueryAll("select[name=language] option")); n < 10 {
 		t.Errorf("the language picker has only %d options", n)
+	}
+}
+
+func TestNewFormOverHTMXReturnsOnlyTheFragment(t *testing.T) {
+	s := newServer(t)
+	req := httptest.NewRequest("GET", "/paste/new", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "shell-bar") {
+		t.Error("an HTMX fragment response repeated the page shell")
+	}
+	htmlassert.Parse(t, "<html><body>"+body+"</body></html>").MustHave("textarea[name=body]")
+}
+
+// TestCreateOverHTMXUpdatesListAndDetailTogether: the new row must appear in
+// the list at the same time the detail pane shows the new snippet.
+func TestCreateOverHTMXUpdatesListAndDetailTogether(t *testing.T) {
+	s := newServer(t)
+	rec := s.PostHX(t, s.Alice, "/paste/new", url.Values{
+		"title": {"Fresh"}, "language": {"go"}, "body": {"package c\n"},
+	})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Fresh") {
+		t.Error("the new snippet is not in the detail response")
+	}
+	if !strings.Contains(body, `hx-swap-oob="true"`) {
+		t.Error("the list was not refreshed out of band")
 	}
 }
 

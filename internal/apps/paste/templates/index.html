@@ -8,6 +8,7 @@
      and 4 add the "new" and "edit" branches alongside their blocks. */}}
 {{define "detail-body"}}
 {{if eq .Mode "view"}}{{template "detail-view" .}}
+{{else if eq .Mode "new"}}{{template "detail-new" .}}
 {{else}}{{template "detail-empty" .}}
 {{end}}
 {{end}}
@@ -67,6 +68,38 @@
 </div>
 {{end}}
 
+{{define "detail-new"}}
+<form class="stack" id="detail-new" method="post" action="/paste/new" hx-post="/paste/new" hx-target="#detail" hx-swap="innerHTML">
+	<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+	<div class="notes-toolbar">
+		<input type="text" name="title" value="{{.TitleValue}}" placeholder="Untitled (optional)" autocomplete="off" spellcheck="false" class="paste-title-input">
+		<div class="notes-toolbar-actions">
+			<a class="toolbar-btn paste-back-btn" href="/paste/" hx-get="/paste/" hx-target="#detail" hx-push-url="true"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Back</a>
+			<button type="submit" class="toolbar-btn toolbar-btn-active"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>Save</button>
+			<a class="toolbar-btn" href="/paste/" hx-get="/paste/" hx-target="#detail" hx-push-url="true">Cancel</a>
+		</div>
+	</div>
+
+	{{with .Error}}
+	<div class="notice notice-error" role="alert">{{.}}</div>
+	{{end}}
+
+	<div class="field">
+		<label for="new-language">Language</label>
+		<select id="new-language" name="language">
+			{{range .Languages}}
+			<option value="{{.Value}}"{{if eq .Value $.LanguageValue}} selected{{end}}>{{.Label}}</option>
+			{{end}}
+		</select>
+	</div>
+
+	<div class="field">
+		<label for="new-body">Snippet</label>
+		<textarea id="new-body" name="body" rows="20" required spellcheck="false" autocapitalize="none">{{.BodyValue}}</textarea>
+	</div>
+</form>
+{{end}}
+
 {{define "list-items"}}
 <ul class="snippet-list" id="snippet-list"{{if .OOB}} hx-swap-oob="true"{{end}}>
 	{{if .Items}}
@@ -108,7 +141,7 @@
 			     an <h2> so a query for "h1" always lands on the snippet
 			     currently selected rather than this static label. */}}
 			<h2>Snippets</h2>
-			<a class="toolbar-btn" href="/paste/new"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>New</a>
+			<a class="toolbar-btn" href="/paste/new" hx-get="/paste/new" hx-target="#detail" hx-push-url="true"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>New</a>
 		</div>
 		{{template "list-items" .Data.List}}
 	</div>
