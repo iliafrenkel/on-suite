@@ -95,6 +95,100 @@ func TestCreateAndFetch(t *testing.T) {
 	}
 }
 
+func TestUpdateChangesFields(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	created, err := f.store.Create(ctx, f.alice.ID, "Original", "go", "package main\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := f.store.Update(ctx, f.alice.ID, created.ID, "  Renamed  ", "python", "print(1)\n")
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.Title != "Renamed" {
+		t.Errorf("Title = %q, want trimmed \"Renamed\"", updated.Title)
+	}
+	if updated.Language != "python" {
+		t.Errorf("Language = %q", updated.Language)
+	}
+	if updated.Body != "print(1)\n" {
+		t.Errorf("Body = %q", updated.Body)
+	}
+	if !updated.CreatedAt.Equal(created.CreatedAt) {
+		t.Errorf("CreatedAt changed: got %v, want %v", updated.CreatedAt, created.CreatedAt)
+	}
+
+	fetched, err := f.store.ByID(ctx, f.alice.ID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetched.Title != "Renamed" || fetched.Body != "print(1)\n" {
+		t.Error("the update was not actually persisted")
+	}
+}
+
+func TestUpdatePreservesShareSlug(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	created, err := f.store.Create(ctx, f.alice.ID, "t", "go", "x\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug, err := f.store.Share(ctx, f.alice.ID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := f.store.Update(ctx, f.alice.ID, created.ID, "t2", "go", "y\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ShareSlug != slug {
+		t.Errorf("ShareSlug = %q, want it preserved as %q", updated.ShareSlug, slug)
+	}
+}
+
+func TestUpdateRejectsSomeoneElsesSnippet(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	created, err := f.store.Create(ctx, f.alice.ID, "alice's", "go", "secret\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = f.store.Update(ctx, f.bob.ID, created.ID, "hijacked", "go", "x\n")
+	if !errors.Is(err, paste.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+
+	fetched, err := f.store.ByID(ctx, f.alice.ID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetched.Title != "alice's" {
+		t.Error("bob's update was applied to alice's snippet")
+	}
+}
+
+func TestUpdateRejectsInvalidInput(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	created, err := f.store.Create(ctx, f.alice.ID, "t", "go", "x\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.store.Update(ctx, f.alice.ID, created.ID, "t", "go", "   \n"); !errors.Is(err, paste.ErrInvalid) {
+		t.Errorf("err = %v, want ErrInvalid for an empty body", err)
+	}
+}
+
 // TestOwnerScoping is the security property of this store: another signed-in
 // user must not be able to reach your snippet, and must not be told it exists.
 func TestOwnerScoping(t *testing.T) {
