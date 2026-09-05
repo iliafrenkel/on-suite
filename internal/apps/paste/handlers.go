@@ -281,6 +281,12 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/paste/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 		return
 	}
+	// The request was to /paste/edit/{id}; without this, reloading after
+	// saving over HTMX reopens the editor instead of showing the saved
+	// view — see create's identical HX-Push-Url above. Must be set before
+	// the render call writes the response, since headers cannot change
+	// after that.
+	w.Header().Set("HX-Push-Url", "/paste/"+strconv.FormatInt(id, 10))
 	a.renderDetailWithList(w, r, userID, http.StatusOK, a.viewDetail(r, updated))
 }
 

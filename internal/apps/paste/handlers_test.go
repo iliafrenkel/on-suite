@@ -977,6 +977,27 @@ func TestSaveEditUpdatesSnippetAndListRow(t *testing.T) {
 	}
 }
 
+// TestSaveEditOverHTMXPushesTheViewURL mirrors
+// TestCreateOverHTMXPushesTheNewURL: the request lands at
+// /paste/edit/{id} (edit's own detail-only route posts to /paste/{id}),
+// so without HX-Push-Url, reloading after saving over HTMX reopens the
+// editor instead of showing the saved view.
+func TestSaveEditOverHTMXPushesTheViewURL(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Original", "go", "package a\n")
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id), url.Values{
+		"title": {"Renamed"}, "language": {"python"}, "body": {"print(1)\n"},
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if push := rec.Header().Get("HX-Push-Url"); push != "/paste/"+itoa(id) {
+		t.Errorf("HX-Push-Url = %q, want /paste/%d", push, id)
+	}
+}
+
 func TestSaveEditRejectsBadInputAndStaysInEditMode(t *testing.T) {
 	s := newServer(t)
 	id := s.createSnippet(t, s.Alice, "Original", "go", "package a\n")
