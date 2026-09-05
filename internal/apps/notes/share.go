@@ -151,8 +151,18 @@ func (st *Store) SharedSubtree(ctx context.Context, userID, rootID int64) ([]Nod
 // no use for) that a shared generic would need type parameters or extra
 // options for a single caller, which is not simpler than two ~15-line
 // functions.
+//
+// It projects Node's fields explicitly rather than embedding it: an
+// embedded Node would carry UserID, ParentID, and — for an independently
+// shared descendant — that descendant's own live ShareSlug credential
+// into a public, unauthenticated view model. shared.html renders none of
+// that today, but this way it structurally can't, the same way the
+// template itself has no forms or menus to leak a mutating control.
 type sharedRow struct {
-	Node
+	Title         string
+	Note          string
+	Done          bool
+	DueOn         string
 	Children      []*sharedRow
 	RenderedTitle template.HTML
 	RenderedNote  template.HTML
@@ -167,7 +177,14 @@ func nestShared(flat []Node) []*sharedRow {
 	open := make([]*sharedRow, 0, MaxDepth+1)
 
 	for _, n := range flat {
-		row := &sharedRow{Node: n, RenderedTitle: RenderShared(n.Title), RenderedNote: RenderShared(n.Note)}
+		row := &sharedRow{
+			Title:         n.Title,
+			Note:          n.Note,
+			Done:          n.Done,
+			DueOn:         n.DueOn,
+			RenderedTitle: RenderShared(n.Title),
+			RenderedNote:  RenderShared(n.Note),
+		}
 
 		switch d := n.Depth; {
 		case d == 0:
@@ -191,9 +208,12 @@ func nestShared(flat []Node) []*sharedRow {
 // not Render/Node.DisplayTitleHTML — spec §15: a #tag/@mention in the
 // root's own title or note must not become a link into /notes/search
 // either, so the template uses these fields for the root instead of
-// calling Root.DisplayTitleHTML directly.
+// calling Root.DisplayTitleHTML directly. There is no Root Node field: the
+// template never needs anything else off the root, and the same reasoning
+// that keeps sharedRow from embedding Node applies here — no reason to
+// carry UserID/ParentID/ShareSlug into a public view model that has no use
+// for them.
 type sharedView struct {
-	Root              Node
 	RootRenderedTitle template.HTML
 	RootRenderedNote  template.HTML
 	Rows              []*sharedRow

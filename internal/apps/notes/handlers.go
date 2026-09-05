@@ -997,7 +997,6 @@ func (a *App) viewShared(w http.ResponseWriter, r *http.Request) {
 	page.Shell.ActiveAppName = ""
 	page.Shell.ActiveAppPath = ""
 	page.Data = sharedView{
-		Root:              root,
 		RootRenderedTitle: RenderShared(root.DisplayTitle()),
 		RootRenderedNote:  RenderShared(root.Note),
 		Rows:              nestShared(flat),
