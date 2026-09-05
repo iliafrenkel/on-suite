@@ -5,6 +5,7 @@
 package notes
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -236,4 +237,28 @@ func TestHideDoneHandlesConsecutiveDoneSubtrees(t *testing.T) {
 	if len(ids) != len(want) || ids[0] != want[0] || ids[1] != want[1] {
 		t.Fatalf("hideDone left %v, want %v", ids, want)
 	}
+}
+
+// TestSharedRowHasNoPrivateFields guards #152: sharedRow and sharedView must
+// stay an explicit projection, not an embedded Node, so a public share
+// page's view model can never carry UserID, ParentID or a descendant's own
+// live ShareSlug, even by accident in a future edit — reflection over the
+// field names, rather than checking what the template happens to print
+// today, is what makes this a structural guarantee instead of a coverage
+// bet.
+func TestSharedRowHasNoPrivateFields(t *testing.T) {
+	forbidden := map[string]bool{
+		"ID": true, "UserID": true, "ParentID": true, "Position": true,
+		"Collapsed": true, "Archived": true, "ShareSlug": true,
+	}
+	check := func(t *testing.T, typ reflect.Type) {
+		for i := 0; i < typ.NumField(); i++ {
+			name := typ.Field(i).Name
+			if forbidden[name] {
+				t.Errorf("%s has field %q, which must not reach a public page's view model", typ, name)
+			}
+		}
+	}
+	check(t, reflect.TypeOf(sharedRow{}))
+	check(t, reflect.TypeOf(sharedView{}))
 }
