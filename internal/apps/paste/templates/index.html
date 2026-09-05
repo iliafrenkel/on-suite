@@ -16,7 +16,7 @@
 
 {{/* detail-with-list is the whole HTMX response for anything that can also
      change a row in the list beside it: creating, saving, sharing,
-     unsharing, or deleting a snippet (Tasks 3-5). The list rides along out
+     unsharing, or deleting a snippet. The list rides along out
      of band, the same convention internal/apps/notes uses for its toolbar
      toggle. The mobile pane-toggle checkbox (see "content" below) rides
      along out of band too, so a narrow viewport actually flips to showing
@@ -166,9 +166,9 @@
 <div class="paste-shell">
 	{{/* A CSS-only mobile toggle: checked whenever a snippet (or a form) is
 	     open, so app.css can show the detail pane in place of the list below
-	     the narrow-viewport breakpoint without any JS. Task 3/4/5 responses
-	     replace this element (its id, via hx-swap-oob) whenever Mode changes,
-	     the same way they replace #snippet-list. */}}
+	     the narrow-viewport breakpoint without any JS. detail-with-list above
+	     replaces this element (its id, via hx-swap-oob) whenever Mode
+	     changes, the same way it replaces #snippet-list. */}}
 	<input type="checkbox" id="paste-detail-open" class="visually-hidden"{{if .Data.Detail.Mode}} checked{{end}} aria-hidden="true" tabindex="-1">
 	<div class="paste-list-pane">
 		<div class="row list-head">
