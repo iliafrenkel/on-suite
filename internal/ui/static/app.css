@@ -1548,4 +1548,15 @@ kbd {
 	.paste-back-btn {
 		display: inline-flex;
 	}
+
+	/* Issue #155: .notes-toolbar's search box plus the Due/Archive/Export/
+	 * Import/Show completed/Shortcuts cluster don't fit one row below phone
+	 * width and, unwrapped, pushed the whole page into horizontal scroll
+	 * instead of just wrapping onto a second line. */
+	.notes-toolbar {
+		flex-wrap: wrap;
+	}
+	.notes-toolbar-actions {
+		flex-wrap: wrap;
+	}
 }
