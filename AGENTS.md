@@ -19,6 +19,13 @@ Full rationale for every design choice below lives in
 `main` is protected — always work on a branch and open a PR, never commit or
 push directly to `main`.
 
+Before writing new code, check [PATTERNS.md](PATTERNS.md) — an index of
+recurring patterns this codebase already has a deliberate answer for
+(error-surfacing, view-model projection, store test conventions, and more).
+Reuse the pattern it points to rather than inventing a new shape; add an
+entry there when you notice yourself reusing (or wanting) one it doesn't
+list yet.
+
 ## Commands
 
 Build:
@@ -152,6 +159,7 @@ type-to-section table and the `feat`-vs-`refactor` distinction.
 
 ## Other docs worth knowing about
 
+- [PATTERNS.md](PATTERNS.md) — index of recurring, deliberate patterns; check it before writing new code.
 - [docs/DEPLOYING.md](docs/DEPLOYING.md) — systemd, TLS, backups, upgrades, Docker.
 - [docs/RELEASING.md](docs/RELEASING.md) — cutting a tagged release.
 - [docs/superpowers/plans/](docs/superpowers/plans/) — task-by-task implementation plans per build phase.
