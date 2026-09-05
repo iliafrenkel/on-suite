@@ -797,6 +797,53 @@
 		document.addEventListener("mousedown", handleDotMouseDown);
 	}
 
+	// ---- drag-to-move: surface a server-side rejection ---------------------
+	//
+	// updateDropTarget's cycle guard is a courtesy, not the source of truth —
+	// Ops.Move (tree.go) still rejects a move onto a descendant hidden by
+	// collapse or "show completed" filtering (invisible to the DOM-based
+	// guard) or one that would nest past MaxDepth (no client-side check for
+	// this at all). htmx's default responseHandling treats POST
+	// /notes/{id}/move's 400 as swap:false, so without a listener of its own
+	// the drop indicator would simply vanish with the outline unchanged and
+	// no explanation — the same gap initPasteErrors closes for /paste.
+	function showMoveError(status) {
+		var outline = document.getElementById("outline");
+		if (!outline || !outline.parentNode) return;
+		if (document.getElementById("notes-move-error")) return; // already showing one
+		var notice = document.createElement("div");
+		notice.id = "notes-move-error";
+		notice.className = "notice notice-error";
+		notice.setAttribute("role", "alert");
+		notice.textContent = status >= 500
+			? "Something went wrong moving that. Try again."
+			: "Couldn't move that there: it would create a cycle or nest too deep.";
+		outline.parentNode.insertBefore(notice, outline);
+		notice.scrollIntoView({ block: "nearest" });
+	}
+
+	function clearMoveError() {
+		var existing = document.getElementById("notes-move-error");
+		if (existing) existing.remove();
+	}
+
+	function initMoveErrors() {
+		if (!document.getElementById("outline")) return;
+		document.body.addEventListener("htmx:responseError", function (evt) {
+			if (requestPath(evt).indexOf("/move") === -1) return;
+			showMoveError(evt.detail && evt.detail.xhr && evt.detail.xhr.status);
+		});
+		// See initPasteErrors' identical afterSwap handler: any later
+		// successful #outline swap clears a stale error, and a failed
+		// request never reaches htmx:afterSwap at all, so this never races
+		// with showMoveError above.
+		document.body.addEventListener("htmx:afterSwap", function (evt) {
+			if (evt && evt.detail && evt.detail.target && evt.detail.target.id === "outline") {
+				clearMoveError();
+			}
+		});
+	}
+
 	// Marks <html> once JS is confirmed running, so app.css can hide
 	// no-JS-only fallback markup (e.g. the notes-import form's real submit
 	// button — see outline.html and the ".js .notes-import button" rule)
@@ -930,6 +977,7 @@
 	initPaste();
 	initPasteErrors();
 	initDragToMove();
+	initMoveErrors();
 	initImportAutoSubmit();
 	initSaveStatusTracking();
 })();
