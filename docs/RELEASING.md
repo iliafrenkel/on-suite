@@ -17,9 +17,33 @@ GitHub Release — there's no separate release script or manual build step.
    go build ./... && go vet ./... && go test ./... -race
    ```
 
-2. Pick the next version ([semver](https://semver.org)) and tag it:
+2. Pick the next version ([semver](https://semver.org)) and tag it. Cutting a
+   release is ad hoc — whenever a batch of merged work feels release-worthy,
+   not on a schedule or a fixed set of triggers.
+
+   ON Suite is pre-1.0 (`0.MINOR.PATCH`) until all four apps
+   (README.md's "Of the four apps...") exist and feel solid; major stays `0`
+   until then. The bump itself is derived from the [Conventional
+   Commits](CONTRIBUTING.md#commit-messages) merged since the last tag, the
+   same classification `.goreleaser.yaml`'s `changelog.groups` already uses:
+
+   | Commits since the last tag                                | Bump                |
+   | ----------------------------------------------------------- | ------------------- |
+   | any `feat:`, or a `BREAKING CHANGE:` footer / `type!:`       | minor (`0.(N+1).0`) |
+   | only `fix:`/`refactor:`/`perf:`/`chore:` (or unlabeled)      | patch (`0.N.(P+1)`) |
+   | only `docs:`/`test:`                                         | no release needed   |
+
+   A feature and a breaking change bump the same digit pre-1.0 because
+   major is pinned at `0` — there is nowhere else for "breaking" to signal.
+   Once ON Suite crosses 1.0, this becomes ordinary semver: breaking →
+   major, `feat` → minor, `fix` → patch.
+
+   [`scripts/next-version.sh`](../scripts/next-version.sh) applies this rule
+   for you — it only prints a suggestion, review it before tagging:
 
    ```bash
+   ./scripts/next-version.sh
+   # v0.4.0
    git tag -a v0.4.0 -m "v0.4.0"
    git push origin v0.4.0
    ```
