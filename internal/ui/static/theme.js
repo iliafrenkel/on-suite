@@ -93,10 +93,27 @@
 		return Promise.resolve();
 	}
 
-	function flashCopied(btn) {
-		var original = btn.textContent;
-		btn.textContent = "Copied";
-		setTimeout(function () { btn.textContent = original; }, 1500);
+	// lastTextNode finds a button's own label so flashLabel can swap just
+	// that, not the whole button — the paste toolbar's Copy button
+	// (index.html) has an inline <svg> icon as a sibling of its "Copy" text
+	// node, and btn.textContent = "..." would silently discard it (and any
+	// other element child) along with the old text, never to return once
+	// the label is restored. A plain-text button (e.g. shared.html's own
+	// Copy, or "Copy link") is just as safe here: its whole content is
+	// already one trailing text node.
+	function lastTextNode(btn) {
+		for (var i = btn.childNodes.length - 1; i >= 0; i--) {
+			if (btn.childNodes[i].nodeType === Node.TEXT_NODE) return btn.childNodes[i];
+		}
+		return null;
+	}
+
+	function flashLabel(btn, message) {
+		var node = lastTextNode(btn);
+		if (!node) return;
+		var original = node.nodeValue;
+		node.nodeValue = message;
+		setTimeout(function () { node.nodeValue = original; }, 1500);
 	}
 
 	// Delegated on document rather than attached per-button via
@@ -109,7 +126,7 @@
 			var btn = e.target.closest("[data-copy-link]");
 			if (!btn) return;
 			var url = location.origin + btn.getAttribute("data-copy-link");
-			copyText(url).then(function () { flashCopied(btn); });
+			copyText(url).then(function () { flashLabel(btn, "Copied"); });
 		});
 	}
 
@@ -126,12 +143,8 @@
 			fetch(btn.getAttribute("data-copy-raw"))
 				.then(function (res) { return res.text(); })
 				.then(function (text) { return copyText(text); })
-				.then(function () { flashCopied(btn); })
-				.catch(function () {
-					var original = btn.textContent;
-					btn.textContent = "Copy failed";
-					setTimeout(function () { btn.textContent = original; }, 1500);
-				});
+				.then(function () { flashLabel(btn, "Copied"); })
+				.catch(function () { flashLabel(btn, "Copy failed"); });
 		});
 	}
 
