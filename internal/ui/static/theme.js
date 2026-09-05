@@ -178,8 +178,21 @@
 	// cannot actually block an HTMX-driven request. Routing HTMX-enhanced
 	// forms through "htmx:confirm" instead (and never through both) avoids
 	// double dialogs and makes Cancel actually cancel.
+	// HTMX_VERBS mirrors htmx 2.0's own verb attributes (htmx.min.js), so
+	// isHtmxForm recognizes any of them rather than just the two this file
+	// happened to use first — hx-delete or hx-put on a future data-confirm
+	// form would otherwise fall through to the plain-submit branch and
+	// reintroduce the exact Cancel-bypass bug the split above exists to
+	// prevent. The "data-hx-" prefix is htmx's own alternative spelling for
+	// hosts where a bare "hx-*" attribute isn't valid (e.g. some template
+	// engines); this app only ever writes the bare form, but a form is
+	// still htmx-driven either way.
+	var HTMX_VERBS = ["get", "post", "put", "patch", "delete"];
+
 	function isHtmxForm(form) {
-		return form.hasAttribute("hx-post") || form.hasAttribute("hx-get");
+		return HTMX_VERBS.some(function (verb) {
+			return form.hasAttribute("hx-" + verb) || form.hasAttribute("data-hx-" + verb);
+		});
 	}
 
 	function initConfirm() {
