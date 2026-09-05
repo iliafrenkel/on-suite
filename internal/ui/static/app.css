@@ -1332,6 +1332,16 @@ input.outline-note:focus { outline: none; }
 .outline-row:focus-within .outline-menu-toggle,
 .outline-menu[open] .outline-menu-toggle { opacity: 1; }
 
+/* Issue #156: a touch device has no hover state, so the opacity-0 reveal
+ * above leaves the chevron and the row's own "..." menu — its only path to
+ * Archive, Share, Due, Delete, Move up/down, Indent/Outdent — invisible
+ * with no affordance to tap in the first place. hover: none catches touch
+ * without disturbing desktop's hover-reveal. */
+@media (hover: none) {
+	.outline-chevron,
+	.outline-menu-toggle { opacity: 1; }
+}
+
 .outline-menu {
 	position: relative;
 	flex: none;
