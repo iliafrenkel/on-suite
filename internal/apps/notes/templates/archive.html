@@ -38,7 +38,7 @@
 		<a href="/notes/{{.ID}}" class="notes-archive-title">{{.DisplayTitle}}</a>
 		<form method="post" action="/notes/{{.ID}}/archive"
 		      hx-post="/notes/{{.ID}}/archive" hx-target="#archive-list" hx-swap="innerHTML">
-			<input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+			<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
 			<button type="submit" name="archived" value="0" class="toolbar-btn notes-archive-restore">Restore</button>
 		</form>
 	</li>

@@ -120,7 +120,7 @@ func NewServer[S any](t *testing.T, a app.App, newStore func(*sql.DB) S, opts ..
 	if err != nil {
 		t.Fatal(err)
 	}
-	rend, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL})
+	rend, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL, CSRFFieldName: web.CSRFFormField})
 	if err != nil {
 		t.Fatal(err)
 	}

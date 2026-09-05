@@ -42,19 +42,19 @@
 			<button type="button" class="toolbar-btn" data-copy-raw="{{.RawURL}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy</button>
 			{{if .Snippet.Shared}}
 			<form method="post" action="/paste/{{.Snippet.ID}}/unshare" hx-post="/paste/{{.Snippet.ID}}/unshare" hx-target="#detail" hx-swap="innerHTML">
-				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 				<button type="submit" class="toolbar-btn"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Stop sharing</button>
 			</form>
 			{{else}}
 			<form method="post" action="/paste/{{.Snippet.ID}}/share" hx-post="/paste/{{.Snippet.ID}}/share" hx-target="#detail" hx-swap="innerHTML">
-				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 				<button type="submit" class="toolbar-btn"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share</button>
 			</form>
 			{{end}}
 			<form method="post" action="/paste/{{.Snippet.ID}}/delete" hx-post="/paste/{{.Snippet.ID}}/delete" hx-target="#detail" hx-swap="innerHTML"
 			      data-confirm="Delete “{{.Snippet.DisplayTitle}}”? This cannot be undone."
 			      class="paste-toolbar-actions-end">
-				<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 				<button type="submit" class="toolbar-btn danger"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Delete</button>
 			</form>
 		</div>
@@ -73,7 +73,7 @@
 
 {{define "detail-new"}}
 <form class="stack" id="detail-new" method="post" action="/paste/new" hx-post="/paste/new" hx-target="#detail" hx-swap="innerHTML">
-	<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 	<div class="notes-toolbar">
 		<input type="text" name="title" value="{{.TitleValue}}" placeholder="Untitled (optional)" autocomplete="off" spellcheck="false" class="paste-title-input">
 		<div class="notes-toolbar-actions">
@@ -105,7 +105,7 @@
 
 {{define "detail-edit"}}
 <form class="stack" id="detail-edit" method="post" action="/paste/{{.Snippet.ID}}" hx-post="/paste/{{.Snippet.ID}}" hx-target="#detail" hx-swap="innerHTML">
-	<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 	<div class="notes-toolbar">
 		<input type="text" name="title" value="{{.TitleValue}}" placeholder="Untitled" autocomplete="off" spellcheck="false" class="paste-title-input">
 		<div class="notes-toolbar-actions">

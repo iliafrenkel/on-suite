@@ -7,7 +7,7 @@
 	{{end}}
 
 	<form method="post" action="/login" class="stack">
-		<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
+		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
 		<input type="hidden" name="next" value="{{.Data.Next}}">
 
 		<div class="field">
