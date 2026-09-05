@@ -190,6 +190,16 @@ for the full task list and the [design spec](docs/superpowers/specs/2026-08-18-o
 for the design this project is being built against. Plan-by-plan write-ups
 live under [`docs/superpowers/plans/`](docs/superpowers/plans/).
 
+## Versioning
+
+Releases follow [semver](https://semver.org), pre-1.0 (`0.MINOR.PATCH`):
+major stays `0` until all four apps exist and feel solid, not on a fixed
+schedule. Until then, a new feature and a breaking change both bump minor
+(there's nowhere else for "breaking" to signal while major is pinned at
+`0`); anything else release-worthy bumps patch. See
+[`docs/RELEASING.md`](docs/RELEASING.md) for the full rule and the tagging
+steps.
+
 ## Testing
 
 ```bash
