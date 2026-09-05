@@ -161,15 +161,13 @@ type listItem struct {
 
 const previewRunes = 100
 
-// paneMode values for detailView.Mode. modeView is added here; Task 3 adds
-// modeNew, Task 4 adds modeEdit.
+// paneMode values for detailView.Mode.
 const modeView = "view"
 const modeNew = "new"
 const modeEdit = "edit"
 
 // detailView is what the detail pane renders, in any mode. Fields below
-// Language belong to the edit/new forms (Tasks 3-4); they are zero-valued in
-// view mode.
+// Language belong to the edit/new forms; they are zero-valued in view mode.
 type detailView struct {
 	Mode      string
 	Snippet   Snippet

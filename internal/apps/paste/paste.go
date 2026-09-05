@@ -72,8 +72,10 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	sum := sha256.Sum256(css)
 	a.cssETag = `"` + hex.EncodeToString(sum[:])[:16] + `"`
 
-	// See the route map at the top of this plan before changing any pattern:
-	// several obvious-looking alternatives make ServeMux panic at startup.
+	// Several obvious-looking alternatives to the patterns below make
+	// ServeMux panic at startup on pattern conflicts — see the /edit/{id}
+	// comment just below for the clearest example of why the shape of each
+	// pattern here is deliberate, not arbitrary.
 	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("GET /new", a.newForm)
 	r.HandleFunc("POST /new", a.create)
