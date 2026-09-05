@@ -39,7 +39,7 @@ func mountFake(t *testing.T, mount func(*app.Router, app.Deps)) *http.ServeMux {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rend, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL})
+	rend, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL, CSRFFieldName: web.CSRFFormField})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestMountRejectsAnAppWithNoRoutes(t *testing.T) {
 	}
 
 	assets, _ := web.NewAssets(ui.Static(), "/static")
-	rend, _ := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL})
+	rend, _ := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: assets.URL, CSRFFieldName: web.CSRFFormField})
 
 	err = reg.Mount(http.NewServeMux(), app.Deps{Render: rend}, denyGuard)
 	if err == nil || !strings.Contains(err.Error(), "no routes") {

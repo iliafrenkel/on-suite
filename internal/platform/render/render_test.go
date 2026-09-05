@@ -9,14 +9,16 @@ import (
 
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
+	"github.com/iliafrenkel/on-suite/internal/platform/web"
 	"github.com/iliafrenkel/on-suite/internal/ui"
 )
 
 func testRenderer(t *testing.T) *render.Renderer {
 	t.Helper()
 	r, err := render.NewRenderer(render.Options{
-		Layouts:  ui.Templates(),
-		AssetURL: func(name string) string { return "/static/" + name + "?v=test" },
+		Layouts:       ui.Templates(),
+		AssetURL:      func(name string) string { return "/static/" + name + "?v=test" },
+		CSRFFieldName: web.CSRFFormField,
 	})
 	if err != nil {
 		t.Fatalf("NewRenderer: %v", err)
@@ -370,11 +372,14 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 }
 
 func TestRendererRejectsBadInput(t *testing.T) {
-	if _, err := render.NewRenderer(render.Options{AssetURL: func(string) string { return "" }}); err == nil {
+	if _, err := render.NewRenderer(render.Options{AssetURL: func(string) string { return "" }, CSRFFieldName: "csrf_token"}); err == nil {
 		t.Error("NewRenderer accepted a nil Layouts")
 	}
-	if _, err := render.NewRenderer(render.Options{Layouts: ui.Templates()}); err == nil {
+	if _, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), CSRFFieldName: "csrf_token"}); err == nil {
 		t.Error("NewRenderer accepted a nil AssetURL")
+	}
+	if _, err := render.NewRenderer(render.Options{Layouts: ui.Templates(), AssetURL: func(string) string { return "" }}); err == nil {
+		t.Error("NewRenderer accepted an empty CSRFFieldName")
 	}
 
 	r := testRenderer(t)

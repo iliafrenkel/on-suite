@@ -14,7 +14,7 @@
 			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8H3l2-4h14z"/><path d="M5 8v11h14V8"/><path d="M10 12h4"/></svg>Archive</a>
 			<a href="/notes/">All notes</a>
 			<form method="post" action="/notes/prefs">
-				<input type="hidden" name="csrf_token" value="{{.Shell.CSRFToken}}">
+				<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
 				<input type="hidden" name="page" value="search">
 				<input type="hidden" name="q" value="{{.Data.Query}}">
 				{{/* dict, not .Data directly: show-completed-toggle also

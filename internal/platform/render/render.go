@@ -71,6 +71,12 @@ type Options struct {
 	// AssetURL resolves a static file name to a cache-busting URL. Injected
 	// rather than imported so render does not depend on the web package.
 	AssetURL func(string) string
+	// CSRFFieldName is the form field name a template's hidden CSRF input
+	// must use — web.CSRFFormField, injected for the same reason AssetURL
+	// is: so render never imports web. Every hidden CSRF input across every
+	// template should use the "csrfField" template func this becomes,
+	// rather than hardcoding "csrf_token" independently in each one.
+	CSRFFieldName string
 }
 
 // Renderer holds one parsed template set per page.
@@ -91,13 +97,17 @@ func NewRenderer(opts Options) (*Renderer, error) {
 	if opts.AssetURL == nil {
 		return nil, fmt.Errorf("render: AssetURL must not be nil")
 	}
+	if opts.CSRFFieldName == "" {
+		return nil, fmt.Errorf("render: CSRFFieldName must not be empty")
+	}
 
 	r := &Renderer{
 		pages: make(map[string]*template.Template),
 		funcs: template.FuncMap{
-			"asset": opts.AssetURL,
-			"icon":  ui.IconFor,
-			"dict":  dict,
+			"asset":     opts.AssetURL,
+			"icon":      ui.IconFor,
+			"dict":      dict,
+			"csrfField": func() string { return opts.CSRFFieldName },
 		},
 	}
 

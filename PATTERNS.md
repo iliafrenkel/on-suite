@@ -90,6 +90,15 @@ canonical example's own comment, not here.
   `internal/apps/notes/store.go`'s `Outline`, mirrored by `export.go` and
   `share.go`'s `SharedSubtree`.
 
+- **Cross a layering boundary with an injected func, not an import** —
+  reach for this when a lower layer needs a value or behavior only a
+  forbidden-to-import higher layer knows (a constant, a URL scheme): add a
+  field to that layer's `Options`/config struct and wire it from whichever
+  caller may import both, the same way `render.Options.AssetURL` and
+  `CSRFFieldName` (a `template.FuncMap` entry, since it's exposed to
+  templates) let `render` use `web`'s asset URLs and CSRF field name
+  without ever importing `web`. Canonical: `internal/platform/render/render.go`.
+
 - **App boundary via `app.App` + `Deps`, no cross-app imports** — reach for
   this when wiring in a new app: implement `app.App`, take only `app.Deps`,
   never import another app package. Enforced by

@@ -38,8 +38,9 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		return nil, err
 	}
 	rend, err := render.NewRenderer(render.Options{
-		Layouts:  ui.Templates(),
-		AssetURL: assets.URL,
+		Layouts:       ui.Templates(),
+		AssetURL:      assets.URL,
+		CSRFFieldName: web.CSRFFormField,
 	})
 	if err != nil {
 		return nil, err
