@@ -762,6 +762,20 @@
 	function handleDragMouseUp() {
 		document.removeEventListener("mousemove", handleDragMouseMove);
 		document.removeEventListener("mouseup", handleDragMouseUp);
+		// suppressNextClick only unregisters itself from inside its own
+		// handler, i.e. only once an actual click reaches document — which
+		// the browser fires synchronously right after this mouseup, in the
+		// same-dot no-op-drag case suppressNextClick exists for. If that
+		// click never arrives (mouseup outside the window, the browser
+		// cancelling the sequence partway through), it would otherwise stay
+		// armed indefinitely and swallow the user's next click anywhere on
+		// the page. Deferring the removal with setTimeout(0) — rather than
+		// removing it here directly — lets it run after that same-tick
+		// click if one does arrive, while still guaranteeing cleanup if one
+		// doesn't.
+		setTimeout(function () {
+			document.removeEventListener("click", suppressNextClick, true);
+		}, 0);
 		if (!dragState) return;
 
 		var state = dragState;
