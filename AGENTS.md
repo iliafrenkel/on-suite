@@ -127,6 +127,16 @@ non-admin gets the same 404 as a URL that does not exist. It is a platform
 page rather than an app because it reports *on* the platform. Its design is in
 [docs/superpowers/specs/2026-08-24-admin-page-design.md](docs/superpowers/specs/2026-08-24-admin-page-design.md).
 
+## Commit messages
+
+Subjects follow [Conventional Commits](https://www.conventionalcommits.org/):
+`type(scope): summary`, e.g. `fix(notes): trim search query before it
+reaches the template`. Scope is usually an app name (`notes`, `paste`) or
+`platform`; omit it for repo-wide changes. `type` decides which release
+notes section a commit lands in — see
+[CONTRIBUTING.md](CONTRIBUTING.md#commit-messages) for the full
+type-to-section table and the `feat`-vs-`refactor` distinction.
+
 ## Constraints (from CONTRIBUTING.md)
 
 - No CGO, ever — every dependency must be pure Go.
