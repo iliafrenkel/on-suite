@@ -3527,6 +3527,28 @@ func TestUnshareKillsTheSharedPage(t *testing.T) {
 	}
 }
 
+// TestDeletingASharedBulletKillsTheSharedPage: deleting the row is the
+// revocation path a user reaches by cleaning up old notes rather than
+// remembering to Unshare first, and is arguably more important than the
+// explicit Unshare TestUnshareKillsTheSharedPage already pins.
+func TestDeletingASharedBulletKillsTheSharedPage(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	id := s.seed(t, s.Alice, notes.RootID, "root")
+	slug, err := s.Store.Share(ctx, s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.Delete(ctx, s.Alice.User.ID, id); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/s/"+slug, nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET a deleted shared bullet's link = %d, want 404", rec.Code)
+	}
+}
+
 func TestSharedPageRendersRootNoteMarkdown(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
