@@ -711,6 +711,25 @@ func TestSharedPageOffersNoDestructiveControls(t *testing.T) {
 	}
 }
 
+// TestSharedPageBreadcrumbHasNoLoginGatedLink guards the same invariant as
+// notes' TestSharedPageHasNoLinksIntoThePrivateTree: a signed-out visitor on
+// a public page must not get a link back into an app's login-gated index
+// (here, "Paste" in the breadcrumb pointing at /paste/).
+func TestSharedPageBreadcrumbHasNoLoginGatedLink(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Shared config", "yaml", "key: value\n")
+	slug := s.shareAndGetSlug(t, s.Alice, id)
+
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
+	doc := htmlassert.Parse(t, rec.Body.String())
+	for _, a := range doc.QueryAll("a") {
+		href, _ := htmlassert.Attr(a, "href")
+		if href == "/paste/" {
+			t.Errorf("the shared page's breadcrumb links to %q, the login-gated index", href)
+		}
+	}
+}
+
 // TestUnshareKillsTheLink is the point of choosing a revocable share model.
 func TestUnshareKillsTheLink(t *testing.T) {
 	s := newServer(t)
