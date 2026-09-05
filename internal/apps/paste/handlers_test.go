@@ -1022,6 +1022,29 @@ func TestShareOverHTMXUpdatesDetailAndListTag(t *testing.T) {
 	}
 }
 
+// TestUnshareOverHTMXUpdatesDetailAndListTag is unshare's counterpart to
+// TestShareOverHTMXUpdatesDetailAndListTag: the same renderDetailWithList
+// path, but nothing previously asserted the list's "shared" tag actually
+// disappears once a snippet is unshared over HTMX.
+func TestUnshareOverHTMXUpdatesDetailAndListTag(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+	s.shareAndGetSlug(t, s.Alice, id)
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id)+"/unshare", url.Values{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "Stop sharing") {
+		t.Error("the detail pane still reflects the shared state")
+	}
+	if !strings.Contains(body, `hx-swap-oob="true"`) || strings.Contains(body, "shared") {
+		t.Error("the list's \"shared\" tag was not cleared")
+	}
+}
+
 func TestDeleteOverHTMXClearsDetailAndRemovesRow(t *testing.T) {
 	s := newServer(t)
 	id := s.createSnippet(t, s.Alice, "Doomed", "go", "package a\n")
