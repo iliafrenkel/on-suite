@@ -295,7 +295,7 @@ func TestOutlineIsFlatDocumentOrder(t *testing.T) {
 	f := newFixture(t)
 	f.sample(t)
 
-	got, err := f.store.Outline(context.Background(), f.alice.ID, notes.RootID, false)
+	got, err := f.store.Outline(context.Background(), f.alice.ID, notes.RootID, false, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestOutlineStopsAtACollapsedNode(t *testing.T) {
 		t.Fatalf("SetCollapsed: %v", err)
 	}
 
-	got, err := f.store.Outline(context.Background(), f.alice.ID, notes.RootID, false)
+	got, err := f.store.Outline(context.Background(), f.alice.ID, notes.RootID, false, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -325,11 +325,41 @@ func TestOutlineStopsAtACollapsedNode(t *testing.T) {
 	}
 }
 
+// TestOutlineIgnoreCollapsedRevealsChildrenOfACollapsedNode is what the
+// search-as-filter feature needs Store.Outline for: a match under a
+// collapsed ancestor must still be fetched, so the handler layer can decide
+// what to keep rather than never seeing it in the first place.
+func TestOutlineIgnoreCollapsedRevealsChildrenOfACollapsedNode(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	parent := f.mk(t, notes.RootID, "parent")
+	child := f.mk(t, parent.ID, "child")
+	if err := f.store.SetCollapsed(ctx, f.alice.ID, parent.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	normal, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(normal) != 1 {
+		t.Fatalf("Outline(ignoreCollapsed=false) = %+v, want just the collapsed parent", normal)
+	}
+
+	all, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 || all[1].ID != child.ID {
+		t.Fatalf("Outline(ignoreCollapsed=true) = %+v, want the parent and its child", all)
+	}
+}
+
 func TestOutlineZoomsIntoANode(t *testing.T) {
 	f := newFixture(t)
 	a, _, _, _, _ := f.sample(t)
 
-	got, err := f.store.Outline(context.Background(), f.alice.ID, a.ID, false)
+	got, err := f.store.Outline(context.Background(), f.alice.ID, a.ID, false, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -344,7 +374,7 @@ func TestOutlineExcludesAnotherUser(t *testing.T) {
 	f := newFixture(t)
 	f.sample(t)
 
-	got, err := f.store.Outline(context.Background(), f.bob.ID, notes.RootID, false)
+	got, err := f.store.Outline(context.Background(), f.bob.ID, notes.RootID, false, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -357,7 +387,7 @@ func TestOutlineOfAnotherUsersNodeIsEmpty(t *testing.T) {
 	f := newFixture(t)
 	a, _, _, _, _ := f.sample(t)
 
-	got, err := f.store.Outline(context.Background(), f.bob.ID, a.ID, false)
+	got, err := f.store.Outline(context.Background(), f.bob.ID, a.ID, false, false)
 	if err != nil {
 		t.Fatalf("Outline: %v", err)
 	}
@@ -438,7 +468,7 @@ func TestOutlineDoesNotLeakAnotherUsersBulletsWhenI2IsBroken(t *testing.T) {
 		{"zoomed into the grafted parent", a.ID, "- a1\n- a2\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := f.store.Outline(ctx, f.alice.ID, tc.root, false)
+			got, err := f.store.Outline(ctx, f.alice.ID, tc.root, false, false)
 			if err != nil {
 				t.Fatalf("Outline: %v", err)
 			}
@@ -560,7 +590,7 @@ func TestOutlineTerminatesOnACycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), cycleDeadline)
 	defer cancel()
 
-	got, err := f.store.Outline(ctx, f.alice.ID, x.ID, false)
+	got, err := f.store.Outline(ctx, f.alice.ID, x.ID, false, false)
 	if err != nil {
 		if ctx.Err() != nil {
 			t.Fatalf("Outline did not return within %s: the MaxDepth cap is not ending the descent (%v)",
@@ -590,7 +620,7 @@ func TestOutlineExcludesAnArchivedNodeAndItsSubtree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false)
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -617,7 +647,7 @@ func TestOutlineHasChildrenIgnoresAnArchivedChild(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false)
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,7 +677,7 @@ func TestOutlineHasChildrenIgnoresADoneChildUnlessShowCompleted(t *testing.T) {
 	// Outline itself never filters a done row out — that is hideDone's job,
 	// a step the handler applies afterward (view.go) — so both rows come
 	// back either way; only HasChildren is what this test is about.
-	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false)
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -658,7 +688,7 @@ func TestOutlineHasChildrenIgnoresADoneChildUnlessShowCompleted(t *testing.T) {
 		t.Error("HasChildren is true, but the only child is done and would be hidden")
 	}
 
-	got, err = f.store.Outline(ctx, f.alice.ID, notes.RootID, true)
+	got, err = f.store.Outline(ctx, f.alice.ID, notes.RootID, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -679,7 +709,7 @@ func TestOutlineChildAndDoneCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, true)
+	got, err := f.store.Outline(ctx, f.alice.ID, notes.RootID, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}

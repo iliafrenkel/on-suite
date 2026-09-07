@@ -206,7 +206,7 @@ func nestShared(flat []Node) []*sharedRow {
 //
 // RootRenderedTitle and RootRenderedNote are rendered through RenderShared,
 // not Render/Node.DisplayTitleHTML — spec §15: a #tag/@mention in the
-// root's own title or note must not become a link into /notes/search
+// root's own title or note must not become a link into /notes/
 // either, so the template uses these fields for the root instead of
 // calling Root.DisplayTitleHTML directly. There is no Root Node field: the
 // template never needs anything else off the root, and the same reasoning

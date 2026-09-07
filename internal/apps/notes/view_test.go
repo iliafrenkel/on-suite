@@ -56,7 +56,7 @@ func TestNestBuildsTheTree(t *testing.T) {
 		lvl{2, "a1x"},
 		lvl{1, "a2"},
 		lvl{0, "b"},
-	), RootID, "tok", "9999-12-31")
+	), RootID, "tok", "9999-12-31", nil, nil)
 
 	want := "a\n  a1\n    a1x*\n  a2*\nb*\n"
 	if got := draw(rows); got != want {
@@ -69,7 +69,7 @@ func TestNestMarksTheLastSiblingAtEveryLevel(t *testing.T) {
 		lvl{0, "a"},
 		lvl{1, "a1"},
 		lvl{1, "a2"},
-	), RootID, "tok", "9999-12-31")
+	), RootID, "tok", "9999-12-31", nil, nil)
 
 	if rows[0].Last != true {
 		t.Error("the only top-level row is not marked last")
@@ -86,7 +86,7 @@ func TestNestMarksTheLastSiblingAtEveryLevel(t *testing.T) {
 // carries the hidden fields that form needs rather than reaching for a shared
 // parent the template has no way to address from inside a recursive block.
 func TestNestStampsEveryRow(t *testing.T) {
-	rows := nest(flat(lvl{0, "a"}, lvl{1, "a1"}), 42, "tok", "9999-12-31")
+	rows := nest(flat(lvl{0, "a"}, lvl{1, "a1"}), 42, "tok", "9999-12-31", nil, nil)
 
 	var seen int
 	var walk func([]*outlineRow)
@@ -109,7 +109,7 @@ func TestNestStampsEveryRow(t *testing.T) {
 }
 
 func TestNestRendersMarkdownIntoEachRow(t *testing.T) {
-	rows := nest([]Node{{ID: 1, Title: "**bold**", Note: "*italic*", Depth: 0}}, RootID, "tok", "9999-12-31")
+	rows := nest([]Node{{ID: 1, Title: "**bold**", Note: "*italic*", Depth: 0}}, RootID, "tok", "9999-12-31", nil, nil)
 	if got := string(rows[0].RenderedTitle); got != "<strong>bold</strong>" {
 		t.Errorf("RenderedTitle = %q", got)
 	}
@@ -127,7 +127,7 @@ func TestNestDropsARowWithNoParent(t *testing.T) {
 		lvl{2, "orphan"},
 		lvl{3, "orphan's child"},
 		lvl{1, "a1"},
-	), RootID, "tok", "9999-12-31")
+	), RootID, "tok", "9999-12-31", nil, nil)
 
 	// "a" is the only surviving top-level row, so it is also the last one.
 	want := "a*\n  a1*\n"
@@ -145,7 +145,7 @@ func TestNestDropsARowWithNoParent(t *testing.T) {
 // without a test a future refactor could read "d > 0" as redundant with the
 // "d == 0" case above it and remove it.
 func TestNestDropsARowWithNegativeDepth(t *testing.T) {
-	rows := nest([]Node{{ID: 1, Title: "negative", Depth: -1}}, RootID, "tok", "9999-12-31")
+	rows := nest([]Node{{ID: 1, Title: "negative", Depth: -1}}, RootID, "tok", "9999-12-31", nil, nil)
 	if len(rows) != 0 {
 		t.Errorf("nest kept %d rows, want the negative-depth row dropped", len(rows))
 	}
@@ -160,7 +160,7 @@ func TestNestResetsTheOpenChainAtEachTopLevelRow(t *testing.T) {
 		lvl{1, "a1"},
 		lvl{0, "b"},
 		lvl{1, "b1"},
-	), RootID, "tok", "9999-12-31")
+	), RootID, "tok", "9999-12-31", nil, nil)
 
 	want := "a\n  a1*\nb*\n  b1*\n"
 	if got := draw(rows); got != want {
@@ -169,7 +169,7 @@ func TestNestResetsTheOpenChainAtEachTopLevelRow(t *testing.T) {
 }
 
 func TestNestOfNothingIsNothing(t *testing.T) {
-	if rows := nest(nil, RootID, "tok", "9999-12-31"); len(rows) != 0 {
+	if rows := nest(nil, RootID, "tok", "9999-12-31", nil, nil); len(rows) != 0 {
 		t.Errorf("nest(nil) returned %d rows", len(rows))
 	}
 }
@@ -182,7 +182,7 @@ func TestNestHandlesTheDeepestPermittedOutline(t *testing.T) {
 	for d := 0; d <= MaxDepth; d++ {
 		spec = append(spec, lvl{d, "d" + string(rune('0'+d%10))})
 	}
-	rows := nest(flat(spec...), RootID, "tok", "9999-12-31")
+	rows := nest(flat(spec...), RootID, "tok", "9999-12-31", nil, nil)
 
 	depth := 0
 	for cur := rows; len(cur) > 0; cur = cur[0].Children {
@@ -261,4 +261,91 @@ func TestSharedRowHasNoPrivateFields(t *testing.T) {
 	}
 	check(t, reflect.TypeOf(sharedRow{}))
 	check(t, reflect.TypeOf(sharedView{}))
+}
+
+func TestFilterToMatchesKeepsOnlyMatchesAndTheirAncestors(t *testing.T) {
+	// a
+	//   a1
+	//     a1x   <- matches
+	//   a2      <- no match, no matching descendant: dropped
+	rows := flat(
+		lvl{0, "a"}, lvl{1, "a1"}, lvl{2, "a1x"}, lvl{1, "a2"},
+	)
+	var a1xID int64
+	for _, n := range rows {
+		if n.Title == "a1x" {
+			a1xID = n.ID
+		}
+	}
+
+	kept := filterToMatches(rows, map[int64]bool{a1xID: true})
+	if len(kept) != 3 {
+		t.Fatalf("filterToMatches kept %d rows, want 3 (a, a1, a1x): %+v", len(kept), kept)
+	}
+	for _, title := range []string{"a", "a1", "a1x"} {
+		found := false
+		for _, n := range kept {
+			if n.Title == title {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("filterToMatches dropped %q, which should have been kept", title)
+		}
+	}
+}
+
+func TestFilterToMatchesWithNilMatchedReturnsInputUnchanged(t *testing.T) {
+	rows := flat(lvl{0, "a"}, lvl{1, "a1"})
+	got := filterToMatches(rows, nil)
+	if len(got) != len(rows) {
+		t.Fatalf("filterToMatches(nil) changed the length: got %d, want %d", len(got), len(rows))
+	}
+}
+
+// TestFilterToMatchesExpandsACollapsedAncestor is the chevron-icon fix: an
+// ancestor kept only for context, whose real Collapsed was true, must not
+// still claim to be collapsed once its matching child is being shown right
+// below it in this same response.
+func TestFilterToMatchesExpandsACollapsedAncestor(t *testing.T) {
+	rows := flat(lvl{0, "a"}, lvl{1, "a1"})
+	rows[0].Collapsed = true
+	var a1ID int64
+	for _, n := range rows {
+		if n.Title == "a1" {
+			a1ID = n.ID
+		}
+	}
+
+	kept := filterToMatches(rows, map[int64]bool{a1ID: true})
+	for _, n := range kept {
+		if n.Title == "a" && n.Collapsed {
+			t.Error("the ancestor still reports Collapsed = true despite its match being shown")
+		}
+	}
+}
+
+func TestNestHighlightsAMatchedRow(t *testing.T) {
+	n := Node{ID: 1, Title: "buy milk", Depth: 0}
+	rows := nest([]Node{n}, RootID, "tok", "9999-12-31", map[int64]bool{1: true}, []string{"milk"})
+	if !strings.Contains(string(rows[0].RenderedTitle), `<mark class="notes-search-hit">milk</mark>`) {
+		t.Errorf("RenderedTitle = %q, want the match highlighted", rows[0].RenderedTitle)
+	}
+}
+
+func TestNestDoesNotHighlightAnUnmatchedAncestorRow(t *testing.T) {
+	n := Node{ID: 1, Title: "buy milk", Depth: 0}
+	// matched is non-nil (filtering is active) but this row's own id isn't
+	// in it — it's present only as an ancestor of some other match.
+	rows := nest([]Node{n}, RootID, "tok", "9999-12-31", map[int64]bool{999: true}, []string{"milk"})
+	if strings.Contains(string(rows[0].RenderedTitle), "<mark") {
+		t.Errorf("RenderedTitle = %q, an ancestor-only row should not be highlighted", rows[0].RenderedTitle)
+	}
+}
+
+func TestIdSetBuildsAMembershipMapFromNodeIDs(t *testing.T) {
+	set := idSet([]Node{{ID: 3}, {ID: 7}})
+	if !set[3] || !set[7] || set[5] {
+		t.Errorf("idSet = %+v, want {3:true, 7:true}", set)
+	}
 }

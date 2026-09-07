@@ -376,7 +376,14 @@ func collectNodes(rows *sql.Rows, what string) ([]Node, error) {
 // will leave on screen, so a bullet whose only children were done still
 // showed a chevron that expanded into nothing — issue #81. The (? OR
 // k.done_at IS NULL) clause mirrors Store.Search's own.
-func (st *Store) Outline(ctx context.Context, userID, rootID int64, showCompleted bool) ([]Node, error) {
+//
+// ignoreCollapsed, when true, descends through a collapsed node instead of
+// stopping at it — spec: search-as-filter fetches a whole zoomed subtree so
+// filterToMatches (view.go) can decide what survives, rather than having a
+// collapsed ancestor hide a match from this query before that decision ever
+// runs. Every caller not filtering passes false, reproducing this method's
+// original behaviour exactly.
+func (st *Store) Outline(ctx context.Context, userID, rootID int64, showCompleted, ignoreCollapsed bool) ([]Node, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`WITH RECURSIVE tree AS (
 		     SELECT `+nodeColumns+`, 0 AS depth, printf('%08d', position) AS path
@@ -387,7 +394,7 @@ func (st *Store) Outline(ctx context.Context, userID, rootID int64, showComplete
 		            t.depth + 1, t.path || '/' || printf('%08d', c.position)
 		       FROM notes_nodes c JOIN tree t ON c.parent_id = t.id
 		      WHERE c.user_id = t.user_id AND c.archived_at IS NULL
-		        AND t.collapsed = 0 AND t.depth + 1 <= ?
+		        AND (? OR t.collapsed = 0) AND t.depth + 1 <= ?
 		 )
 		 SELECT `+nodeColumns+`, depth,
 		        EXISTS (SELECT 1 FROM notes_nodes k
@@ -400,7 +407,7 @@ func (st *Store) Outline(ctx context.Context, userID, rootID int64, showComplete
 		          WHERE k.user_id = tree.user_id AND k.parent_id = tree.id
 		            AND k.archived_at IS NULL AND k.done_at IS NOT NULL) AS done_child_count
 		   FROM tree ORDER BY path`,
-		userID, parentArg(rootID), MaxDepth, showCompleted)
+		userID, parentArg(rootID), ignoreCollapsed, MaxDepth, showCompleted)
 	if err != nil {
 		return nil, fmt.Errorf("notes: outline of %d: %w", rootID, err)
 	}

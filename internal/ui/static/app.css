@@ -1117,7 +1117,6 @@ button.outline-chevron {
 	border-bottom: 1px solid var(--c-border);
 }
 .notes-due-crumbs,
-.notes-search-crumbs,
 .notes-archive-crumbs { font-size: var(--fs-sm); color: var(--c-text-faint); }
 .notes-crumb-item {
 	display: inline-block;
@@ -1141,16 +1140,21 @@ button.outline-chevron {
 	width: 12rem;
 }
 
-.notes-search-list { margin: 0; padding: 0; list-style: none; }
-.notes-search-item {
-	display: flex;
-	align-items: baseline;
-	gap: var(--s-2);
-	padding: var(--s-1) 0;
-	border-bottom: 1px solid var(--c-border);
+/* A match's highlight — issue #86 — uses the palette's own tinted-
+ * background token (the same one active/selected chips already use, e.g.
+ * .admin-tag-flag) rather than the browser's default yellow mark, so it
+ * reads as "this app's own accent", not a generic <mark>. */
+mark.notes-search-hit {
+	background: var(--c-accent-bg);
+	color: inherit;
+	border-radius: 2px;
+	padding: 0 0.15em;
 }
-.notes-search-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
-.notes-search-title:hover { color: var(--c-accent); }
+
+.notes-search-snippet {
+	margin: 0.25em 0 0;
+	font-size: var(--fs-sm);
+}
 
 .notes-archive-list { margin: 0; padding: 0; list-style: none; }
 .notes-archive-item {

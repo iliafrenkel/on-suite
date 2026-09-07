@@ -1,25 +1,33 @@
 {{/* notes-search-box is the toolbar search box, shared by every ON Notes
-     page's toolbar (outline, due, search, archive) — issue #89: it used to
-     be hand-copied verbatim across all of them, with no shared define
-     protecting the id notes.js's "/" binding looks up (#notes-search-input)
-     from drifting out of sync. *.partial.html (render.go's AddApp) is what
-     makes one define visible from every one of this app's own page files,
-     each of which is otherwise its own independent template set.
+     page's toolbar (outline, due, archive) — issue #89. It is also this
+     feature's live filter: hx-get targets Action (each page's own GET
+     route) with hx-target Target (that page's own list container), so
+     typing re-renders just that list in place; hx-replace-url keeps the
+     filter in the URL, so a refresh still restores it. hx-push-url was
+     considered instead, but was rejected — a deliberate tradeoff, reviewed
+     and accepted — because a single debounced typing session would then
+     push one history entry per fired request; with hx-replace-url the back
+     button instead returns to wherever the user was before they started
+     typing, not to some intermediate filter state.
+     "search" as an hx-trigger event, alongside "input changed delay:300ms",
+     fires immediately when a user clicks the native <input type=search>'s
+     own clear (x) button, rather than waiting out the debounce.
 
-     Takes a dict (issue #90's Query/Autofocus both vary: search.html alone
-     prefills the last query and autofocuses; every other page wants
-     neither), since a {{template}} call passes exactly one argument.
-     role="search" is the landmark WCAG asks for alongside the input's own
-     aria-label. */}}
-{{define "notes-search-box"}}<form method="get" action="/notes/search" class="notes-search" role="search">
+     Action/Target vary per page and are passed via dict at each call site,
+     alongside the existing Query (every page prefills its current filter)
+     and Autofocus (no page currently sets this true). role="search" is
+     the landmark WCAG asks for alongside the input's own aria-label. */}}
+{{define "notes-search-box"}}<form method="get" action="{{.Action}}" class="notes-search" role="search">
 	<input type="search" id="notes-search-input" name="q" value="{{.Query}}"
-	       placeholder="Search…" aria-label="Search notes"{{if .Autofocus}} autofocus{{end}}>
+	       placeholder="Search…" aria-label="Search notes"{{if .Autofocus}} autofocus{{end}}
+	       hx-get="{{.Action}}" hx-target="{{.Target}}" hx-swap="innerHTML"
+	       hx-trigger="input changed delay:300ms, search" hx-replace-url="true">
 </form>{{end}}
 
-{{/* show-completed-toggle is the toolbar's button. Moved here (from
-     outline.html, where it originated) so /notes/search can share it too
-     (issue #88) — this app's own pages are otherwise independent template
-     sets, same reason notes-search-box above lives in a partial.
+{{/* show-completed-toggle is the toolbar's button. Moved here from
+     outline.html, where it originated (issue #88) — this app's own pages
+     are otherwise independent template sets, same reason notes-search-box
+     above lives in a partial. The outline is the only page that uses it.
 
      Shared between the page render and every HTMX fragment response, on
      the same OOB discipline as rendered-title (outline.html): the fragment
@@ -27,9 +35,7 @@
      outside #outline, so the hx-target="#outline" swap can never update it
      — without the out-of-band copy its label and value stay frozen at
      whatever the last full page load wrote, and a second click re-sends
-     the stale value and appears to do nothing. /notes/search's own toggle
-     is a plain (non-HTMX) form — that page does no partial swapping of its
-     own — so .OOB is always false there, harmlessly. */}}
+     the stale value and appears to do nothing. */}}
 {{define "show-completed-toggle"}}<button type="submit" id="show-completed-toggle" class="toolbar-btn{{if .ShowCompleted}} toolbar-btn-active{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}
         name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}" title="{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>Completed</button>{{end}}
 

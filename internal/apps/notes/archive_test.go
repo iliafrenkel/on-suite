@@ -17,7 +17,7 @@ func TestArchiveListsATopLevelArchivedNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Archive(ctx, f.alice.ID)
+	got, err := f.store.Archive(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestArchiveListsOnlyTheRootOfAnArchivedSubtree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Archive(ctx, f.alice.ID)
+	got, err := f.store.Archive(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestArchiveListsANestedNodeWhoseParentIsNotArchived(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Archive(ctx, f.alice.ID)
+	got, err := f.store.Archive(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestArchiveExcludesADoublyNestedArchivedDescendant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Archive(ctx, f.alice.ID)
+	got, err := f.store.Archive(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestArchiveOrdersChronologicallyAcrossWholeAndFractionalSeconds(t *testing.
 		}
 	}
 
-	got, err := f.store.Archive(ctx, f.alice.ID)
+	got, err := f.store.Archive(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestArchiveDoesNotLeakAnotherUsersNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Archive(ctx, f.alice.ID)
+	got, err := f.store.Archive(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,11 +156,49 @@ func TestArchiveWithNothingArchivedIsEmpty(t *testing.T) {
 	f := newFixture(t)
 	f.mk(t, notes.RootID, "never archived")
 
-	got, err := f.store.Archive(context.Background(), f.alice.ID)
+	got, err := f.store.Archive(context.Background(), f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 0 {
 		t.Fatalf("Archive = %+v, want none", got)
+	}
+}
+
+func TestArchiveWithAQueryOnlyReturnsMatchingRows(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	match := f.mk(t, notes.RootID, "old milk carton")
+	if err := f.store.SetArchived(ctx, f.alice.ID, match.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	other := f.mk(t, notes.RootID, "old receipts")
+	if err := f.store.SetArchived(ctx, f.alice.ID, other.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Archive(ctx, f.alice.ID, "milk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != match.ID {
+		t.Fatalf("Archive(query=milk) = %+v, want just the milk bullet", got)
+	}
+}
+
+func TestArchiveWithNoQueryReturnsEverything(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "anything")
+	if err := f.store.SetArchived(ctx, f.alice.ID, n.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Archive(ctx, f.alice.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Archive(query=\"\") = %+v, want the one archived bullet", got)
 	}
 }

@@ -3,24 +3,31 @@ package notes
 import (
 	"context"
 	"fmt"
+	"html/template"
 )
 
 // ArchiveRow is one entry on /notes/archive: an archived subtree's root,
 // plus its ancestor breadcrumb — the same shape Search and Due rows take,
 // for the same reason: a node found outside the context of the tree it
 // lives in needs its path spelled out to be legible on its own.
+//
+// TitleHTML/Snippet are DueRow's own fields, for the same reason — see
+// DueRow's doc comment (due.go).
 type ArchiveRow struct {
 	Node
-	Crumbs []Node
+	Crumbs    []Node
+	TitleHTML template.HTML
+	Snippet   template.HTML
 }
 
 // archiveView is what /notes/archive renders.
 type archiveView struct {
 	Rows []ArchiveRow
-	// CSRFToken is needed here, unlike searchView and DueGroups, because
-	// this page's rows carry a real mutating form — Restore — and every
-	// other one is read-only.
-	CSRFToken string
+	// CSRFToken is needed here, unlike DueGroups, because this page's rows
+	// carry a real mutating form — Restore — and Due's are read-only.
+	CSRFToken    string
+	Query        string
+	SearchAction string
 }
 
 // Archive returns userID's archived nodes with no archived ancestor —
@@ -54,15 +61,28 @@ type archiveView struct {
 // as an actual instant rather than comparing bytes, so this orders
 // correctly regardless of which timestamps in the table happen to land on
 // a whole second.
-func (st *Store) Archive(ctx context.Context, userID int64) ([]Node, error) {
+//
+// query, when non-empty, additionally requires a title/note match — the
+// filter behind /notes/archive's own search box. "" matches every row, the
+// same as calling this before that feature existed. Unlike Store.Search,
+// this never excludes archived content — these rows are archived by
+// definition — so it cannot reuse Search itself, only ftsQuery/
+// matchedIDsSubquery, the pieces that don't carry that exclusion.
+func (st *Store) Archive(ctx context.Context, userID int64, query string) ([]Node, error) {
+	matchClause := ""
+	args := []any{userID, userID, userID}
+	if q := ftsQuery(query); q != "" {
+		matchClause = " AND " + matchedIDsSubquery
+		args = append(args, q)
+	}
 	rows, err := st.db.QueryContext(ctx,
 		`WITH RECURSIVE `+archivedBelowCTE+`
 		 SELECT `+aliasNodeColumns("n")+`
 		   FROM notes_nodes n
 		  WHERE n.user_id = ? AND n.archived_at IS NOT NULL
-		    AND (n.parent_id IS NULL OR n.parent_id NOT IN (SELECT id FROM archived_below))
+		    AND (n.parent_id IS NULL OR n.parent_id NOT IN (SELECT id FROM archived_below))`+matchClause+`
 		  ORDER BY julianday(n.archived_at) DESC`,
-		userID, userID, userID)
+		args...)
 	if err != nil {
 		return nil, fmt.Errorf("notes: archive: %w", err)
 	}

@@ -3,6 +3,7 @@ package notes
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"time"
 )
 
@@ -11,10 +12,29 @@ import (
 // result three levels deep is legible on its own. Overdue is set by
 // GroupByDue, once, rather than computed in the template — the same reason
 // outlineRow.Overdue exists.
+//
+// TitleHTML is DisplayTitle run through highlightPlainText — escaped, and
+// with any filter match wrapped in <mark>, but never through Render: the
+// title is a link (see DisplayTitleHTML's own doc comment on why that
+// stays plain), so this only ever adds <mark>, never anything Render could
+// produce. It equals plain escaped DisplayTitle when there is no filter.
+// Snippet is a highlighted excerpt of Note, set only when the filter
+// matched there and not in the title — issue #86's "which field matched".
 type DueRow struct {
 	Node
-	Crumbs  []Node
-	Overdue bool
+	Crumbs    []Node
+	Overdue   bool
+	TitleHTML template.HTML
+	Snippet   template.HTML
+}
+
+// dueView is what /notes/due renders — Groups wraps GroupByDue's own
+// buckets so the template can also read Query/SearchAction, which DueGroups
+// itself has no reason to carry.
+type dueView struct {
+	Groups       DueGroups
+	Query        string
+	SearchAction string
 }
 
 // DueGroups is /notes/due's four buckets, spec §11's Overdue / Today / This
@@ -87,14 +107,24 @@ func DueBadgeCount(rows []Node, today time.Time) int {
 // via archivedBelowCTE (store.go), shared with Store.Search — spec §13's
 // subtree rule applies here exactly as it does there. Ordered by due_on so
 // GroupByDue only has to bucket, never sort.
-func (st *Store) Due(ctx context.Context, userID int64) ([]Node, error) {
+//
+// query, when non-empty, additionally requires a title/note match — the
+// filter behind /notes/due's own search box. "" matches every row, the same
+// as calling this before that feature existed.
+func (st *Store) Due(ctx context.Context, userID int64, query string) ([]Node, error) {
+	matchClause := ""
+	args := []any{userID, userID, userID}
+	if q := ftsQuery(query); q != "" {
+		matchClause = " AND " + matchedIDsSubquery
+		args = append(args, q)
+	}
 	rows, err := st.db.QueryContext(ctx,
 		`WITH RECURSIVE `+archivedBelowCTE+`
 		 SELECT `+nodeColumns+`
 		   FROM notes_nodes
 		  WHERE user_id = ? AND due_on IS NOT NULL AND done_at IS NULL
-		    AND id NOT IN (SELECT id FROM archived_below)
-		  ORDER BY due_on`, userID, userID, userID)
+		    AND id NOT IN (SELECT id FROM archived_below)`+matchClause+`
+		  ORDER BY due_on`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("notes: due nodes: %w", err)
 	}

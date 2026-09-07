@@ -4,45 +4,62 @@
 	     spec §11 — so, unlike the outline, this toolbar needs no
 	     show-completed toggle and no .notes-toolbar-actions cluster. */}}
 	<div class="notes-toolbar">
-		{{template "notes-search-box" (dict "Query" "" "Autofocus" false)}}
+		{{template "notes-search-box" (dict "Query" .Data.Query "Autofocus" false "Action" .Data.SearchAction "Target" "#due-list")}}
 		<div class="notes-toolbar-actions">
 			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8H3l2-4h14z"/><path d="M5 8v11h14V8"/><path d="M10 12h4"/></svg>Archive</a>
 			<a href="/notes/" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>All notes</a>
 		</div>
 	</div>
 	<h1>Due</h1>
-	{{range .Data.Sections}}
-	{{if .Rows}}
-	<section class="notes-due-group">
-		<h2>{{.Title}}</h2>
-		<ul class="notes-due-list">
-			{{range .Rows}}
-			<li class="notes-due-item">
-				{{if .Crumbs}}
-				{{/* Not links — see Node.DisplayTitleHTML's doc comment
-				     (issue #76) — so rendering Markdown here can't nest an
-				     <a>. The row's own title just below stays on
-				     DisplayTitle: it IS a link, so a title containing a
-				     link/autolink/#tag of its own would nest anchors. */}}
-				<span class="notes-due-crumbs">
-					{{range .Crumbs}}<span class="notes-crumb-item" title="{{.DisplayTitle}}">{{.DisplayTitleHTML}}</span> / {{end}}
-				</span>
-				{{end}}
-				<a href="/notes/{{.ID}}" class="notes-due-title">{{.DisplayTitle}}</a>
-				{{/* Issue #78: same non-colour signal as the outline's own
-				     chip (outline.html's rendered-title) — the "Overdue"
-				     section heading above also carries the meaning here, but
-				     a chip read on its own (e.g. by a screen reader jumping
-				     straight to it) still needs its own mark. */}}
-				<span class="outline-due-chip{{if .Overdue}} outline-due-overdue{{end}}"{{if .Overdue}} aria-label="Overdue: {{.DueOn}}"{{end}}>{{if .Overdue}}&#33; {{end}}{{.DueOn}}</span>
-			</li>
-			{{end}}
-		</ul>
-	</section>
-	{{end}}
-	{{end}}
-	{{if not (or .Data.Overdue .Data.Today .Data.ThisWeek .Data.Later)}}
-	<p class="dim">Nothing is due.</p>
-	{{end}}
+	{{/* #due-list is this feature's own swap target, the equivalent of
+	     #outline and #archive-list: its content is a named block so an
+	     HTMX filter re-render can replace just this, through
+	     Renderer.Fragment, without touching the toolbar above it. */}}
+	<div id="due-list">
+		{{template "due-list" .Data}}
+	</div>
 </div>
+{{end}}
+
+{{define "due-list"}}
+{{$empty := not (or .Groups.Overdue .Groups.Today .Groups.ThisWeek .Groups.Later)}}
+{{if and .Query $empty}}
+<p class="dim">No notes match &ldquo;{{.Query}}&rdquo;.</p>
+{{else}}
+{{range .Groups.Sections}}
+{{if .Rows}}
+<section class="notes-due-group">
+	<h2>{{.Title}}</h2>
+	<ul class="notes-due-list">
+		{{range .Rows}}
+		<li class="notes-due-item">
+			{{if .Crumbs}}
+			{{/* Not links — see Node.DisplayTitleHTML's doc comment
+			     (issue #76) — so rendering Markdown here can't nest an
+			     <a>. The row's own title just below stays on a
+			     Markdown-free highlighted form: it IS a link, so a title
+			     containing a link/autolink/#tag of its own would nest
+			     anchors. */}}
+			<span class="notes-due-crumbs">
+				{{range .Crumbs}}<span class="notes-crumb-item" title="{{.DisplayTitle}}">{{.DisplayTitleHTML}}</span> / {{end}}
+			</span>
+			{{end}}
+			<a href="/notes/{{.ID}}" class="notes-due-title">{{.TitleHTML}}</a>
+			{{with .Snippet}}<p class="notes-search-snippet dim">{{.}}</p>{{end}}
+			{{/* Issue #78: same non-colour signal as the outline's own
+			     chip (outline.html's rendered-title) — the "Overdue"
+			     section heading above also carries the meaning here, but
+			     a chip read on its own (e.g. by a screen reader jumping
+			     straight to it) still needs its own mark. */}}
+			<span class="outline-due-chip{{if .Overdue}} outline-due-overdue{{end}}"{{if .Overdue}} aria-label="Overdue: {{.DueOn}}"{{end}}>{{if .Overdue}}&#33; {{end}}{{.DueOn}}</span>
+		</li>
+		{{end}}
+	</ul>
+</section>
+{{end}}
+{{end}}
+{{if and (not .Query) $empty}}
+<p class="dim">Nothing is due.</p>
+{{end}}
+{{end}}
 {{end}}
