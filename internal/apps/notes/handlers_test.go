@@ -3567,8 +3567,8 @@ func TestOutlineTagsStillLinkOnThePrivateOutline(t *testing.T) {
 
 	doc := s.Get(t, s.Alice, "/notes/")
 	a := doc.MustHave("a.outline-tag")
-	if href, _ := htmlassert.Attr(a, "href"); !strings.HasPrefix(href, "/notes/search?q=") {
-		t.Errorf("outline-tag href = %q, want a /notes/search?q= link", href)
+	if href, _ := htmlassert.Attr(a, "href"); !strings.HasPrefix(href, "/notes/?q=") {
+		t.Errorf("outline-tag href = %q, want a /notes/?q= link", href)
 	}
 }
 

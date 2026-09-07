@@ -55,13 +55,13 @@ func Render(s string) template.HTML {
 // RenderShared is Render for the public share page (spec §15: "no link
 // leads anywhere into the owner's private tree"). #tag/@mention chips
 // still render — they keep their visual styling — but as an inert
-// <span class="outline-tag">, not an <a href="/notes/search?...">:
-// /notes/search is an authenticated route, so a link there from a page an
-// anonymous visitor can reach is a dead end into a login wall, not the
-// private tree itself, but it still violates the no-link invariant. Used
-// only by share.go's nestShared and handlers.go's viewShared — every other
-// caller renders the ordinary, authenticated outline and should keep using
-// Render so tags there stay real links into /notes/search.
+// <span class="outline-tag">, not an <a href="/notes/?q=...">: /notes/ is
+// an authenticated route, so a link there from a page an anonymous
+// visitor can reach is a dead end into a login wall, not the private tree
+// itself, but it still violates the no-link invariant. Used only by
+// share.go's nestShared and handlers.go's viewShared — every other caller
+// renders the ordinary, authenticated outline and should keep using Render
+// so tags there stay real links into the filtered outline.
 func RenderShared(s string) template.HTML {
 	return renderMarkdown(s, false)
 }
@@ -171,13 +171,13 @@ func writeLink(b *strings.Builder, text, href, source string) {
 // writeTag renders a #tag or @mention as a chip — spec §10, §13. There is
 // no tags table: this is a rendering and linking behaviour of the Markdown
 // renderer alone. When linkTags is true (Render, the ordinary authenticated
-// outline) the chip links to a literal search for that exact string,
-// /notes/search — that route does not exist until N6, so until then this
-// 404s, and it starts working with no further change once N6 ships. When
-// linkTags is false (RenderShared, the public share page) the chip keeps
-// its "outline-tag" styling but renders as an inert <span>, not a link —
+// outline) the chip links to a literal filter for that exact string, the
+// top-level outline with ?q= set — spec: search as an inline filter,
+// replacing the old dedicated /notes/search results page. When linkTags is
+// false (RenderShared, the public share page) the chip keeps its
+// "outline-tag" styling but renders as an inert <span>, not a link —
 // spec §15's "no link leads anywhere into the owner's private tree", which
-// /notes/search would violate for an anonymous visitor even though it only
+// /notes/ would violate for an anonymous visitor even though it only
 // dead-ends them at a login wall rather than exposing private data.
 func writeTag(b *strings.Builder, tag string, linkTags bool) {
 	if !linkTags {
@@ -186,7 +186,7 @@ func writeTag(b *strings.Builder, tag string, linkTags bool) {
 		b.WriteString(`</span>`)
 		return
 	}
-	b.WriteString(`<a class="outline-tag" href="/notes/search?q=`)
+	b.WriteString(`<a class="outline-tag" href="/notes/?q=`)
 	b.WriteString(url.QueryEscape(tag))
 	b.WriteString(`">`)
 	b.WriteString(html.EscapeString(tag))

@@ -137,14 +137,14 @@ func TestRenderBareURLWrappedInProseParenIsNotExtended(t *testing.T) {
 
 func TestRenderTagChip(t *testing.T) {
 	got := string(notes.Render("check #urgent today"))
-	if !strings.Contains(got, `<a class="outline-tag" href="/notes/search?q=%23urgent">#urgent</a>`) {
+	if !strings.Contains(got, `<a class="outline-tag" href="/notes/?q=%23urgent">#urgent</a>`) {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestRenderMentionChip(t *testing.T) {
 	got := string(notes.Render("ping @alice"))
-	if !strings.Contains(got, `<a class="outline-tag" href="/notes/search?q=%40alice">@alice</a>`) {
+	if !strings.Contains(got, `<a class="outline-tag" href="/notes/?q=%40alice">@alice</a>`) {
 		t.Errorf("got %q", got)
 	}
 }
@@ -167,7 +167,7 @@ func TestRenderMultipleTagsInOneString(t *testing.T) {
 // trailing punctuation stays outside the chip.
 func TestRenderTagStopsAtPunctuation(t *testing.T) {
 	got := string(notes.Render("check #tag."))
-	if !strings.Contains(got, `<a class="outline-tag" href="/notes/search?q=%23tag">#tag</a>.`) {
+	if !strings.Contains(got, `<a class="outline-tag" href="/notes/?q=%23tag">#tag</a>.`) {
 		t.Errorf("got %q", got)
 	}
 }
