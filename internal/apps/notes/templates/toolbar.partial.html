@@ -10,8 +10,10 @@
 
      Action/Target vary per page and are passed via dict at each call site,
      alongside the existing Query/Autofocus (search.html alone used to
-     prefill the last query and autofocus; that page is gone as of this
-     feature, but every other page still wants neither). role="search" is
+     prefill the last query and autofocus; that page still exists but will
+     render with empty action/hx-get/hx-target — a known interim state,
+     expected to be addressed when a later task removes that page entirely;
+     every other page still wants neither). role="search" is
      the landmark WCAG asks for alongside the input's own aria-label. */}}
 {{define "notes-search-box"}}<form method="get" action="{{.Action}}" class="notes-search" role="search">
 	<input type="search" id="notes-search-input" name="q" value="{{.Query}}"
