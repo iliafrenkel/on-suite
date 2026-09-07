@@ -63,6 +63,11 @@ GitHub Release — there's no separate release script or manual build step.
    - sign `checksums.txt` with [cosign](https://docs.sigstore.dev/cosign/overview/)
      using keyless (Sigstore) signing, producing `checksums.txt.sig` and
      `checksums.txt.pem`,
+   - build a multi-arch (`linux/amd64`, `linux/arm64`) Docker image from
+     [`Dockerfile.release`](../Dockerfile.release) — packaging the `linux`
+     binaries already built above, not rebuilding from source — and push it to
+     `ghcr.io/iliafrenkel/on-suite` tagged with the version and `latest`,
+     signing it the same keyless way as the checksums,
    - generate release notes from `git log`, grouped into New Features, Bug
      Fixes, Improvements, and Everything Else (for the curious) based on each
      commit's Conventional Commits type — see
@@ -75,7 +80,9 @@ GitHub Release — there's no separate release script or manual build step.
 write` as before. Signing needs one more: `permissions: id-token: write`,
 which lets the workflow request a short-lived GitHub OIDC token — that
 token *is* the signing identity, so there's no private key for this project
-to generate, store, or rotate.
+to generate, store, or rotate. Pushing the Docker image needs a third:
+`permissions: packages: write`, and the workflow logs in to GHCR with the
+same `GITHUB_TOKEN` — no separate registry credential to manage.
 
 ## Verifying a release
 
@@ -96,6 +103,15 @@ second then verifies every archive's checksum against it. Verifying only
 the archive's checksum without the signature just confirms the download
 wasn't corrupted — not who built it.
 
+The Docker image is signed the same way, but against its digest rather than
+a checksums file:
+
+```bash
+cosign verify --certificate-identity-regexp 'https://github.com/iliafrenkel/on-suite/.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/iliafrenkel/on-suite:v0.4.0
+```
+
 ## If something goes wrong
 
 Goreleaser refuses to reuse a tag. To redo a release, delete the tag both
@@ -110,12 +126,5 @@ Then also delete the (likely partial) GitHub Release it created before
 re-pushing the tag, or goreleaser will fail on the name collision.
 
 ## What this doesn't cover
-
-- **Docker.** The [`Dockerfile`](../Dockerfile) isn't built or published by
-  this workflow — build and push it yourself if you want a versioned image:
-
-  ```bash
-  docker build --build-arg VERSION=v0.4.0 -t onsuite:v0.4.0 .
-  ```
 
 - **Deploying a release to a server** — see [`docs/DEPLOYING.md`](DEPLOYING.md).

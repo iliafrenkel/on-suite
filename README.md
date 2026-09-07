@@ -160,7 +160,8 @@ on-suite/
 │       └── plans/              # task-by-task implementation plans
 ├── CONTRIBUTING.md             # ground rules for contributing or forking
 ├── Dockerfile / .dockerignore  # scratch-based container image, optional
-└── .goreleaser.yaml            # cross-compiled release builds
+├── Dockerfile.release          # goreleaser's image: packages a prebuilt binary
+└── .goreleaser.yaml            # cross-compiled release builds, incl. the docker image
 ```
 
 Adding an app (ON Reader, ON Flash, or anything else) means writing

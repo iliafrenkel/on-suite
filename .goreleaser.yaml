@@ -48,6 +48,38 @@ archives:
       - docs/DEPLOYING.md
       - docs/onsuite.service
 
+# One multi-platform image built from the linux binaries in `builds` above —
+# goreleaser assembles a single manifest covering both platforms, so there's
+# no separate per-arch manifest-stitching step to maintain.
+dockers_v2:
+  - id: onsuite
+    ids: [onsuite]
+    dockerfile: Dockerfile.release
+    images:
+      - ghcr.io/iliafrenkel/on-suite
+    tags:
+      - "{{ .Version }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.source: https://github.com/iliafrenkel/on-suite
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.licenses: MIT
+
+# Signs the image the same keyless way as checksums.txt above — the identity
+# comes from this workflow's GitHub Actions OIDC token.
+docker_signs:
+  - cmd: cosign
+    args:
+      - sign
+      - "--yes"
+      - "${artifact}@${digest}"
+    artifacts: all
+
 checksum:
   name_template: checksums.txt
 
