@@ -2913,6 +2913,18 @@ func TestArchiveFilterOverHTMXRendersOnlyTheFragment(t *testing.T) {
 	}
 }
 
+func TestArchiveFilterShowsASnippetForANoteOnlyMatch(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "groceries")
+	if err := s.Store.SetText(context.Background(), s.Alice.User.ID, id, "groceries", "don't forget the oat milk"); err != nil {
+		t.Fatal(err)
+	}
+	s.Post(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{"root": {"0"}, "focus_id": {"0"}, "archived": {"1"}})
+
+	doc := s.Get(t, s.Alice, "/notes/archive?q=milk")
+	doc.MustHave(".notes-search-snippet mark.notes-search-hit")
+}
+
 func TestExportDownloadsTheWholeTree(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.Alice, notes.RootID, "top level bullet")
