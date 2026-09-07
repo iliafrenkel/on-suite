@@ -37,6 +37,12 @@ type outlineView struct {
 	// toolbar's Due button badge — see renderOutline/renderOutlineFragment
 	// (handlers.go).
 	DueCount int
+	// Query is the current filter, "" when not filtering — spec: search as
+	// an inline filter. SearchAction is the toolbar search box's own
+	// hx-get/action target: outlinePath(rootID), so filtering never leaves
+	// whatever zoom the page is already on.
+	Query        string
+	SearchAction string
 }
 
 // outlineRow is one bullet, and exactly the inputs of the one form that edits

@@ -51,7 +51,7 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 
 // outline renders the top-level outline.
 func (a *App) outline(w http.ResponseWriter, r *http.Request) {
-	a.renderOutline(w, r, RootID)
+	a.renderOutlineOrFragment(w, r, RootID)
 }
 
 // nodeID parses the {id} wildcard. A path that is not a positive integer is a
@@ -74,7 +74,25 @@ func (a *App) outlineZoomed(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.renderOutline(w, r, id)
+	a.renderOutlineOrFragment(w, r, id)
+}
+
+// renderOutlineOrFragment is outline/outlineZoomed's shared body. A plain
+// GET renders the whole page; the toolbar's search box drives its live
+// filter through this very same route over HTMX (hx-get, targeting
+// #outline) — the same GET-request-branches-on-HX-Request shape every
+// structural mutation route already uses (mutateThen), just reached by GET
+// instead of POST.
+func (a *App) renderOutlineOrFragment(w http.ResponseWriter, r *http.Request, rootID int64) {
+	if web.IsHTMX(r) {
+		userID, ok := a.userID(w, r)
+		if !ok {
+			return
+		}
+		a.renderOutlineFragment(w, r, userID, rootID, showCompletedFrom(r))
+		return
+	}
+	a.renderOutline(w, r, rootID)
 }
 
 // renderOutline draws the outline rooted at rootID: the breadcrumb, the
@@ -89,7 +107,13 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 	}
 
 	showCompleted := showCompletedFrom(r)
-	view := outlineView{CSRFToken: web.CSRFToken(r.Context()), ShowCompleted: showCompleted}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	view := outlineView{
+		CSRFToken:     web.CSRFToken(r.Context()),
+		ShowCompleted: showCompleted,
+		Query:         query,
+		SearchAction:  outlinePath(rootID),
+	}
 
 	// An empty title leaves the shell's breadcrumb reading "Home / ON Notes",
 	// which is what the top level is. A zoomed outline names its root.
@@ -119,14 +143,26 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 	}
 	view.DueCount = DueBadgeCount(dueRows, time.Now())
 
-	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, false)
+	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, query != "")
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
 	visible := hideDone(flat, showCompleted)
-	view.HiddenCount = len(flat) - len(visible)
-	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"), nil, nil)
+
+	var matched map[int64]bool
+	if query != "" {
+		matchedNodes, err := a.store.Search(r.Context(), userID, query, showCompleted)
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
+		matched = idSet(matchedNodes)
+	} else {
+		view.HiddenCount = len(flat) - len(visible)
+	}
+	visible = filterToMatches(visible, matched)
+	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"), matched, searchTerms(query))
 
 	page := a.deps.Page(r, title)
 	page.Data = view
@@ -140,11 +176,18 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 // need to look the root node up — Root.ID is all outline-body reads, and
 // the caller already has it as a plain int64.
 //
+// A structural mutation, or a "show completed" toggle, reaches this too
+// (mutateThen, prefs.go), always without a ?q= on its own request URL — so
+// performing one while a filter is active resets it, deliberately: see this
+// plan's own note on that scope boundary.
+//
 // The response also carries the toolbar's show-completed toggle out of band:
 // that button lives outside #outline, so the swap cannot reach it, and after
 // a prefs toggle its label and value would otherwise stay stale.
 func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64, showCompleted bool) {
-	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, false)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+
+	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, query != "")
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -155,15 +198,29 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 		return
 	}
 	visible := hideDone(flat, showCompleted)
+
 	view := outlineView{
 		CSRFToken:     web.CSRFToken(r.Context()),
 		Root:          Node{ID: rootID},
 		ShowCompleted: showCompleted,
-		HiddenCount:   len(flat) - len(visible),
+		Query:         query,
 		DueCount:      DueBadgeCount(dueRows, time.Now()),
 		OOB:           true,
 	}
-	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"), nil, nil)
+
+	var matched map[int64]bool
+	if query != "" {
+		matchedNodes, err := a.store.Search(r.Context(), userID, query, showCompleted)
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
+		matched = idSet(matchedNodes)
+	} else {
+		view.HiddenCount = len(flat) - len(visible)
+	}
+	visible = filterToMatches(visible, matched)
+	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"), matched, searchTerms(query))
 	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "outline-swap", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}

@@ -1,19 +1,23 @@
 {{/* notes-search-box is the toolbar search box, shared by every ON Notes
-     page's toolbar (outline, due, search, archive) — issue #89: it used to
-     be hand-copied verbatim across all of them, with no shared define
-     protecting the id notes.js's "/" binding looks up (#notes-search-input)
-     from drifting out of sync. *.partial.html (render.go's AddApp) is what
-     makes one define visible from every one of this app's own page files,
-     each of which is otherwise its own independent template set.
+     page's toolbar (outline, due, archive) — issue #89. It is also this
+     feature's live filter: hx-get targets Action (each page's own GET
+     route) with hx-target Target (that page's own list container), so
+     typing re-renders just that list in place; hx-push-url keeps the
+     filter in the URL, so a refresh or the back button restores it.
+     "search" as an hx-trigger event, alongside "input changed delay:300ms",
+     fires immediately when a user clicks the native <input type=search>'s
+     own clear (x) button, rather than waiting out the debounce.
 
-     Takes a dict (issue #90's Query/Autofocus both vary: search.html alone
-     prefills the last query and autofocuses; every other page wants
-     neither), since a {{template}} call passes exactly one argument.
-     role="search" is the landmark WCAG asks for alongside the input's own
-     aria-label. */}}
-{{define "notes-search-box"}}<form method="get" action="/notes/search" class="notes-search" role="search">
+     Action/Target vary per page and are passed via dict at each call site,
+     alongside the existing Query/Autofocus (search.html alone used to
+     prefill the last query and autofocus; that page is gone as of this
+     feature, but every other page still wants neither). role="search" is
+     the landmark WCAG asks for alongside the input's own aria-label. */}}
+{{define "notes-search-box"}}<form method="get" action="{{.Action}}" class="notes-search" role="search">
 	<input type="search" id="notes-search-input" name="q" value="{{.Query}}"
-	       placeholder="Search…" aria-label="Search notes"{{if .Autofocus}} autofocus{{end}}>
+	       placeholder="Search…" aria-label="Search notes"{{if .Autofocus}} autofocus{{end}}
+	       hx-get="{{.Action}}" hx-target="{{.Target}}" hx-swap="innerHTML"
+	       hx-trigger="input changed delay:300ms, search" hx-push-url="true">
 </form>{{end}}
 
 {{/* show-completed-toggle is the toolbar's button. Moved here (from

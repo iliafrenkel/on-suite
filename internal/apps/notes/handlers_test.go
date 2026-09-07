@@ -2723,6 +2723,12 @@ func TestTagChipNowResolves(t *testing.T) {
 // TestOutlineToolbarHasASearchBox: search has to be reachable from the page
 // the user is actually on, not just by typing the URL. The box is a plain GET
 // form, so it needs no CSRF token and works with JavaScript off.
+//
+// The form's action used to be the fixed "/notes/search" page. As of the
+// inline-filter feature (this task) the search box is its own page's live
+// filter instead: its action/hx-get is outlinePath(rootID), so submitting it
+// without JS (or before htmx has loaded) reloads the very page the user is
+// on with ?q= set, rather than navigating to a separate search page.
 func TestOutlineToolbarHasASearchBox(t *testing.T) {
 	s := newServer(t)
 	doc := s.Get(t, s.Alice, "/notes/")
@@ -2731,8 +2737,8 @@ func TestOutlineToolbarHasASearchBox(t *testing.T) {
 		t.Errorf("search input name = %q, want q", got)
 	}
 	form := doc.MustHave("form.notes-search")
-	if got, _ := htmlassert.Attr(form, "action"); got != "/notes/search" {
-		t.Errorf("search form action = %q", got)
+	if got, _ := htmlassert.Attr(form, "action"); got != "/notes/" {
+		t.Errorf("search form action = %q, want /notes/", got)
 	}
 	if got, _ := htmlassert.Attr(form, "method"); !strings.EqualFold(got, "get") {
 		t.Errorf("search form method = %q, want get (no CSRF token needed)", got)
@@ -2745,6 +2751,91 @@ func TestOutlineToolbarHasASearchBox(t *testing.T) {
 func TestDueToolbarHasASearchBox(t *testing.T) {
 	s := newServer(t)
 	s.Get(t, s.Alice, "/notes/due").MustHave("#notes-search-input")
+}
+
+// TestOutlineFilterKeepsAMatchAndItsAncestorOnly is the filter's core
+// behaviour: a match's ancestor path stays, an unrelated sibling subtree
+// does not.
+func TestOutlineFilterKeepsAMatchAndItsAncestorOnly(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, parent, "Budget report")
+	s.seed(t, s.Alice, notes.RootID, "unrelated top-level bullet")
+
+	doc := s.Get(t, s.Alice, "/notes/?q=budget")
+	if !strings.Contains(doc.Text(), "Projects") {
+		t.Error("the match's ancestor is missing")
+	}
+	if strings.Contains(doc.Text(), "unrelated top-level bullet") {
+		t.Error("an unrelated sibling subtree leaked into the filtered view")
+	}
+}
+
+// TestOutlineFilterHighlightsTheMatch guards the actual visible <mark>.
+func TestOutlineFilterHighlightsTheMatch(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "buy milk today")
+
+	doc := s.Get(t, s.Alice, "/notes/?q=milk")
+	mark := doc.MustHave("mark.notes-search-hit")
+	if got := htmlassert.Text(mark); !strings.EqualFold(got, "milk") {
+		t.Errorf("highlighted text = %q, want milk", got)
+	}
+}
+
+func TestOutlineFilterWithNoMatchesSaysSo(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "anything")
+
+	doc := s.Get(t, s.Alice, "/notes/?q=nonexistent")
+	if !strings.Contains(doc.Text(), "No notes match") {
+		t.Error("an empty filtered result shows no feedback")
+	}
+}
+
+func TestOutlineFilterOverHTMXRendersOnlyTheFragment(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "buy milk")
+
+	req := httptest.NewRequest("GET", "/notes/?q=milk", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "<html") || strings.Contains(body, "<!DOCTYPE") {
+		t.Errorf("an HTMX filter request got a full page, not a fragment: %q", body)
+	}
+	if !strings.Contains(body, "milk") {
+		t.Error("the fragment does not contain the match")
+	}
+}
+
+// TestOutlineSearchBoxTargetsOutlineOverHTMX pins the wiring the live
+// filter depends on.
+func TestOutlineSearchBoxTargetsOutlineOverHTMX(t *testing.T) {
+	s := newServer(t)
+	in := s.Get(t, s.Alice, "/notes/").MustHave("#notes-search-input")
+	if got, _ := htmlassert.Attr(in, "hx-get"); got != "/notes/" {
+		t.Errorf("search box hx-get = %q, want /notes/", got)
+	}
+	if got, _ := htmlassert.Attr(in, "hx-target"); got != "#outline" {
+		t.Errorf("search box hx-target = %q, want #outline", got)
+	}
+}
+
+// TestOutlineFilterScopedToTheCurrentZoom: a match outside the zoomed
+// subtree must not appear, even though Store.Search itself searches the
+// whole tree — the handler's own intersection with the fetched subtree is
+// what scopes it.
+func TestOutlineFilterScopedToTheCurrentZoom(t *testing.T) {
+	s := newServer(t)
+	zoomRoot := s.seed(t, s.Alice, notes.RootID, "Zoomed root")
+	s.seed(t, s.Alice, notes.RootID, "outside milk bullet")
+
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(zoomRoot)+"?q=milk")
+	doc.MustNotHave(".outline-item")
 }
 
 // TestOutlineMenuHasAnArchiveAction extends the existing comprehensive-menu
