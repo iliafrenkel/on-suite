@@ -119,7 +119,7 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 	}
 	view.DueCount = DueBadgeCount(dueRows, time.Now())
 
-	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted)
+	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, false)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -144,7 +144,7 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 // that button lives outside #outline, so the swap cannot reach it, and after
 // a prefs toggle its label and value would otherwise stay stale.
 func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64, showCompleted bool) {
-	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted)
+	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, false)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
