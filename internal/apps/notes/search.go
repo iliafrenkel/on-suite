@@ -6,26 +6,6 @@ import (
 	"strings"
 )
 
-// SearchRow is one hit in /notes/search: a node plus its ancestor
-// breadcrumb, outermost first — spec §12: "each hit renders as the
-// matching bullet plus its ancestor breadcrumb".
-type SearchRow struct {
-	Node
-	Crumbs []Node
-}
-
-// searchView is what /notes/search renders.
-type searchView struct {
-	Query string
-	Rows  []SearchRow
-	// ShowCompleted is spec §12's preference, read once per request so the
-	// toolbar's toggle can show its own opposite action — issue #88: unlike
-	// /notes/due (which excludes done nodes unconditionally, no preference
-	// to toggle), Search actually takes showCompleted, so a completed match
-	// was silently unfindable here with no way to see or change why.
-	ShowCompleted bool
-}
-
 // ftsQuery turns free text into an FTS5 MATCH expression that can never be
 // a syntax error. Each word becomes its own quoted phrase — doubling any
 // embedded '"' the way FTS5's string literals require — so a user typing an

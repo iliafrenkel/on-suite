@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -637,29 +636,17 @@ func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
 		a.renderOutlineFragment(w, r, userID, root, raw == "1")
 		return
 	}
-	http.Redirect(w, r, prefsRedirectTarget(r, root), http.StatusSeeOther)
+	http.Redirect(w, r, prefsRedirectTarget(root), http.StatusSeeOther)
 }
 
 // prefsRedirectTarget is where a non-HTMX prefs toggle sends the browser
-// back to. The outline's own toggle is HTMX (handled above); /notes/search's
-// plain-form toggle (issue #88) is not, since that page does no partial
-// swapping of its own, so it needs a real redirect back to itself — with
-// its query string preserved, or the toggle would silently reset the search.
-//
-// page is a closed enum read from a hidden field, not an arbitrary URL:
-// a forged value can only ever select one of these known-safe destinations,
-// never something open-redirect-shaped.
-func prefsRedirectTarget(r *http.Request, root int64) string {
-	switch r.PostFormValue("page") {
-	case "search":
-		q := r.PostFormValue("q")
-		if q == "" {
-			return "/notes/search"
-		}
-		return "/notes/search?q=" + url.QueryEscape(q)
-	default:
-		return outlinePath(root)
-	}
+// back to: the zoom the request came from. (Until /notes/search was
+// removed, this also special-cased a redirect back to that page with its
+// own query string preserved — issue #88 — since every other prefs toggle
+// on this app is HTMX. There is no longer a non-HTMX page whose own toggle
+// needs anywhere else to go.)
+func prefsRedirectTarget(root int64) string {
+	return outlinePath(root)
 }
 
 // idsOf is the ID column of a node slice — issue #77: the shared shape
@@ -861,46 +848,6 @@ func (a *App) restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/notes/archive", http.StatusSeeOther)
-}
-
-// search runs spec §12's full-text search across the whole tree. An empty
-// query shows just the search box, with nothing to list — there is nothing
-// sensible to prefill a fresh search with, unlike the outline's own empty
-// bullet.
-func (a *App) search(w http.ResponseWriter, r *http.Request) {
-	userID, ok := a.userID(w, r)
-	if !ok {
-		return
-	}
-	// Trimmed once, here, rather than leaving the raw value to reach the
-	// template — issue #92: search.html's own "no matches" branch used to
-	// check the untrimmed Query, so a whitespace-only q rendered
-	// "No matches for '  '" instead of the bare search box a genuinely
-	// empty query gets, even though this guard already correctly skipped
-	// running a search for it.
-	query := strings.TrimSpace(r.URL.Query().Get("q"))
-
-	var rows []SearchRow
-	if query != "" {
-		nodes, err := a.store.Search(r.Context(), userID, query, showCompletedFrom(r))
-		if err != nil {
-			a.deps.Errors.Internal(w, r, err)
-			return
-		}
-		crumbs, err := a.store.AncestorsMany(r.Context(), userID, idsOf(nodes))
-		if err != nil {
-			a.deps.Errors.Internal(w, r, err)
-			return
-		}
-		rows = make([]SearchRow, len(nodes))
-		for i, n := range nodes {
-			rows[i] = SearchRow{Node: n, Crumbs: crumbs[n.ID]}
-		}
-	}
-
-	page := a.deps.Page(r, "Search")
-	page.Data = searchView{Query: query, Rows: rows, ShowCompleted: showCompletedFrom(r)}
-	a.render(w, r, http.StatusOK, "notes/search", page)
 }
 
 // export downloads userID's whole tree, or one subtree, as spec §14's

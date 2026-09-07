@@ -2083,17 +2083,6 @@ func TestPrefsTogglesTheCookie(t *testing.T) {
 	}
 }
 
-// TestPrefsRedirectsBackToSearchWithItsQuery is issue #88: /notes/search's
-// own show-completed toggle is a plain (non-HTMX) form, so prefs must send
-// the browser back to /notes/search with its query preserved — not always
-// the outline, which is what every prefs redirect did before this.
-func TestPrefsRedirectsBackToSearchWithItsQuery(t *testing.T) {
-	s := newServer(t)
-	s.Submit(t, s.Alice, "/notes/prefs", url.Values{
-		"show_completed": {"1"}, "page": {"search"}, "q": {"foo"},
-	}, "/notes/search?q=foo")
-}
-
 // TestPrefsRedirectsToOutlineWithNoPage: the default (no page field, the
 // outline's own shape) must be unchanged — every existing outline test
 // submitting to /notes/prefs relies on this.
@@ -2102,36 +2091,6 @@ func TestPrefsRedirectsToOutlineWithNoPage(t *testing.T) {
 	s.Submit(t, s.Alice, "/notes/prefs", url.Values{
 		"root": {"0"}, "show_completed": {"1"},
 	}, "/notes/")
-}
-
-// TestSearchHasAShowCompletedToggle is issue #88: unlike /notes/due (which
-// excludes done nodes unconditionally, no preference to toggle), Search
-// actually takes showCompleted, so a completed match was silently
-// unfindable here with no way to see or change why. End to end: a done
-// bullet that matches is invisible until the toggle is used, and visible
-// once it is.
-func TestSearchHasAShowCompletedToggle(t *testing.T) {
-	s := newServer(t)
-	id := s.seed(t, s.Alice, notes.RootID, "finished task")
-	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/done", url.Values{
-		"root": {"0"}, "done": {"1"},
-	}, "/notes/")
-
-	doc := s.Get(t, s.Alice, "/notes/search?q=finished")
-	doc.MustNotHave(".notes-search-item")
-	toggle := doc.MustHave("#show-completed-toggle")
-	if got, _ := htmlassert.Attr(toggle, "value"); got != "1" {
-		t.Errorf("toggle value = %q, want 1 (currently off)", got)
-	}
-
-	s.Submit(t, s.Alice, "/notes/prefs", url.Values{
-		"show_completed": {"1"}, "page": {"search"}, "q": {"finished"},
-	}, "/notes/search?q=finished")
-
-	req := httptest.NewRequest("GET", "/notes/search?q=finished", nil)
-	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
-	rec := s.Do(t, s.Alice, req)
-	htmlassert.Parse(t, rec.Body.String()).MustHave(".notes-search-item")
 }
 
 // TestPrefsRespondsWithTheFreshValueOverHTMX guards the staleness trap: the
@@ -2596,107 +2555,32 @@ func TestTheOutlineLinksToTheDueList(t *testing.T) {
 	s.Get(t, s.Alice, "/notes/").MustHave(`.notes-toolbar a[href=/notes/due]`)
 }
 
-func TestSearchFindsABulletAndShowsItsBreadcrumb(t *testing.T) {
-	s := newServer(t)
-	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
-	// A word FTS5's default unicode61 tokenizer treats as its own token, not
-	// "AtBudget report" (the plan's literal example): that camelCase run
-	// tokenizes as one "atbudget" token, which "budget" alone never matches.
-	// See task-2-report.md for the full account of this deviation.
-	child := s.seed(t, s.Alice, parent, "Budget report")
-
-	doc := s.Get(t, s.Alice, "/notes/search?q=budget")
-	if !strings.Contains(doc.Text(), "Projects") {
-		t.Error("the hit's ancestor breadcrumb is missing")
-	}
-	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
-	if got := htmlassert.Text(link); got != "Budget report" {
-		t.Errorf("search hit link text = %q", got)
-	}
-}
-
-// TestSearchCrumbsRenderMarkdownButRowTitleStaysPlain is issue #120: same
-// split as TestArchiveCrumbsRenderMarkdownButRowTitleStaysPlain — the crumb
-// spans aren't links and render Markdown; the row's own title IS a link, so
-// it stays on plain DisplayTitle.
-func TestSearchCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
-	s := newServer(t)
-	parent := s.seed(t, s.Alice, notes.RootID, "**Projects**")
-	child := s.seed(t, s.Alice, parent, "**Milk**")
-
-	doc := s.Get(t, s.Alice, "/notes/search?q=milk")
-	crumb := doc.MustHave(".notes-crumb-item")
-	if got := htmlassert.Text(crumb); got != "Projects" {
-		t.Errorf("search crumb text = %q, want the rendered form", got)
-	}
-
-	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
-	if got := htmlassert.Text(link); got != "**Milk**" {
-		t.Errorf("search hit link text = %q, want the literal source (it's a link)", got)
-	}
-}
-
-// TestSearchBoxPrefillsTheQueryAndAutofocuses is issue #90: search.html's
-// own copy of the search box carried value="{{.Data.Query}}" and autofocus,
-// attributes the outline's and due's copies don't have — neither was
-// pinned by a handler test before this, the least-protected of the (now
-// shared, per #89) copies against drift.
-func TestSearchBoxPrefillsTheQueryAndAutofocuses(t *testing.T) {
-	s := newServer(t)
-	in := s.Get(t, s.Alice, "/notes/search?q=foo").MustHave("#notes-search-input")
-	if got, _ := htmlassert.Attr(in, "value"); got != "foo" {
-		t.Errorf("search box value = %q, want foo", got)
-	}
-	if _, ok := htmlassert.Attr(in, "autofocus"); !ok {
-		t.Error("search.html's search box does not autofocus")
-	}
-}
-
-func TestSearchWithNoQueryShowsNoResults(t *testing.T) {
-	s := newServer(t)
-	s.seed(t, s.Alice, notes.RootID, "anything")
-
-	doc := s.Get(t, s.Alice, "/notes/search")
-	doc.MustNotHave(".notes-search-item")
-}
-
-// TestSearchWithWhitespaceOnlyQueryShowsNoResults is issue #92: a
+// TestOutlineFilterWithWhitespaceOnlyQueryShowsNoFeedback is issue #92: a
 // whitespace-only q must render exactly like a genuinely empty one — just
-// the bare search box — not "No matches for '  '", which is what happened
-// when the untrimmed query reached the template while the handler's own
-// guard (strings.TrimSpace(query) != "") correctly skipped running a search.
-func TestSearchWithWhitespaceOnlyQueryShowsNoResults(t *testing.T) {
+// the ordinary outline — not "No notes match", which is what happened when
+// an untrimmed query reached the template while the handler's own guard
+// correctly skipped running a search.
+func TestOutlineFilterWithWhitespaceOnlyQueryShowsNoFeedback(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.Alice, notes.RootID, "anything")
 
-	doc := s.Get(t, s.Alice, "/notes/search?q=%20%20")
-	doc.MustNotHave(".notes-search-item")
-	if strings.Contains(doc.Text(), "No matches") {
+	doc := s.Get(t, s.Alice, "/notes/?q=%20%20")
+	if strings.Contains(doc.Text(), "No notes match") {
 		t.Error("a whitespace-only query rendered the no-matches message")
 	}
 }
 
-func TestSearchWithNoMatchesSaysSo(t *testing.T) {
-	s := newServer(t)
-	doc := s.Get(t, s.Alice, "/notes/search?q=nonexistent")
-	if !strings.Contains(doc.Text(), "No matches") {
-		t.Error("an empty result set shows no feedback")
-	}
-}
-
-func TestSearchDoesNotRenderAnotherUsersNodes(t *testing.T) {
+func TestOutlineFilterDoesNotRenderAnotherUsersNodes(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.Bob, notes.RootID, "bob's secret plan")
 
-	doc := s.Get(t, s.Alice, "/notes/search?q=secret")
-	doc.MustNotHave(".notes-search-item")
-}
-
-func TestSearchRequiresSignIn(t *testing.T) {
-	s := newServer(t)
-	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/search", nil))
-	if rec.Code != http.StatusSeeOther {
-		t.Errorf("GET /notes/search anonymous = %d, want a 303 to the login page", rec.Code)
+	// Checking for the full seeded text, not just "secret": the "no notes
+	// match" message (outline.html) echoes the raw query back to the page,
+	// so a bare "secret" substring check would false-positive on that
+	// message alone even with bob's node correctly excluded.
+	doc := s.Get(t, s.Alice, "/notes/?q=secret")
+	if strings.Contains(doc.Text(), "bob's secret plan") {
+		t.Error("alice's filtered outline shows bob's node")
 	}
 }
 

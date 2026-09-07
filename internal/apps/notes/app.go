@@ -98,7 +98,6 @@ func (a *App) script(w http.ResponseWriter, r *http.Request) {
 //	POST /notes/prefs        likewise a literal segment; N5's show-completed
 //	                         toggle
 //	GET  /notes/due          likewise a literal segment; N5's due-date list
-//	GET  /notes/search       likewise a literal segment; N6's search
 //	GET  /notes/archive      likewise a literal segment; N7's archive list
 //	GET  /notes/export       likewise a literal segment; N8's Markdown download
 //	POST /notes/import       likewise a literal segment; N8's Markdown upload
@@ -118,7 +117,6 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /{id}", a.outlineZoomed)
 	r.HandleFunc("GET /notes.js", a.script)
 	r.HandleFunc("GET /due", a.dueList)
-	r.HandleFunc("GET /search", a.search)
 	r.HandleFunc("GET /archive", a.archiveList)
 	r.HandleFunc("GET /export", a.export)
 	r.HandleFunc("POST /new", a.create)
