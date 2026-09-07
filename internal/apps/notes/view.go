@@ -90,7 +90,7 @@ type outlineRow struct {
 // A row that breaks that has no correct parent — and inventing one would put a
 // bullet somewhere the user never left it — so it is dropped, along with
 // everything that would have hung beneath it.
-func nest(flat []Node, root int64, csrfToken, today string) []*outlineRow {
+func nest(flat []Node, root int64, csrfToken, today string, matched map[int64]bool, terms []string) []*outlineRow {
 	var top []*outlineRow
 
 	// open is the ancestor chain of the row most recently added: open[d] is
@@ -99,10 +99,15 @@ func nest(flat []Node, root int64, csrfToken, today string) []*outlineRow {
 	open := make([]*outlineRow, 0, MaxDepth+1)
 
 	for _, n := range flat {
+		titleHTML, noteHTML := Render(n.Title), Render(n.Note)
+		if matched != nil && matched[n.ID] {
+			titleHTML = highlight(titleHTML, terms)
+			noteHTML = highlight(noteHTML, terms)
+		}
 		row := &outlineRow{
 			Node: n, RootID: root, CSRFToken: csrfToken,
-			RenderedTitle: Render(n.Title),
-			RenderedNote:  Render(n.Note),
+			RenderedTitle: titleHTML,
+			RenderedNote:  noteHTML,
 			Overdue:       n.DueOn != "" && n.DueOn < today,
 		}
 
@@ -125,6 +130,75 @@ func nest(flat []Node, root int64, csrfToken, today string) []*outlineRow {
 
 	markLast(top)
 	return top
+}
+
+// filterToMatches drops every row from Outline's own flat pre-order slice
+// that is neither itself in matched nor an ancestor of one — the
+// search-as-filter behaviour: a hit's ancestor path stays visible for
+// context, but an unrelated sibling subtree does not. matched is nil for
+// "not filtering", in which case flat is returned unchanged.
+//
+// A kept row that has a kept child has its own Collapsed forced false:
+// Store.Outline is queried with ignoreCollapsed when filtering, so a match
+// under a collapsed ancestor is not silently absent from flat in the first
+// place — but outline-rows.html's chevron/dot icon still reads a row's own
+// Collapsed field, and without this a collapsed ancestor would show its
+// "collapsed" icon directly above a child this same response is about to
+// render right below it.
+func filterToMatches(flat []Node, matched map[int64]bool) []Node {
+	if matched == nil {
+		return flat
+	}
+
+	keep := make([]bool, len(flat))
+	hasKeptChild := make([]bool, len(flat))
+	// open holds the ancestor chain's indices into flat — the same
+	// technique nest uses above to attach a row to its parent, relying on
+	// the same guarantee: a parent immediately precedes its subtree, and
+	// depth rises by at most one from a row to the next.
+	open := make([]int, 0, MaxDepth+1)
+
+	for i, n := range flat {
+		switch d := n.Depth; {
+		case d == 0:
+			open = open[:0]
+		case d > 0 && d <= len(open):
+			open = open[:d]
+		default:
+			continue
+		}
+		if matched[n.ID] {
+			keep[i] = true
+			for _, a := range open {
+				keep[a] = true
+				hasKeptChild[a] = true
+			}
+		}
+		open = append(open, i)
+	}
+
+	out := make([]Node, 0, len(flat))
+	for i, n := range flat {
+		if !keep[i] {
+			continue
+		}
+		if hasKeptChild[i] {
+			n.Collapsed = false
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// idSet builds a membership map from a slice of nodes' ids — the shape
+// filterToMatches and nest's own matched parameter want, out of whatever
+// Store.Search just returned.
+func idSet(nodes []Node) map[int64]bool {
+	set := make(map[int64]bool, len(nodes))
+	for _, n := range nodes {
+		set[n.ID] = true
+	}
+	return set
 }
 
 // markLast flags the final row of every sibling list.
