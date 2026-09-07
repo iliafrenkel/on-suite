@@ -3,20 +3,20 @@
      feature's live filter: hx-get targets Action (each page's own GET
      route) with hx-target Target (that page's own list container), so
      typing re-renders just that list in place; hx-replace-url keeps the
-     filter in the URL, so a refresh still restores it, but — a deliberate
-     tradeoff, reviewed and accepted — does NOT create a new history entry
-     per keystroke: with hx-push-url, a single debounced typing session
-     would push one history entry per fired request, so the back button
-     returns to wherever the user was before they started typing, not to
-     some intermediate filter state.
+     filter in the URL, so a refresh still restores it. hx-push-url was
+     considered instead, but was rejected — a deliberate tradeoff, reviewed
+     and accepted — because a single debounced typing session would then
+     push one history entry per fired request; with hx-replace-url the back
+     button instead returns to wherever the user was before they started
+     typing, not to some intermediate filter state.
      "search" as an hx-trigger event, alongside "input changed delay:300ms",
      fires immediately when a user clicks the native <input type=search>'s
      own clear (x) button, rather than waiting out the debounce.
 
      Action/Target vary per page and are passed via dict at each call site,
-     alongside the existing Query/Autofocus (every page but the outline
-     wants neither). role="search" is the landmark WCAG asks for alongside
-     the input's own aria-label. */}}
+     alongside the existing Query (every page prefills its current filter)
+     and Autofocus (no page currently sets this true). role="search" is
+     the landmark WCAG asks for alongside the input's own aria-label. */}}
 {{define "notes-search-box"}}<form method="get" action="{{.Action}}" class="notes-search" role="search">
 	<input type="search" id="notes-search-input" name="q" value="{{.Query}}"
 	       placeholder="Search…" aria-label="Search notes"{{if .Autofocus}} autofocus{{end}}
