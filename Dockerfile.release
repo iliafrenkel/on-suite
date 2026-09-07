@@ -1,0 +1,34 @@
+# Packages a binary goreleaser already cross-compiled, rather than building
+# from source like the top-level Dockerfile — goreleaser hands this build one
+# native binary per arch, so there's no build stage here, only assembly.
+# --platform=$BUILDPLATFORM pins this stage to the builder's native arch —
+# it only needs mkdir/chown, and alpine's base image already ships
+# /etc/ssl/certs/ca-certificates.crt, so there's no package fetch (and no
+# reason to pay for QEMU emulation) needed to produce either.
+FROM --platform=$BUILDPLATFORM alpine:3.22 AS prep
+# scratch has no shell to mkdir/chown with, so the volume's mountpoint is
+# prepared here, in the one stage that has a shell.
+RUN mkdir -p /data && chown 65532:65532 /data
+
+# scratch, not alpine: the binary is static, so there is nothing else to ship.
+FROM scratch
+
+# Root certificates, needed only if built-in TLS is used — autocert has to
+# verify Let's Encrypt's own certificate.
+COPY --from=prep /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=prep --chown=65532:65532 /data /data
+
+# goreleaser's multi-platform docker builder lays the build context out as
+# <goos>/<goarch>/<binary>, and buildx sets TARGETARCH for each platform in
+# `dockers_v2.platforms`, so this picks the right one per arch automatically.
+ARG TARGETARCH
+COPY linux/${TARGETARCH}/onsuite /onsuite
+
+# An unprivileged numeric user; scratch has no /etc/passwd to name one in.
+USER 65532:65532
+
+VOLUME ["/data"]
+EXPOSE 8080
+
+ENTRYPOINT ["/onsuite"]
+CMD ["serve", "--data-dir", "/data", "--addr", ":8080"]

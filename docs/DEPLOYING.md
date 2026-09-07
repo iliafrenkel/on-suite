@@ -154,6 +154,17 @@ without signing in. It is read-only — nothing on it changes state.
 
 ## Docker, if you prefer
 
+Every release also publishes a multi-arch (amd64/arm64) image, so there's no
+need to build one yourself:
+
+```bash
+docker run -d --name onsuite -p 8080:8080 -v onsuite-data:/data ghcr.io/iliafrenkel/on-suite:latest
+docker exec -it onsuite /onsuite user add ilia --admin --data-dir /data
+```
+
+Pin a specific version instead of `latest` by tag, e.g.
+`ghcr.io/iliafrenkel/on-suite:v0.2.0`. To build the image yourself instead:
+
 ```bash
 docker build --build-arg VERSION=$(git describe --tags --always) -t onsuite .
 docker run -d --name onsuite -p 8080:8080 -v onsuite-data:/data onsuite
