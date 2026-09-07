@@ -2637,6 +2637,19 @@ func TestDueToolbarHasASearchBox(t *testing.T) {
 	s.Get(t, s.Alice, "/notes/due").MustHave("#notes-search-input")
 }
 
+// TestDueSearchBoxTargetsDueListOverHTMX pins the wiring the live filter
+// depends on, the Due counterpart of TestOutlineSearchBoxTargetsOutlineOverHTMX.
+func TestDueSearchBoxTargetsDueListOverHTMX(t *testing.T) {
+	s := newServer(t)
+	in := s.Get(t, s.Alice, "/notes/due").MustHave("#notes-search-input")
+	if got, _ := htmlassert.Attr(in, "hx-get"); got != "/notes/due" {
+		t.Errorf("search box hx-get = %q, want /notes/due", got)
+	}
+	if got, _ := htmlassert.Attr(in, "hx-target"); got != "#due-list" {
+		t.Errorf("search box hx-target = %q, want #due-list", got)
+	}
+}
+
 func TestDueFilterHighlightsATitleMatch(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.Alice, notes.RootID, "buy milk")
@@ -2679,6 +2692,26 @@ func TestDueFilterWithNoMatchesSaysSo(t *testing.T) {
 	doc := s.Get(t, s.Alice, "/notes/due?q=nonexistent")
 	if !strings.Contains(doc.Text(), "No notes match") {
 		t.Error("an empty filtered Due result shows no feedback")
+	}
+}
+
+func TestDueFilterOverHTMXRendersOnlyTheFragment(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "buy milk")
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{"root": {"0"}, "due": {"2026-01-01"}}, "/notes/")
+
+	req := httptest.NewRequest("GET", "/notes/due?q=milk", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "<html") || strings.Contains(body, "<!DOCTYPE") {
+		t.Errorf("an HTMX filter request got a full page, not a fragment: %q", body)
+	}
+	if !strings.Contains(body, "milk") {
+		t.Error("the fragment does not contain the match")
 	}
 }
 
@@ -2813,6 +2846,20 @@ func TestArchiveToolbarHasASearchBox(t *testing.T) {
 	s.Get(t, s.Alice, "/notes/archive").MustHave("#notes-search-input")
 }
 
+// TestArchiveSearchBoxTargetsArchiveListOverHTMX pins the wiring the live
+// filter depends on, the Archive counterpart of
+// TestOutlineSearchBoxTargetsOutlineOverHTMX.
+func TestArchiveSearchBoxTargetsArchiveListOverHTMX(t *testing.T) {
+	s := newServer(t)
+	in := s.Get(t, s.Alice, "/notes/archive").MustHave("#notes-search-input")
+	if got, _ := htmlassert.Attr(in, "hx-get"); got != "/notes/archive" {
+		t.Errorf("search box hx-get = %q, want /notes/archive", got)
+	}
+	if got, _ := htmlassert.Attr(in, "hx-target"); got != "#archive-list" {
+		t.Errorf("search box hx-target = %q, want #archive-list", got)
+	}
+}
+
 func TestArchiveFilterHighlightsATitleMatch(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.Alice, notes.RootID, "old milk carton")
@@ -2843,6 +2890,26 @@ func TestArchiveFilterWithNoMatchesSaysSo(t *testing.T) {
 	doc := s.Get(t, s.Alice, "/notes/archive?q=nonexistent")
 	if !strings.Contains(doc.Text(), "No notes match") {
 		t.Error("an empty filtered Archive result shows no feedback")
+	}
+}
+
+func TestArchiveFilterOverHTMXRendersOnlyTheFragment(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "old milk carton")
+	s.Post(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{"root": {"0"}, "focus_id": {"0"}, "archived": {"1"}})
+
+	req := httptest.NewRequest("GET", "/notes/archive?q=milk", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "<html") || strings.Contains(body, "<!DOCTYPE") {
+		t.Errorf("an HTMX filter request got a full page, not a fragment: %q", body)
+	}
+	if !strings.Contains(body, "milk") {
+		t.Error("the fragment does not contain the match")
 	}
 }
 
