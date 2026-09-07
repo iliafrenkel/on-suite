@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -51,7 +51,7 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 
 // outline renders the top-level outline.
 func (a *App) outline(w http.ResponseWriter, r *http.Request) {
-	a.renderOutline(w, r, RootID)
+	a.renderOutlineOrFragment(w, r, RootID)
 }
 
 // nodeID parses the {id} wildcard. A path that is not a positive integer is a
@@ -74,7 +74,25 @@ func (a *App) outlineZoomed(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.renderOutline(w, r, id)
+	a.renderOutlineOrFragment(w, r, id)
+}
+
+// renderOutlineOrFragment is outline/outlineZoomed's shared body. A plain
+// GET renders the whole page; the toolbar's search box drives its live
+// filter through this very same route over HTMX (hx-get, targeting
+// #outline) — the same GET-request-branches-on-HX-Request shape every
+// structural mutation route already uses (mutateThen), just reached by GET
+// instead of POST.
+func (a *App) renderOutlineOrFragment(w http.ResponseWriter, r *http.Request, rootID int64) {
+	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
+		userID, ok := a.userID(w, r)
+		if !ok {
+			return
+		}
+		a.renderOutlineFragment(w, r, userID, rootID, showCompletedFrom(r))
+		return
+	}
+	a.renderOutline(w, r, rootID)
 }
 
 // renderOutline draws the outline rooted at rootID: the breadcrumb, the
@@ -89,7 +107,13 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 	}
 
 	showCompleted := showCompletedFrom(r)
-	view := outlineView{CSRFToken: web.CSRFToken(r.Context()), ShowCompleted: showCompleted}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	view := outlineView{
+		CSRFToken:     web.CSRFToken(r.Context()),
+		ShowCompleted: showCompleted,
+		Query:         query,
+		SearchAction:  outlinePath(rootID),
+	}
 
 	// An empty title leaves the shell's breadcrumb reading "Home / ON Notes",
 	// which is what the top level is. A zoomed outline names its root.
@@ -112,21 +136,33 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		title = root.DisplayTitle()
 	}
 
-	dueRows, err := a.store.Due(r.Context(), userID)
+	dueRows, err := a.store.Due(r.Context(), userID, "")
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
 	view.DueCount = DueBadgeCount(dueRows, time.Now())
 
-	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted)
+	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, query != "")
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
 	visible := hideDone(flat, showCompleted)
-	view.HiddenCount = len(flat) - len(visible)
-	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
+
+	var matched map[int64]bool
+	if query != "" {
+		matchedNodes, err := a.store.Search(r.Context(), userID, query, showCompleted)
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
+		matched = idSet(matchedNodes)
+	} else {
+		view.HiddenCount = len(flat) - len(visible)
+	}
+	visible = filterToMatches(visible, matched)
+	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"), matched, searchTerms(query))
 
 	page := a.deps.Page(r, title)
 	page.Data = view
@@ -140,30 +176,51 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 // need to look the root node up — Root.ID is all outline-body reads, and
 // the caller already has it as a plain int64.
 //
+// A structural mutation, or a "show completed" toggle, reaches this too
+// (mutateThen, prefs.go), always without a ?q= on its own request URL — so
+// performing one while a filter is active resets it, deliberately: see this
+// plan's own note on that scope boundary.
+//
 // The response also carries the toolbar's show-completed toggle out of band:
 // that button lives outside #outline, so the swap cannot reach it, and after
 // a prefs toggle its label and value would otherwise stay stale.
 func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64, showCompleted bool) {
-	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+
+	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, query != "")
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	dueRows, err := a.store.Due(r.Context(), userID)
+	dueRows, err := a.store.Due(r.Context(), userID, "")
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
 	visible := hideDone(flat, showCompleted)
+
 	view := outlineView{
 		CSRFToken:     web.CSRFToken(r.Context()),
 		Root:          Node{ID: rootID},
 		ShowCompleted: showCompleted,
-		HiddenCount:   len(flat) - len(visible),
+		Query:         query,
 		DueCount:      DueBadgeCount(dueRows, time.Now()),
 		OOB:           true,
 	}
-	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"))
+
+	var matched map[int64]bool
+	if query != "" {
+		matchedNodes, err := a.store.Search(r.Context(), userID, query, showCompleted)
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
+		matched = idSet(matchedNodes)
+	} else {
+		view.HiddenCount = len(flat) - len(visible)
+	}
+	visible = filterToMatches(visible, matched)
+	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"), matched, searchTerms(query))
 	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "outline-swap", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
@@ -353,6 +410,12 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 // ignores focus_id: its subject is the path id, so target and focus cannot
 // differ, and there is only one write to make. The row form still sends the
 // hidden focus_id field, because the same form's other buttons need it.
+//
+// Known, accepted asymmetry: the fragment below calls plain Render, not
+// highlight, so when a filter is active the just-edited row's own
+// rendered-title/rendered-note briefly loses its highlight even though the
+// rest of the filtered list still shows it — a consequence of this app's
+// "editing resets the filter" simplification, not a bug to chase.
 func (a *App) setText(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -579,33 +642,21 @@ func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
 		a.renderOutlineFragment(w, r, userID, root, raw == "1")
 		return
 	}
-	http.Redirect(w, r, prefsRedirectTarget(r, root), http.StatusSeeOther)
+	http.Redirect(w, r, prefsRedirectTarget(root), http.StatusSeeOther)
 }
 
 // prefsRedirectTarget is where a non-HTMX prefs toggle sends the browser
-// back to. The outline's own toggle is HTMX (handled above); /notes/search's
-// plain-form toggle (issue #88) is not, since that page does no partial
-// swapping of its own, so it needs a real redirect back to itself — with
-// its query string preserved, or the toggle would silently reset the search.
-//
-// page is a closed enum read from a hidden field, not an arbitrary URL:
-// a forged value can only ever select one of these known-safe destinations,
-// never something open-redirect-shaped.
-func prefsRedirectTarget(r *http.Request, root int64) string {
-	switch r.PostFormValue("page") {
-	case "search":
-		q := r.PostFormValue("q")
-		if q == "" {
-			return "/notes/search"
-		}
-		return "/notes/search?q=" + url.QueryEscape(q)
-	default:
-		return outlinePath(root)
-	}
+// back to: the zoom the request came from. (Until /notes/search was
+// removed, this also special-cased a redirect back to that page with its
+// own query string preserved — issue #88 — since every other prefs toggle
+// on this app is HTMX. There is no longer a non-HTMX page whose own toggle
+// needs anywhere else to go.)
+func prefsRedirectTarget(root int64) string {
+	return outlinePath(root)
 }
 
 // idsOf is the ID column of a node slice — issue #77: the shared shape
-// dueList, buildArchiveView, and search each hand to Store.AncestorsMany to
+// buildDueView and buildArchiveView each hand to Store.AncestorsMany to
 // fetch every row's breadcrumb in one batched query instead of one per row.
 func idsOf(nodes []Node) []int64 {
 	ids := make([]int64, len(nodes))
@@ -616,41 +667,92 @@ func idsOf(nodes []Node) []int64 {
 }
 
 // dueList renders every one of the user's due bullets, grouped by urgency —
-// spec §11.
+// spec §11. The toolbar's search box drives its own live filter through
+// this same route over HTMX, the same GET-branches-on-HX-Request shape
+// renderOutlineOrFragment uses.
 func (a *App) dueList(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
 		return
 	}
-	nodes, err := a.store.Due(r.Context(), userID)
+	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
+		a.renderDueFragment(w, r, userID)
+		return
+	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	view, err := a.buildDueView(r.Context(), userID, query)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-
-	crumbs, err := a.store.AncestorsMany(r.Context(), userID, idsOf(nodes))
-	if err != nil {
-		a.deps.Errors.Internal(w, r, err)
-		return
-	}
-	rows := make([]DueRow, len(nodes))
-	for i, n := range nodes {
-		rows[i] = DueRow{Node: n, Crumbs: crumbs[n.ID]}
-	}
-
 	page := a.deps.Page(r, "Due")
-	page.Data = GroupByDue(rows, time.Now())
+	page.Data = view
 	a.render(w, r, http.StatusOK, "notes/due", page)
 }
 
+// renderDueFragment re-renders #due-list's own content for an HTMX swap —
+// the equivalent of renderOutlineFragment/renderArchiveFragment.
+func (a *App) renderDueFragment(w http.ResponseWriter, r *http.Request, userID int64) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	view, err := a.buildDueView(r.Context(), userID, query)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/due", "due-list", view); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
+}
+
+// buildDueView is the query behind both of the above.
+func (a *App) buildDueView(ctx context.Context, userID int64, query string) (dueView, error) {
+	nodes, err := a.store.Due(ctx, userID, query)
+	if err != nil {
+		return dueView{}, err
+	}
+	crumbs, err := a.store.AncestorsMany(ctx, userID, idsOf(nodes))
+	if err != nil {
+		return dueView{}, err
+	}
+
+	terms := searchTerms(query)
+	rows := make([]DueRow, len(nodes))
+	for i, n := range nodes {
+		rows[i] = DueRow{
+			Node:      n,
+			Crumbs:    crumbs[n.ID],
+			TitleHTML: highlightPlainText(n.DisplayTitle(), terms),
+			Snippet:   noteOnlySnippet(n, terms),
+		}
+	}
+	return dueView{Groups: GroupByDue(rows, time.Now()), Query: query, SearchAction: "/notes/due"}, nil
+}
+
+// noteOnlySnippet is Due/Archive's issue #86 indicator: a highlighted
+// excerpt of a row's note, shown only when the filter matched there and not
+// in the title (a title match is already visible via TitleHTML above).
+func noteOnlySnippet(n Node, terms []string) template.HTML {
+	if len(terms) == 0 || len(matchSpans(n.Title, terms)) > 0 {
+		return ""
+	}
+	return noteSnippet(n.Note, terms)
+}
+
 // archiveList renders every one of the user's archived subtree roots —
-// spec §13.
+// spec §13. The toolbar's search box drives its own live filter through
+// this same route over HTMX, the same shape dueList/renderOutlineOrFragment
+// use.
 func (a *App) archiveList(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
 		return
 	}
-	view, err := a.buildArchiveView(r.Context(), userID)
+	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
+		a.renderArchiveFragment(w, r, userID)
+		return
+	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	view, err := a.buildArchiveView(r.Context(), userID, query)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -662,10 +764,14 @@ func (a *App) archiveList(w http.ResponseWriter, r *http.Request) {
 }
 
 // renderArchiveFragment re-renders /notes/archive's own list for an HTMX
-// restore — the equivalent of renderOutlineFragment, but targeting this
-// page's own swap target instead of #outline.
+// restore, or an HTMX filter — the equivalent of renderOutlineFragment, but
+// targeting this page's own swap target instead of #outline. A restore's
+// own POST never carries a ?q= of its own, so — like every structural
+// mutation on the outline — performing one resets an active filter; see
+// this plan's note on that scope boundary.
 func (a *App) renderArchiveFragment(w http.ResponseWriter, r *http.Request, userID int64) {
-	view, err := a.buildArchiveView(r.Context(), userID)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	view, err := a.buildArchiveView(r.Context(), userID, query)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -679,8 +785,8 @@ func (a *App) renderArchiveFragment(w http.ResponseWriter, r *http.Request, user
 // buildArchiveView is the query behind both of the above: the full page and
 // the HTMX fragment render exactly the same rows, so they share the one
 // place that fetches them.
-func (a *App) buildArchiveView(ctx context.Context, userID int64) (archiveView, error) {
-	nodes, err := a.store.Archive(ctx, userID)
+func (a *App) buildArchiveView(ctx context.Context, userID int64, query string) (archiveView, error) {
+	nodes, err := a.store.Archive(ctx, userID, query)
 	if err != nil {
 		return archiveView{}, err
 	}
@@ -688,11 +794,18 @@ func (a *App) buildArchiveView(ctx context.Context, userID int64) (archiveView, 
 	if err != nil {
 		return archiveView{}, err
 	}
+
+	terms := searchTerms(query)
 	rows := make([]ArchiveRow, len(nodes))
 	for i, n := range nodes {
-		rows[i] = ArchiveRow{Node: n, Crumbs: crumbs[n.ID]}
+		rows[i] = ArchiveRow{
+			Node:      n,
+			Crumbs:    crumbs[n.ID],
+			TitleHTML: highlightPlainText(n.DisplayTitle(), terms),
+			Snippet:   noteOnlySnippet(n, terms),
+		}
 	}
-	return archiveView{Rows: rows}, nil
+	return archiveView{Rows: rows, Query: query, SearchAction: "/notes/archive"}, nil
 }
 
 // archive marks a bullet archived, or restores it — spec §13. The field
@@ -741,46 +854,6 @@ func (a *App) restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/notes/archive", http.StatusSeeOther)
-}
-
-// search runs spec §12's full-text search across the whole tree. An empty
-// query shows just the search box, with nothing to list — there is nothing
-// sensible to prefill a fresh search with, unlike the outline's own empty
-// bullet.
-func (a *App) search(w http.ResponseWriter, r *http.Request) {
-	userID, ok := a.userID(w, r)
-	if !ok {
-		return
-	}
-	// Trimmed once, here, rather than leaving the raw value to reach the
-	// template — issue #92: search.html's own "no matches" branch used to
-	// check the untrimmed Query, so a whitespace-only q rendered
-	// "No matches for '  '" instead of the bare search box a genuinely
-	// empty query gets, even though this guard already correctly skipped
-	// running a search for it.
-	query := strings.TrimSpace(r.URL.Query().Get("q"))
-
-	var rows []SearchRow
-	if query != "" {
-		nodes, err := a.store.Search(r.Context(), userID, query, showCompletedFrom(r))
-		if err != nil {
-			a.deps.Errors.Internal(w, r, err)
-			return
-		}
-		crumbs, err := a.store.AncestorsMany(r.Context(), userID, idsOf(nodes))
-		if err != nil {
-			a.deps.Errors.Internal(w, r, err)
-			return
-		}
-		rows = make([]SearchRow, len(nodes))
-		for i, n := range nodes {
-			rows[i] = SearchRow{Node: n, Crumbs: crumbs[n.ID]}
-		}
-	}
-
-	page := a.deps.Page(r, "Search")
-	page.Data = searchView{Query: query, Rows: rows, ShowCompleted: showCompletedFrom(r)}
-	a.render(w, r, http.StatusOK, "notes/search", page)
 }
 
 // export downloads userID's whole tree, or one subtree, as spec §14's

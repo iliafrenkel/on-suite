@@ -4,7 +4,7 @@
 		{{/* Issue #89: a 4th copy of the same markup — not in scope when
 		     that issue was filed (archiving hadn't shipped yet), but the
 		     exact drift risk it's about, so folded in here too. */}}
-		{{template "notes-search-box" (dict "Query" "" "Autofocus" false)}}
+		{{template "notes-search-box" (dict "Query" .Data.Query "Autofocus" false "Action" .Data.SearchAction "Target" "#archive-list")}}
 		<div class="notes-toolbar-actions">
 			<a href="/notes/due" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Due</a>
 			<a href="/notes/" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>All notes</a>
@@ -35,7 +35,8 @@
 			{{range .Crumbs}}<span class="notes-crumb-item" title="{{.DisplayTitle}}">{{.DisplayTitleHTML}}</span> / {{end}}
 		</span>
 		{{end}}
-		<a href="/notes/{{.ID}}" class="notes-archive-title">{{.DisplayTitle}}</a>
+		<a href="/notes/{{.ID}}" class="notes-archive-title">{{.TitleHTML}}</a>
+		{{with .Snippet}}<p class="notes-search-snippet dim">{{.}}</p>{{end}}
 		<form method="post" action="/notes/{{.ID}}/archive"
 		      hx-post="/notes/{{.ID}}/archive" hx-target="#archive-list" hx-swap="innerHTML">
 			<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
@@ -44,6 +45,8 @@
 	</li>
 	{{end}}
 </ul>
+{{else if .Query}}
+<p class="dim">No notes match &ldquo;{{.Query}}&rdquo;.</p>
 {{else}}
 <p class="dim">Nothing is archived.</p>
 {{end}}

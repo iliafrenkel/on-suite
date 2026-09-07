@@ -2083,17 +2083,6 @@ func TestPrefsTogglesTheCookie(t *testing.T) {
 	}
 }
 
-// TestPrefsRedirectsBackToSearchWithItsQuery is issue #88: /notes/search's
-// own show-completed toggle is a plain (non-HTMX) form, so prefs must send
-// the browser back to /notes/search with its query preserved — not always
-// the outline, which is what every prefs redirect did before this.
-func TestPrefsRedirectsBackToSearchWithItsQuery(t *testing.T) {
-	s := newServer(t)
-	s.Submit(t, s.Alice, "/notes/prefs", url.Values{
-		"show_completed": {"1"}, "page": {"search"}, "q": {"foo"},
-	}, "/notes/search?q=foo")
-}
-
 // TestPrefsRedirectsToOutlineWithNoPage: the default (no page field, the
 // outline's own shape) must be unchanged — every existing outline test
 // submitting to /notes/prefs relies on this.
@@ -2102,36 +2091,6 @@ func TestPrefsRedirectsToOutlineWithNoPage(t *testing.T) {
 	s.Submit(t, s.Alice, "/notes/prefs", url.Values{
 		"root": {"0"}, "show_completed": {"1"},
 	}, "/notes/")
-}
-
-// TestSearchHasAShowCompletedToggle is issue #88: unlike /notes/due (which
-// excludes done nodes unconditionally, no preference to toggle), Search
-// actually takes showCompleted, so a completed match was silently
-// unfindable here with no way to see or change why. End to end: a done
-// bullet that matches is invisible until the toggle is used, and visible
-// once it is.
-func TestSearchHasAShowCompletedToggle(t *testing.T) {
-	s := newServer(t)
-	id := s.seed(t, s.Alice, notes.RootID, "finished task")
-	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/done", url.Values{
-		"root": {"0"}, "done": {"1"},
-	}, "/notes/")
-
-	doc := s.Get(t, s.Alice, "/notes/search?q=finished")
-	doc.MustNotHave(".notes-search-item")
-	toggle := doc.MustHave("#show-completed-toggle")
-	if got, _ := htmlassert.Attr(toggle, "value"); got != "1" {
-		t.Errorf("toggle value = %q, want 1 (currently off)", got)
-	}
-
-	s.Submit(t, s.Alice, "/notes/prefs", url.Values{
-		"show_completed": {"1"}, "page": {"search"}, "q": {"finished"},
-	}, "/notes/search?q=finished")
-
-	req := httptest.NewRequest("GET", "/notes/search?q=finished", nil)
-	req.AddCookie(&http.Cookie{Name: notes.ShowCompletedCookie, Value: "1"})
-	rec := s.Do(t, s.Alice, req)
-	htmlassert.Parse(t, rec.Body.String()).MustHave(".notes-search-item")
 }
 
 // TestPrefsRespondsWithTheFreshValueOverHTMX guards the staleness trap: the
@@ -2596,107 +2555,32 @@ func TestTheOutlineLinksToTheDueList(t *testing.T) {
 	s.Get(t, s.Alice, "/notes/").MustHave(`.notes-toolbar a[href=/notes/due]`)
 }
 
-func TestSearchFindsABulletAndShowsItsBreadcrumb(t *testing.T) {
-	s := newServer(t)
-	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
-	// A word FTS5's default unicode61 tokenizer treats as its own token, not
-	// "AtBudget report" (the plan's literal example): that camelCase run
-	// tokenizes as one "atbudget" token, which "budget" alone never matches.
-	// See task-2-report.md for the full account of this deviation.
-	child := s.seed(t, s.Alice, parent, "Budget report")
-
-	doc := s.Get(t, s.Alice, "/notes/search?q=budget")
-	if !strings.Contains(doc.Text(), "Projects") {
-		t.Error("the hit's ancestor breadcrumb is missing")
-	}
-	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
-	if got := htmlassert.Text(link); got != "Budget report" {
-		t.Errorf("search hit link text = %q", got)
-	}
-}
-
-// TestSearchCrumbsRenderMarkdownButRowTitleStaysPlain is issue #120: same
-// split as TestArchiveCrumbsRenderMarkdownButRowTitleStaysPlain — the crumb
-// spans aren't links and render Markdown; the row's own title IS a link, so
-// it stays on plain DisplayTitle.
-func TestSearchCrumbsRenderMarkdownButRowTitleStaysPlain(t *testing.T) {
-	s := newServer(t)
-	parent := s.seed(t, s.Alice, notes.RootID, "**Projects**")
-	child := s.seed(t, s.Alice, parent, "**Milk**")
-
-	doc := s.Get(t, s.Alice, "/notes/search?q=milk")
-	crumb := doc.MustHave(".notes-crumb-item")
-	if got := htmlassert.Text(crumb); got != "Projects" {
-		t.Errorf("search crumb text = %q, want the rendered form", got)
-	}
-
-	link := doc.MustHave(`a[href=/notes/` + itoa(child) + `]`)
-	if got := htmlassert.Text(link); got != "**Milk**" {
-		t.Errorf("search hit link text = %q, want the literal source (it's a link)", got)
-	}
-}
-
-// TestSearchBoxPrefillsTheQueryAndAutofocuses is issue #90: search.html's
-// own copy of the search box carried value="{{.Data.Query}}" and autofocus,
-// attributes the outline's and due's copies don't have — neither was
-// pinned by a handler test before this, the least-protected of the (now
-// shared, per #89) copies against drift.
-func TestSearchBoxPrefillsTheQueryAndAutofocuses(t *testing.T) {
-	s := newServer(t)
-	in := s.Get(t, s.Alice, "/notes/search?q=foo").MustHave("#notes-search-input")
-	if got, _ := htmlassert.Attr(in, "value"); got != "foo" {
-		t.Errorf("search box value = %q, want foo", got)
-	}
-	if _, ok := htmlassert.Attr(in, "autofocus"); !ok {
-		t.Error("search.html's search box does not autofocus")
-	}
-}
-
-func TestSearchWithNoQueryShowsNoResults(t *testing.T) {
-	s := newServer(t)
-	s.seed(t, s.Alice, notes.RootID, "anything")
-
-	doc := s.Get(t, s.Alice, "/notes/search")
-	doc.MustNotHave(".notes-search-item")
-}
-
-// TestSearchWithWhitespaceOnlyQueryShowsNoResults is issue #92: a
+// TestOutlineFilterWithWhitespaceOnlyQueryShowsNoFeedback is issue #92: a
 // whitespace-only q must render exactly like a genuinely empty one — just
-// the bare search box — not "No matches for '  '", which is what happened
-// when the untrimmed query reached the template while the handler's own
-// guard (strings.TrimSpace(query) != "") correctly skipped running a search.
-func TestSearchWithWhitespaceOnlyQueryShowsNoResults(t *testing.T) {
+// the ordinary outline — not "No notes match", which is what happened when
+// an untrimmed query reached the template while the handler's own guard
+// correctly skipped running a search.
+func TestOutlineFilterWithWhitespaceOnlyQueryShowsNoFeedback(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.Alice, notes.RootID, "anything")
 
-	doc := s.Get(t, s.Alice, "/notes/search?q=%20%20")
-	doc.MustNotHave(".notes-search-item")
-	if strings.Contains(doc.Text(), "No matches") {
+	doc := s.Get(t, s.Alice, "/notes/?q=%20%20")
+	if strings.Contains(doc.Text(), "No notes match") {
 		t.Error("a whitespace-only query rendered the no-matches message")
 	}
 }
 
-func TestSearchWithNoMatchesSaysSo(t *testing.T) {
-	s := newServer(t)
-	doc := s.Get(t, s.Alice, "/notes/search?q=nonexistent")
-	if !strings.Contains(doc.Text(), "No matches") {
-		t.Error("an empty result set shows no feedback")
-	}
-}
-
-func TestSearchDoesNotRenderAnotherUsersNodes(t *testing.T) {
+func TestOutlineFilterDoesNotRenderAnotherUsersNodes(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.Bob, notes.RootID, "bob's secret plan")
 
-	doc := s.Get(t, s.Alice, "/notes/search?q=secret")
-	doc.MustNotHave(".notes-search-item")
-}
-
-func TestSearchRequiresSignIn(t *testing.T) {
-	s := newServer(t)
-	rec := s.Do(t, nil, httptest.NewRequest("GET", "/notes/search", nil))
-	if rec.Code != http.StatusSeeOther {
-		t.Errorf("GET /notes/search anonymous = %d, want a 303 to the login page", rec.Code)
+	// Checking for the full seeded text, not just "secret": the "no notes
+	// match" message (outline.html) echoes the raw query back to the page,
+	// so a bare "secret" substring check would false-positive on that
+	// message alone even with bob's node correctly excluded.
+	doc := s.Get(t, s.Alice, "/notes/?q=secret")
+	if strings.Contains(doc.Text(), "bob's secret plan") {
+		t.Error("alice's filtered outline shows bob's node")
 	}
 }
 
@@ -2723,6 +2607,12 @@ func TestTagChipNowResolves(t *testing.T) {
 // TestOutlineToolbarHasASearchBox: search has to be reachable from the page
 // the user is actually on, not just by typing the URL. The box is a plain GET
 // form, so it needs no CSRF token and works with JavaScript off.
+//
+// The form's action used to be the fixed "/notes/search" page. As of the
+// inline-filter feature (this task) the search box is its own page's live
+// filter instead: its action/hx-get is outlinePath(rootID), so submitting it
+// without JS (or before htmx has loaded) reloads the very page the user is
+// on with ?q= set, rather than navigating to a separate search page.
 func TestOutlineToolbarHasASearchBox(t *testing.T) {
 	s := newServer(t)
 	doc := s.Get(t, s.Alice, "/notes/")
@@ -2731,8 +2621,8 @@ func TestOutlineToolbarHasASearchBox(t *testing.T) {
 		t.Errorf("search input name = %q, want q", got)
 	}
 	form := doc.MustHave("form.notes-search")
-	if got, _ := htmlassert.Attr(form, "action"); got != "/notes/search" {
-		t.Errorf("search form action = %q", got)
+	if got, _ := htmlassert.Attr(form, "action"); got != "/notes/" {
+		t.Errorf("search form action = %q, want /notes/", got)
 	}
 	if got, _ := htmlassert.Attr(form, "method"); !strings.EqualFold(got, "get") {
 		t.Errorf("search form method = %q, want get (no CSRF token needed)", got)
@@ -2745,6 +2635,189 @@ func TestOutlineToolbarHasASearchBox(t *testing.T) {
 func TestDueToolbarHasASearchBox(t *testing.T) {
 	s := newServer(t)
 	s.Get(t, s.Alice, "/notes/due").MustHave("#notes-search-input")
+}
+
+// TestDueSearchBoxTargetsDueListOverHTMX pins the wiring the live filter
+// depends on, the Due counterpart of TestOutlineSearchBoxTargetsOutlineOverHTMX.
+func TestDueSearchBoxTargetsDueListOverHTMX(t *testing.T) {
+	s := newServer(t)
+	in := s.Get(t, s.Alice, "/notes/due").MustHave("#notes-search-input")
+	if got, _ := htmlassert.Attr(in, "hx-get"); got != "/notes/due" {
+		t.Errorf("search box hx-get = %q, want /notes/due", got)
+	}
+	if got, _ := htmlassert.Attr(in, "hx-target"); got != "#due-list" {
+		t.Errorf("search box hx-target = %q, want #due-list", got)
+	}
+}
+
+func TestDueFilterHighlightsATitleMatch(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "buy milk")
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{"root": {"0"}, "due": {"2026-01-01"}}, "/notes/")
+
+	doc := s.Get(t, s.Alice, "/notes/due?q=milk")
+	mark := doc.MustHave("mark.notes-search-hit")
+	if got := htmlassert.Text(mark); !strings.EqualFold(got, "milk") {
+		t.Errorf("highlighted text = %q, want milk", got)
+	}
+}
+
+func TestDueFilterExcludesNonMatchingRows(t *testing.T) {
+	s := newServer(t)
+	match := s.seed(t, s.Alice, notes.RootID, "buy milk")
+	s.Submit(t, s.Alice, "/notes/"+itoa(match)+"/due", url.Values{"root": {"0"}, "due": {"2026-01-01"}}, "/notes/")
+	other := s.seed(t, s.Alice, notes.RootID, "call dentist")
+	s.Submit(t, s.Alice, "/notes/"+itoa(other)+"/due", url.Values{"root": {"0"}, "due": {"2026-01-01"}}, "/notes/")
+
+	doc := s.Get(t, s.Alice, "/notes/due?q=milk")
+	if strings.Contains(doc.Text(), "call dentist") {
+		t.Error("a non-matching row leaked into the filtered Due list")
+	}
+}
+
+func TestDueFilterShowsASnippetForANoteOnlyMatch(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "groceries")
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{"root": {"0"}, "due": {"2026-01-01"}}, "/notes/")
+	if err := s.Store.SetText(context.Background(), s.Alice.User.ID, id, "groceries", "don't forget the oat milk"); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/notes/due?q=milk")
+	doc.MustHave(".notes-search-snippet mark.notes-search-hit")
+}
+
+func TestDueFilterWithNoMatchesSaysSo(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/notes/due?q=nonexistent")
+	if !strings.Contains(doc.Text(), "No notes match") {
+		t.Error("an empty filtered Due result shows no feedback")
+	}
+}
+
+func TestDueFilterOverHTMXRendersOnlyTheFragment(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "buy milk")
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{"root": {"0"}, "due": {"2026-01-01"}}, "/notes/")
+
+	req := httptest.NewRequest("GET", "/notes/due?q=milk", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "<html") || strings.Contains(body, "<!DOCTYPE") {
+		t.Errorf("an HTMX filter request got a full page, not a fragment: %q", body)
+	}
+	if !strings.Contains(body, "milk") {
+		t.Error("the fragment does not contain the match")
+	}
+}
+
+// TestDueHistoryRestoreOverHTMXRendersTheFullPage guards the fix for htmx's
+// history-cache-miss re-fetch: it carries HX-Request (like a live filter
+// request) alongside HX-History-Restore-Request, and must get a full page
+// back — not the bare fragment a plain HX-Request would get — or htmx swaps
+// a fragment into <body> and visibly destroys the page.
+func TestDueHistoryRestoreOverHTMXRendersTheFullPage(t *testing.T) {
+	s := newServer(t)
+	req := httptest.NewRequest("GET", "/notes/due", nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-History-Restore-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "<!DOCTYPE") && !strings.Contains(body, "<html") {
+		t.Errorf("a history-restore request got a bare fragment, not a full page: %q", body)
+	}
+}
+
+// TestOutlineFilterKeepsAMatchAndItsAncestorOnly is the filter's core
+// behaviour: a match's ancestor path stays, an unrelated sibling subtree
+// does not.
+func TestOutlineFilterKeepsAMatchAndItsAncestorOnly(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, parent, "Budget report")
+	s.seed(t, s.Alice, notes.RootID, "unrelated top-level bullet")
+
+	doc := s.Get(t, s.Alice, "/notes/?q=budget")
+	if !strings.Contains(doc.Text(), "Projects") {
+		t.Error("the match's ancestor is missing")
+	}
+	if strings.Contains(doc.Text(), "unrelated top-level bullet") {
+		t.Error("an unrelated sibling subtree leaked into the filtered view")
+	}
+}
+
+// TestOutlineFilterHighlightsTheMatch guards the actual visible <mark>.
+func TestOutlineFilterHighlightsTheMatch(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "buy milk today")
+
+	doc := s.Get(t, s.Alice, "/notes/?q=milk")
+	mark := doc.MustHave("mark.notes-search-hit")
+	if got := htmlassert.Text(mark); !strings.EqualFold(got, "milk") {
+		t.Errorf("highlighted text = %q, want milk", got)
+	}
+}
+
+func TestOutlineFilterWithNoMatchesSaysSo(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "anything")
+
+	doc := s.Get(t, s.Alice, "/notes/?q=nonexistent")
+	if !strings.Contains(doc.Text(), "No notes match") {
+		t.Error("an empty filtered result shows no feedback")
+	}
+}
+
+func TestOutlineFilterOverHTMXRendersOnlyTheFragment(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "buy milk")
+
+	req := httptest.NewRequest("GET", "/notes/?q=milk", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "<html") || strings.Contains(body, "<!DOCTYPE") {
+		t.Errorf("an HTMX filter request got a full page, not a fragment: %q", body)
+	}
+	if !strings.Contains(body, "milk") {
+		t.Error("the fragment does not contain the match")
+	}
+}
+
+// TestOutlineSearchBoxTargetsOutlineOverHTMX pins the wiring the live
+// filter depends on.
+func TestOutlineSearchBoxTargetsOutlineOverHTMX(t *testing.T) {
+	s := newServer(t)
+	in := s.Get(t, s.Alice, "/notes/").MustHave("#notes-search-input")
+	if got, _ := htmlassert.Attr(in, "hx-get"); got != "/notes/" {
+		t.Errorf("search box hx-get = %q, want /notes/", got)
+	}
+	if got, _ := htmlassert.Attr(in, "hx-target"); got != "#outline" {
+		t.Errorf("search box hx-target = %q, want #outline", got)
+	}
+}
+
+// TestOutlineFilterScopedToTheCurrentZoom: a match outside the zoomed
+// subtree must not appear, even though Store.Search itself searches the
+// whole tree — the handler's own intersection with the fetched subtree is
+// what scopes it.
+func TestOutlineFilterScopedToTheCurrentZoom(t *testing.T) {
+	s := newServer(t)
+	zoomRoot := s.seed(t, s.Alice, notes.RootID, "Zoomed root")
+	s.seed(t, s.Alice, notes.RootID, "outside milk bullet")
+
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(zoomRoot)+"?q=milk")
+	doc.MustNotHave(".outline-item")
 }
 
 // TestOutlineMenuHasAnArchiveAction extends the existing comprehensive-menu
@@ -2771,6 +2844,85 @@ func TestOutlineMenuHasAnArchiveAction(t *testing.T) {
 func TestArchiveToolbarHasASearchBox(t *testing.T) {
 	s := newServer(t)
 	s.Get(t, s.Alice, "/notes/archive").MustHave("#notes-search-input")
+}
+
+// TestArchiveSearchBoxTargetsArchiveListOverHTMX pins the wiring the live
+// filter depends on, the Archive counterpart of
+// TestOutlineSearchBoxTargetsOutlineOverHTMX.
+func TestArchiveSearchBoxTargetsArchiveListOverHTMX(t *testing.T) {
+	s := newServer(t)
+	in := s.Get(t, s.Alice, "/notes/archive").MustHave("#notes-search-input")
+	if got, _ := htmlassert.Attr(in, "hx-get"); got != "/notes/archive" {
+		t.Errorf("search box hx-get = %q, want /notes/archive", got)
+	}
+	if got, _ := htmlassert.Attr(in, "hx-target"); got != "#archive-list" {
+		t.Errorf("search box hx-target = %q, want #archive-list", got)
+	}
+}
+
+func TestArchiveFilterHighlightsATitleMatch(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "old milk carton")
+	s.Post(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{"root": {"0"}, "focus_id": {"0"}, "archived": {"1"}})
+
+	doc := s.Get(t, s.Alice, "/notes/archive?q=milk")
+	mark := doc.MustHave("mark.notes-search-hit")
+	if got := htmlassert.Text(mark); !strings.EqualFold(got, "milk") {
+		t.Errorf("highlighted text = %q, want milk", got)
+	}
+}
+
+func TestArchiveFilterExcludesNonMatchingRows(t *testing.T) {
+	s := newServer(t)
+	match := s.seed(t, s.Alice, notes.RootID, "old milk carton")
+	s.Post(t, s.Alice, "/notes/"+itoa(match)+"/archive", url.Values{"root": {"0"}, "focus_id": {"0"}, "archived": {"1"}})
+	other := s.seed(t, s.Alice, notes.RootID, "old receipts")
+	s.Post(t, s.Alice, "/notes/"+itoa(other)+"/archive", url.Values{"root": {"0"}, "focus_id": {"0"}, "archived": {"1"}})
+
+	doc := s.Get(t, s.Alice, "/notes/archive?q=milk")
+	if strings.Contains(doc.Text(), "old receipts") {
+		t.Error("a non-matching row leaked into the filtered Archive list")
+	}
+}
+
+func TestArchiveFilterWithNoMatchesSaysSo(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/notes/archive?q=nonexistent")
+	if !strings.Contains(doc.Text(), "No notes match") {
+		t.Error("an empty filtered Archive result shows no feedback")
+	}
+}
+
+func TestArchiveFilterOverHTMXRendersOnlyTheFragment(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "old milk carton")
+	s.Post(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{"root": {"0"}, "focus_id": {"0"}, "archived": {"1"}})
+
+	req := httptest.NewRequest("GET", "/notes/archive?q=milk", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "<html") || strings.Contains(body, "<!DOCTYPE") {
+		t.Errorf("an HTMX filter request got a full page, not a fragment: %q", body)
+	}
+	if !strings.Contains(body, "milk") {
+		t.Error("the fragment does not contain the match")
+	}
+}
+
+func TestArchiveFilterShowsASnippetForANoteOnlyMatch(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "groceries")
+	if err := s.Store.SetText(context.Background(), s.Alice.User.ID, id, "groceries", "don't forget the oat milk"); err != nil {
+		t.Fatal(err)
+	}
+	s.Post(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{"root": {"0"}, "focus_id": {"0"}, "archived": {"1"}})
+
+	doc := s.Get(t, s.Alice, "/notes/archive?q=milk")
+	doc.MustHave(".notes-search-snippet mark.notes-search-hit")
 }
 
 func TestExportDownloadsTheWholeTree(t *testing.T) {
@@ -3469,15 +3621,15 @@ func TestSharedPageHasNoLinksIntoThePrivateTree(t *testing.T) {
 // TestOutlineTagsStillLinkOnThePrivateOutline guards the other side of the
 // fix: RenderShared's chips lost their href, but Render's own — used by the
 // ordinary, authenticated outline page (outline.html) — must keep linking
-// into /notes/search exactly as before.
+// into the filtered outline (/notes/?q=) exactly as before.
 func TestOutlineTagsStillLinkOnThePrivateOutline(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.Alice, notes.RootID, "a #tag here")
 
 	doc := s.Get(t, s.Alice, "/notes/")
 	a := doc.MustHave("a.outline-tag")
-	if href, _ := htmlassert.Attr(a, "href"); !strings.HasPrefix(href, "/notes/search?q=") {
-		t.Errorf("outline-tag href = %q, want a /notes/search?q= link", href)
+	if href, _ := htmlassert.Attr(a, "href"); !strings.HasPrefix(href, "/notes/?q=") {
+		t.Errorf("outline-tag href = %q, want a /notes/?q= link", href)
 	}
 }
 

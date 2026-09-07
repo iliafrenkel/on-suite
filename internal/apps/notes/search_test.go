@@ -222,3 +222,20 @@ func TestSearchExcludesADescendantOfAnArchivedNode(t *testing.T) {
 		t.Fatalf("Search = %+v, want none — %d sits under an archived node", got, child.ID)
 	}
 }
+
+// TestSearchMatchesAPrefixOfALongerWord is this feature's whole point: a
+// live filter needs to react while a word is still being typed, not only
+// once it exactly matches a token — spec's "add prefix matching".
+func TestSearchMatchesAPrefixOfALongerWord(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.mk(t, notes.RootID, "buy categorically fresh milk")
+
+	got, err := f.store.Search(ctx, f.alice.ID, "categ", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Search(categ) = %+v, want the one bullet whose word starts with it", got)
+	}
+}
