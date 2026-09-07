@@ -58,3 +58,12 @@ func UserFrom(ctx context.Context) (auth.User, bool) {
 func IsHTMX(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
 }
+
+// IsHTMXHistoryRestore reports whether r is htmx re-fetching a URL after a
+// history-cache miss (htmx's own default config sends both HX-Request and
+// this header together for such a request) rather than a live interaction
+// — the response must be a full page in this case, even though HX-Request
+// is also true, or htmx swaps a fragment into <body>.
+func IsHTMXHistoryRestore(r *http.Request) bool {
+	return r.Header.Get("HX-History-Restore-Request") == "true"
+}

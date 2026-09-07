@@ -2682,6 +2682,26 @@ func TestDueFilterWithNoMatchesSaysSo(t *testing.T) {
 	}
 }
 
+// TestDueHistoryRestoreOverHTMXRendersTheFullPage guards the fix for htmx's
+// history-cache-miss re-fetch: it carries HX-Request (like a live filter
+// request) alongside HX-History-Restore-Request, and must get a full page
+// back — not the bare fragment a plain HX-Request would get — or htmx swaps
+// a fragment into <body> and visibly destroys the page.
+func TestDueHistoryRestoreOverHTMXRendersTheFullPage(t *testing.T) {
+	s := newServer(t)
+	req := httptest.NewRequest("GET", "/notes/due", nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-History-Restore-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "<!DOCTYPE") && !strings.Contains(body, "<html") {
+		t.Errorf("a history-restore request got a bare fragment, not a full page: %q", body)
+	}
+}
+
 // TestOutlineFilterKeepsAMatchAndItsAncestorOnly is the filter's core
 // behaviour: a match's ancestor path stays, an unrelated sibling subtree
 // does not.

@@ -84,7 +84,7 @@ func (a *App) outlineZoomed(w http.ResponseWriter, r *http.Request) {
 // structural mutation route already uses (mutateThen), just reached by GET
 // instead of POST.
 func (a *App) renderOutlineOrFragment(w http.ResponseWriter, r *http.Request, rootID int64) {
-	if web.IsHTMX(r) {
+	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
 		userID, ok := a.userID(w, r)
 		if !ok {
 			return
@@ -669,7 +669,7 @@ func (a *App) dueList(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if web.IsHTMX(r) {
+	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
 		a.renderDueFragment(w, r, userID)
 		return
 	}
@@ -741,7 +741,7 @@ func (a *App) archiveList(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if web.IsHTMX(r) {
+	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
 		a.renderArchiveFragment(w, r, userID)
 		return
 	}
