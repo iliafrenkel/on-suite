@@ -2753,6 +2753,51 @@ func TestDueToolbarHasASearchBox(t *testing.T) {
 	s.Get(t, s.Alice, "/notes/due").MustHave("#notes-search-input")
 }
 
+func TestDueFilterHighlightsATitleMatch(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "buy milk")
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{"root": {"0"}, "due": {"2026-01-01"}}, "/notes/")
+
+	doc := s.Get(t, s.Alice, "/notes/due?q=milk")
+	mark := doc.MustHave("mark.notes-search-hit")
+	if got := htmlassert.Text(mark); !strings.EqualFold(got, "milk") {
+		t.Errorf("highlighted text = %q, want milk", got)
+	}
+}
+
+func TestDueFilterExcludesNonMatchingRows(t *testing.T) {
+	s := newServer(t)
+	match := s.seed(t, s.Alice, notes.RootID, "buy milk")
+	s.Submit(t, s.Alice, "/notes/"+itoa(match)+"/due", url.Values{"root": {"0"}, "due": {"2026-01-01"}}, "/notes/")
+	other := s.seed(t, s.Alice, notes.RootID, "call dentist")
+	s.Submit(t, s.Alice, "/notes/"+itoa(other)+"/due", url.Values{"root": {"0"}, "due": {"2026-01-01"}}, "/notes/")
+
+	doc := s.Get(t, s.Alice, "/notes/due?q=milk")
+	if strings.Contains(doc.Text(), "call dentist") {
+		t.Error("a non-matching row leaked into the filtered Due list")
+	}
+}
+
+func TestDueFilterShowsASnippetForANoteOnlyMatch(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "groceries")
+	s.Submit(t, s.Alice, "/notes/"+itoa(id)+"/due", url.Values{"root": {"0"}, "due": {"2026-01-01"}}, "/notes/")
+	if err := s.Store.SetText(context.Background(), s.Alice.User.ID, id, "groceries", "don't forget the oat milk"); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/notes/due?q=milk")
+	doc.MustHave(".notes-search-snippet mark.notes-search-hit")
+}
+
+func TestDueFilterWithNoMatchesSaysSo(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/notes/due?q=nonexistent")
+	if !strings.Contains(doc.Text(), "No notes match") {
+		t.Error("an empty filtered Due result shows no feedback")
+	}
+}
+
 // TestOutlineFilterKeepsAMatchAndItsAncestorOnly is the filter's core
 // behaviour: a match's ancestor path stays, an unrelated sibling subtree
 // does not.

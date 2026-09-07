@@ -18,7 +18,7 @@ func TestDueReturnsOnlyNodesWithADueDate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Due(ctx, f.alice.ID)
+	got, err := f.store.Due(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestDueExcludesDoneNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Due(ctx, f.alice.ID)
+	got, err := f.store.Due(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestDueDoesNotLeakAnotherUsersNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Due(ctx, f.alice.ID)
+	got, err := f.store.Due(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestDueIsOrderedByDate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Due(ctx, f.alice.ID)
+	got, err := f.store.Due(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestDueExcludesArchivedNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Due(ctx, f.alice.ID)
+	got, err := f.store.Due(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestDueExcludesADescendantOfAnArchivedNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := f.store.Due(ctx, f.alice.ID)
+	got, err := f.store.Due(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,5 +188,43 @@ func TestDueBadgeCountOfNoRowsIsZero(t *testing.T) {
 	got := notes.DueBadgeCount(nil, time.Now())
 	if got != 0 {
 		t.Errorf("DueBadgeCount(nil) = %d, want 0", got)
+	}
+}
+
+func TestDueWithAQueryOnlyReturnsMatchingRows(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	match := f.mk(t, notes.RootID, "buy milk")
+	if err := f.store.SetDue(ctx, f.alice.ID, match.ID, "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	other := f.mk(t, notes.RootID, "call dentist")
+	if err := f.store.SetDue(ctx, f.alice.ID, other.ID, "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Due(ctx, f.alice.ID, "milk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != match.ID {
+		t.Fatalf("Due(query=milk) = %+v, want just the milk bullet", got)
+	}
+}
+
+func TestDueWithNoQueryReturnsEverything(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	n := f.mk(t, notes.RootID, "anything")
+	if err := f.store.SetDue(ctx, f.alice.ID, n.ID, "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.Due(ctx, f.alice.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Due(query=\"\") = %+v, want the one due bullet", got)
 	}
 }

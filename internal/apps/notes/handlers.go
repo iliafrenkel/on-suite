@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
 	"net/url"
@@ -136,7 +137,7 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		title = root.DisplayTitle()
 	}
 
-	dueRows, err := a.store.Due(r.Context(), userID)
+	dueRows, err := a.store.Due(r.Context(), userID, "")
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -192,7 +193,7 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	dueRows, err := a.store.Due(r.Context(), userID)
+	dueRows, err := a.store.Due(r.Context(), userID, "")
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -673,31 +674,75 @@ func idsOf(nodes []Node) []int64 {
 }
 
 // dueList renders every one of the user's due bullets, grouped by urgency —
-// spec §11.
+// spec §11. The toolbar's search box drives its own live filter through
+// this same route over HTMX, the same GET-branches-on-HX-Request shape
+// renderOutlineOrFragment uses.
 func (a *App) dueList(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
 		return
 	}
-	nodes, err := a.store.Due(r.Context(), userID)
+	if web.IsHTMX(r) {
+		a.renderDueFragment(w, r, userID)
+		return
+	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	view, err := a.buildDueView(r.Context(), userID, query)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
+	}
+	page := a.deps.Page(r, "Due")
+	page.Data = view
+	a.render(w, r, http.StatusOK, "notes/due", page)
+}
+
+// renderDueFragment re-renders #due-list's own content for an HTMX swap —
+// the equivalent of renderOutlineFragment/renderArchiveFragment.
+func (a *App) renderDueFragment(w http.ResponseWriter, r *http.Request, userID int64) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	view, err := a.buildDueView(r.Context(), userID, query)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/due", "due-list", view); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
+}
+
+// buildDueView is the query behind both of the above.
+func (a *App) buildDueView(ctx context.Context, userID int64, query string) (dueView, error) {
+	nodes, err := a.store.Due(ctx, userID, query)
+	if err != nil {
+		return dueView{}, err
+	}
+	crumbs, err := a.store.AncestorsMany(ctx, userID, idsOf(nodes))
+	if err != nil {
+		return dueView{}, err
 	}
 
-	crumbs, err := a.store.AncestorsMany(r.Context(), userID, idsOf(nodes))
-	if err != nil {
-		a.deps.Errors.Internal(w, r, err)
-		return
-	}
+	terms := searchTerms(query)
 	rows := make([]DueRow, len(nodes))
 	for i, n := range nodes {
-		rows[i] = DueRow{Node: n, Crumbs: crumbs[n.ID]}
+		rows[i] = DueRow{
+			Node:      n,
+			Crumbs:    crumbs[n.ID],
+			TitleHTML: highlightPlainText(n.DisplayTitle(), terms),
+			Snippet:   noteOnlySnippet(n, terms),
+		}
 	}
+	return dueView{Groups: GroupByDue(rows, time.Now()), Query: query, SearchAction: "/notes/due"}, nil
+}
 
-	page := a.deps.Page(r, "Due")
-	page.Data = GroupByDue(rows, time.Now())
-	a.render(w, r, http.StatusOK, "notes/due", page)
+// noteOnlySnippet is Due/Archive's issue #86 indicator: a highlighted
+// excerpt of a row's note, shown only when the filter matched there and not
+// in the title (a title match is already visible via TitleHTML above).
+func noteOnlySnippet(n Node, terms []string) template.HTML {
+	if len(terms) == 0 || len(matchSpans(n.Title, terms)) > 0 {
+		return ""
+	}
+	return noteSnippet(n.Note, terms)
 }
 
 // archiveList renders every one of the user's archived subtree roots —
