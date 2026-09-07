@@ -410,6 +410,12 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 // ignores focus_id: its subject is the path id, so target and focus cannot
 // differ, and there is only one write to make. The row form still sends the
 // hidden focus_id field, because the same form's other buttons need it.
+//
+// Known, accepted asymmetry: the fragment below calls plain Render, not
+// highlight, so when a filter is active the just-edited row's own
+// rendered-title/rendered-note briefly loses its highlight even though the
+// rest of the filtered list still shows it — a consequence of this app's
+// "editing resets the filter" simplification, not a bug to chase.
 func (a *App) setText(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -650,7 +656,7 @@ func prefsRedirectTarget(root int64) string {
 }
 
 // idsOf is the ID column of a node slice — issue #77: the shared shape
-// dueList, buildArchiveView, and search each hand to Store.AncestorsMany to
+// buildDueView and buildArchiveView each hand to Store.AncestorsMany to
 // fetch every row's breadcrumb in one batched query instead of one per row.
 func idsOf(nodes []Node) []int64 {
 	ids := make([]int64, len(nodes))

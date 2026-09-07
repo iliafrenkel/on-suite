@@ -88,7 +88,13 @@ func highlight(rendered template.HTML, terms []string) template.HTML {
 	}
 
 	// Wrap fragment nodes in a temporary container so they have a parent
-	// for the InsertBefore operations in splitTextNode
+	// for the InsertBefore operations in splitTextNode: ParseFragment can
+	// return a bare text node at the top level (e.g. rendered is plain text
+	// with no wrapping tag at all), and such a node's own .Parent is nil —
+	// splitTextNode's parent.InsertBefore(...) would nil-pointer-panic on
+	// it without something to attach it to first. container is never
+	// itself rendered into the output below; it exists only to give every
+	// top-level node a real parent.
 	container := &xhtml.Node{Type: xhtml.ElementNode, Data: "div"}
 	for _, n := range nodes {
 		container.AppendChild(n)

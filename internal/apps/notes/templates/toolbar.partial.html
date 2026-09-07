@@ -14,12 +14,9 @@
      own clear (x) button, rather than waiting out the debounce.
 
      Action/Target vary per page and are passed via dict at each call site,
-     alongside the existing Query/Autofocus (search.html alone used to
-     prefill the last query and autofocus; that page still exists but will
-     render with empty action/hx-get/hx-target — a known interim state,
-     expected to be addressed when a later task removes that page entirely;
-     every other page still wants neither). role="search" is
-     the landmark WCAG asks for alongside the input's own aria-label. */}}
+     alongside the existing Query/Autofocus (every page but the outline
+     wants neither). role="search" is the landmark WCAG asks for alongside
+     the input's own aria-label. */}}
 {{define "notes-search-box"}}<form method="get" action="{{.Action}}" class="notes-search" role="search">
 	<input type="search" id="notes-search-input" name="q" value="{{.Query}}"
 	       placeholder="Search…" aria-label="Search notes"{{if .Autofocus}} autofocus{{end}}
@@ -27,10 +24,10 @@
 	       hx-trigger="input changed delay:300ms, search" hx-replace-url="true">
 </form>{{end}}
 
-{{/* show-completed-toggle is the toolbar's button. Moved here (from
-     outline.html, where it originated) so /notes/search can share it too
-     (issue #88) — this app's own pages are otherwise independent template
-     sets, same reason notes-search-box above lives in a partial.
+{{/* show-completed-toggle is the toolbar's button. Moved here from
+     outline.html, where it originated (issue #88) — this app's own pages
+     are otherwise independent template sets, same reason notes-search-box
+     above lives in a partial. The outline is the only page that uses it.
 
      Shared between the page render and every HTMX fragment response, on
      the same OOB discipline as rendered-title (outline.html): the fragment
@@ -38,9 +35,7 @@
      outside #outline, so the hx-target="#outline" swap can never update it
      — without the out-of-band copy its label and value stay frozen at
      whatever the last full page load wrote, and a second click re-sends
-     the stale value and appears to do nothing. /notes/search's own toggle
-     is a plain (non-HTMX) form — that page does no partial swapping of its
-     own — so .OOB is always false there, harmlessly. */}}
+     the stale value and appears to do nothing. */}}
 {{define "show-completed-toggle"}}<button type="submit" id="show-completed-toggle" class="toolbar-btn{{if .ShowCompleted}} toolbar-btn-active{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}
         name="show_completed" value="{{if .ShowCompleted}}0{{else}}1{{end}}" title="{{if .ShowCompleted}}Hide completed{{else}}Show completed{{end}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>Completed</button>{{end}}
 

@@ -1117,7 +1117,6 @@ button.outline-chevron {
 	border-bottom: 1px solid var(--c-border);
 }
 .notes-due-crumbs,
-.notes-search-crumbs,
 .notes-archive-crumbs { font-size: var(--fs-sm); color: var(--c-text-faint); }
 .notes-crumb-item {
 	display: inline-block;
@@ -1140,17 +1139,6 @@ button.outline-chevron {
 	padding: var(--s-1) var(--s-2);
 	width: 12rem;
 }
-
-.notes-search-list { margin: 0; padding: 0; list-style: none; }
-.notes-search-item {
-	display: flex;
-	align-items: baseline;
-	gap: var(--s-2);
-	padding: var(--s-1) 0;
-	border-bottom: 1px solid var(--c-border);
-}
-.notes-search-title { flex: 1; min-width: 0; color: var(--c-text); text-decoration: none; }
-.notes-search-title:hover { color: var(--c-accent); }
 
 /* A match's highlight — issue #86 — uses the palette's own tinted-
  * background token (the same one active/selected chips already use, e.g.

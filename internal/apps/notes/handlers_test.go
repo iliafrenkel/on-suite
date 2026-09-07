@@ -3621,7 +3621,7 @@ func TestSharedPageHasNoLinksIntoThePrivateTree(t *testing.T) {
 // TestOutlineTagsStillLinkOnThePrivateOutline guards the other side of the
 // fix: RenderShared's chips lost their href, but Render's own — used by the
 // ordinary, authenticated outline page (outline.html) — must keep linking
-// into /notes/search exactly as before.
+// into the filtered outline (/notes/?q=) exactly as before.
 func TestOutlineTagsStillLinkOnThePrivateOutline(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.Alice, notes.RootID, "a #tag here")
