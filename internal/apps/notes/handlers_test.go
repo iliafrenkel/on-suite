@@ -2909,6 +2909,39 @@ func TestArchiveToolbarHasASearchBox(t *testing.T) {
 	s.Get(t, s.Alice, "/notes/archive").MustHave("#notes-search-input")
 }
 
+func TestArchiveFilterHighlightsATitleMatch(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "old milk carton")
+	s.Post(t, s.Alice, "/notes/"+itoa(id)+"/archive", url.Values{"root": {"0"}, "focus_id": {"0"}, "archived": {"1"}})
+
+	doc := s.Get(t, s.Alice, "/notes/archive?q=milk")
+	mark := doc.MustHave("mark.notes-search-hit")
+	if got := htmlassert.Text(mark); !strings.EqualFold(got, "milk") {
+		t.Errorf("highlighted text = %q, want milk", got)
+	}
+}
+
+func TestArchiveFilterExcludesNonMatchingRows(t *testing.T) {
+	s := newServer(t)
+	match := s.seed(t, s.Alice, notes.RootID, "old milk carton")
+	s.Post(t, s.Alice, "/notes/"+itoa(match)+"/archive", url.Values{"root": {"0"}, "focus_id": {"0"}, "archived": {"1"}})
+	other := s.seed(t, s.Alice, notes.RootID, "old receipts")
+	s.Post(t, s.Alice, "/notes/"+itoa(other)+"/archive", url.Values{"root": {"0"}, "focus_id": {"0"}, "archived": {"1"}})
+
+	doc := s.Get(t, s.Alice, "/notes/archive?q=milk")
+	if strings.Contains(doc.Text(), "old receipts") {
+		t.Error("a non-matching row leaked into the filtered Archive list")
+	}
+}
+
+func TestArchiveFilterWithNoMatchesSaysSo(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/notes/archive?q=nonexistent")
+	if !strings.Contains(doc.Text(), "No notes match") {
+		t.Error("an empty filtered Archive result shows no feedback")
+	}
+}
+
 func TestExportDownloadsTheWholeTree(t *testing.T) {
 	s := newServer(t)
 	s.seed(t, s.Alice, notes.RootID, "top level bullet")

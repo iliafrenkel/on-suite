@@ -746,13 +746,20 @@ func noteOnlySnippet(n Node, terms []string) template.HTML {
 }
 
 // archiveList renders every one of the user's archived subtree roots —
-// spec §13.
+// spec §13. The toolbar's search box drives its own live filter through
+// this same route over HTMX, the same shape dueList/renderOutlineOrFragment
+// use.
 func (a *App) archiveList(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
 		return
 	}
-	view, err := a.buildArchiveView(r.Context(), userID)
+	if web.IsHTMX(r) {
+		a.renderArchiveFragment(w, r, userID)
+		return
+	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	view, err := a.buildArchiveView(r.Context(), userID, query)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -764,10 +771,14 @@ func (a *App) archiveList(w http.ResponseWriter, r *http.Request) {
 }
 
 // renderArchiveFragment re-renders /notes/archive's own list for an HTMX
-// restore — the equivalent of renderOutlineFragment, but targeting this
-// page's own swap target instead of #outline.
+// restore, or an HTMX filter — the equivalent of renderOutlineFragment, but
+// targeting this page's own swap target instead of #outline. A restore's
+// own POST never carries a ?q= of its own, so — like every structural
+// mutation on the outline — performing one resets an active filter; see
+// this plan's note on that scope boundary.
 func (a *App) renderArchiveFragment(w http.ResponseWriter, r *http.Request, userID int64) {
-	view, err := a.buildArchiveView(r.Context(), userID)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	view, err := a.buildArchiveView(r.Context(), userID, query)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -781,8 +792,8 @@ func (a *App) renderArchiveFragment(w http.ResponseWriter, r *http.Request, user
 // buildArchiveView is the query behind both of the above: the full page and
 // the HTMX fragment render exactly the same rows, so they share the one
 // place that fetches them.
-func (a *App) buildArchiveView(ctx context.Context, userID int64) (archiveView, error) {
-	nodes, err := a.store.Archive(ctx, userID)
+func (a *App) buildArchiveView(ctx context.Context, userID int64, query string) (archiveView, error) {
+	nodes, err := a.store.Archive(ctx, userID, query)
 	if err != nil {
 		return archiveView{}, err
 	}
@@ -790,11 +801,18 @@ func (a *App) buildArchiveView(ctx context.Context, userID int64) (archiveView, 
 	if err != nil {
 		return archiveView{}, err
 	}
+
+	terms := searchTerms(query)
 	rows := make([]ArchiveRow, len(nodes))
 	for i, n := range nodes {
-		rows[i] = ArchiveRow{Node: n, Crumbs: crumbs[n.ID]}
+		rows[i] = ArchiveRow{
+			Node:      n,
+			Crumbs:    crumbs[n.ID],
+			TitleHTML: highlightPlainText(n.DisplayTitle(), terms),
+			Snippet:   noteOnlySnippet(n, terms),
+		}
 	}
-	return archiveView{Rows: rows}, nil
+	return archiveView{Rows: rows, Query: query, SearchAction: "/notes/archive"}, nil
 }
 
 // archive marks a bullet archived, or restores it — spec §13. The field
