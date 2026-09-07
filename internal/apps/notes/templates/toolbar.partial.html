@@ -2,8 +2,13 @@
      page's toolbar (outline, due, archive) — issue #89. It is also this
      feature's live filter: hx-get targets Action (each page's own GET
      route) with hx-target Target (that page's own list container), so
-     typing re-renders just that list in place; hx-push-url keeps the
-     filter in the URL, so a refresh or the back button restores it.
+     typing re-renders just that list in place; hx-replace-url keeps the
+     filter in the URL, so a refresh still restores it, but — a deliberate
+     tradeoff, reviewed and accepted — does NOT create a new history entry
+     per keystroke: with hx-push-url, a single debounced typing session
+     would push one history entry per fired request, so the back button
+     returns to wherever the user was before they started typing, not to
+     some intermediate filter state.
      "search" as an hx-trigger event, alongside "input changed delay:300ms",
      fires immediately when a user clicks the native <input type=search>'s
      own clear (x) button, rather than waiting out the debounce.
@@ -19,7 +24,7 @@
 	<input type="search" id="notes-search-input" name="q" value="{{.Query}}"
 	       placeholder="Search…" aria-label="Search notes"{{if .Autofocus}} autofocus{{end}}
 	       hx-get="{{.Action}}" hx-target="{{.Target}}" hx-swap="innerHTML"
-	       hx-trigger="input changed delay:300ms, search" hx-push-url="true">
+	       hx-trigger="input changed delay:300ms, search" hx-replace-url="true">
 </form>{{end}}
 
 {{/* show-completed-toggle is the toolbar's button. Moved here (from
