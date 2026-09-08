@@ -558,22 +558,13 @@
 
 	function showPasteError(status) {
 		var outline = document.getElementById("outline");
-		if (!outline || !outline.parentNode) return;
-		if (document.getElementById("notes-paste-error")) return; // already showing one
-		var notice = document.createElement("div");
-		notice.id = "notes-paste-error";
-		notice.className = "notice notice-error";
-		notice.setAttribute("role", "alert");
-		notice.textContent = status >= 500
+		OnSuite.notices.show(outline, "notes-paste-error", status >= 500
 			? "Something went wrong pasting that. Try again."
-			: "Couldn't paste that: it doesn't look like valid outline text, or it's too large.";
-		outline.parentNode.insertBefore(notice, outline);
-		notice.scrollIntoView({ block: "nearest" });
+			: "Couldn't paste that: it doesn't look like valid outline text, or it's too large.");
 	}
 
 	function clearPasteError() {
-		var existing = document.getElementById("notes-paste-error");
-		if (existing) existing.remove();
+		OnSuite.notices.clear("notes-paste-error");
 	}
 
 	function initPasteErrors() {
@@ -823,22 +814,13 @@
 	// no explanation — the same gap initPasteErrors closes for /paste.
 	function showMoveError(status) {
 		var outline = document.getElementById("outline");
-		if (!outline || !outline.parentNode) return;
-		if (document.getElementById("notes-move-error")) return; // already showing one
-		var notice = document.createElement("div");
-		notice.id = "notes-move-error";
-		notice.className = "notice notice-error";
-		notice.setAttribute("role", "alert");
-		notice.textContent = status >= 500
+		OnSuite.notices.show(outline, "notes-move-error", status >= 500
 			? "Something went wrong moving that. Try again."
-			: "Couldn't move that there: it would create a cycle or nest too deep.";
-		outline.parentNode.insertBefore(notice, outline);
-		notice.scrollIntoView({ block: "nearest" });
+			: "Couldn't move that there: it would create a cycle or nest too deep.");
 	}
 
 	function clearMoveError() {
-		var existing = document.getElementById("notes-move-error");
-		if (existing) existing.remove();
+		OnSuite.notices.clear("notes-move-error");
 	}
 
 	function initMoveErrors() {

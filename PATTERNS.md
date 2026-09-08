@@ -14,12 +14,14 @@ if an entry needs more than that to explain, the explanation belongs in the
 canonical example's own comment, not here.
 
 - **Server-rejection surfaced as a dismissable notice** — reach for this
-  when an htmx request can be rejected (4xx/5xx) and swap:false would
-  otherwise leave the user with no feedback at all: listen for
-  `htmx:responseError`, insert a `.notice.notice-error` element, clear it on
-  the next successful swap of the same target. Canonical:
-  `internal/apps/notes/static/notes.js`'s `initPasteErrors` (copied by
-  `initMoveErrors` in the same file).
+  when an htmx request can be rejected (4xx/5xx), or fails at the network
+  level (offline), and swap:false would otherwise leave the user with no
+  feedback at all: listen for `htmx:responseError` and `htmx:sendError`,
+  call `OnSuite.notices.show`/`.clear` to insert/remove a
+  `.notice.notice-error` element, clearing it on the next successful swap
+  of the same target. Canonical: `internal/ui/static/htmx-notices.js`,
+  used by `internal/apps/notes/static/notes.js`'s `initPasteErrors` and
+  `initMoveErrors`.
 
 - **View-model projection instead of embedding a domain struct** — reach for
   this whenever a struct is rendered somewhere less trusted than where it
