@@ -5,10 +5,15 @@
 // (htmx 2.0's default responseHandling for 4xx/5xx, and the only outcome
 // of a network-level sendError) would otherwise leave the user with no
 // feedback at all. Originally duplicated per-action in
-// internal/apps/notes/static/notes.js (initPasteErrors/initMoveErrors);
-// extracted here once the connectivity indicator's offline-aware error
-// messages (notes.js) needed the exact same insert/clear logic for a
-// third and fourth caller.
+// internal/apps/notes/static/notes.js (initPasteErrors/initMoveErrors).
+// PATTERNS.md documents "duplicate, don't extract" as this project's normal
+// convention for this kind of pattern (see "Cross-app mirroring instead of
+// a shared package"), but that default is about cross-app domain-logic
+// duplication — this is shared UI chrome infrastructure, the same category
+// as theme.js. The project owner was consulted on that exact tension during
+// planning and chose to extract this one anyway, even though notes.js is
+// still the only caller (initPasteErrors/initMoveErrors) — not because a
+// third or fourth caller appeared.
 (function () {
 	"use strict";
 

@@ -135,7 +135,13 @@ func TestPageOmitsUserChromeWhenLoggedOut(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	htmlassert.Parse(t, rec.Body.String()).MustNotHave(".shell-user")
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustNotHave(".shell-user")
+	// The connectivity indicator lives inside .shell-user, so the assertion
+	// above already implies this, but pinning it explicitly documents the
+	// invariant connectivity.js's graceful-degradation-on-public-pages story
+	// depends on (see its init()'s comment).
+	doc.MustNotHave("[data-conn-indicator]")
 }
 
 // TestPageEscapesUntrustedValues guards the property html/template exists to

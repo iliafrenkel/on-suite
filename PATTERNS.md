@@ -6,7 +6,11 @@ solved. Each entry is a pointer, not an explanation: the canonical example's
 own comments carry the "why." When you copy a pattern, cross-reference the
 original the way existing copies do (e.g. "mirrors X's own Y") rather than
 extracting a shared abstraction — see "Cross-app mirroring" below for why
-that's often the deliberate choice here, not an oversight.
+that's often the deliberate choice here, not an oversight. That default is
+about cross-app domain-logic duplication specifically (two apps that must
+never import each other); shared UI chrome infrastructure living in
+`internal/ui/static` (alongside `theme.js`) is a different layer and is the
+deliberate exception — it's already extracted and shared across all apps.
 
 Add to this list when you notice yourself reusing (or wishing you could
 find) a shape that already exists elsewhere. Keep entries to one line each;

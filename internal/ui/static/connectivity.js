@@ -30,7 +30,14 @@
 	}
 
 	function checkHealth() {
-		fetch("/healthz", { cache: "no-store" })
+		// A client-side timeout shorter than POLL_INTERVAL_MS guards against a
+		// hung connection (captive portal, blackholed TCP, server accepting but
+		// not responding) that would otherwise never reject and leave the dot
+		// green until the browser's own much longer network timeout. 5000ms is
+		// comfortably above /healthz's own 2s DB-ping budget (see healthzHandler
+		// in cmd/onsuite/serve.go) and comfortably below the 15s poll interval,
+		// so responses can't resolve out of order.
+		fetch("/healthz", { cache: "no-store", signal: AbortSignal.timeout(5000) })
 			.then(function (res) { setOnline(res.ok); })
 			.catch(function () { setOnline(false); });
 	}
@@ -44,7 +51,7 @@
 		indicator = document.querySelector("[data-conn-indicator]");
 		if (!indicator) return;
 
-		window.addEventListener("online", function () { setOnline(true); });
+		window.addEventListener("online", function () { setOnline(true); checkHealth(); });
 		window.addEventListener("offline", function () { setOnline(false); });
 		document.addEventListener("htmx:sendError", function () { setOnline(false); });
 

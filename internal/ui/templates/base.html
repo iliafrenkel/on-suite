@@ -39,7 +39,7 @@
 	</nav>
 	{{if .Shell.LoggedIn}}
 	<div class="shell-user">
-		<div class="conn-indicator" data-conn-indicator data-status="online" title="All changes are saving normally" aria-label="Online — all changes are saving normally">
+		<div class="conn-indicator" data-conn-indicator role="img" data-status="online" title="All changes are saving normally" aria-label="Online — all changes are saving normally">
 			<div class="conn-dot" aria-hidden="true"></div>
 		</div>
 		<span>{{.Shell.Username}}</span>

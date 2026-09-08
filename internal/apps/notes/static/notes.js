@@ -556,9 +556,19 @@
 		return "";
 	}
 
+	// notices() degrades to a no-op instead of throwing if htmx-notices.js
+	// ever failed to load — without this guard, a missing OnSuite.notices
+	// would throw a ReferenceError inside an event handler and silently kill
+	// all paste/move error feedback, not just the offline path added here.
+	function notices() {
+		return (window.OnSuite && window.OnSuite.notices) || null;
+	}
+
 	function showPasteError(status) {
 		var outline = document.getElementById("outline");
-		OnSuite.notices.show(outline, "notes-paste-error", status === undefined
+		var n = notices();
+		if (!n) return;
+		n.show(outline, "notes-paste-error", status === undefined
 			? "You're offline: that couldn't be saved. Try again once you're back online."
 			: status >= 500
 				? "Something went wrong pasting that. Try again."
@@ -566,7 +576,8 @@
 	}
 
 	function clearPasteError() {
-		OnSuite.notices.clear("notes-paste-error");
+		var n = notices();
+		if (n) n.clear("notes-paste-error");
 	}
 
 	function initPasteErrors() {
@@ -824,7 +835,9 @@
 	// no explanation — the same gap initPasteErrors closes for /paste.
 	function showMoveError(status) {
 		var outline = document.getElementById("outline");
-		OnSuite.notices.show(outline, "notes-move-error", status === undefined
+		var n = notices();
+		if (!n) return;
+		n.show(outline, "notes-move-error", status === undefined
 			? "You're offline: that couldn't be saved. Try again once you're back online."
 			: status >= 500
 				? "Something went wrong moving that. Try again."
@@ -832,7 +845,8 @@
 	}
 
 	function clearMoveError() {
-		OnSuite.notices.clear("notes-move-error");
+		var n = notices();
+		if (n) n.clear("notes-move-error");
 	}
 
 	function initMoveErrors() {
