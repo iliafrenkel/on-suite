@@ -6,7 +6,11 @@ solved. Each entry is a pointer, not an explanation: the canonical example's
 own comments carry the "why." When you copy a pattern, cross-reference the
 original the way existing copies do (e.g. "mirrors X's own Y") rather than
 extracting a shared abstraction — see "Cross-app mirroring" below for why
-that's often the deliberate choice here, not an oversight.
+that's often the deliberate choice here, not an oversight. That default is
+about cross-app domain-logic duplication specifically (two apps that must
+never import each other); shared UI chrome infrastructure living in
+`internal/ui/static` (alongside `theme.js`) is a different layer and is the
+deliberate exception — it's already extracted and shared across all apps.
 
 Add to this list when you notice yourself reusing (or wishing you could
 find) a shape that already exists elsewhere. Keep entries to one line each;
@@ -14,12 +18,14 @@ if an entry needs more than that to explain, the explanation belongs in the
 canonical example's own comment, not here.
 
 - **Server-rejection surfaced as a dismissable notice** — reach for this
-  when an htmx request can be rejected (4xx/5xx) and swap:false would
-  otherwise leave the user with no feedback at all: listen for
-  `htmx:responseError`, insert a `.notice.notice-error` element, clear it on
-  the next successful swap of the same target. Canonical:
-  `internal/apps/notes/static/notes.js`'s `initPasteErrors` (copied by
-  `initMoveErrors` in the same file).
+  when an htmx request can be rejected (4xx/5xx), or fails at the network
+  level (offline), and swap:false would otherwise leave the user with no
+  feedback at all: listen for `htmx:responseError` and `htmx:sendError`,
+  call `OnSuite.notices.show`/`.clear` to insert/remove a
+  `.notice.notice-error` element, clearing it on the next successful swap
+  of the same target. Canonical: `internal/ui/static/htmx-notices.js`,
+  used by `internal/apps/notes/static/notes.js`'s `initPasteErrors` and
+  `initMoveErrors`.
 
 - **View-model projection instead of embedding a domain struct** — reach for
   this whenever a struct is rendered somewhere less trusted than where it
