@@ -446,16 +446,16 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 	assertOnlyToggleIsOOB(t, frag)
 }
 
-// assertOnlyToggleIsOOB asserts that the show-completed toggle and the
-// due-count badge are the only elements anywhere in body carrying
-// hx-swap-oob. Both toolbar elements legitimately get marked out of band —
-// see renderOutlineFragment — but nothing else should ever be: an
+// assertOnlyToggleIsOOB asserts that the show-completed toggle, the
+// due-count badge, and the breadcrumb/heading are the only elements anywhere
+// in body carrying hx-swap-oob. All three legitimately get marked out of
+// band — see renderOutlineFragment — but nothing else should ever be: an
 // accidental hx-swap-oob on, say, .outline-list or an .outline-row would
 // make htmx silently strip that chunk out of the response before swapping
 // it in.
 func assertOnlyToggleIsOOB(t *testing.T, body string) {
 	t.Helper()
-	allowed := map[string]bool{"show-completed-toggle": true, "due-badge": true}
+	allowed := map[string]bool{"show-completed-toggle": true, "due-badge": true, "outline-heading": true}
 	for _, n := range htmlassert.Parse(t, body).QueryAll("[hx-swap-oob]") {
 		if id, _ := htmlassert.Attr(n, "id"); !allowed[id] {
 			t.Errorf("unexpected hx-swap-oob element (id=%q); only show-completed-toggle and due-badge may be out of band", id)
@@ -703,6 +703,82 @@ func TestAncestorCrumbLinkUsesHTMXTransition(t *testing.T) {
 	}
 	if got, _ := htmlassert.Attr(ancestor, "hx-push-url"); got != "true" {
 		t.Errorf("ancestor crumb hx-push-url = %q, want true", got)
+	}
+}
+
+// TestZoomingViaHTMXUpdatesTheBreadcrumb is the regression test for the gap
+// Task 2's live verification found: an htmx zoom must refresh the
+// breadcrumb/heading via OOB swap, not just the row list.
+func TestZoomingViaHTMXUpdatesTheBreadcrumb(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
+	child := s.seed(t, s.Alice, parent, "Sub-project")
+
+	req := httptest.NewRequest("GET", "/notes/"+itoa(child), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="outline-heading" hx-swap-oob="true"`) {
+		t.Error("htmx zoom response is missing the OOB heading swap")
+	}
+	if !strings.Contains(body, "Sub-project") {
+		t.Error("OOB heading does not show the new zoom root's title")
+	}
+	if !strings.Contains(body, "Projects") {
+		t.Error("OOB heading does not show the new zoom root's ancestor crumb")
+	}
+}
+
+// TestZoomingOutViaHTMXShowsTheUnzoomedHeading covers the other direction:
+// zooming back to the top level over htmx must replace the OOB heading with
+// the plain "Notes" title, not leave the previous zoom's heading in place.
+func TestZoomingOutViaHTMXShowsTheUnzoomedHeading(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	req := httptest.NewRequest("GET", "/notes/", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="outline-heading" hx-swap-oob="true"`) {
+		t.Error("htmx zoom-out response is missing the OOB heading swap")
+	}
+	if !strings.Contains(body, "<h1>Notes</h1>") {
+		t.Error("OOB heading does not show the unzoomed title")
+	}
+	_ = id
+}
+
+// TestMutationFragmentAlsoCarriesTheHeadingUnchanged is the counterpart to
+// the existing TestMutationFragmentCarriesTheToggleUnchanged: a structural
+// op must still emit the OOB heading (so the pattern is uniform across
+// every fragment response), and it must describe the same root the
+// request came in on, not some other one.
+func TestMutationFragmentAlsoCarriesTheHeadingUnchanged(t *testing.T) {
+	s := newServer(t)
+	parent := s.seed(t, s.Alice, notes.RootID, "Projects")
+	child := s.seed(t, s.Alice, parent, "a")
+
+	req := httptest.NewRequest("POST", "/notes/"+itoa(child)+"/indent",
+		strings.NewReader(url.Values{"root": {itoa(parent)}, web.CSRFFormField: {s.CSRFToken(t, s.Alice)}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="outline-heading" hx-swap-oob="true"`) {
+		t.Error("structural-op fragment is missing the OOB heading swap")
+	}
+	if !strings.Contains(body, "Projects") {
+		t.Error("OOB heading does not describe the root the request came in on")
 	}
 }
 
