@@ -101,13 +101,16 @@
 	</div>
 	{{if .Data.Zoomed}}
 	<nav class="outline-crumbs" aria-label="Outline breadcrumb">
-		<a href="/notes/">All notes</a>
+		<a href="/notes/" hx-get="/notes/" hx-target="#outline"
+		   hx-swap="innerHTML transition:true" hx-push-url="true">All notes</a>
 		{{range .Data.Crumbs}}
 		<span aria-hidden="true">/</span>
 		{{/* Stays on DisplayTitle, not DisplayTitleHTML: this IS a link, so a
 		     title containing its own link/autolink/#tag would nest anchors —
 		     issue #65's own text on the tension. */}}
-		<a href="/notes/{{.ID}}" title="{{.DisplayTitle}}">{{.DisplayTitle}}</a>
+		<a href="/notes/{{.ID}}" title="{{.DisplayTitle}}"
+		   hx-get="/notes/{{.ID}}" hx-target="#outline"
+		   hx-swap="innerHTML transition:true" hx-push-url="true">{{.DisplayTitle}}</a>
 		{{end}}
 		<span aria-hidden="true">/</span>
 		{{/* Not a link — see DisplayTitleHTML's own doc comment (issue #65) —
@@ -327,6 +330,8 @@
 
 				<a class="outline-dot{{if .Collapsed}} outline-dot-full{{end}}"
 				   href="/notes/{{.ID}}"
+				   hx-get="/notes/{{.ID}}" hx-target="#outline"
+				   hx-swap="innerHTML transition:true" hx-push-url="true"
 				   draggable="false"
 				   aria-label="Zoom in to {{.DisplayTitle}}"><svg class="icon-dot" width="16" height="16" viewBox="0 0 16 16">{{if .Collapsed}}<circle class="icon-dot-halo" cx="8" cy="8" r="8"/><circle cx="8" cy="8" r="4" fill="currentColor"/>{{else}}<circle cx="8" cy="8" r="4" fill="currentColor"/>{{end}}</svg></a>
 

@@ -634,6 +634,78 @@ func TestBulletDotZoomsIn(t *testing.T) {
 	}
 }
 
+// TestBulletDotZoomsInWithHTMXTransition pins the htmx wiring the cross-fade
+// transition depends on: same route as before, now also an in-place htmx
+// swap so the CSS view-transition on #outline can fire.
+func TestBulletDotZoomsInWithHTMXTransition(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	doc := s.Get(t, s.Alice, "/notes/")
+	dot := doc.MustHave("a.outline-dot")
+	if got, _ := htmlassert.Attr(dot, "hx-get"); got != "/notes/"+itoa(id) {
+		t.Errorf("bullet dot hx-get = %q, want /notes/%d", got, id)
+	}
+	if got, _ := htmlassert.Attr(dot, "hx-target"); got != "#outline" {
+		t.Errorf("bullet dot hx-target = %q, want #outline", got)
+	}
+	if got, _ := htmlassert.Attr(dot, "hx-swap"); got != "innerHTML transition:true" {
+		t.Errorf("bullet dot hx-swap = %q, want %q", got, "innerHTML transition:true")
+	}
+	if got, _ := htmlassert.Attr(dot, "hx-push-url"); got != "true" {
+		t.Errorf("bullet dot hx-push-url = %q, want true", got)
+	}
+}
+
+// TestAllNotesLinkUsesHTMXTransition covers the top-level "All notes"
+// breadcrumb link, which zooms back out to the root.
+func TestAllNotesLinkUsesHTMXTransition(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(id))
+	link := doc.MustHave("nav.outline-crumbs a")
+	if got, _ := htmlassert.Attr(link, "hx-get"); got != "/notes/" {
+		t.Errorf("All notes link hx-get = %q, want /notes/", got)
+	}
+	if got, _ := htmlassert.Attr(link, "hx-target"); got != "#outline" {
+		t.Errorf("All notes link hx-target = %q, want #outline", got)
+	}
+	if got, _ := htmlassert.Attr(link, "hx-swap"); got != "innerHTML transition:true" {
+		t.Errorf("All notes link hx-swap = %q, want %q", got, "innerHTML transition:true")
+	}
+	if got, _ := htmlassert.Attr(link, "hx-push-url"); got != "true" {
+		t.Errorf("All notes link hx-push-url = %q, want true", got)
+	}
+}
+
+// TestAncestorCrumbLinkUsesHTMXTransition covers an ancestor breadcrumb link
+// (not the top-level "All notes" one, not the current/leaf crumb).
+func TestAncestorCrumbLinkUsesHTMXTransition(t *testing.T) {
+	s := newServer(t)
+	projects := s.seed(t, s.Alice, notes.RootID, "Projects")
+	child := s.seed(t, s.Alice, projects, "child")
+
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(child))
+	links := doc.QueryAll("nav.outline-crumbs a")
+	if len(links) < 2 {
+		t.Fatalf("got %d breadcrumb links, want at least 2", len(links))
+	}
+	ancestor := links[1]
+	if got, _ := htmlassert.Attr(ancestor, "hx-get"); got != "/notes/"+itoa(projects) {
+		t.Errorf("ancestor crumb hx-get = %q, want /notes/%d", got, projects)
+	}
+	if got, _ := htmlassert.Attr(ancestor, "hx-target"); got != "#outline" {
+		t.Errorf("ancestor crumb hx-target = %q, want #outline", got)
+	}
+	if got, _ := htmlassert.Attr(ancestor, "hx-swap"); got != "innerHTML transition:true" {
+		t.Errorf("ancestor crumb hx-swap = %q, want %q", got, "innerHTML transition:true")
+	}
+	if got, _ := htmlassert.Attr(ancestor, "hx-push-url"); got != "true" {
+		t.Errorf("ancestor crumb hx-push-url = %q, want true", got)
+	}
+}
+
 func TestSetTextSavesTheBullet(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.Alice, notes.RootID, "old")
