@@ -93,6 +93,36 @@ func TestPageRendersADocumentWithTheShell(t *testing.T) {
 	}
 }
 
+// TestShellHasConnectivityIndicator covers the element connectivity.js
+// looks up and mutates (see internal/ui/static/connectivity.js) — its
+// initial state must be "online" so a page rendered before the script
+// runs never flashes a false "offline" reading.
+func TestShellHasConnectivityIndicator(t *testing.T) {
+	r := testRenderer(t)
+	rec := httptest.NewRecorder()
+
+	err := r.Page(rec, http.StatusOK, "error", render.Page{
+		Shell: render.Shell{LoggedIn: true, Username: "ilia", CSRFToken: "tok123"},
+		Data:  map[string]any{"Status": 404, "Title": "Not found", "Message": "no such page"},
+	})
+	if err != nil {
+		t.Fatalf("Page: %v", err)
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	indicator := doc.MustHave("[data-conn-indicator]")
+	if got, _ := htmlassert.Attr(indicator, "data-status"); got != "online" {
+		t.Errorf("data-status = %q, want %q", got, "online")
+	}
+	doc.MustHave(".shell-user [data-conn-indicator] .conn-dot")
+
+	// Still the username test's first .shell-user span, unaffected by the
+	// new indicator (which is a div, not a span).
+	if got := htmlassert.Text(doc.MustHave(".shell-user span")); got != "ilia" {
+		t.Errorf("username = %q", got)
+	}
+}
+
 // TestPageOmitsUserChromeWhenLoggedOut is the negative case that matters: the
 // login page must not offer a logout button.
 func TestPageOmitsUserChromeWhenLoggedOut(t *testing.T) {

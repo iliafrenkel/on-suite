@@ -266,6 +266,26 @@ kbd {
 	border-color: var(--c-accent);
 }
 
+/* Online/offline dot — see internal/ui/static/connectivity.js, which owns
+ * data-status on this element after page load. Initial markup ships
+ * "online" so a page rendered before the script runs never flashes a
+ * false "offline" reading. */
+.conn-indicator {
+	display: inline-flex;
+	align-items: center;
+}
+
+.conn-dot {
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: #16a34a;
+}
+
+.conn-indicator[data-status="offline"] .conn-dot {
+	background: var(--c-danger);
+}
+
 /* ---- App shell: sidebar + main ------------------------------------------ */
 
 .app-shell {
