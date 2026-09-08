@@ -755,6 +755,28 @@ button.danger:hover { background: var(--c-danger-bg); }
  * navigation, so the outline gets no second sidebar. */
 .notes { max-width: 46rem; }
 
+/* Cross-fade the outline when zooming in/out (row dot, breadcrumb, "All
+ * notes", and browser back/forward via hx-push-url) — issue-free everywhere
+ * else, since only the three zoom links carry `transition:true` on their
+ * hx-swap. This is the reusable pattern for Paste/Flash/Reader: name a
+ * swapped region with view-transition-name, override its
+ * ::view-transition-old/new rule for the desired effect, and add
+ * `transition:true` to just the hx-swap attributes that should animate. */
+#outline {
+	view-transition-name: outline;
+}
+::view-transition-old(outline),
+::view-transition-new(outline) {
+	animation-duration: 0.18s;
+	animation-timing-function: ease;
+}
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-old(outline),
+	::view-transition-new(outline) {
+		animation-duration: 0.001s;
+	}
+}
+
 .outline-crumbs {
 	display: flex;
 	flex-wrap: wrap;
