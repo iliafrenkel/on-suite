@@ -29,7 +29,7 @@
 
 {{/* outline-swap is the whole HTMX response for a structural op or a prefs
      toggle: #outline's new content, plus the toolbar toggle out of band. */}}
-{{define "outline-swap"}}<title>{{if .Zoomed}}{{.Root.DisplayTitle}} · {{end}}ON Suite</title><div id="outline-heading" class="stack" hx-swap-oob="true">{{template "outline-heading" .}}</div>{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{template "due-badge" .}}{{end}}
+{{define "outline-swap"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span><div id="outline-heading" class="stack" hx-swap-oob="true">{{template "outline-heading" .}}</div>{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{template "due-badge" .}}{{end}}
 
 {{define "content"}}
 <div class="stack notes">

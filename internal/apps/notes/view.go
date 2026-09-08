@@ -1,6 +1,10 @@
 package notes
 
-import "html/template"
+import (
+	"html/template"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/render"
+)
 
 // outlineView is what the outline template renders.
 type outlineView struct {
@@ -43,6 +47,12 @@ type outlineView struct {
 	// whatever zoom the page is already on.
 	Query        string
 	SearchAction string
+	// Title and Shell are only populated by renderOutlineFragment, for the
+	// shell-crumb-tail OOB block outline-swap emits — a full page render's
+	// shell crumb comes from render.Page directly (via app.Deps.Page),
+	// which outlineView never touches. See handlers.go.
+	Title string
+	Shell render.Shell
 }
 
 // outlineRow is one bullet, and exactly the inputs of the one form that edits

@@ -455,10 +455,10 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 // it in.
 func assertOnlyKnownOOBIsOOB(t *testing.T, body string) {
 	t.Helper()
-	allowed := map[string]bool{"show-completed-toggle": true, "due-badge": true, "outline-heading": true}
+	allowed := map[string]bool{"show-completed-toggle": true, "due-badge": true, "outline-heading": true, "shell-crumb-tail": true}
 	for _, n := range htmlassert.Parse(t, body).QueryAll("[hx-swap-oob]") {
 		if id, _ := htmlassert.Attr(n, "id"); !allowed[id] {
-			t.Errorf("unexpected hx-swap-oob element (id=%q); only show-completed-toggle, due-badge, and outline-heading may be out of band", id)
+			t.Errorf("unexpected hx-swap-oob element (id=%q); only show-completed-toggle, due-badge, outline-heading, and shell-crumb-tail may be out of band", id)
 		}
 	}
 }
@@ -777,6 +777,79 @@ func TestZoomingOutViaHTMXShowsTheUnzoomedHeading(t *testing.T) {
 	}
 	if got := htmlassert.Text(htmlassert.Parse(t, body).MustHave("#outline-heading h1")); got != "Notes" {
 		t.Errorf("OOB heading h1 = %q, want Notes", got)
+	}
+}
+
+// TestZoomingViaHTMXUpdatesTheShellCrumb is issue #205's Notes half: the
+// shell's own top breadcrumb (outside #outline-heading entirely) must also
+// follow an htmx zoom, via the shared shell-crumb-tail OOB block.
+func TestZoomingViaHTMXUpdatesTheShellCrumb(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	req := httptest.NewRequest("GET", "/notes/"+itoa(id), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	tail := htmlassert.Parse(t, body).MustHave("#shell-crumb-tail")
+	if got, _ := htmlassert.Attr(tail, "hx-swap-oob"); got != "true" {
+		t.Errorf("shell-crumb-tail hx-swap-oob = %q, want true", got)
+	}
+	if !strings.Contains(htmlassert.Text(tail), "Projects") {
+		t.Error("shell-crumb-tail does not show the new zoom root's title")
+	}
+}
+
+// TestZoomingOutViaHTMXShowsPlainShellCrumb is the zoom-out counterpart:
+// the shell crumb tail must collapse back to just the app name, not keep
+// showing the note title from the level the user just left.
+func TestZoomingOutViaHTMXShowsPlainShellCrumb(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	req := httptest.NewRequest("GET", "/notes/", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	tail := htmlassert.Parse(t, body).MustHave("#shell-crumb-tail")
+	if got, _ := htmlassert.Attr(tail, "hx-swap-oob"); got != "true" {
+		t.Errorf("shell-crumb-tail hx-swap-oob = %q, want true", got)
+	}
+	tailText := htmlassert.Text(tail)
+	if strings.Contains(tailText, "Projects") {
+		t.Error("shell-crumb-tail still shows the previous zoom root's title")
+	}
+	if !strings.Contains(tailText, "ON Notes") {
+		t.Error("shell-crumb-tail does not show the app name at the top level")
+	}
+}
+
+// TestZoomedPageShowsShellCrumbTail pins the shell-crumb-tail extraction
+// (Task 1) as behavior-preserving for a real (non-htmx) zoomed page load in
+// this app specifically, not just the platform's own synthetic
+// render_test.go fixture.
+func TestZoomedPageShowsShellCrumbTail(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(id))
+	tail := doc.MustHave("#shell-crumb-tail")
+	if _, ok := htmlassert.Attr(tail, "hx-swap-oob"); ok {
+		t.Error("a full page load's shell-crumb-tail carries hx-swap-oob")
+	}
+	tailText := htmlassert.Text(tail)
+	for _, want := range []string{"ON Notes", "Projects"} {
+		if !strings.Contains(tailText, want) {
+			t.Errorf("shell-crumb-tail missing %q; got %q", want, tailText)
+		}
 	}
 }
 
