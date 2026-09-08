@@ -128,6 +128,27 @@ func TestNewFormOverHTMXReturnsOnlyTheFragment(t *testing.T) {
 	htmlassert.Parse(t, "<html><body>"+body+"</body></html>").MustHave("textarea[name=body]")
 }
 
+// TestIndexHistoryRestoreOverHTMXRendersTheFullPage guards against htmx's
+// history-cache-miss re-fetch: it carries HX-Request (like any HTMX
+// navigation) alongside HX-History-Restore-Request, and must get a full page
+// back — not the bare fragment a plain HX-Request would get — or htmx swaps
+// a fragment into <body> and visibly destroys the page.
+func TestIndexHistoryRestoreOverHTMXRendersTheFullPage(t *testing.T) {
+	s := newServer(t)
+	req := httptest.NewRequest("GET", "/paste/", nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-History-Restore-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "<!DOCTYPE") && !strings.Contains(body, "<html") {
+		t.Errorf("a history-restore request got a bare fragment, not a full page: %q", body)
+	}
+}
+
 // TestCreateOverHTMXUpdatesListAndDetailTogether: the new row must appear in
 // the list at the same time the detail pane shows the new snippet.
 func TestCreateOverHTMXUpdatesListAndDetailTogether(t *testing.T) {

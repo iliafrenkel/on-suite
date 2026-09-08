@@ -371,7 +371,7 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, 
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	if web.IsHTMX(r) {
+	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
 		view := indexView{
 			List:   listFragment{Items: items, ActiveID: detail.Snippet.ID, OOB: true},
 			Detail: detail,
