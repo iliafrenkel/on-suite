@@ -112,6 +112,30 @@ func TestNewFormRendersInsideTheSplitView(t *testing.T) {
 	}
 }
 
+// TestSnippetPageShowsShellCrumbTail pins the shell-crumb-tail extraction
+// as behavior-preserving for a real (non-htmx) snippet page load in this
+// app specifically, not just the platform's own synthetic render_test.go
+// fixture.
+func TestSnippetPageShowsShellCrumbTail(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/paste/"+itoa(id), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	tail := htmlassert.Parse(t, rec.Body.String()).MustHave("#shell-crumb-tail")
+	if _, ok := htmlassert.Attr(tail, "hx-swap-oob"); ok {
+		t.Error("a full page load's shell-crumb-tail carries hx-swap-oob")
+	}
+	tailText := htmlassert.Text(tail)
+	for _, want := range []string{"ON Paste", "My config"} {
+		if !strings.Contains(tailText, want) {
+			t.Errorf("shell-crumb-tail missing %q; got %q", want, tailText)
+		}
+	}
+}
+
 func TestNewFormOverHTMXReturnsOnlyTheFragment(t *testing.T) {
 	s := newServer(t)
 	req := httptest.NewRequest("GET", "/paste/new", nil)
@@ -350,6 +374,7 @@ func TestSelectingOverHTMXUpdatesTheShellCrumbAndTitle(t *testing.T) {
 	if !strings.Contains(htmlassert.Text(tail), "My config") {
 		t.Error("shell-crumb-tail does not show the selected snippet's title")
 	}
+	assertOnlyKnownOOBIsOOB(t, body)
 }
 
 // TestNewFormOverHTMXShowsPlaceholderTitle covers pageTitle's "new" branch
@@ -363,7 +388,14 @@ func TestNewFormOverHTMXShowsPlaceholderTitle(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	tail := htmlassert.Parse(t, rec.Body.String()).MustHave("#shell-crumb-tail")
+	body := rec.Body.String()
+	if !strings.Contains(body, "<title>New snippet · ON Suite</title>") {
+		t.Error("the fragment does not carry the placeholder document title")
+	}
+	tail := htmlassert.Parse(t, body).MustHave("#shell-crumb-tail")
+	if got, _ := htmlassert.Attr(tail, "hx-swap-oob"); got != "true" {
+		t.Errorf("shell-crumb-tail hx-swap-oob = %q, want true", got)
+	}
 	if !strings.Contains(htmlassert.Text(tail), "New snippet") {
 		t.Error("shell-crumb-tail does not show the new-snippet placeholder title")
 	}
@@ -1148,6 +1180,37 @@ func TestDeleteOverHTMXClearsDetailAndRemovesRow(t *testing.T) {
 	doc.MustHave(".paste-detail-empty")
 }
 
+// TestDeleteOverHTMXUpdatesTheShellCrumbAndTitle covers renderDetailWithList
+// specifically (create/save/share/unshare/delete all route through it,
+// separately from renderIndex's htmx branch) — deleting the currently-open
+// snippet must collapse the shell crumb and title back to the no-snippet
+// state, not leave the deleted snippet's name showing.
+func TestDeleteOverHTMXUpdatesTheShellCrumbAndTitle(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Doomed", "go", "package a\n")
+
+	rec := s.PostHX(t, s.Alice, "/paste/"+itoa(id)+"/delete", url.Values{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "<title>Snippets · ON Suite</title>") {
+		t.Error("the delete response does not carry the collapsed document title")
+	}
+	tail := htmlassert.Parse(t, body).MustHave("#shell-crumb-tail")
+	if got, _ := htmlassert.Attr(tail, "hx-swap-oob"); got != "true" {
+		t.Errorf("shell-crumb-tail hx-swap-oob = %q, want true", got)
+	}
+	tailText := htmlassert.Text(tail)
+	if strings.Contains(tailText, "Doomed") {
+		t.Error("shell-crumb-tail still shows the deleted snippet's title")
+	}
+	if !strings.Contains(tailText, "Snippets") {
+		t.Error("shell-crumb-tail does not show the collapsed 'Snippets' title")
+	}
+}
+
 // TestDeleteOverHTMXPushesTheListURL: the browser was at /paste/{id}, but
 // that snippet no longer exists after the delete, so without HX-Push-Url a
 // reload would 404 instead of landing back on the list.
@@ -1162,6 +1225,22 @@ func TestDeleteOverHTMXPushesTheListURL(t *testing.T) {
 	}
 	if push := rec.Header().Get("HX-Push-Url"); push != "/paste/" {
 		t.Errorf("HX-Push-Url = %q, want /paste/", push)
+	}
+}
+
+// assertOnlyKnownOOBIsOOB asserts that shell-crumb-tail, paste-detail-open,
+// and snippet-list are the only elements anywhere in body carrying
+// hx-swap-oob. All three legitimately get marked out of band from
+// detail-with-list — see renderIndex/renderDetailWithList — but nothing
+// else should ever be: an accidental hx-swap-oob elsewhere would make htmx
+// silently strip that chunk out of the response before swapping it in.
+func assertOnlyKnownOOBIsOOB(t *testing.T, body string) {
+	t.Helper()
+	allowed := map[string]bool{"shell-crumb-tail": true, "paste-detail-open": true, "snippet-list": true}
+	for _, n := range htmlassert.Parse(t, body).QueryAll("[hx-swap-oob]") {
+		if id, _ := htmlassert.Attr(n, "id"); !allowed[id] {
+			t.Errorf("unexpected hx-swap-oob element (id=%q); only shell-crumb-tail, paste-detail-open, and snippet-list may be out of band", id)
+		}
 	}
 }
 
