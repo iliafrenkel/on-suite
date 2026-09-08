@@ -14,12 +14,12 @@
      own clear (x) button, rather than waiting out the debounce.
 
      Action/Target vary per page and are passed via dict at each call site,
-     alongside the existing Query (every page prefills its current filter)
-     and Autofocus (no page currently sets this true). role="search" is
-     the landmark WCAG asks for alongside the input's own aria-label. */}}
+     alongside the existing Query (every page prefills its current filter).
+     role="search" is the landmark WCAG asks for alongside the input's own
+     aria-label. */}}
 {{define "notes-search-box"}}<form method="get" action="{{.Action}}" class="notes-search" role="search">
 	<input type="search" id="notes-search-input" name="q" value="{{.Query}}"
-	       placeholder="Search…" aria-label="Search notes"{{if .Autofocus}} autofocus{{end}}
+	       placeholder="Search…" aria-label="Search notes"
 	       hx-get="{{.Action}}" hx-target="{{.Target}}" hx-swap="innerHTML"
 	       hx-trigger="input changed delay:300ms, search" hx-replace-url="true">
 </form>{{end}}
