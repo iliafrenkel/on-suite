@@ -29,7 +29,7 @@
 
 {{/* outline-swap is the whole HTMX response for a structural op or a prefs
      toggle: #outline's new content, plus the toolbar toggle out of band. */}}
-{{define "outline-swap"}}<div id="outline-heading" hx-swap-oob="true">{{template "outline-heading" .}}</div>{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{template "due-badge" .}}{{end}}
+{{define "outline-swap"}}<title>{{if .Zoomed}}{{.Root.DisplayTitle}} · {{end}}ON Suite</title><div id="outline-heading" class="stack" hx-swap-oob="true">{{template "outline-heading" .}}</div>{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{template "due-badge" .}}{{end}}
 
 {{define "content"}}
 <div class="stack notes">
@@ -99,14 +99,18 @@
 			</details>
 		</div>
 	</div>
-	<div id="outline-heading">
+	<div id="outline-heading" class="stack">
 	{{template "outline-heading" .Data}}
 	</div>
 
 	{{/* #outline is N3's swap target. Its content is its own named block so
 	     a structural response can re-render just this, through
 	     Renderer.Fragment, without touching the breadcrumb or heading above
-	     it — neither ever changes as a side effect of a structural op. */}}
+	     it directly — #outline's own swap never rewrites #outline-heading's
+	     markup. The heading still changes on every fragment response, just
+	     via a separate OOB swap (outline-swap's own #outline-heading block
+	     above), so #outline's content here does not need to duplicate any
+	     heading logic. */}}
 	<div id="outline" class="outline">
 		{{template "outline-body" .Data}}
 	</div>

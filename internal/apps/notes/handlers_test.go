@@ -443,17 +443,17 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 	if oobOverlays(t, frag) {
 		t.Error("a structural fragment carries hx-swap-oob, so htmx would strip the overlays out of it")
 	}
-	assertOnlyToggleIsOOB(t, frag)
+	assertOnlyKnownOOBIsOOB(t, frag)
 }
 
-// assertOnlyToggleIsOOB asserts that the show-completed toggle, the
+// assertOnlyKnownOOBIsOOB asserts that the show-completed toggle, the
 // due-count badge, and the breadcrumb/heading are the only elements anywhere
 // in body carrying hx-swap-oob. All three legitimately get marked out of
 // band — see renderOutlineFragment — but nothing else should ever be: an
 // accidental hx-swap-oob on, say, .outline-list or an .outline-row would
 // make htmx silently strip that chunk out of the response before swapping
 // it in.
-func assertOnlyToggleIsOOB(t *testing.T, body string) {
+func assertOnlyKnownOOBIsOOB(t *testing.T, body string) {
 	t.Helper()
 	allowed := map[string]bool{"show-completed-toggle": true, "due-badge": true, "outline-heading": true}
 	for _, n := range htmlassert.Parse(t, body).QueryAll("[hx-swap-oob]") {
@@ -613,6 +613,27 @@ func TestZoomingIntoAnotherUsersNodeIs404(t *testing.T) {
 	}
 }
 
+// TestZoomingIntoAnotherUsersNodeOverHTMXIs404 is the htmx-fragment
+// counterpart to TestZoomingIntoAnotherUsersNodeIs404: renderOutlineFragment
+// (Task 1.5) does its own ownership check via a.store.ByID before rendering
+// the OOB heading, and that check must produce a real 404, not a silently
+// empty 200 fragment.
+func TestZoomingIntoAnotherUsersNodeOverHTMXIs404(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Bob, notes.RootID, "bob's secret")
+
+	req := httptest.NewRequest("GET", "/notes/"+itoa(id), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "bob's secret") {
+		t.Error("another user's bullet leaked through the htmx zoom route")
+	}
+}
+
 func TestZoomingIntoNonsenseIs404(t *testing.T) {
 	s := newServer(t)
 	for _, path := range []string{"/notes/0", "/notes/-1", "/notes/abc", "/notes/999999"} {
@@ -722,13 +743,15 @@ func TestZoomingViaHTMXUpdatesTheBreadcrumb(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `id="outline-heading" hx-swap-oob="true"`) {
-		t.Error("htmx zoom response is missing the OOB heading swap")
+	heading := htmlassert.Parse(t, body).MustHave("#outline-heading")
+	if got, _ := htmlassert.Attr(heading, "hx-swap-oob"); got != "true" {
+		t.Errorf("outline-heading hx-swap-oob = %q, want true", got)
 	}
-	if !strings.Contains(body, "Sub-project") {
+	headingText := htmlassert.Text(heading)
+	if !strings.Contains(headingText, "Sub-project") {
 		t.Error("OOB heading does not show the new zoom root's title")
 	}
-	if !strings.Contains(body, "Projects") {
+	if !strings.Contains(headingText, "Projects") {
 		t.Error("OOB heading does not show the new zoom root's ancestor crumb")
 	}
 }
@@ -738,7 +761,7 @@ func TestZoomingViaHTMXUpdatesTheBreadcrumb(t *testing.T) {
 // the plain "Notes" title, not leave the previous zoom's heading in place.
 func TestZoomingOutViaHTMXShowsTheUnzoomedHeading(t *testing.T) {
 	s := newServer(t)
-	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+	s.seed(t, s.Alice, notes.RootID, "Projects")
 
 	req := httptest.NewRequest("GET", "/notes/", nil)
 	req.Header.Set("HX-Request", "true")
@@ -748,13 +771,13 @@ func TestZoomingOutViaHTMXShowsTheUnzoomedHeading(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `id="outline-heading" hx-swap-oob="true"`) {
-		t.Error("htmx zoom-out response is missing the OOB heading swap")
+	heading := htmlassert.Parse(t, body).MustHave("#outline-heading")
+	if got, _ := htmlassert.Attr(heading, "hx-swap-oob"); got != "true" {
+		t.Errorf("outline-heading hx-swap-oob = %q, want true", got)
 	}
-	if !strings.Contains(body, "<h1>Notes</h1>") {
-		t.Error("OOB heading does not show the unzoomed title")
+	if got := htmlassert.Text(htmlassert.Parse(t, body).MustHave("#outline-heading h1")); got != "Notes" {
+		t.Errorf("OOB heading h1 = %q, want Notes", got)
 	}
-	_ = id
 }
 
 // TestMutationFragmentAlsoCarriesTheHeadingUnchanged is the counterpart to
@@ -774,11 +797,55 @@ func TestMutationFragmentAlsoCarriesTheHeadingUnchanged(t *testing.T) {
 	rec := s.Do(t, s.Alice, req)
 
 	body := rec.Body.String()
-	if !strings.Contains(body, `id="outline-heading" hx-swap-oob="true"`) {
-		t.Error("structural-op fragment is missing the OOB heading swap")
+	heading := htmlassert.Parse(t, body).MustHave("#outline-heading")
+	if got, _ := htmlassert.Attr(heading, "hx-swap-oob"); got != "true" {
+		t.Errorf("outline-heading hx-swap-oob = %q, want true", got)
 	}
-	if !strings.Contains(body, "Projects") {
+	if !strings.Contains(htmlassert.Text(heading), "Projects") {
 		t.Error("OOB heading does not describe the root the request came in on")
+	}
+}
+
+// TestZoomingViaHTMXUpdatesTheDocumentTitle covers the other gap an htmx
+// zoom must close beyond the breadcrumb (TestZoomingViaHTMXUpdatesTheBreadcrumb
+// above): htmx updates document.title from a bare <title> element found
+// anywhere in a swap response, so outline-swap must carry one matching the
+// exact format the full page uses (base.html's {{with .Title}}{{.}} ·
+// {{end}}ON Suite), or the browser tab keeps showing the pre-zoom title.
+func TestZoomingViaHTMXUpdatesTheDocumentTitle(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	req := httptest.NewRequest("GET", "/notes/"+itoa(id), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "<title>Projects · ON Suite</title>") {
+		t.Errorf("htmx zoom response is missing the updated <title>, got:\n%s", body)
+	}
+}
+
+// TestZoomingOutViaHTMXRestoresTheDocumentTitle is the zoom-out counterpart:
+// the response must carry the plain, un-suffixed title, matching what
+// renderOutline sets when unzoomed ("").
+func TestZoomingOutViaHTMXRestoresTheDocumentTitle(t *testing.T) {
+	s := newServer(t)
+	s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	req := httptest.NewRequest("GET", "/notes/", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "<title>ON Suite</title>") {
+		t.Errorf("htmx zoom-out response is missing the restored <title>, got:\n%s", body)
 	}
 }
 
