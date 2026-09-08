@@ -458,7 +458,7 @@ func assertOnlyToggleIsOOB(t *testing.T, body string) {
 	allowed := map[string]bool{"show-completed-toggle": true, "due-badge": true, "outline-heading": true}
 	for _, n := range htmlassert.Parse(t, body).QueryAll("[hx-swap-oob]") {
 		if id, _ := htmlassert.Attr(n, "id"); !allowed[id] {
-			t.Errorf("unexpected hx-swap-oob element (id=%q); only show-completed-toggle and due-badge may be out of band", id)
+			t.Errorf("unexpected hx-swap-oob element (id=%q); only show-completed-toggle, due-badge, and outline-heading may be out of band", id)
 		}
 	}
 }
