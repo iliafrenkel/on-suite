@@ -558,9 +558,11 @@
 
 	function showPasteError(status) {
 		var outline = document.getElementById("outline");
-		OnSuite.notices.show(outline, "notes-paste-error", status >= 500
-			? "Something went wrong pasting that. Try again."
-			: "Couldn't paste that: it doesn't look like valid outline text, or it's too large.");
+		OnSuite.notices.show(outline, "notes-paste-error", status === undefined
+			? "You're offline: that couldn't be saved. Try again once you're back online."
+			: status >= 500
+				? "Something went wrong pasting that. Try again."
+				: "Couldn't paste that: it doesn't look like valid outline text, or it's too large.");
 	}
 
 	function clearPasteError() {
@@ -572,6 +574,14 @@
 		document.body.addEventListener("htmx:responseError", function (evt) {
 			if (pasteRequestPath(evt).indexOf("/paste") === -1) return;
 			showPasteError(evt.detail && evt.detail.xhr && evt.detail.xhr.status);
+		});
+		// A network-level failure (offline, server unreachable) never
+		// reaches htmx:responseError at all — there is no xhr response to
+		// have a status. showPasteError(undefined) is the offline-specific
+		// message branch added below.
+		document.body.addEventListener("htmx:sendError", function (evt) {
+			if (pasteRequestPath(evt).indexOf("/paste") === -1) return;
+			showPasteError(undefined);
 		});
 		// Any later successful swap of #outline — a retried paste, or any
 		// other structural action — clears a stale error rather than
@@ -814,9 +824,11 @@
 	// no explanation — the same gap initPasteErrors closes for /paste.
 	function showMoveError(status) {
 		var outline = document.getElementById("outline");
-		OnSuite.notices.show(outline, "notes-move-error", status >= 500
-			? "Something went wrong moving that. Try again."
-			: "Couldn't move that there: it would create a cycle or nest too deep.");
+		OnSuite.notices.show(outline, "notes-move-error", status === undefined
+			? "You're offline: that couldn't be saved. Try again once you're back online."
+			: status >= 500
+				? "Something went wrong moving that. Try again."
+				: "Couldn't move that there: it would create a cycle or nest too deep.");
 	}
 
 	function clearMoveError() {
@@ -828,6 +840,13 @@
 		document.body.addEventListener("htmx:responseError", function (evt) {
 			if (requestPath(evt).indexOf("/move") === -1) return;
 			showMoveError(evt.detail && evt.detail.xhr && evt.detail.xhr.status);
+		});
+		// See initPasteErrors' identical htmx:sendError handler: a
+		// network-level failure never reaches htmx:responseError, so the
+		// offline case needs its own listener.
+		document.body.addEventListener("htmx:sendError", function (evt) {
+			if (requestPath(evt).indexOf("/move") === -1) return;
+			showMoveError(undefined);
 		});
 		// See initPasteErrors' identical afterSwap handler: any later
 		// successful #outline swap clears a stale error, and a failed
