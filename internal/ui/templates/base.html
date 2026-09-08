@@ -18,6 +18,14 @@
 </body>
 </html>{{end}}
 
+{{define "shell-crumb-tail"}}
+{{if .Shell.ActiveAppName}}
+<span aria-hidden="true">/</span>
+{{if and .Title .Shell.LoggedIn}}<a href="{{.Shell.ActiveAppPath}}" title="{{.Shell.ActiveAppName}}">{{.Shell.ActiveAppName}}</a>{{else}}<span title="{{.Shell.ActiveAppName}}">{{.Shell.ActiveAppName}}</span>{{end}}
+{{end}}
+{{if .Title}}<span aria-hidden="true">/</span><span title="{{.Title}}">{{.Title}}</span>{{end}}
+{{end}}
+
 {{define "shell"}}
 <header class="shell-bar">
 	<a class="shell-logo" href="/" aria-label="ON Suite home">
@@ -31,11 +39,7 @@
 	</a>
 	<nav class="shell-crumbs" aria-label="Breadcrumb">
 		<a href="/">Home</a>
-		{{if .Shell.ActiveAppName}}
-		<span aria-hidden="true">/</span>
-		{{if and .Title .Shell.LoggedIn}}<a href="{{.Shell.ActiveAppPath}}" title="{{.Shell.ActiveAppName}}">{{.Shell.ActiveAppName}}</a>{{else}}<span title="{{.Shell.ActiveAppName}}">{{.Shell.ActiveAppName}}</span>{{end}}
-		{{end}}
-		{{if .Title}}<span aria-hidden="true">/</span><span title="{{.Title}}">{{.Title}}</span>{{end}}
+		<span id="shell-crumb-tail">{{template "shell-crumb-tail" .}}</span>
 	</nav>
 	{{if .Shell.LoggedIn}}
 	<div class="shell-user">

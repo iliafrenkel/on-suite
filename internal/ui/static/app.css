@@ -229,6 +229,15 @@ kbd {
 .shell-crumbs a:hover { color: var(--c-accent); }
 .shell-crumbs > span:last-child { color: var(--c-text); font-weight: 500; }
 
+/* Invisible to layout, so its children (the app-name and title segments)
+ * stay direct flex items of .shell-crumbs and keep its gap between them —
+ * issue #205. Without this, wrapping them in a span for OOB-swap targeting
+ * would collapse that gap, the same class of regression #outline-heading
+ * hit without its own .stack class (see the zoom-transition PR). */
+#shell-crumb-tail {
+	display: contents;
+}
+
 .shell-user {
 	display: flex;
 	align-items: center;
