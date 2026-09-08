@@ -4,7 +4,7 @@
 		{{/* Issue #89: a 4th copy of the same markup — not in scope when
 		     that issue was filed (archiving hadn't shipped yet), but the
 		     exact drift risk it's about, so folded in here too. */}}
-		{{template "notes-search-box" (dict "Query" .Data.Query "Autofocus" false "Action" .Data.SearchAction "Target" "#archive-list")}}
+		{{template "notes-search-box" (dict "Query" .Data.Query "Action" .Data.SearchAction "Target" "#archive-list")}}
 		<div class="notes-toolbar-actions">
 			<a href="/notes/due" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Due</a>
 			<a href="/notes/" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>All notes</a>

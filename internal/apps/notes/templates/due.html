@@ -4,7 +4,7 @@
 	     spec §11 — so, unlike the outline, this toolbar needs no
 	     show-completed toggle and no .notes-toolbar-actions cluster. */}}
 	<div class="notes-toolbar">
-		{{template "notes-search-box" (dict "Query" .Data.Query "Autofocus" false "Action" .Data.SearchAction "Target" "#due-list")}}
+		{{template "notes-search-box" (dict "Query" .Data.Query "Action" .Data.SearchAction "Target" "#due-list")}}
 		<div class="notes-toolbar-actions">
 			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8H3l2-4h14z"/><path d="M5 8v11h14V8"/><path d="M10 12h4"/></svg>Archive</a>
 			<a href="/notes/" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>All notes</a>

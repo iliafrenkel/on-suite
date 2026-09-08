@@ -34,7 +34,7 @@
 {{define "content"}}
 <div class="stack notes">
 	<div class="notes-toolbar">
-		{{template "notes-search-box" (dict "Query" .Data.Query "Autofocus" false "Action" .Data.SearchAction "Target" "#outline")}}
+		{{template "notes-search-box" (dict "Query" .Data.Query "Action" .Data.SearchAction "Target" "#outline")}}
 		{{/* Grouped together so .notes-toolbar's own justify-content puts the
 		     search box alone on the left and this cluster together on the
 		     right, rather than spreading three items evenly. The prefs form
