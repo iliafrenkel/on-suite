@@ -325,6 +325,50 @@ func TestSelectingOverHTMXReturnsOnlyTheFragment(t *testing.T) {
 	}
 }
 
+// TestSelectingOverHTMXUpdatesTheShellCrumbAndTitle is issue #205's Paste
+// half: selecting a different snippet over HTMX must refresh the shell's
+// top breadcrumb and the document title, not just the detail pane.
+func TestSelectingOverHTMXUpdatesTheShellCrumbAndTitle(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+
+	req := httptest.NewRequest("GET", "/paste/"+itoa(id), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "<title>My config · ON Suite</title>") {
+		t.Error("the fragment does not carry the new document title")
+	}
+	tail := htmlassert.Parse(t, body).MustHave("#shell-crumb-tail")
+	if got, _ := htmlassert.Attr(tail, "hx-swap-oob"); got != "true" {
+		t.Errorf("shell-crumb-tail hx-swap-oob = %q, want true", got)
+	}
+	if !strings.Contains(htmlassert.Text(tail), "My config") {
+		t.Error("shell-crumb-tail does not show the selected snippet's title")
+	}
+}
+
+// TestNewFormOverHTMXShowsPlaceholderTitle covers pageTitle's "new" branch
+// reaching the shell crumb the same way the view/edit branches do.
+func TestNewFormOverHTMXShowsPlaceholderTitle(t *testing.T) {
+	s := newServer(t)
+	req := httptest.NewRequest("GET", "/paste/new", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	tail := htmlassert.Parse(t, rec.Body.String()).MustHave("#shell-crumb-tail")
+	if !strings.Contains(htmlassert.Text(tail), "New snippet") {
+		t.Error("shell-crumb-tail does not show the new-snippet placeholder title")
+	}
+}
+
 // TestSelectingOverHTMXRefreshesTheListsActiveRow: selecting a second snippet
 // over HTMX must ride the list along out of band, so the active row moves off
 // the first snippet and onto the second one — otherwise the list still shows
