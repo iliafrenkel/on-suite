@@ -213,6 +213,13 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 		}
 	}
 
+	title := ""
+	if view.Zoomed {
+		title = view.Root.DisplayTitle()
+	}
+	page := a.deps.Page(r, title)
+	view.Title, view.Shell = page.Title, page.Shell
+
 	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, query != "")
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)

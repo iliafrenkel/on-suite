@@ -18,6 +18,30 @@
 </body>
 </html>{{end}}
 
+{{/* shell-crumb-tail renders the app-name and title segments of the shell
+     breadcrumb. It expects a value shaped like {Title string; Shell
+     render.Shell} — either the whole render.Page on a full-page render, or a
+     `dict "Title" ... "Shell" ...`-built value from a fragment response (see
+     "detail-with-list" in paste's templates and "outline-swap" in notes').
+
+     Its caller always wraps it in a <span id="shell-crumb-tail">. That id is
+     load-bearing twice over: it's the OOB-swap target every fragment
+     response uses to refresh the crumb in place, AND it's what app.css's
+     `#shell-crumb-tail > span:...` rules key off of to truncate/style this
+     template's own <span> children — because the wrapper is `display:
+     contents` (invisible to layout, so the children stay direct flex items
+     of .shell-crumbs and keep its gap), a `.shell-crumbs > span:...`
+     selector would match the wrapper itself instead of these children, which
+     is exactly the regression fixed once already (see app.css). Don't rename
+     this id without updating both the callers and app.css together. */}}
+{{define "shell-crumb-tail"}}
+{{if .Shell.ActiveAppName}}
+<span aria-hidden="true">/</span>
+{{if and .Title .Shell.LoggedIn}}<a href="{{.Shell.ActiveAppPath}}" title="{{.Shell.ActiveAppName}}">{{.Shell.ActiveAppName}}</a>{{else}}<span title="{{.Shell.ActiveAppName}}">{{.Shell.ActiveAppName}}</span>{{end}}
+{{end}}
+{{if .Title}}<span aria-hidden="true">/</span><span title="{{.Title}}">{{.Title}}</span>{{end}}
+{{end}}
+
 {{define "shell"}}
 <header class="shell-bar">
 	<a class="shell-logo" href="/" aria-label="ON Suite home">
@@ -31,11 +55,7 @@
 	</a>
 	<nav class="shell-crumbs" aria-label="Breadcrumb">
 		<a href="/">Home</a>
-		{{if .Shell.ActiveAppName}}
-		<span aria-hidden="true">/</span>
-		{{if and .Title .Shell.LoggedIn}}<a href="{{.Shell.ActiveAppPath}}" title="{{.Shell.ActiveAppName}}">{{.Shell.ActiveAppName}}</a>{{else}}<span title="{{.Shell.ActiveAppName}}">{{.Shell.ActiveAppName}}</span>{{end}}
-		{{end}}
-		{{if .Title}}<span aria-hidden="true">/</span><span title="{{.Title}}">{{.Title}}</span>{{end}}
+		<span id="shell-crumb-tail">{{template "shell-crumb-tail" .}}</span>
 	</nav>
 	{{if .Shell.LoggedIn}}
 	<div class="shell-user">

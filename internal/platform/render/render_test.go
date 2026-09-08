@@ -393,6 +393,16 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 		}
 	}
 
+	// The app-name and title segments live in their own stable-id span, so
+	// a fragment response can later OOB-swap just that (issue #205).
+	tail := doc.MustHave("#shell-crumb-tail")
+	tailText := htmlassert.Text(tail)
+	for _, want := range []string{"ON Paste", "New snippet"} {
+		if !strings.Contains(tailText, want) {
+			t.Errorf("shell-crumb-tail text missing %q; got %q", want, tailText)
+		}
+	}
+
 	// The sidebar shows the real app as a link and the coming-soon one as
 	// something else, not a link.
 	links := doc.QueryAll("nav.shell-nav a")

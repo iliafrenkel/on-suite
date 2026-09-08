@@ -197,6 +197,12 @@ type listFragment struct {
 type indexView struct {
 	List   listFragment
 	Detail detailView
+	// Title and Shell are only populated by the two HTMX fragment paths
+	// below, for the shell-crumb-tail OOB block detail-with-list emits — a
+	// full page render's shell crumb comes from render.Page directly (via
+	// app.Deps.Page), which indexView never touches.
+	Title string
+	Shell render.Shell
 }
 
 // viewDetail builds the detail pane's view-mode data for one snippet.
@@ -376,6 +382,8 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, 
 			List:   listFragment{Items: items, ActiveID: detail.Snippet.ID, OOB: true},
 			Detail: detail,
 		}
+		page := a.deps.Page(r, pageTitle(detail))
+		view.Title, view.Shell = page.Title, page.Shell
 		// htmx's default responseHandling config only swaps 2xx/3xx
 		// responses into the DOM; a 4xx (e.g. a validation failure) is
 		// otherwise silently discarded, and the freshly re-rendered form
@@ -414,6 +422,8 @@ func (a *App) renderDetailWithList(w http.ResponseWriter, r *http.Request, userI
 		List:   listFragment{Items: items, ActiveID: detail.Snippet.ID, OOB: true},
 		Detail: detail,
 	}
+	page := a.deps.Page(r, pageTitle(detail))
+	view.Title, view.Shell = page.Title, page.Shell
 	if err := a.deps.Render.Fragment(w, status, "paste/index", "detail-with-list", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}

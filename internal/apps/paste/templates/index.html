@@ -21,7 +21,7 @@
      toggle. The mobile pane-toggle checkbox (see "content" below) rides
      along out of band too, so a narrow viewport actually flips to showing
      the detail pane (or back to the list) after one of these actions. */}}
-{{define "detail-with-list"}}{{template "detail-body" .Detail}}{{template "list-items" .List}}<input type="checkbox" id="paste-detail-open" class="visually-hidden" hx-swap-oob="true"{{if .Detail.Mode}} checked{{end}} aria-hidden="true" tabindex="-1">{{end}}
+{{define "detail-with-list"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "detail-body" .Detail}}{{template "list-items" .List}}<input type="checkbox" id="paste-detail-open" class="visually-hidden" hx-swap-oob="true"{{if .Detail.Mode}} checked{{end}} aria-hidden="true" tabindex="-1">{{end}}
 
 {{define "detail-empty"}}
 <p class="dim paste-detail-empty">Select a snippet to view it.</p>
