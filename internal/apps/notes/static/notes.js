@@ -243,9 +243,14 @@
 		var crumbs = document.querySelectorAll(".outline-crumbs a");
 		if (crumbs.length === 0) return;
 		// crumbs[...].click(), not location.href = crumbs[...].href — reuses
-		// an existing control the way the rest of this module does,
-		// behaviorally identical here since the breadcrumb anchor carries
-		// no hx-*.
+		// an existing control the way the rest of this module does. The
+		// breadcrumb anchor now carries hx-get/hx-target/hx-swap/hx-push-url
+		// (the cross-fade transition feature), so .click() fires htmx's own
+		// listener rather than a plain navigation — an improvement, not just
+		// a no-op: Esc-to-zoom-out now gets the same view-transition
+		// cross-fade a direct click on the anchor gets, which is exactly why
+		// .click() remains the right choice here, arguably more so now than
+		// before.
 		crumbs[crumbs.length - 1].click();
 	}
 

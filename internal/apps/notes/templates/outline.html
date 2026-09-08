@@ -29,7 +29,7 @@
 
 {{/* outline-swap is the whole HTMX response for a structural op or a prefs
      toggle: #outline's new content, plus the toolbar toggle out of band. */}}
-{{define "outline-swap"}}{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{template "due-badge" .}}{{end}}
+{{define "outline-swap"}}<title>{{if .Zoomed}}{{.Root.DisplayTitle}} · {{end}}ON Suite</title><div id="outline-heading" class="stack" hx-swap-oob="true">{{template "outline-heading" .}}</div>{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{template "due-badge" .}}{{end}}
 
 {{define "content"}}
 <div class="stack notes">
@@ -99,44 +99,57 @@
 			</details>
 		</div>
 	</div>
-	{{if .Data.Zoomed}}
-	<nav class="outline-crumbs" aria-label="Outline breadcrumb">
-		<a href="/notes/">All notes</a>
-		{{range .Data.Crumbs}}
-		<span aria-hidden="true">/</span>
-		{{/* Stays on DisplayTitle, not DisplayTitleHTML: this IS a link, so a
-		     title containing its own link/autolink/#tag would nest anchors —
-		     issue #65's own text on the tension. */}}
-		<a href="/notes/{{.ID}}" title="{{.DisplayTitle}}">{{.DisplayTitle}}</a>
-		{{end}}
-		<span aria-hidden="true">/</span>
-		{{/* Not a link — see DisplayTitleHTML's own doc comment (issue #65) —
-		     so rendering the title's Markdown here can't nest an <a>. */}}
-		<span class="outline-crumb-current" title="{{.Data.Root.DisplayTitle}}">{{.Data.Root.DisplayTitleHTML}}</span>
-	</nav>
-	{{if .Data.Root.Archived}}
-	<p class="notes-archived-banner">This bullet is archived. Its still-visible children can be edited here, but consider <a href="/notes/archive">restoring it</a> first.</p>
-	{{end}}
-	{{if .Data.Root.Shared}}
-	<div class="notice row">
-		<span>Anyone with this link can read this bullet and its subtree: <a href="{{.Data.ShareURL}}">{{.Data.ShareURL}}</a></span>
-		<button type="button" class="button" data-copy-link="{{.Data.ShareURL}}">Copy link</button>
+	<div id="outline-heading" class="stack">
+	{{template "outline-heading" .Data}}
 	</div>
-	{{end}}
-	<h1>{{.Data.Root.DisplayTitleHTML}}</h1>
-	{{with .Data.Root.Note}}<p class="dim">{{.}}</p>{{end}}
-	{{else}}
-	<h1>Notes</h1>
-	{{end}}
 
 	{{/* #outline is N3's swap target. Its content is its own named block so
 	     a structural response can re-render just this, through
 	     Renderer.Fragment, without touching the breadcrumb or heading above
-	     it — neither ever changes as a side effect of a structural op. */}}
+	     it directly — #outline's own swap never rewrites #outline-heading's
+	     markup. The heading still changes on every fragment response, just
+	     via a separate OOB swap (outline-swap's own #outline-heading block
+	     above), so #outline's content here does not need to duplicate any
+	     heading logic. */}}
 	<div id="outline" class="outline">
 		{{template "outline-body" .Data}}
 	</div>
 </div>
+{{end}}
+
+{{define "outline-heading"}}
+{{if .Zoomed}}
+<nav class="outline-crumbs" aria-label="Outline breadcrumb">
+	<a href="/notes/" hx-get="/notes/" hx-target="#outline"
+	   hx-swap="innerHTML transition:true" hx-push-url="true">All notes</a>
+	{{range .Crumbs}}
+	<span aria-hidden="true">/</span>
+	{{/* Stays on DisplayTitle, not DisplayTitleHTML: this IS a link, so a
+	     title containing its own link/autolink/#tag would nest anchors —
+	     issue #65's own text on the tension. */}}
+	<a href="/notes/{{.ID}}" title="{{.DisplayTitle}}"
+	   hx-get="/notes/{{.ID}}" hx-target="#outline"
+	   hx-swap="innerHTML transition:true" hx-push-url="true">{{.DisplayTitle}}</a>
+	{{end}}
+	<span aria-hidden="true">/</span>
+	{{/* Not a link — see DisplayTitleHTML's own doc comment (issue #65) —
+	     so rendering the title's Markdown here can't nest an <a>. */}}
+	<span class="outline-crumb-current" title="{{.Root.DisplayTitle}}">{{.Root.DisplayTitleHTML}}</span>
+</nav>
+{{if .Root.Archived}}
+<p class="notes-archived-banner">This bullet is archived. Its still-visible children can be edited here, but consider <a href="/notes/archive">restoring it</a> first.</p>
+{{end}}
+{{if .Root.Shared}}
+<div class="notice row">
+	<span>Anyone with this link can read this bullet and its subtree: <a href="{{.ShareURL}}">{{.ShareURL}}</a></span>
+	<button type="button" class="button" data-copy-link="{{.ShareURL}}">Copy link</button>
+</div>
+{{end}}
+<h1>{{.Root.DisplayTitleHTML}}</h1>
+{{with .Root.Note}}<p class="dim">{{.}}</p>{{end}}
+{{else}}
+<h1>Notes</h1>
+{{end}}
 {{end}}
 
 {{define "outline-body"}}
@@ -327,6 +340,8 @@
 
 				<a class="outline-dot{{if .Collapsed}} outline-dot-full{{end}}"
 				   href="/notes/{{.ID}}"
+				   hx-get="/notes/{{.ID}}" hx-target="#outline"
+				   hx-swap="innerHTML transition:true" hx-push-url="true"
 				   draggable="false"
 				   aria-label="Zoom in to {{.DisplayTitle}}"><svg class="icon-dot" width="16" height="16" viewBox="0 0 16 16">{{if .Collapsed}}<circle class="icon-dot-halo" cx="8" cy="8" r="8"/><circle cx="8" cy="8" r="4" fill="currentColor"/>{{else}}<circle cx="8" cy="8" r="4" fill="currentColor"/>{{end}}</svg></a>
 

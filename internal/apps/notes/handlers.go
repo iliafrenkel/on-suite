@@ -170,22 +170,48 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 }
 
 // renderOutlineFragment re-renders #outline's own content for an HTMX swap.
-// It shares renderOutline's query but not its shell: a structural response
-// never changes which node the page is zoomed to, so the breadcrumb and
-// heading stay exactly as the browser already has them, and there is no
-// need to look the root node up — Root.ID is all outline-body reads, and
-// the caller already has it as a plain int64.
+// It shares renderOutline's query but not its shell — outline-body only ever
+// reads Root.ID, which the caller already has as a plain int64. A structural
+// mutation never changes which node the page is zoomed to, but the zoom
+// links (Task 1) reach this same path when they do change it, so the root
+// (and its ancestors, for the breadcrumb) is still looked up whenever
+// rootID != RootID, exactly as renderOutline does.
 //
 // A structural mutation, or a "show completed" toggle, reaches this too
 // (mutateThen, prefs.go), always without a ?q= on its own request URL — so
 // performing one while a filter is active resets it, deliberately: see this
 // plan's own note on that scope boundary.
 //
-// The response also carries the toolbar's show-completed toggle out of band:
-// that button lives outside #outline, so the swap cannot reach it, and after
-// a prefs toggle its label and value would otherwise stay stale.
+// The response also carries the toolbar's show-completed toggle and the
+// breadcrumb/heading out of band: both live outside #outline, so the swap
+// cannot reach them, and would otherwise show a stale toggle state or the
+// previous zoom's heading.
 func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64, showCompleted bool) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
+
+	view := outlineView{
+		CSRFToken:     web.CSRFToken(r.Context()),
+		Root:          Node{ID: rootID},
+		ShowCompleted: showCompleted,
+		Query:         query,
+		OOB:           true,
+	}
+	if rootID != RootID {
+		root, err := a.store.ByID(r.Context(), userID, rootID)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		crumbs, err := a.store.Ancestors(r.Context(), userID, rootID)
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
+		view.Root, view.Zoomed, view.Crumbs = root, true, crumbs
+		if root.Shared() {
+			view.ShareURL = "/notes/s/" + root.ShareSlug
+		}
+	}
 
 	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, query != "")
 	if err != nil {
@@ -198,15 +224,7 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 		return
 	}
 	visible := hideDone(flat, showCompleted)
-
-	view := outlineView{
-		CSRFToken:     web.CSRFToken(r.Context()),
-		Root:          Node{ID: rootID},
-		ShowCompleted: showCompleted,
-		Query:         query,
-		DueCount:      DueBadgeCount(dueRows, time.Now()),
-		OOB:           true,
-	}
+	view.DueCount = DueBadgeCount(dueRows, time.Now())
 
 	var matched map[int64]bool
 	if query != "" {
