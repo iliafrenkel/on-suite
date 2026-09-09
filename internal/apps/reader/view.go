@@ -66,16 +66,6 @@ type articleView struct {
 	Body template.HTML
 }
 
-// articleFragment is the whole HTMX response for GET /item/{id}: the article
-// pane plus the shell-crumb-tail OOB block "article-oob" emits, the same
-// reason indexView carries Title/Shell for "panes-oob" — see that field's
-// doc comment.
-type articleFragment struct {
-	Article articleView
-	Title   string
-	Shell   render.Shell
-}
-
 func viewTree(t Tree, activeID int64) treeView {
 	empty := len(t.Root) == 0
 	for _, f := range t.Folders {

@@ -157,14 +157,7 @@ func (a *App) article(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	view := viewArticle(item)
-	page := a.deps.Page(r, view.Title)
-	// "article-oob" (not "article") is the block rendered here: it wraps the
-	// article pane with the <title> and hx-swap-oob shell-crumb-tail span, the
-	// same reason renderIndex renders "panes-oob" rather than "panes" — see
-	// its doc comment and issue #205 / commit c96a03f.
-	frag := articleFragment{Article: view, Title: page.Title, Shell: page.Shell}
-	if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article-oob", frag); err != nil {
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article", viewArticle(item)); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
 }

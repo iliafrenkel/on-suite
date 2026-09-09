@@ -28,9 +28,27 @@ func TestEveryReaderRouteIsBehindAuth(t *testing.T) {
 	s := newServer(t)
 	anon := s.Anonymous(t)
 
-	rec := s.Do(t, anon, httptest.NewRequest(http.MethodGet, "/reader/", nil))
-	if rec.Code == http.StatusOK {
-		t.Fatalf("anonymous GET /reader/ returned 200; the router is default-deny")
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/reader/"},
+		{http.MethodGet, "/reader/feed/1"},
+		{http.MethodGet, "/reader/item/1"},
+		{http.MethodPost, "/reader/subscribe"},
+		{http.MethodPost, "/reader/sub/1/delete"},
+		{http.MethodPost, "/reader/folder"},
+		{http.MethodPost, "/reader/folder/1/delete"},
+		{http.MethodPost, "/reader/refresh"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			rec := s.Do(t, anon, httptest.NewRequest(tt.method, tt.path, nil))
+			if rec.Code == http.StatusOK {
+				t.Fatalf("anonymous %s %s returned 200; the router is default-deny", tt.method, tt.path)
+			}
+		})
 	}
 }
 
@@ -65,7 +83,7 @@ func TestSubscribeRejectsANonHTTPURL(t *testing.T) {
 	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
 		"url": {"file:///etc/passwd"},
 	})
-	if !strings.Contains(strings.ToLower(rec.Body.String()), "http") {
+	if !strings.Contains(rec.Body.String(), "not a feed address") {
 		t.Errorf("no validation message shown for a file:// URL:\n%s", rec.Body.String())
 	}
 

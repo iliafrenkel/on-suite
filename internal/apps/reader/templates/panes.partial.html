@@ -72,12 +72,6 @@
 </section>
 {{end}}
 
-{{/* article-oob is the whole HTMX response for GET /item/{id}: the article
-     pane plus the same shell-crumb-tail OOB block panes-oob uses, so opening
-     an article also keeps the tab title and breadcrumb in sync — see
-     panes-oob's own comment above for why this matters. */}}
-{{define "article-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "article" .Article}}{{end}}
-
 {{define "article"}}
 <article class="reader-article" id="reader-article">
   {{if .Selected}}
