@@ -625,3 +625,85 @@ func (s *Store) SaveFetchResult(ctx context.Context, r FetchResult) error {
 	}
 	return nil
 }
+
+// canSeeItem reports whether a user subscribes to the feed an item belongs to.
+//
+// Item ids are global, so every state change needs this: without it any
+// signed-in user could mark any item in the database read or starred, and the
+// row they wrote would be a durable record that they probed for it.
+func (s *Store) canSeeItem(ctx context.Context, userID, itemID int64) error {
+	var ok int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT 1
+		  FROM reader_items i
+		 WHERE i.id = ?
+		   AND EXISTS (SELECT 1 FROM reader_subs sub
+		                WHERE sub.feed_id = i.feed_id AND sub.user_id = ?)`,
+		itemID, userID).Scan(&ok)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("reader: check item visibility: %w", err)
+	}
+	return nil
+}
+
+// SetRead marks an item read or unread.
+//
+// The upsert writes only read_at, leaving starred_at alone: the two axes share
+// a row, and a whole-row replace here would silently drop a star every time
+// something was marked read.
+func (s *Store) SetRead(ctx context.Context, userID, itemID int64, read bool, now time.Time) error {
+	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
+		return err
+	}
+	var readAt any
+	if read {
+		readAt = formatTime(now)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO reader_item_state (user_id, item_id, read_at, starred_at)
+		VALUES (?, ?, ?, NULL)
+		ON CONFLICT (user_id, item_id) DO UPDATE SET read_at = excluded.read_at`,
+		userID, itemID, readAt); err != nil {
+		return fmt.Errorf("reader: set read state: %w", err)
+	}
+	return nil
+}
+
+// SetStarred stars or unstars an item, leaving read state alone for the same
+// reason SetRead leaves the star alone.
+func (s *Store) SetStarred(ctx context.Context, userID, itemID int64, starred bool, now time.Time) error {
+	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
+		return err
+	}
+	var starredAt any
+	if starred {
+		starredAt = formatTime(now)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO reader_item_state (user_id, item_id, read_at, starred_at)
+		VALUES (?, ?, NULL, ?)
+		ON CONFLICT (user_id, item_id) DO UPDATE SET starred_at = excluded.starred_at`,
+		userID, itemID, starredAt); err != nil {
+		return fmt.Errorf("reader: set starred state: %w", err)
+	}
+	return nil
+}
+
+// ItemState reports one item's read and starred flags. A missing row is not an
+// error: absence means unread and unstarred.
+func (s *Store) ItemState(ctx context.Context, userID, itemID int64) (read, starred bool, err error) {
+	var readAt, starredAt sql.NullString
+	err = s.db.QueryRowContext(ctx,
+		`SELECT read_at, starred_at FROM reader_item_state WHERE user_id = ? AND item_id = ?`,
+		userID, itemID).Scan(&readAt, &starredAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, fmt.Errorf("reader: load item state: %w", err)
+	}
+	return readAt.Valid, starredAt.Valid, nil
+}
