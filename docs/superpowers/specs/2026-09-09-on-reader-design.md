@@ -162,8 +162,18 @@ NULL. `PRIMARY KEY(user_id, item_id)`.
 ### Three decisions worth stating explicitly
 
 **Absence means unread.** No state row exists until an item is read or starred,
-so subscribing to a firehose does not cost a row per user per item. An unread
-count is `count(items) - count(read states)`, two indexed counts.
+so subscribing to a firehose does not cost a row per user per item.
+
+An unread count is a single `count(*)` over items, with a `NOT EXISTS`
+correlated subquery against `reader_item_state` — indexed by that table's
+`(user_id, item_id)` primary key.
+
+It is deliberately *not* `count(items) - count(read states)`, which an earlier
+draft of this document specified. Subtraction is only correct if every
+read-state row falls inside the counted range, and the `added_at` cutoff below
+means it does not: a user can hold a read-state row for an item published
+before they subscribed. Subtracting it makes the count too low, which hides a
+genuinely unread article instead of failing visibly.
 
 **`reader_subs.added_at` is the unread cutoff.** When a second household member
 subscribes to a feed that already has 60 days of history, items published before
