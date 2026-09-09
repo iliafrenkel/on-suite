@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>No GUID Blog</title>
+    <link>https://noguid.example/</link>
+    <item>
+      <title>Untagged post</title>
+      <pubDate>Mon, 08 Sep 2026 10:00:00 +1000</pubDate>
+      <description>No guid and no link, which real feeds do.</description>
+    </item>
+  </channel>
+</rss>
