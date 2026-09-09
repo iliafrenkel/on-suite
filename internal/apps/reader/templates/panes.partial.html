@@ -1,0 +1,92 @@
+{{/* panes-oob is the whole HTMX response for anything that can change which
+     feed or the tree is showing: selecting a feed, subscribing, unsubscribing,
+     creating or deleting a folder, and refreshing. The <title> and
+     shell-crumb-tail ride along out of band so the page chrome stays in sync
+     with the panes — the same convention paste's "detail-with-list" and
+     notes' "outline-swap" use. Without this, an HTMX feed selection would
+     swap the panes while leaving the tab title and breadcrumb showing
+     whatever was there before, which is the regression fixed for issue #205
+     (commit c96a03f) elsewhere in this codebase. */}}
+{{define "panes-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "panes" .}}{{end}}
+
+{{define "panes"}}
+<div class="reader-panes" id="reader-panes">
+  {{template "tree" .}}
+  {{template "list" .List}}
+  {{template "article" .Article}}
+</div>
+{{end}}
+
+{{define "tree"}}
+<nav class="reader-tree" aria-label="Feeds">
+  <form class="reader-add" hx-post="/reader/subscribe" hx-target="#reader-panes" hx-swap="outerHTML">
+    <label for="feed-url">Add a feed</label>
+    <input id="feed-url" name="url" type="url" placeholder="https://example.com/feed.xml" required>
+    <button type="submit">Add</button>
+    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+  </form>
+
+  <button type="button" hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">Refresh</button>
+
+  {{if .Tree.Empty}}
+    <p class="empty">No feeds yet. Paste a feed address above to start.</p>
+  {{else}}
+    {{range .Tree.Folders}}
+      <details open>
+        <summary>{{.Name}}</summary>
+        <ul>
+          {{range .Subs}}
+            <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
+                   hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a></li>
+          {{end}}
+        </ul>
+      </details>
+    {{end}}
+    <ul>
+      {{range .Tree.Root}}
+        <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
+               hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a></li>
+      {{end}}
+    </ul>
+  {{end}}
+</nav>
+{{end}}
+
+{{define "list"}}
+<section class="reader-list" aria-label="Articles">
+  {{if .Selected}}
+    <h2>{{.FeedTitle}}</h2>
+    {{if .EmptyState}}<p class="empty">{{.EmptyState}}</p>{{end}}
+    <ul>
+      {{range .Items}}
+        <li><a href="/reader/item/{{.ID}}" hx-get="/reader/item/{{.ID}}"
+               hx-target="#reader-article" hx-swap="outerHTML">
+          <span class="title">{{.Title}}</span>
+          <span class="meta">{{.FeedName}} · {{.Published}}</span>
+        </a></li>
+      {{end}}
+    </ul>
+  {{else}}
+    <p class="empty">Pick a feed.</p>
+  {{end}}
+</section>
+{{end}}
+
+{{/* article-oob is the whole HTMX response for GET /item/{id}: the article
+     pane plus the same shell-crumb-tail OOB block panes-oob uses, so opening
+     an article also keeps the tab title and breadcrumb in sync — see
+     panes-oob's own comment above for why this matters. */}}
+{{define "article-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "article" .Article}}{{end}}
+
+{{define "article"}}
+<article class="reader-article" id="reader-article">
+  {{if .Selected}}
+    <h1>{{.Title}}</h1>
+    <p class="meta">{{.FeedName}}{{if .Author}} · {{.Author}}{{end}}{{if .When}} · {{.When}}{{end}}</p>
+    {{if .URL}}<p><a href="{{.URL}}" target="_blank" rel="noopener noreferrer">Open original</a></p>{{end}}
+    <div class="reader-body">{{.Body}}</div>
+  {{else}}
+    <p class="empty">Pick an article.</p>
+  {{end}}
+</article>
+{{end}}

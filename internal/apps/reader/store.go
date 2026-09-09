@@ -47,6 +47,9 @@ type Store struct{ db *sql.DB }
 
 func NewStore(handle *sql.DB) *Store { return &Store{db: handle} }
 
+// DB exposes the handle for tests that assert on rows no method returns.
+func (s *Store) DB() *sql.DB { return s.db }
+
 // Feed is one globally shared feed row.
 type Feed struct {
 	ID            int64
