@@ -190,3 +190,232 @@ func TestSelectingAFeedUpdatesTheShellCrumb(t *testing.T) {
 		t.Errorf("shell-crumb-tail does not show the selected feed: %q", tailText)
 	}
 }
+
+// TestUnsubscribeControlRemovesASubscription pins the missing UI control the
+// whole-branch review flagged: unsubscribe/createFolder/deleteFolder already
+// worked over HTTP but nothing in the template posted to them. This traces
+// the button in the tree all the way to the subscription disappearing.
+func TestUnsubscribeControlRemovesASubscription(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	btn := doc.MustHave("button.reader-sub-delete")
+	if got, _ := htmlassert.Attr(btn, "hx-post"); got != "/reader/sub/"+itoa(sub.ID)+"/delete" {
+		t.Errorf("delete button hx-post = %q", got)
+	}
+	if got, _ := htmlassert.Attr(btn, "hx-target"); got != "#reader-panes" {
+		t.Errorf("delete button hx-target = %q, want #reader-panes", got)
+	}
+	if _, ok := htmlassert.Attr(btn, "hx-confirm"); !ok {
+		t.Error("unsubscribe is destructive but the button asks for no confirmation")
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/delete", url.Values{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unsubscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc = s.Get(t, s.Alice, "/reader/")
+	if strings.Contains(doc.Text(), "example.com/feed.xml") {
+		t.Errorf("subscription still in the tree after unsubscribe:\n%s", doc.Text())
+	}
+}
+
+// TestFolderCreateFormAddsAFolder pins the missing add-folder control.
+func TestFolderCreateFormAddsAFolder(t *testing.T) {
+	s := newServer(t)
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	form := doc.MustHave("form.reader-add-folder")
+	if got, _ := htmlassert.Attr(form, "hx-post"); got != "/reader/folder" {
+		t.Errorf("folder form hx-post = %q, want /reader/folder", got)
+	}
+	doc.MustHave(`form.reader-add-folder input[name=name]`)
+
+	rec := s.PostHX(t, s.Alice, "/reader/folder", url.Values{"name": {"Tech"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create folder returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc = s.Get(t, s.Alice, "/reader/")
+	if !strings.Contains(doc.Text(), "Tech") {
+		t.Errorf("new folder not in the tree:\n%s", doc.Text())
+	}
+}
+
+// TestFolderDeleteControlRemovesAFolder pins the missing delete-folder
+// control.
+func TestFolderDeleteControlRemovesAFolder(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Tech")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	btn := doc.MustHave("button.reader-folder-delete")
+	if got, _ := htmlassert.Attr(btn, "hx-post"); got != "/reader/folder/"+itoa(folder.ID)+"/delete" {
+		t.Errorf("folder delete button hx-post = %q", got)
+	}
+	if _, ok := htmlassert.Attr(btn, "hx-confirm"); !ok {
+		t.Error("folder delete is destructive but the button asks for no confirmation")
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/folder/"+itoa(folder.ID)+"/delete", url.Values{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete folder returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc = s.Get(t, s.Alice, "/reader/")
+	if strings.Contains(doc.Text(), "Tech") {
+		t.Errorf("folder still in the tree after delete:\n%s", doc.Text())
+	}
+}
+
+// TestAddFeedFormHasFolderPicker pins folderParam's reachability from the UI:
+// the handler already accepted folder_id, but nothing rendered a way to send
+// one.
+func TestAddFeedFormHasFolderPicker(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Tech")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	doc.MustHave("select[name=folder_id]")
+	opt := doc.MustHave(`select[name=folder_id] option[value="` + itoa(folder.ID) + `"]`)
+	if got := htmlassert.Text(opt); got != "Tech" {
+		t.Errorf("folder option text = %q, want Tech", got)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
+		"url":       {"https://example.com/feed.xml"},
+		"folder_id": {itoa(folder.ID)},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Folders) != 1 || len(tree.Folders[0].Subs) != 1 {
+		t.Fatalf("subscription was not filed under the chosen folder: %+v", tree)
+	}
+}
+
+// TestFailingSubscriptionShowsAMarker pins DoD item 2: a persistently-failing
+// feed (which the poller already backs off correctly, per poll_test.go) must
+// be visible in the tree, not silently invisible.
+func TestFailingSubscriptionShowsAMarker(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.DB().ExecContext(ctx,
+		`UPDATE reader_feeds SET error_count = 3, last_error = 'connection refused' WHERE id = ?`,
+		sub.FeedID); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	marker := doc.MustHave("span.reader-failing")
+	if got, _ := htmlassert.Attr(marker, "title"); got != "connection refused" {
+		t.Errorf("failure marker title = %q, want the last error", got)
+	}
+}
+
+// TestHealthySubscriptionShowsNoMarker is the negative case for the above: a
+// feed that has never failed must not render the marker.
+func TestHealthySubscriptionShowsNoMarker(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	if _, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	doc.MustNotHave("span.reader-failing")
+}
+
+// TestSubscribePollAndRenderComposedFlow is the seam no other test exercises:
+// a real HTTP subscribe, a real poll against a fake feed server, then a real
+// HTTP render of what the poll fetched — all through the same store the HTTP
+// handlers themselves use.
+func TestSubscribePollAndRenderComposedFlow(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <title>Composed Blog</title>
+  <link>https://example.com/</link>
+  <item>
+    <title>Composed Post</title>
+    <link>https://example.com/composed</link>
+    <guid isPermaLink="false">tag:example.com,2026:composed-1</guid>
+    <description><![CDATA[<p>Composed body <script>alert(1)</script>.</p>]]></description>
+  </item>
+</channel></rss>`))
+	}))
+	defer srv.Close()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {srv.URL + "/feed.xml"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	client := reader.NewClient("test")
+	client.DenyAddr = func(string) error { return nil }
+	if err := reader.NewPoller(s.Store, client, quietLogger()).PollDue(ctx); err != nil {
+		t.Fatalf("PollDue: %v", err)
+	}
+
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 1 {
+		t.Fatalf("expected one subscription in the tree, got %+v", tree)
+	}
+	subID := tree.Root[0].ID
+
+	feedDoc := s.Get(t, s.Alice, "/reader/feed/"+itoa(subID))
+	if !strings.Contains(feedDoc.Text(), "Composed Post") {
+		t.Errorf("polled article title missing from the feed pane:\n%s", feedDoc.Text())
+	}
+
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, subID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("stored %d items, want 1", len(items))
+	}
+
+	itemDoc := s.Get(t, s.Alice, "/reader/item/"+itoa(items[0].ID))
+	if !strings.Contains(itemDoc.Text(), "Composed body") {
+		t.Errorf("polled article body missing from the article pane:\n%s", itemDoc.Text())
+	}
+	if strings.Contains(itemDoc.Text(), "alert(1)") {
+		t.Error("unsanitized script content reached the rendered article")
+	}
+}

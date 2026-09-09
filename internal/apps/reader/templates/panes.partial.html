@@ -22,33 +22,63 @@
   <form class="reader-add" hx-post="/reader/subscribe" hx-target="#reader-panes" hx-swap="outerHTML">
     <label for="feed-url">Add a feed</label>
     <input id="feed-url" name="url" type="url" placeholder="https://example.com/feed.xml" required>
+    <label for="feed-folder">Folder</label>
+    <select id="feed-folder" name="folder_id">
+      <option value="">(no folder)</option>
+      {{range .Tree.Folders}}
+        <option value="{{.ID}}">{{.Name}}</option>
+      {{end}}
+    </select>
     <button type="submit">Add</button>
     {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
   </form>
 
+  <form class="reader-add-folder" hx-post="/reader/folder" hx-target="#reader-panes" hx-swap="outerHTML">
+    <label for="folder-name">New folder</label>
+    <input id="folder-name" name="name" type="text" placeholder="Folder name" required>
+    <button type="submit">Create folder</button>
+  </form>
+
   <button type="button" hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">Refresh</button>
 
+  {{/* Empty means no subscriptions anywhere — a folder with nothing in it
+       still deserves to be shown (and deletable), so the folder/root loops
+       below are not gated on Empty the way the hint paragraph is. */}}
   {{if .Tree.Empty}}
     <p class="empty">No feeds yet. Paste a feed address above to start.</p>
-  {{else}}
-    {{range .Tree.Folders}}
-      <details open>
-        <summary>{{.Name}}</summary>
-        <ul>
-          {{range .Subs}}
-            <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
-                   hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a></li>
-          {{end}}
-        </ul>
-      </details>
-    {{end}}
-    <ul>
-      {{range .Tree.Root}}
-        <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
-               hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a></li>
-      {{end}}
-    </ul>
   {{end}}
+  {{range .Tree.Folders}}
+    <details open>
+      <summary>{{.Name}}
+        <button type="button" class="reader-folder-delete"
+                hx-post="/reader/folder/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                hx-confirm="Delete the folder &#8220;{{.Name}}&#8221;? Its feeds move to the root."
+                aria-label="Delete folder {{.Name}}">Delete</button>
+      </summary>
+      <ul>
+        {{range .Subs}}
+          <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
+                 hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
+            <button type="button" class="reader-sub-delete"
+                    hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                    hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
+                    aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
+          </li>
+        {{end}}
+      </ul>
+    </details>
+  {{end}}
+  <ul>
+    {{range .Tree.Root}}
+      <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
+             hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
+        <button type="button" class="reader-sub-delete"
+                hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
+                aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
+      </li>
+    {{end}}
+  </ul>
 </nav>
 {{end}}
 

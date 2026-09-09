@@ -90,7 +90,17 @@ type Subscription struct {
 	FeedURL  string
 	FeedName string
 	AddedAt  time.Time
+	// ErrorCount and LastError mirror the shared feed's own poller state
+	// (Feed.ErrorCount / Feed.LastError), so the sidebar can show a
+	// persistently-failing feed without a second query.
+	ErrorCount int
+	LastError  string
 }
+
+// Failing is true once the poller has recorded at least one consecutive
+// failure fetching this subscription's feed. It is what the tree template
+// checks to decide whether to render the failure marker.
+func (s Subscription) Failing() bool { return s.ErrorCount > 0 }
 
 // DisplayName is the override when set, then the feed's own title, then the
 // URL — so a feed that has never been polled successfully is still nameable.
@@ -324,7 +334,8 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 	}
 
 	subRows, err := s.db.QueryContext(ctx, `
-		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title
+		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title,
+		       f.error_count, f.last_error
 		  FROM reader_subs s JOIN reader_feeds f ON f.id = s.feed_id
 		 WHERE s.user_id = ?
 		 ORDER BY s.position, coalesce(nullif(s.title, ''), nullif(f.title, ''), f.url)`,
@@ -338,7 +349,7 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 		var sub Subscription
 		var added string
 		if err := subRows.Scan(&sub.ID, &sub.FeedID, &sub.FolderID, &sub.Title,
-			&added, &sub.FeedURL, &sub.FeedName); err != nil {
+			&added, &sub.FeedURL, &sub.FeedName, &sub.ErrorCount, &sub.LastError); err != nil {
 			return Tree{}, fmt.Errorf("reader: scan subscription: %w", err)
 		}
 		sub.AddedAt = parseTime(added)
