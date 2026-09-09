@@ -521,3 +521,93 @@ func scanItems(rows *sql.Rows) ([]Item, error) {
 	}
 	return out, nil
 }
+
+// DueFeeds returns feeds whose next_fetch_at has passed, oldest first.
+func (s *Store) DueFeeds(ctx context.Context, now time.Time, limit int) ([]Feed, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, url, resolved_url, title, site_url, etag, last_modified,
+		       last_status, last_error, error_count, next_fetch_at, fetch_interval
+		  FROM reader_feeds
+		 WHERE next_fetch_at <= ?
+		 ORDER BY next_fetch_at
+		 LIMIT ?`, formatTime(now), limit)
+	if err != nil {
+		return nil, fmt.Errorf("reader: list due feeds: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Feed
+	for rows.Next() {
+		var f Feed
+		var next string
+		var interval sql.NullInt64
+		if err := rows.Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL,
+			&f.ETag, &f.LastModified, &f.LastStatus, &f.LastError, &f.ErrorCount,
+			&next, &interval); err != nil {
+			return nil, fmt.Errorf("reader: scan feed: %w", err)
+		}
+		f.NextFetchAt = parseTime(next)
+		if interval.Valid {
+			f.FetchInterval = time.Duration(interval.Int64) * time.Second
+		}
+		out = append(out, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reader: iterate feeds: %w", err)
+	}
+	return out, nil
+}
+
+// FetchResult is one poll's outcome, written back in a single statement.
+type FetchResult struct {
+	FeedID       int64
+	ResolvedURL  string
+	Title        string
+	SiteURL      string
+	ETag         string
+	LastModified string
+	Status       int
+	Err          string
+	FetchedAt    time.Time
+	NextFetchAt  time.Time
+}
+
+// SaveFetchResult records how a poll went.
+//
+// A failure keeps the last good title and site URL rather than blanking them:
+// a feed that 500s for a day should stay recognisable in the sidebar.
+func (s *Store) SaveFetchResult(ctx context.Context, r FetchResult) error {
+	if r.Err != "" {
+		_, err := s.db.ExecContext(ctx, `
+			UPDATE reader_feeds
+			   SET last_fetch_at = ?, last_status = ?, last_error = ?,
+			       error_count = error_count + 1, next_fetch_at = ?
+			 WHERE id = ?`,
+			formatTime(r.FetchedAt), r.Status, r.Err, formatTime(r.NextFetchAt), r.FeedID)
+		if err != nil {
+			return fmt.Errorf("reader: save fetch failure: %w", err)
+		}
+		return nil
+	}
+
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE reader_feeds
+		   SET resolved_url  = ?,
+		       title         = CASE WHEN ? <> '' THEN ? ELSE title END,
+		       site_url      = CASE WHEN ? <> '' THEN ? ELSE site_url END,
+		       etag          = ?,
+		       last_modified = ?,
+		       last_fetch_at = ?,
+		       last_status   = ?,
+		       last_error    = '',
+		       error_count   = 0,
+		       next_fetch_at = ?
+		 WHERE id = ?`,
+		r.ResolvedURL, r.Title, r.Title, r.SiteURL, r.SiteURL,
+		r.ETag, r.LastModified, formatTime(r.FetchedAt), r.Status,
+		formatTime(r.NextFetchAt), r.FeedID)
+	if err != nil {
+		return fmt.Errorf("reader: save fetch result: %w", err)
+	}
+	return nil
+}
