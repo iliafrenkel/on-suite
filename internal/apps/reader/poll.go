@@ -42,12 +42,16 @@ func NewPoller(store *Store, client *Client, log *slog.Logger) *Poller {
 //
 // Jitter matters more than it looks: without it, forty feeds added in one OPML
 // import would poll in lockstep forever, producing a thundering herd every
-// interval instead of a trickle.
+// interval instead of a trickle. Once errorCount has pushed wait all the way
+// to maxBackoff, jitter is capped at a small fixed fraction of maxBackoff
+// rather than 25% of wait — otherwise a persistently broken feed's next poll
+// could land up to 1.5h past the ~6h cap this function's name promises.
 func NextFetchAt(now time.Time, interval time.Duration, errorCount int) time.Time {
 	if interval <= 0 {
 		interval = DefaultFetchInterval
 	}
 	wait := interval
+	capped := false
 	if errorCount > 0 {
 		// Exponential, capped. math.Pow on a bounded exponent keeps this
 		// readable and cannot overflow the way repeated doubling can.
@@ -55,9 +59,14 @@ func NextFetchAt(now time.Time, interval time.Duration, errorCount int) time.Tim
 		wait = time.Duration(float64(interval) * math.Pow(2, exp))
 		if wait > maxBackoff || wait <= 0 {
 			wait = maxBackoff
+			capped = true
 		}
 	}
-	jitter := time.Duration(rand.Int64N(int64(wait/4) + 1))
+	jitterCeiling := wait / 4
+	if capped {
+		jitterCeiling = maxBackoff / 24
+	}
+	jitter := time.Duration(rand.Int64N(int64(jitterCeiling) + 1))
 	return now.Add(wait + jitter)
 }
 
