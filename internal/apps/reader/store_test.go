@@ -11,16 +11,16 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
-// fixture is a migrated database with two users, so every owner-scoping test
+// storeFixture is a migrated database with two users, so every owner-scoping test
 // has somebody else to be confused with.
-type fixture struct {
+type storeFixture struct {
 	store *reader.Store
 	db    *sql.DB
 	alice auth.User
 	bob   auth.User
 }
 
-func newFixture(t *testing.T) *fixture {
+func newStoreFixture(t *testing.T) *storeFixture {
 	t.Helper()
 	ctx := context.Background()
 
@@ -55,11 +55,11 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &fixture{store: reader.NewStore(handle), db: handle, alice: alice, bob: bob}
+	return &storeFixture{store: reader.NewStore(handle), db: handle, alice: alice, bob: bob}
 }
 
 func TestSubscribeSharesOneFeedRow(t *testing.T) {
-	f := newFixture(t)
+	f := newStoreFixture(t)
 	ctx := context.Background()
 
 	a, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
@@ -88,7 +88,7 @@ func TestSubscribeSharesOneFeedRow(t *testing.T) {
 }
 
 func TestSubscribeTwiceIsNotAnError(t *testing.T) {
-	f := newFixture(t)
+	f := newStoreFixture(t)
 	ctx := context.Background()
 
 	first, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
@@ -105,7 +105,7 @@ func TestSubscribeTwiceIsNotAnError(t *testing.T) {
 }
 
 func TestUnsubscribeDropsTheFeedOnlyWhenOrphaned(t *testing.T) {
-	f := newFixture(t)
+	f := newStoreFixture(t)
 	ctx := context.Background()
 
 	aliceSub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
@@ -130,7 +130,7 @@ func TestUnsubscribeDropsTheFeedOnlyWhenOrphaned(t *testing.T) {
 }
 
 func TestUnsubscribeIsScopedToTheOwner(t *testing.T) {
-	f := newFixture(t)
+	f := newStoreFixture(t)
 	ctx := context.Background()
 
 	aliceSub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
@@ -143,7 +143,7 @@ func TestUnsubscribeIsScopedToTheOwner(t *testing.T) {
 }
 
 func TestDeleteFolderKeepsItsSubscriptions(t *testing.T) {
-	f := newFixture(t)
+	f := newStoreFixture(t)
 	ctx := context.Background()
 
 	folder, err := f.store.CreateFolder(ctx, f.alice.ID, "Tech")
@@ -170,7 +170,7 @@ func TestDeleteFolderKeepsItsSubscriptions(t *testing.T) {
 }
 
 func TestTreeIsScopedToOneUser(t *testing.T) {
-	f := newFixture(t)
+	f := newStoreFixture(t)
 	ctx := context.Background()
 
 	if _, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/a.xml", nil); err != nil {
