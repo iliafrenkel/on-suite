@@ -10,8 +10,10 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
+	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 	"github.com/iliafrenkel/on-suite/internal/ui"
@@ -392,5 +394,40 @@ func TestOneAppsStatsFailureDoesNotHideTheOthers(t *testing.T) {
 	}
 	if len(ok.Stats) != 1 {
 		t.Errorf("the healthy app returned %d stats; one app's failure must not hide another's", len(ok.Stats))
+	}
+}
+
+// schedulingApp implements Scheduler; the plain fakeApp from newFake does not.
+// The pair is the whole point of the capability: an app with no background
+// work stubs nothing.
+type schedulingApp struct{ fakeApp }
+
+func (schedulingApp) Jobs(deps app.Deps) []app.Job {
+	return []app.Job{{
+		Name:        "refresh feeds",
+		Description: "Polls every feed that is due.",
+		Every:       5 * time.Minute,
+		Run:         func(context.Context) error { return nil },
+	}}
+}
+
+func TestRegisterJobsRegistersOnlySchedulerApps(t *testing.T) {
+	reg, err := app.NewRegistry(schedulingApp{newFake("sched", "ON Sched", 0)}, newFake("plain", "ON Plain", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jr := jobs.NewRegistry()
+	reg.RegisterJobs(jr, app.Deps{})
+
+	got := jr.Snapshot()
+	if len(got) != 1 {
+		t.Fatalf("registered %d jobs, want 1: %+v", len(got), got)
+	}
+	if got[0].Name != "refresh feeds" {
+		t.Errorf("Name = %q, want %q", got[0].Name, "refresh feeds")
+	}
+	if got[0].Interval != 5*time.Minute {
+		t.Errorf("Interval = %v, want 5m", got[0].Interval)
 	}
 }

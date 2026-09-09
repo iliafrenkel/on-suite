@@ -14,9 +14,11 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
+	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -271,6 +273,46 @@ func (reg *Registry) Export(ctx context.Context, handle *sql.DB, userID int64) (
 		out[id] = data
 	}
 	return out, nil
+}
+
+// Job is one unit of background work an app owns.
+//
+// It is a value type rather than a registration call so an app can declare its
+// jobs without holding a reference to the scheduler — the same reason Stat is
+// a value rather than a callback onto the admin page.
+type Job struct {
+	Name        string
+	Description string
+	// Every is the interval between runs. Zero registers the job but never
+	// schedules it, which is how jobs.Registry already spells "disabled".
+	Every time.Duration
+	Run   func(context.Context) error
+}
+
+// Scheduler is implemented by apps that own background work. Like Exporter and
+// Stater it is optional and discovered by type assertion, so an app with no
+// background work does not have to stub out a method.
+type Scheduler interface {
+	Jobs(deps Deps) []Job
+}
+
+// RegisterJobs hands every scheduling app's jobs to the scheduler.
+//
+// It is a separate call rather than a parameter on Mount because a command
+// that builds the registry without a server — onsuite export — has no
+// scheduler and should not have to invent one. Apps that do not implement
+// Scheduler are skipped silently, which is the same design choice Export and
+// Stats make.
+func (reg *Registry) RegisterJobs(jr *jobs.Registry, deps Deps) {
+	for _, a := range reg.apps {
+		s, ok := a.(Scheduler)
+		if !ok {
+			continue
+		}
+		for _, j := range s.Jobs(deps) {
+			jr.Register(j.Name, j.Description, j.Every, j.Run)
+		}
+	}
 }
 
 // Stat is one number an app wants shown on the admin page.

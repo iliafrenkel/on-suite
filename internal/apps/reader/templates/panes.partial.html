@@ -1,0 +1,116 @@
+{{/* panes-oob is the whole HTMX response for anything that can change which
+     feed or the tree is showing: selecting a feed, subscribing, unsubscribing,
+     creating or deleting a folder, and refreshing. The <title> and
+     shell-crumb-tail ride along out of band so the page chrome stays in sync
+     with the panes — the same convention paste's "detail-with-list" and
+     notes' "outline-swap" use. Without this, an HTMX feed selection would
+     swap the panes while leaving the tab title and breadcrumb showing
+     whatever was there before, which is the regression fixed for issue #205
+     (commit c96a03f) elsewhere in this codebase. */}}
+{{define "panes-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "panes" .}}{{end}}
+
+{{define "panes"}}
+<div class="reader-panes" id="reader-panes">
+  {{template "tree" .}}
+  {{template "list" .List}}
+  {{template "article" .Article}}
+</div>
+{{end}}
+
+{{define "tree"}}
+<nav class="reader-tree" aria-label="Feeds">
+  <form class="reader-add" hx-post="/reader/subscribe" hx-target="#reader-panes" hx-swap="outerHTML">
+    <label for="feed-url">Add a feed</label>
+    <input id="feed-url" name="url" type="url" placeholder="https://example.com/feed.xml" required>
+    <label for="feed-folder">Folder</label>
+    <select id="feed-folder" name="folder_id">
+      <option value="">(no folder)</option>
+      {{range .Tree.Folders}}
+        <option value="{{.ID}}">{{.Name}}</option>
+      {{end}}
+    </select>
+    <button type="submit">Add</button>
+    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+  </form>
+
+  <form class="reader-add-folder" hx-post="/reader/folder" hx-target="#reader-panes" hx-swap="outerHTML">
+    <label for="folder-name">New folder</label>
+    <input id="folder-name" name="name" type="text" placeholder="Folder name" required>
+    <button type="submit">Create folder</button>
+  </form>
+
+  <button type="button" hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">Refresh</button>
+
+  {{/* Empty means no subscriptions anywhere — a folder with nothing in it
+       still deserves to be shown (and deletable), so the folder/root loops
+       below are not gated on Empty the way the hint paragraph is. */}}
+  {{if .Tree.Empty}}
+    <p class="empty">No feeds yet. Paste a feed address above to start.</p>
+  {{end}}
+  {{range .Tree.Folders}}
+    <details open>
+      <summary>{{.Name}}
+        <button type="button" class="reader-folder-delete"
+                hx-post="/reader/folder/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                hx-confirm="Delete the folder &#8220;{{.Name}}&#8221;? Its feeds move to the root."
+                aria-label="Delete folder {{.Name}}">Delete</button>
+      </summary>
+      <ul>
+        {{range .Subs}}
+          <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
+                 hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
+            <button type="button" class="reader-sub-delete"
+                    hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                    hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
+                    aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
+          </li>
+        {{end}}
+      </ul>
+    </details>
+  {{end}}
+  <ul>
+    {{range .Tree.Root}}
+      <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
+             hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
+        <button type="button" class="reader-sub-delete"
+                hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
+                aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
+      </li>
+    {{end}}
+  </ul>
+</nav>
+{{end}}
+
+{{define "list"}}
+<section class="reader-list" aria-label="Articles">
+  {{if .Selected}}
+    <h2>{{.FeedTitle}}</h2>
+    {{if .EmptyState}}<p class="empty">{{.EmptyState}}</p>{{end}}
+    <ul>
+      {{range .Items}}
+        <li><a href="/reader/item/{{.ID}}" hx-get="/reader/item/{{.ID}}"
+               hx-target="#reader-article" hx-swap="outerHTML">
+          <span class="title">{{.Title}}</span>
+          <span class="meta">{{.FeedName}} · {{.Published}}</span>
+        </a></li>
+      {{end}}
+    </ul>
+  {{else}}
+    <p class="empty">Pick a feed.</p>
+  {{end}}
+</section>
+{{end}}
+
+{{define "article"}}
+<article class="reader-article" id="reader-article">
+  {{if .Selected}}
+    <h1>{{.Title}}</h1>
+    <p class="meta">{{.FeedName}}{{if .Author}} · {{.Author}}{{end}}{{if .When}} · {{.When}}{{end}}</p>
+    {{if .URL}}<p><a href="{{.URL}}" target="_blank" rel="noopener noreferrer">Open original</a></p>{{end}}
+    <div class="reader-body">{{.Body}}</div>
+  {{else}}
+    <p class="empty">Pick an article.</p>
+  {{end}}
+</article>
+{{end}}

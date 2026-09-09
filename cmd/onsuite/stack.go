@@ -71,7 +71,7 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	routes.Handle(mux, "GET /static/", true, http.StripPrefix("/static", assets.Handler()))
 	authn.Routes(mux, routes)
 
-	if err := deps.Registry.Mount(mux, app.Deps{
+	appDeps := app.Deps{
 		DB:      deps.DB,
 		Render:  rend,
 		Users:   deps.Users,
@@ -79,8 +79,16 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		Log:     deps.Log,
 		Version: deps.Version,
 		Secure:  deps.Secure,
-	}, authn.RequireUser); err != nil {
+	}
+	if err := deps.Registry.Mount(mux, appDeps, authn.RequireUser); err != nil {
 		return nil, err
+	}
+
+	// App-owned background work. Registered after Mount so an app can build
+	// whatever its jobs close over in Mount, and before the server starts so
+	// the admin page lists them from the first request.
+	if deps.Jobs != nil {
+		deps.Registry.RegisterJobs(deps.Jobs, appDeps)
 	}
 
 	// The admin page is guarded, and RequireAdmin returns 404 (not 403) so a

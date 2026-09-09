@@ -9,6 +9,7 @@ import (
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/apps/paste"
+	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
 
@@ -72,5 +73,6 @@ func registeredApps() []app.App {
 	return []app.App{
 		notes.New(),
 		paste.New(),
+		reader.New(),
 	}
 }
