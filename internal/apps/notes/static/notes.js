@@ -62,10 +62,10 @@
 	}
 
 	// augmentRequest runs before every HTMX request this page issues. A
-	// hand-built request (see splitAndCreate and maybeDeleteEmptyBullet in
-	// the keyboard module) already knows exactly which focus_id/title/note
-	// it wants and marks itself with _skipFocusOverride so this does not
-	// clobber them.
+	// hand-built request (see maybeDeleteEmptyBullet in the keyboard
+	// module) already knows exactly which focus_id/title/note it wants
+	// and marks itself with _skipFocusOverride so this does not clobber
+	// them.
 	function augmentRequest(e) {
 		var params = e.detail.parameters;
 		if (params._skipFocusOverride) {
@@ -138,8 +138,9 @@
 	// restoreFocus runs after every HTMX swap of #outline. hx-swap=innerHTML
 	// destroys and recreates every row, so the browser drops focus to
 	// <body> unless this puts it back. afterID (rather than id) is how
-	// splitAndCreate asks for "the row after this one": the new row's id is
-	// assigned by the server and unknown until the response arrives.
+	// augmentRequest asks for "the row after this one" on a /notes/new
+	// request: the new row's id is assigned by the server and unknown
+	// until the response arrives.
 	function restoreFocus(e) {
 		// Only a swap of #outline destroys rows, and only those need the
 		// caret put back. N4 gave setText a real response body (the OOB
@@ -257,9 +258,9 @@
 	function handleKeydown(e) {
 		// Issue #62: during an active IME composition (e.g. CJK input),
 		// Enter commits the composition rather than ending the line, so it
-		// must not reach splitAndCreate/maybeDeleteEmptyBullet/the arrow-key
-		// bindings below. keyCode 229 is the legacy fallback for browsers
-		// (older Safari) that don't set isComposing.
+		// must not reach appendSiblingBelow/maybeDeleteEmptyBullet/the
+		// arrow-key bindings below. keyCode 229 is the legacy fallback for
+		// browsers (older Safari) that don't set isComposing.
 		if (e.isComposing || e.keyCode === 229) return;
 		if (e.key === "Escape") {
 			handleEscape();
@@ -352,7 +353,7 @@
 		}
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
-			splitAndCreate(el, row);
+			appendSiblingBelow(row);
 			return;
 		}
 		if (e.key === "Backspace") {
@@ -383,6 +384,11 @@
 		return inputs[idx + dir] || null;
 	}
 
+	// appendSiblingBelow is spec §8's plain Enter, in both title and note
+	// fields: an empty new sibling below, regardless of caret position.
+	// Splitting title text at the caret was tried and dropped as
+	// undesirable in practice, so Enter never touches the current
+	// bullet's own text.
 	function appendSiblingBelow(row) {
 		click(row.querySelector('button[formaction="/notes/new"]'));
 	}
@@ -395,43 +401,6 @@
 		note.focus();
 		var pos = note.value.length;
 		note.setSelectionRange(pos, pos);
-	}
-
-	// splitAndCreate is spec §8's Enter: a new sibling below, splitting the
-	// title at the caret. In the note field there is nothing to split — a
-	// note is not the tree structure — so Enter there behaves like the "+"
-	// button instead.
-	function splitAndCreate(el, row) {
-		if (!el.classList.contains("outline-title")) {
-			appendSiblingBelow(row);
-			return;
-		}
-
-		var pos = el.selectionStart;
-		var head = el.value.slice(0, pos);
-		var tail = el.value.slice(pos);
-		var note = row.querySelector('input[name="note"]');
-		var rootField = row.querySelector('input[name="root"]');
-		var id = row.getAttribute("data-id");
-
-		// The new row's id is assigned by the server and unknown until the
-		// response arrives, so the caret target is "the row right after
-		// this one" rather than an id — see restoreFocus's afterID branch.
-		pendingFocus = { afterID: id, field: "title", offset: 0 };
-
-		htmx.ajax("POST", "/notes/new", {
-			source: document.body,
-			target: "#outline",
-			swap: "innerHTML",
-			values: {
-				root: rootField.value,
-				focus_id: id,
-				title: head,
-				note: note ? note.value : "",
-				new_title: tail,
-				_skipFocusOverride: "1"
-			}
-		});
 	}
 
 	// maybeDeleteEmptyBullet is spec §8's Backspace: only when the bullet is
