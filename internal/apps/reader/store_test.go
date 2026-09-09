@@ -3,8 +3,10 @@ package reader_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
@@ -189,5 +191,121 @@ func TestTreeIsScopedToOneUser(t *testing.T) {
 	}
 	if tree.Root[0].FeedURL != "https://example.com/a.xml" {
 		t.Errorf("alice sees %q, which is bob's feed", tree.Root[0].FeedURL)
+	}
+}
+
+func TestSaveItemsIsIdempotentOnGUID(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC)
+	items := []reader.ParsedItem{{
+		GUID:        "g1",
+		URL:         "https://example.com/1",
+		Title:       "First",
+		PublishedAt: now.Add(-time.Hour),
+		ContentHTML: "<p>one</p>",
+	}}
+
+	inserted, err := f.store.SaveItems(ctx, sub.FeedID, items, now)
+	if err != nil {
+		t.Fatalf("SaveItems: %v", err)
+	}
+	if inserted != 1 {
+		t.Errorf("first save inserted %d, want 1", inserted)
+	}
+
+	// A publisher edited the title in place. Same GUID, so it updates.
+	items[0].Title = "First, corrected"
+	inserted, err = f.store.SaveItems(ctx, sub.FeedID, items, now)
+	if err != nil {
+		t.Fatalf("second SaveItems: %v", err)
+	}
+	if inserted != 0 {
+		t.Errorf("re-saving inserted %d rows, want 0", inserted)
+	}
+
+	got, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d items, want 1", len(got))
+	}
+	if got[0].Title != "First, corrected" {
+		t.Errorf("Title = %q; a matching GUID must update in place", got[0].Title)
+	}
+}
+
+func TestSaveItemsFallsBackToFetchTimeForAnUndatedItem(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC)
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Undated",
+	}}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got[0].PublishedAt.Equal(now) {
+		t.Errorf("PublishedAt = %v, want the fetch time %v", got[0].PublishedAt, now)
+	}
+}
+
+func TestItemsForSubscriptionIsScopedToTheOwner(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Alice's", PublishedAt: time.Now().UTC(),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.store.ItemsForSubscription(ctx, f.bob.ID, sub.ID, 50); !errors.Is(err, reader.ErrNotFound) {
+		t.Fatalf("bob read alice's subscription: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestItemRequiresASubscription(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Alice's", PublishedAt: time.Now().UTC(),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.store.Item(ctx, f.bob.ID, items[0].ID); !errors.Is(err, reader.ErrNotFound) {
+		t.Fatalf("bob read an item from a feed he is not subscribed to: err = %v, want ErrNotFound", err)
+	}
+	if _, err := f.store.Item(ctx, f.alice.ID, items[0].ID); err != nil {
+		t.Fatalf("alice cannot read her own item: %v", err)
 	}
 }

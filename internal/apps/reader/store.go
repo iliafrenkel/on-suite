@@ -352,3 +352,172 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 	}
 	return out, nil
 }
+
+// Item is one stored article.
+type Item struct {
+	ID          int64
+	FeedID      int64
+	GUID        string
+	URL         string
+	Title       string
+	Author      string
+	PublishedAt time.Time
+	FetchedAt   time.Time
+	SummaryHTML string
+	ContentHTML string
+	FeedName    string
+}
+
+// Body is what the article pane renders: the full content when the publisher
+// supplied it, the summary otherwise.
+func (i Item) Body() string {
+	if i.ContentHTML != "" {
+		return i.ContentHTML
+	}
+	return i.SummaryHTML
+}
+
+// SaveItems inserts new items and updates ones whose GUID is already known,
+// returning how many were newly inserted.
+//
+// Updating in place rather than inserting a duplicate is what stops a
+// publisher's typo fix from showing up as a second article — and (from R2) it
+// is why an edit does not clear read state, since the row's identity does not
+// change.
+func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem, now time.Time) (int, error) {
+	if len(items) == 0 {
+		return 0, nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("reader: begin save items: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO reader_items
+			(feed_id, guid, url, title, author, published_at, fetched_at, summary_html, content_html)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (feed_id, guid) DO UPDATE SET
+			url          = excluded.url,
+			title        = excluded.title,
+			author       = excluded.author,
+			summary_html = excluded.summary_html,
+			content_html = excluded.content_html`)
+	if err != nil {
+		return 0, fmt.Errorf("reader: prepare save item: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	inserted := 0
+	for _, it := range items {
+		if it.GUID == "" {
+			// parse.go always synthesises one; a caller that does not is a bug
+			// worth failing on rather than storing an unaddressable row.
+			return 0, fmt.Errorf("reader: item %q has no guid", it.Title)
+		}
+		published := it.PublishedAt
+		if published.IsZero() {
+			// An undated item still has to sort somewhere sensible.
+			published = now
+		}
+
+		var existing int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT count(*) FROM reader_items WHERE feed_id = ? AND guid = ?`,
+			feedID, it.GUID).Scan(&existing); err != nil {
+			return 0, fmt.Errorf("reader: check existing item: %w", err)
+		}
+
+		if _, err := stmt.ExecContext(ctx, feedID, it.GUID, it.URL, it.Title, it.Author,
+			formatTime(published), formatTime(now), it.SummaryHTML, it.ContentHTML); err != nil {
+			return 0, fmt.Errorf("reader: save item %q: %w", it.GUID, err)
+		}
+		if existing == 0 {
+			inserted++
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("reader: commit save items: %w", err)
+	}
+	return inserted, nil
+}
+
+// ItemsForSubscription lists one subscription's items, newest first.
+//
+// The subscription is looked up by (id, user_id) first so a subscription that
+// belongs to somebody else is ErrNotFound rather than an empty list — an empty
+// list would tell a caller the id exists.
+func (s *Store) ItemsForSubscription(ctx context.Context, userID, subID int64, limit int) ([]Item, error) {
+	var feedID int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT feed_id FROM reader_subs WHERE id = ? AND user_id = ?`,
+		subID, userID).Scan(&feedID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("reader: load subscription: %w", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT i.id, i.feed_id, i.guid, i.url, i.title, i.author,
+		       i.published_at, i.fetched_at, i.summary_html, i.content_html, f.title
+		  FROM reader_items i JOIN reader_feeds f ON f.id = i.feed_id
+		 WHERE i.feed_id = ?
+		 ORDER BY i.published_at DESC, i.id DESC
+		 LIMIT ?`, feedID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("reader: list items: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanItems(rows)
+}
+
+// Item loads one article, but only for a user who subscribes to its feed. The
+// EXISTS clause is the authorisation check: item ids are global, so without it
+// any signed-in user could read any item in the database.
+func (s *Store) Item(ctx context.Context, userID, itemID int64) (Item, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT i.id, i.feed_id, i.guid, i.url, i.title, i.author,
+		       i.published_at, i.fetched_at, i.summary_html, i.content_html, f.title
+		  FROM reader_items i JOIN reader_feeds f ON f.id = i.feed_id
+		 WHERE i.id = ?
+		   AND EXISTS (SELECT 1 FROM reader_subs s
+		                WHERE s.feed_id = i.feed_id AND s.user_id = ?)`,
+		itemID, userID)
+	if err != nil {
+		return Item{}, fmt.Errorf("reader: load item: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	items, err := scanItems(rows)
+	if err != nil {
+		return Item{}, err
+	}
+	if len(items) == 0 {
+		return Item{}, ErrNotFound
+	}
+	return items[0], nil
+}
+
+func scanItems(rows *sql.Rows) ([]Item, error) {
+	var out []Item
+	for rows.Next() {
+		var it Item
+		var published, fetched string
+		if err := rows.Scan(&it.ID, &it.FeedID, &it.GUID, &it.URL, &it.Title, &it.Author,
+			&published, &fetched, &it.SummaryHTML, &it.ContentHTML, &it.FeedName); err != nil {
+			return nil, fmt.Errorf("reader: scan item: %w", err)
+		}
+		it.PublishedAt = parseTime(published)
+		it.FetchedAt = parseTime(fetched)
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reader: iterate items: %w", err)
+	}
+	return out, nil
+}
