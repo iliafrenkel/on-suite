@@ -92,8 +92,11 @@ a side effect buried inside `Mount` rather than a declared capability.
 admin visibility, no shared shutdown, and a second thing in the codebase that
 means "background job".
 
-`internal/arch/arch_test.go` gains a case asserting `internal/platform/app` may
-import `internal/platform/jobs` and that the direction is not reversed.
+No arch test change is needed. `TestLayering` in
+`internal/arch/arch_test.go` already lists `internal/platform/jobs` with
+`internal/platform/app` among its forbidden imports, so the direction that
+matters — the scheduler must never learn what an app is — is enforced today.
+`app` importing `jobs` is downward and already allowed.
 
 ## 3. Package layout
 
@@ -346,7 +349,7 @@ A reader accumulates cruft. This is the page that says what to prune.
 - **`store.go`** against a real SQLite file in a temp dir, per the existing
   store-test convention.
 - **Handlers** via `internal/htmlassert`.
-- **`internal/arch`** gains the `app` → `jobs` import case.
+- **`internal/arch`** needs no new case; see section 2.
 
 ## 10. Phasing
 
