@@ -101,6 +101,43 @@ func TestSanitizeArticleHTMLFailsClosed(t *testing.T) {
 	}
 }
 
+// policyWithImages must stay exactly as strict as the default policy about
+// relative <a href> values. Before this fix, allowing a relative <img src>
+// through required flipping bluemonday's policy-wide AllowRelativeURLs
+// switch, which also let a relative link survive sanitizing unresolved —
+// rendering it relative to the reader app's own origin instead of the
+// publisher's site. Pre-absolutizing img sources ahead of sanitizing lets
+// policyWithImages leave AllowRelativeURLs off, so this must show the same
+// "href stripped" behavior TestSanitizeHTMLStillStripsImages-adjacent code
+// already relies on for the default policy.
+func TestSanitizeArticleHTMLDoesNotWidenRelativeLinks(t *testing.T) {
+	in := `<p><a href="/about">About</a></p><img src="/img/a.png">`
+
+	got, images := reader.SanitizeArticleHTML(in, "https://example.com/posts/one")
+
+	if strings.Contains(got, `href="/about"`) {
+		t.Errorf("relative href survived unresolved through policyWithImages:\n%s", got)
+	}
+	if strings.Contains(got, `href="https://example.com/about"`) {
+		// Also acceptable: resolving the link instead of stripping it. Not
+		// implemented here, but if a future change adds it this branch
+		// should not fail the test — remove this guard if that happens.
+		t.Skip("href was resolved to an absolute URL instead of stripped; that is fine too")
+	}
+
+	if len(images) != 1 {
+		t.Fatalf("recorded %d images, want 1", len(images))
+	}
+	for _, src := range images {
+		if src != "https://example.com/img/a.png" {
+			t.Errorf("recorded source %q, want https://example.com/img/a.png", src)
+		}
+	}
+	if !strings.Contains(got, `src="/reader/img/`) {
+		t.Errorf("image was not rewritten to a proxy URL:\n%s", got)
+	}
+}
+
 // SanitizeHTML keeps R1's guarantee: on its own it strips images entirely, so
 // any caller that forgets to rewrite cannot leak.
 func TestSanitizeHTMLStillStripsImages(t *testing.T) {

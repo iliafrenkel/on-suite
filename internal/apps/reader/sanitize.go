@@ -73,12 +73,14 @@ var policyWithImages = sync.OnceValue(func() *bluemonday.Policy {
 	p := buildPolicy()
 	p.AllowAttrs("src", "alt", "title", "width", "height").OnElements("img")
 	// Publishers commonly write site-relative image sources (e.g. "/img/a.png").
-	// buildPolicy leaves relative URLs disallowed, which is right for links —
-	// every feed item's own link is absolute — but here it would silently drop
-	// the src. rewriteImages resolves whatever bluemonday keeps against the
-	// article's URL and refuses anything that isn't http(s) afterwards, so
-	// allowing relative values through does not weaken the fail-closed guarantee.
-	p.AllowRelativeURLs(true)
+	// AllowRelativeURLs is a policy-wide switch in bluemonday, not a per-element
+	// one — turning it on here would also let a relative <a href> survive
+	// unresolved, breaking the "links are always absolute" invariant that
+	// buildPolicy relies on. So relative image sources are resolved to absolute
+	// URLs by absolutizeImageSources *before* this policy ever sanitizes the
+	// fragment; by the time Sanitize runs, every img src it sees is already
+	// absolute, and this policy stays exactly as strict about relative URLs as
+	// the default one.
 	// No srcset or sizes: each would be a second list of URLs to rewrite for
 	// no benefit at the sizes an article renders at here.
 	return p

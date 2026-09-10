@@ -38,7 +38,15 @@ func SanitizeArticleHTML(raw, baseURL string) (string, map[string]string) {
 	if strings.TrimSpace(raw) == "" {
 		return "", nil
 	}
-	clean := policyWithImages().Sanitize(raw)
+	absolutized, err := absolutizeImageSources(raw, baseURL)
+	if err != nil {
+		// Fall through with the original markup; bluemonday will still run
+		// on it below, it just may drop a relative img src it otherwise
+		// could have resolved. Parsing raw HTML with html.ParseFragment
+		// essentially never fails, so this is a belt-and-suspenders path.
+		absolutized = raw
+	}
+	clean := policyWithImages().Sanitize(absolutized)
 	if !strings.Contains(clean, "<img") {
 		return clean, nil
 	}
@@ -47,6 +55,71 @@ func SanitizeArticleHTML(raw, baseURL string) (string, map[string]string) {
 		return SanitizeHTML(raw), nil
 	}
 	return out, images
+}
+
+// absolutizeImageSources rewrites every <img src> in the raw fragment to an
+// absolute http(s) URL before bluemonday ever sees it, so policyWithImages
+// never needs to allow relative URLs through — that switch is policy-wide in
+// bluemonday, not per-element, and would just as happily let a relative
+// <a href> survive sanitizing unresolved. Doing the absolutizing here instead
+// keeps "links are always absolute" true for policyWithImages exactly as it
+// already is for the default policy.
+//
+// An img whose src cannot be resolved to a valid http(s) absolute URL has its
+// src attribute removed outright, so bluemonday's later pass drops the image
+// the same way it does today — this is not a new fail-closed path, just an
+// earlier one.
+func absolutizeImageSources(fragment, baseURL string) (string, error) {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		base = nil
+	}
+
+	ctx := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
+	nodes, err := html.ParseFragment(strings.NewReader(fragment), ctx)
+	if err != nil {
+		return "", err
+	}
+
+	for _, n := range nodes {
+		walkAbsolutizeImages(n, base)
+	}
+
+	var buf strings.Builder
+	for _, n := range nodes {
+		if err := html.Render(&buf, n); err != nil {
+			return "", err
+		}
+	}
+	return buf.String(), nil
+}
+
+func walkAbsolutizeImages(n *html.Node, base *url.URL) {
+	if n.Type == html.ElementNode && n.DataAtom == atom.Img {
+		absolutizeOneImageSrc(n, base)
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		walkAbsolutizeImages(c, base)
+	}
+}
+
+func absolutizeOneImageSrc(n *html.Node, base *url.URL) {
+	var attrs []html.Attribute
+	var src string
+	for _, a := range n.Attr {
+		if a.Key == "src" {
+			src = strings.TrimSpace(a.Val)
+			continue
+		}
+		attrs = append(attrs, a)
+	}
+
+	abs, ok := absoluteImageURL(src, base)
+	if !ok {
+		n.Attr = attrs
+		return
+	}
+	n.Attr = append(attrs, html.Attribute{Key: "src", Val: abs})
 }
 
 // rewriteImages replaces every img src with a proxy path.
