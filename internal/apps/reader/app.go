@@ -26,9 +26,20 @@ type App struct {
 	client *Client
 	poller *Poller
 	deps   app.Deps
+	imgSem chan struct{}
 }
 
 func New() *App { return &App{} }
+
+// AllowPrivateFetchesForTest lets this app's HTTP client reach loopback, so
+// handler tests can point it at an httptest origin. Production never calls it;
+// the real guard is what TestDefaultClientRefusesPrivateAddresses exercises.
+//
+// It must be called after Mount, which is where a.client is built —
+// apptest.NewServer has already mounted by the time it hands the App back.
+func (a *App) AllowPrivateFetchesForTest() {
+	a.client.DenyAddr = func(string) error { return nil }
+}
 
 func (a *App) Meta() app.Meta {
 	return app.Meta{
@@ -55,6 +66,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.store = NewStore(deps.DB)
 	a.client = NewClient(deps.Version)
 	a.poller = NewPoller(a.store, a.client, deps.Log)
+	a.imgSem = make(chan struct{}, imageFetchConcurrency)
 
 	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("GET /feed/{id}", a.index)
@@ -72,6 +84,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /item/{id}/unread", a.setRead)
 	r.HandleFunc("POST /item/{id}/star", a.toggleStar)
 	r.HandleFunc("POST /read-all", a.markAllRead)
+	r.HandleFunc("GET /img/{hash}", a.image)
 }
 
 // purgeTick is daily. Retention is a housekeeping concern, not a
@@ -99,8 +112,12 @@ func (a *App) Jobs(deps app.Deps) []app.Job {
 				if err != nil {
 					return err
 				}
-				if n > 0 {
-					a.deps.Log.Info("reader purged old articles", "count", n)
+				images, err := a.store.PurgeOrphanImages(ctx)
+				if err != nil {
+					return err
+				}
+				if n > 0 || images > 0 {
+					a.deps.Log.Info("reader purged old articles", "items", n, "images", images)
 				}
 				return nil
 			},
