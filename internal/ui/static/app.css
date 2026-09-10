@@ -1630,3 +1630,207 @@ kbd {
 		flex-wrap: wrap;
 	}
 }
+
+/* ---- ON Reader ---------------------------------------------------------- */
+
+/* Three panes that scroll independently. A single page scroll is the thing
+ * that makes a reader feel wrong: the tree should stay put while a long
+ * article moves. */
+.reader-panes {
+	display: grid;
+	grid-template-columns: minmax(12rem, 16rem) minmax(16rem, 24rem) 1fr;
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.reader-tree,
+.reader-list,
+.reader-article {
+	min-width: 0;
+	min-height: 0;
+	overflow-y: auto;
+	padding: var(--s-3);
+}
+
+.reader-tree,
+.reader-list {
+	background: var(--c-bg-subtle);
+	border-right: 1px solid var(--c-border);
+}
+
+.reader-article {
+	background: var(--c-bg);
+}
+
+.reader-nodes,
+.reader-rows,
+.reader-tree ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+/* A count sits at the end of its row, quiet enough to scan past when it does
+ * not matter. */
+.reader-node,
+.reader-sub {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-2);
+	border-radius: 3px;
+	padding: var(--s-1) var(--s-2);
+}
+
+.reader-node a,
+.reader-sub a {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.reader-count {
+	flex: none;
+	color: var(--c-text-dim);
+	font-size: var(--fs-xs);
+	font-variant-numeric: tabular-nums;
+}
+
+.reader-node.is-active,
+.reader-sub.is-active {
+	background: var(--c-accent-bg);
+}
+
+/* A failing feed is one of the few things that genuinely needs attention, so
+ * it gets the orange that nothing else in this app is allowed to use. */
+.reader-failing {
+	color: var(--c-accent-attention);
+}
+
+.reader-list-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--s-2) var(--s-3);
+	margin-bottom: var(--s-3);
+}
+
+.reader-list-head h2 {
+	flex: 1 1 auto;
+	margin: 0;
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.reader-filters {
+	display: flex;
+	gap: var(--s-2);
+	font-size: var(--fs-xs);
+}
+
+.reader-filters .is-active {
+	color: var(--c-text);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.reader-row a {
+	display: block;
+	padding: var(--s-2);
+	border-radius: 3px;
+	text-decoration: none;
+}
+
+.reader-row .title {
+	display: block;
+	color: var(--c-text);
+}
+
+.reader-row .meta {
+	display: block;
+	color: var(--c-text-faint);
+	font-size: var(--fs-xs);
+}
+
+/* Read rows dim. That contrast *is* the unread indicator — do not also add a
+ * dot, or every row grows a second thing to read. */
+.reader-row.is-read .title {
+	color: var(--c-text-dim);
+	font-weight: 400;
+}
+
+.reader-row .title {
+	font-weight: 600;
+}
+
+.reader-star {
+	color: var(--c-accent);
+}
+
+.reader-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2);
+	margin-bottom: var(--s-4);
+}
+
+.reader-actions form {
+	margin: 0;
+}
+
+/* Prose measure. 38rem is roughly 70 characters at the body size, which is
+ * where long-form reading stops being work. */
+.reader-body {
+	max-width: 38rem;
+	font-family: var(--font-body);
+	line-height: 1.6;
+}
+
+.reader-body img {
+	max-width: 100%;
+	height: auto;
+}
+
+.reader-body pre {
+	overflow-x: auto;
+}
+
+/* Two panes: the tree stays, and the article takes the list's column once
+ * something is open. */
+@media (max-width: 900px) {
+	.reader-panes {
+		grid-template-columns: minmax(10rem, 14rem) 1fr;
+	}
+	.reader-article {
+		display: none;
+	}
+	#reader-article-open:checked ~ .reader-list {
+		display: none;
+	}
+	#reader-article-open:checked ~ .reader-article {
+		display: block;
+	}
+}
+
+/* One pane. Drilling down: tree, then list, then article. The checkboxes are
+ * set by the server and swapped out of band, so this needs no JavaScript —
+ * the same mechanism as #paste-detail-open above. */
+@media (max-width: 640px) {
+	.reader-panes {
+		grid-template-columns: 1fr;
+	}
+	#reader-list-open:checked ~ .reader-tree {
+		display: none;
+	}
+	#reader-list-open:checked ~ .reader-list {
+		display: block;
+	}
+	#reader-article-open:checked ~ .reader-list {
+		display: none;
+	}
+}
