@@ -819,3 +819,112 @@ func (s *Store) ItemState(ctx context.Context, userID, itemID int64) (read, star
 	}
 	return readAt.Valid, starredAt.Valid, nil
 }
+
+// Counts is the sidebar's unread numbers in one round trip.
+type Counts struct {
+	// BySub has an entry for every subscription, including those at zero.
+	BySub map[int64]int
+	// Total is unread across every subscription.
+	Total int
+	// Starred is how many items the user has saved, read or not.
+	Starred int
+}
+
+// UnreadCounts computes the whole sidebar in two queries.
+//
+// The LEFT JOIN is what keeps a subscription with nothing unread in the map at
+// zero rather than dropping it — an inner join here silently removes feeds from
+// the sidebar the moment they are all read, which looks exactly like data loss.
+//
+// The cutoff compares against fetched_at, not published_at, for the same
+// reason ItemsForScope does: published_at is the publisher's own date and has
+// no relationship to when we discovered the item, while fetched_at is when
+// this system learned of it — the actual question a cutoff needs answered.
+func (s *Store) UnreadCounts(ctx context.Context, userID int64) (Counts, error) {
+	out := Counts{BySub: map[int64]int{}}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT sub.id, count(i.id)
+		  FROM reader_subs sub
+		  LEFT JOIN reader_items i
+		         ON i.feed_id = sub.feed_id
+		        AND i.fetched_at >= sub.added_at
+		        AND NOT EXISTS (SELECT 1 FROM reader_item_state st
+		                         WHERE st.user_id = sub.user_id
+		                           AND st.item_id = i.id
+		                           AND st.read_at IS NOT NULL)
+		 WHERE sub.user_id = ?
+		 GROUP BY sub.id`, userID)
+	if err != nil {
+		return Counts{}, fmt.Errorf("reader: unread counts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var subID int64
+		var n int
+		if err := rows.Scan(&subID, &n); err != nil {
+			return Counts{}, fmt.Errorf("reader: scan unread count: %w", err)
+		}
+		out.BySub[subID] = n
+		out.Total += n
+	}
+	if err := rows.Err(); err != nil {
+		return Counts{}, fmt.Errorf("reader: iterate unread counts: %w", err)
+	}
+
+	// Starred is counted separately rather than folded into the grouped query
+	// above, which counts only unread items — a starred article that has been
+	// read still belongs in the Starred node.
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT count(*)
+		  FROM reader_item_state st
+		 WHERE st.user_id = ? AND st.starred_at IS NOT NULL`,
+		userID).Scan(&out.Starred); err != nil {
+		return Counts{}, fmt.Errorf("reader: starred count: %w", err)
+	}
+	return out, nil
+}
+
+// MarkAllRead marks everything currently unread in a scope as read, returning
+// how many rows it touched.
+//
+// It writes state rows for exactly the items the same predicate as
+// ItemsForScope would list — including ItemsForScope's fetched_at cutoff — so
+// "mark all read" and "what is unread" can never disagree.
+func (s *Store) MarkAllRead(ctx context.Context, userID int64, scope Scope, subID int64, now time.Time) (int, error) {
+	query := `
+		INSERT INTO reader_item_state (user_id, item_id, read_at, starred_at)
+		SELECT sub.user_id, i.id, ?, NULL
+		  FROM reader_items i
+		  JOIN reader_subs sub ON sub.feed_id = i.feed_id AND sub.user_id = ?
+		 WHERE i.fetched_at >= sub.added_at`
+	args := []any{formatTime(now), userID}
+
+	switch scope {
+	case ScopeFeed:
+		query += ` AND sub.id = ?`
+		args = append(args, subID)
+	case ScopeAll:
+		// Everything the user subscribes to.
+	case ScopeStarred:
+		query += ` AND EXISTS (SELECT 1 FROM reader_item_state st
+		                        WHERE st.user_id = sub.user_id AND st.item_id = i.id
+		                          AND st.starred_at IS NOT NULL)`
+	default:
+		return 0, fmt.Errorf("%w: unknown scope %q", ErrInvalid, scope)
+	}
+
+	query += ` ON CONFLICT (user_id, item_id) DO UPDATE SET read_at = excluded.read_at
+	            WHERE reader_item_state.read_at IS NULL`
+
+	res, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("reader: mark all read: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reader: mark all read rows: %w", err)
+	}
+	return int(n), nil
+}

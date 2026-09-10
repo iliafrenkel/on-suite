@@ -270,3 +270,121 @@ func TestItemsPublishedBeforeSubscribingAreNotUnread(t *testing.T) {
 		t.Errorf("alice has %d unread items; the cutoff must not hide items from the original subscriber", len(aliceUnread))
 	}
 }
+
+func TestUnreadCounts(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "A", PublishedAt: now.Add(-3 * time.Hour)},
+		{GUID: "b", Title: "B", PublishedAt: now.Add(-2 * time.Hour)},
+		{GUID: "c", Title: "C", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	counts, err := f.store.UnreadCounts(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatalf("UnreadCounts: %v", err)
+	}
+	if counts.BySub[sub.ID] != 3 {
+		t.Errorf("BySub[%d] = %d, want 3", sub.ID, counts.BySub[sub.ID])
+	}
+	if counts.Total != 3 {
+		t.Errorf("Total = %d, want 3", counts.Total)
+	}
+
+	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetRead(ctx, f.alice.ID, items[0].ID, true, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetStarred(ctx, f.alice.ID, items[1].ID, true, now); err != nil {
+		t.Fatal(err)
+	}
+
+	counts, err = f.store.UnreadCounts(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts.BySub[sub.ID] != 2 {
+		t.Errorf("after one read, BySub = %d, want 2", counts.BySub[sub.ID])
+	}
+	if counts.Starred != 1 {
+		t.Errorf("Starred = %d, want 1", counts.Starred)
+	}
+}
+
+// A subscription with nothing unread must still appear, at zero. Dropping it
+// from the map is how a sidebar ends up silently missing a feed.
+func TestUnreadCountsIncludeEmptySubscriptions(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts, err := f.store.UnreadCounts(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := counts.BySub[sub.ID]; !ok {
+		t.Error("a subscription with no items is missing from BySub entirely")
+	}
+	if counts.BySub[sub.ID] != 0 {
+		t.Errorf("BySub = %d, want 0", counts.BySub[sub.ID])
+	}
+}
+
+func TestMarkAllReadIsScopedAndDoesNotTouchOtherUsers(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	aliceSub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobSub, err := f.store.Subscribe(ctx, f.bob.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := f.store.SaveItems(ctx, aliceSub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "A", PublishedAt: now.Add(-2 * time.Hour)},
+		{GUID: "b", Title: "B", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := f.store.MarkAllRead(ctx, f.alice.ID, reader.ScopeFeed, aliceSub.ID, now)
+	if err != nil {
+		t.Fatalf("MarkAllRead: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("marked %d items read, want 2", n)
+	}
+
+	aliceCounts, err := f.store.UnreadCounts(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aliceCounts.Total != 0 {
+		t.Errorf("alice still has %d unread", aliceCounts.Total)
+	}
+
+	bobCounts, err := f.store.UnreadCounts(ctx, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bobCounts.BySub[bobSub.ID] != 2 {
+		t.Errorf("bob has %d unread; alice's mark-all-read must not touch his state", bobCounts.BySub[bobSub.ID])
+	}
+}
