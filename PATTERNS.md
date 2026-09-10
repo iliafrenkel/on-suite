@@ -17,6 +17,13 @@ find) a shape that already exists elsewhere. Keep entries to one line each;
 if an entry needs more than that to explain, the explanation belongs in the
 canonical example's own comment, not here.
 
+- **Cheap pre-hashed password in test fixtures** — reach for this whenever a
+  test needs a user account: store `apptest.PasswordHash` rather than calling
+  `auth.HashPassword`, because a PHC string carries its own Argon2id cost
+  parameters and the production ones cost ~27ms a call. Canonical:
+  `internal/apptest/apptest.go`'s `PasswordHash`, used by every app's
+  `store_test.go` fixture.
+
 - **Server-rejection surfaced as a dismissable notice** — reach for this
   when an htmx request can be rejected (4xx/5xx), or fails at the network
   level (offline), and swap:false would otherwise leave the user with no

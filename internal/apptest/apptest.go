@@ -43,6 +43,35 @@ import (
 // to thread a per-user secret through anything.
 const Password = "a-sufficiently-long-password"
 
+// PasswordHash is Password, pre-hashed with deliberately cheap Argon2id
+// parameters. Every test fixture in this repository stores it instead of
+// calling auth.HashPassword.
+//
+// Why: the production parameters (m=64MiB, t=3, p=4) cost about 27ms per hash
+// and are meant to. The notes package alone builds roughly 140 fixtures, and
+// every LogIn verifies as well, which put Argon2id at around two thirds of the
+// whole suite's CPU. Moving the fixtures to these parameters took
+// `go test ./... -race -count=1` from 4m18s to 30s.
+//
+// This is safe because a PHC string carries its own cost parameters, so
+// VerifyPassword reads m, t and p from here rather than from
+// defaultHashParams. Nothing about the production hashing path changes, and
+// internal/platform/auth/password_test.go still exercises HashPassword at the
+// real parameters — so a regression there still fails where it should.
+//
+// Never use these parameters for a real user's password: m=64KiB, t=1, p=1 is
+// trivially brute-forceable, which is exactly why it is fast.
+//
+// To regenerate, if Password ever changes:
+//
+//	salt := make([]byte, 16)
+//	rand.Read(salt)
+//	key := argon2.IDKey([]byte(Password), salt, 1, 64, 1, 32)
+//	fmt.Printf("$argon2id$v=%v$m=64,t=1,p=1$%v$%v\n", argon2.Version,
+//		base64.RawStdEncoding.EncodeToString(salt),
+//		base64.RawStdEncoding.EncodeToString(key))
+const PasswordHash = "$argon2id$v=19$m=64,t=1,p=1$iIjmml1kRNXc0KsDf1i2gg$16+9ZMjxCqGoA2NAv5F+RPDQINiAsDwIxtH1F8X5AWM"
+
 // Session holds one signed-in browser's cookies.
 type Session struct {
 	User    auth.User
@@ -146,12 +175,8 @@ func NewServer[S any](t *testing.T, a app.App, newStore func(*sql.DB) S, opts ..
 		Store:   newStore(handle),
 	}
 
-	hash, err := auth.HashPassword(Password)
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, name := range []string{"alice", "bob"} {
-		u, err := users.CreateUser(ctx, name, hash, false)
+		u, err := users.CreateUser(ctx, name, PasswordHash, false)
 		if err != nil {
 			t.Fatal(err)
 		}
