@@ -928,3 +928,44 @@ func (s *Store) MarkAllRead(ctx context.Context, userID int64, scope Scope, subI
 	}
 	return int(n), nil
 }
+
+// RetentionAge is how long a read, unstarred article is kept.
+//
+// A constant rather than a flag: the platform's config is a deliberately small,
+// closed set of server settings, and adding per-app configuration is a separate
+// design question this app should not answer on its own.
+const RetentionAge = 60 * 24 * time.Hour
+
+// PurgeItems deletes articles published before the cutoff, keeping anything
+// anyone starred and anything anyone still has unread.
+//
+// The items are shared across the household but the state is not, so "read" has
+// to mean read by every subscriber who can see it. Deleting an article one
+// person finished while another has it waiting would be quiet data loss.
+func (s *Store) PurgeItems(ctx context.Context, before time.Time) (int, error) {
+	res, err := s.db.ExecContext(ctx, `
+		DELETE FROM reader_items
+		 WHERE published_at < ?
+		   AND NOT EXISTS (
+		       SELECT 1 FROM reader_item_state st
+		        WHERE st.item_id = reader_items.id
+		          AND st.starred_at IS NOT NULL)
+		   AND NOT EXISTS (
+		       SELECT 1 FROM reader_subs sub
+		        WHERE sub.feed_id = reader_items.feed_id
+		          AND reader_items.fetched_at >= sub.added_at
+		          AND NOT EXISTS (
+		              SELECT 1 FROM reader_item_state st2
+		               WHERE st2.user_id = sub.user_id
+		                 AND st2.item_id = reader_items.id
+		                 AND st2.read_at IS NOT NULL))`,
+		formatTime(before))
+	if err != nil {
+		return 0, fmt.Errorf("reader: purge items: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reader: purge rows: %w", err)
+	}
+	return int(n), nil
+}
