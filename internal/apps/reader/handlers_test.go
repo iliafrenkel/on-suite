@@ -937,3 +937,40 @@ func setAddedAt(t *testing.T, s *apptest.Server[*reader.Store], subID int64, at 
 		t.Fatal(err)
 	}
 }
+
+// TestArticleResponseSwapsOnlyTheSidebarCounts pins the OOB fragment's ids
+// (#reader-count-all, #reader-count-starred, #reader-count-sub-N); this test
+// pins the other half of that contract — that the full page render emits the
+// SAME ids, for a subscription inside a folder as well as one at the root.
+// The tree template has two near-identical per-subscription count spans, one
+// in the folder loop and one in the root loop, so a future edit to either
+// could drift from the OOB side without either test failing on its own.
+func TestReaderPageEmitsTheSidebarCountIdsTheOOBSwapTargets(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Tech")
+	if err != nil {
+		t.Fatal(err)
+	}
+	folderSub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/folder-feed.xml", &folder.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, folderSub.FeedID, []reader.ParsedItem{{
+		GUID: "f1", Title: "In folder", PublishedAt: time.Now().UTC(),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	rootSubID, _ := seedOne(t, s, "r1")
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	doc.MustHave("#reader-count-all")
+	starred := doc.MustHave("#reader-count-starred")
+	if got := strings.TrimSpace(htmlassert.Text(starred)); got != "" {
+		t.Errorf("#reader-count-starred = %q with nothing starred, want an empty span (present, not absent)", got)
+	}
+	doc.MustHave("#reader-count-sub-" + itoa(folderSub.ID))
+	doc.MustHave("#reader-count-sub-" + itoa(rootSubID))
+}
