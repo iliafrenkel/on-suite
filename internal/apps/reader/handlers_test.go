@@ -419,3 +419,169 @@ func TestSubscribePollAndRenderComposedFlow(t *testing.T) {
 		t.Error("unsanitized script content reached the rendered article")
 	}
 }
+
+// seedOne subscribes Alice to a feed and stores n items, returning them
+// newest-first as the list pane would show them.
+func seedOne(t *testing.T, s *apptest.Server[*reader.Store], guids ...string) (int64, []reader.Item) {
+	t.Helper()
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	var parsed []reader.ParsedItem
+	for i, g := range guids {
+		parsed = append(parsed, reader.ParsedItem{
+			GUID:        g,
+			Title:       "Article " + g,
+			ContentHTML: "<p>Body of " + g + ".</p>",
+			PublishedAt: now.Add(-time.Duration(i+1) * time.Hour),
+		})
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, parsed, now); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sub.ID, items
+}
+
+func TestOpeningAnArticleMarksItReadAndOffersUndo(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	_, items := seedOne(t, s, "g1")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("article returned %d", rec.Code)
+	}
+
+	read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !read {
+		t.Error("opening an article did not mark it read")
+	}
+	if !strings.Contains(rec.Body.String(), "/unread") {
+		t.Errorf("no undo control in the article pane:\n%s", rec.Body.String())
+	}
+}
+
+// The drill-down layout depends on this: the article pane is swapped on its
+// own, so the pane-state checkbox has to ride along out of band or a phone
+// stays on the list after opening an article.
+func TestArticleResponseCarriesTheOOBPaneState(t *testing.T) {
+	s := newServer(t)
+	_, items := seedOne(t, s, "g1")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil))
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="reader-article-open"`) {
+		t.Errorf("article response has no reader-article-open input:\n%s", body)
+	}
+	if !strings.Contains(body, `hx-swap-oob`) {
+		t.Errorf("pane-state input is not swapped out of band:\n%s", body)
+	}
+}
+
+func TestStarToggleRoundTrips(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	_, items := seedOne(t, s, "g1")
+	path := "/reader/item/" + itoa(items[0].ID) + "/star"
+
+	s.PostHX(t, s.Alice, path, url.Values{})
+	if _, starred, _ := s.Store.ItemState(ctx, s.Alice.User.ID, items[0].ID); !starred {
+		t.Fatal("first star post did not star the item")
+	}
+	s.PostHX(t, s.Alice, path, url.Values{})
+	if _, starred, _ := s.Store.ItemState(ctx, s.Alice.User.ID, items[0].ID); starred {
+		t.Error("second star post did not unstar the item")
+	}
+}
+
+func TestStateRoutesRefuseAnotherUsersItem(t *testing.T) {
+	s := newServer(t)
+	_, items := seedOne(t, s, "g1")
+
+	for _, path := range []string{
+		"/reader/item/" + itoa(items[0].ID) + "/read",
+		"/reader/item/" + itoa(items[0].ID) + "/unread",
+		"/reader/item/" + itoa(items[0].ID) + "/star",
+	} {
+		rec := s.PostHX(t, s.Bob, path, url.Values{})
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s as bob returned %d, want 404 — a 403 would confirm the id exists", path, rec.Code)
+		}
+	}
+}
+
+func TestUnreadCountAppearsInTheTree(t *testing.T) {
+	s := newServer(t)
+	seedOne(t, s, "a", "b")
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	if doc.Query(".reader-count") == nil {
+		t.Fatalf("no .reader-count element in the tree:\n%s", doc.Text())
+	}
+	if !strings.Contains(doc.Text(), "2") {
+		t.Errorf("unread count of 2 is not rendered:\n%s", doc.Text())
+	}
+}
+
+func TestFilterNarrowsTheListToUnread(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	subID, items := seedOne(t, s, "a", "b")
+
+	if err := s.Store.SetRead(ctx, s.Alice.User.ID, items[0].ID, true, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	unread := s.Get(t, s.Alice, "/reader/feed/"+itoa(subID)+"?filter=unread")
+	if n := len(unread.QueryAll(".reader-row")); n != 1 {
+		t.Errorf("unread filter shows %d rows, want 1", n)
+	}
+	all := s.Get(t, s.Alice, "/reader/feed/"+itoa(subID)+"?filter=all")
+	if n := len(all.QueryAll(".reader-row")); n != 2 {
+		t.Errorf("all filter shows %d rows, want 2", n)
+	}
+}
+
+func TestMarkAllReadClearsTheFeed(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	subID, _ := seedOne(t, s, "a", "b")
+
+	s.PostHX(t, s.Alice, "/reader/read-all", url.Values{
+		"scope": {"feed"},
+		"sub":   {itoa(subID)},
+	})
+
+	counts, err := s.Store.UnreadCounts(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts.Total != 0 {
+		t.Errorf("%d items still unread after mark-all-read", counts.Total)
+	}
+}
+
+func TestStarredScopeHasItsOwnPage(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	_, items := seedOne(t, s, "a", "b")
+
+	if err := s.Store.SetStarred(ctx, s.Alice.User.ID, items[0].ID, true, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/reader/starred?filter=all")
+	if n := len(doc.QueryAll(".reader-row")); n != 1 {
+		t.Errorf("starred page shows %d rows, want 1", n)
+	}
+}

@@ -64,6 +64,14 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /folder", a.createFolder)
 	r.HandleFunc("POST /folder/{id}/delete", a.deleteFolder)
 	r.HandleFunc("POST /refresh", a.refresh)
+
+	// Scope lives in the path and the filter in the query string, so a URL is
+	// shareable and hx-push-url writes something meaningful into history.
+	r.HandleFunc("GET /starred", a.index)
+	r.HandleFunc("POST /item/{id}/read", a.setRead)
+	r.HandleFunc("POST /item/{id}/unread", a.setRead)
+	r.HandleFunc("POST /item/{id}/star", a.toggleStar)
+	r.HandleFunc("POST /read-all", a.markAllRead)
 }
 
 // purgeTick is daily. Retention is a housekeeping concern, not a
