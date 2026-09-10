@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/paste"
+	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
@@ -47,15 +48,11 @@ func newFixture(t *testing.T) *fixture {
 	}
 
 	users := auth.NewStore(handle)
-	hash, err := auth.HashPassword("a-sufficiently-long-password")
+	alice, err := users.CreateUser(ctx, "alice", apptest.PasswordHash, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	alice, err := users.CreateUser(ctx, "alice", hash, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bob, err := users.CreateUser(ctx, "bob", hash, false)
+	bob, err := users.CreateUser(ctx, "bob", apptest.PasswordHash, false)
 	if err != nil {
 		t.Fatal(err)
 	}
