@@ -39,11 +39,6 @@ type treeView struct {
 	// Empty is true when the user has no subscriptions at all, which is a
 	// different thing from a folder having none.
 	Empty bool
-	// OOB makes the tree an out-of-band swap. The article response redraws
-	// the tree so unread counts do not go stale the moment something is read;
-	// the panes response has the tree inside its own primary swap, where a
-	// second hx-swap-oob would be wrong.
-	OOB bool
 }
 
 type listView struct {

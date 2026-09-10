@@ -192,9 +192,10 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, 
 }
 
 // renderPanes is renderIndex with an optional third pane already loaded. Only
-// the JavaScript-less star/unread path passes an article: with htmx those
-// routes answer with the article fragment, and without it they have to answer
-// with a whole page or the browser lands on a bare <article> with no shell.
+// the JavaScript-less item routes pass an article — opening one, starring it,
+// or marking it unread: with htmx they answer with the article fragment, and
+// without it they have to answer with a whole page or the browser lands on a
+// bare <article> with no shell.
 func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr string, art articleView) {
 	ctx := r.Context()
 
@@ -291,11 +292,14 @@ func findSub(t Tree, id int64) Subscription {
 // phone swaps a pane the viewport is not showing. (R1 had an article OOB swap
 // reverted as unrequested — this one is requested, deliberately, and
 // TestArticleResponseCarriesTheOOBPaneState pins it.)
-// It also redraws the tree out of band. Reading or starring an article changes
-// an unread count, and without this the sidebar keeps the pre-click numbers
-// until some unrelated navigation happens to reconcile them. The tree comes
-// from the same viewTree/"tree" pair "panes-oob" uses, so there is one way to
-// render it.
+// It also redraws the sidebar's unread counts out of band. Reading or starring
+// an article changes a count, and without this the sidebar keeps the pre-click
+// numbers until some unrelated navigation happens to reconcile them. Only the
+// count spans are swapped, not the whole tree: the counts are the only thing
+// that changed, and replacing the <nav> would discard a half-typed feed URL or
+// folder name, re-expand every collapsed folder and reset the pane's scroll —
+// on the app's most frequent interaction. They come from the same Counts the
+// tree renders from, so there is still one source for every number.
 //
 // The list pane is deliberately *not* swapped along with it: under the Unread
 // filter a fresh list would drop the article out from under the reader the
@@ -323,11 +327,15 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 	lc := articleContext(r)
 	page := a.deps.Page(r, item.Title)
 
-	// A POST that did not come from htmx is a plain form submission — the
-	// star and unread forms carry method/action for exactly that case — so it
-	// gets the whole page back rather than a fragment with no shell around it.
-	// A GET stays a fragment: the item link is an htmx swap of one pane.
-	if r.Method == http.MethodPost && !web.IsHTMX(r) {
+	// Anything that did not come from htmx is a plain browser navigation and
+	// gets the whole page back: a form submission from the star or unread
+	// forms (which carry method/action for exactly that case), or a click on
+	// an item link with JavaScript off. Without the GET half of this, reading
+	// an article — the one thing this app is for — was the only action a
+	// no-JS reader could not do: the response was a bare <article> with a
+	// stray out-of-band checkbox and no shell around either.
+	// An htmx request, GET or POST, still gets the one-pane fragment.
+	if !web.IsHTMX(r) {
 		a.renderPanes(w, r, userID, lc, "", viewArticle(item, page.Shell, lc))
 		return
 	}
@@ -338,7 +346,6 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 		Article: viewArticle(item, page.Shell, lc),
 		Shell:   page.Shell,
 	}
-	view.Tree.OOB = true
 	if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article-swap", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}

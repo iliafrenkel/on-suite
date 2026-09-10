@@ -29,6 +29,26 @@
      forms and Refresh were unreachable for the rest of the session. */}}
 {{define "reader-back"}}<label class="toolbar-btn reader-back-btn" for="{{.For}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>{{.Label}}</label>{{end}}
 
+{{/* count-span is one sidebar number. It always renders, with an empty body
+     when the count is zero, because "counts-oob" swaps these by id: an element
+     that disappears at zero cannot be swapped back, so the last read in a feed
+     would leave a stale number on screen forever. Empty is the same thing
+     visually — .reader-count has no box of its own — so a column of noughts is
+     still avoided; the conditional just moved inside the span.
+     ID is the stable target, N the count, OOB set only by "counts-oob". */}}
+{{define "count-span"}}<span class="reader-count" id="{{.ID}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{if .N}}{{.N}}{{end}}</span>{{end}}
+
+{{/* counts-oob is the sidebar's numbers and nothing else, for the article
+     response. Reading or starring changes an unread count, but it changes
+     nothing else in the tree, and swapping the whole <nav> to deliver three
+     numbers threw away everything the tree was holding: whatever was half
+     typed into #feed-url or #folder-name, which <details> folders the reader
+     had collapsed, and the pane's scroll position — on opening an article,
+     the single most frequent action in the app. So only the spans move.
+     It reads the same Counts "tree" does, so there is still one source for
+     every number. */}}
+{{define "counts-oob"}}{{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total "OOB" true)}}{{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred "OOB" true)}}{{range .Tree.Folders}}{{range .Subs}}{{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID) "OOB" true)}}{{end}}{{end}}{{range .Tree.Root}}{{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID) "OOB" true)}}{{end}}{{end}}
+
 {{define "panes"}}
 <div class="reader-panes" id="reader-panes">
   {{/* Two hidden checkboxes drive the narrow-viewport drill-down, the same
@@ -52,7 +72,7 @@
      since the token otherwise only travels in the X-CSRF-Token header base.html
      sets for htmx. */}}
 {{define "tree"}}
-<nav class="reader-tree" id="reader-tree" aria-label="Feeds"{{if .Tree.OOB}} hx-swap-oob="true"{{end}}>
+<nav class="reader-tree" id="reader-tree" aria-label="Feeds">
   <form class="reader-add" method="post" action="/reader/subscribe"
         hx-post="/reader/subscribe" hx-target="#reader-panes" hx-swap="outerHTML">
     {{template "reader-ctx" .List}}
@@ -87,12 +107,12 @@
     <li class="reader-node{{if eq .Tree.Scope "all"}} is-active{{end}}">
       <a href="/reader/" hx-get="/reader/" hx-target="#reader-panes"
          hx-swap="outerHTML" hx-push-url="true">All</a>
-      {{if .Tree.Counts.Total}}<span class="reader-count">{{.Tree.Counts.Total}}</span>{{end}}
+      {{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total)}}
     </li>
     <li class="reader-node{{if eq .Tree.Scope "starred"}} is-active{{end}}">
       <a href="/reader/starred" hx-get="/reader/starred" hx-target="#reader-panes"
          hx-swap="outerHTML" hx-push-url="true">Starred</a>
-      {{if .Tree.Counts.Starred}}<span class="reader-count">{{.Tree.Counts.Starred}}</span>{{end}}
+      {{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred)}}
     </li>
   </ul>
 
@@ -122,7 +142,7 @@
           <li class="reader-sub{{if eq .ID $.Tree.ActiveID}} is-active{{end}}">
             <a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
                  hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
-            {{with index $.Tree.Counts.BySub .ID}}{{if .}}<span class="reader-count">{{.}}</span>{{end}}{{end}}
+            {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID))}}
             <form method="post" action="/reader/sub/{{.ID}}/delete">
               {{template "reader-ctx" $.List}}
               <button type="submit" class="reader-sub-delete"
@@ -140,7 +160,7 @@
       <li class="reader-sub{{if eq .ID $.Tree.ActiveID}} is-active{{end}}">
         <a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
              hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
-        {{with index $.Tree.Counts.BySub .ID}}{{if .}}<span class="reader-count">{{.}}</span>{{end}}{{end}}
+        {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID))}}
         <form method="post" action="/reader/sub/{{.ID}}/delete">
           {{template "reader-ctx" $.List}}
           <button type="submit" class="reader-sub-delete"
@@ -202,11 +222,11 @@
      opening one, starring it, or undoing the automatic mark-as-read. Two
      things ride along out of band. The pane-state checkbox, so the narrow
      layout drills down into the article — without it, opening an article on a
-     phone swaps a pane the viewport is not showing. And the tree, because
-     reading or starring changes an unread count and the sidebar would
+     phone swaps a pane the viewport is not showing. And the sidebar counts,
+     because reading or starring changes an unread count and the sidebar would
      otherwise keep the pre-click numbers until some unrelated navigation
-     reconciled them. */}}
-{{define "article-swap"}}{{template "article-oob" .Article}}{{template "tree" .}}{{end}}
+     reconciled them. Only the counts, not the whole tree: see "counts-oob". */}}
+{{define "article-swap"}}{{template "article-oob" .Article}}{{template "counts-oob" .}}{{end}}
 
 {{define "article-oob"}}<input type="checkbox" id="reader-article-open" class="visually-hidden" hx-swap-oob="true" checked aria-hidden="true" tabindex="-1">{{template "article" .}}{{end}}
 

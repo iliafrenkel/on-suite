@@ -476,11 +476,20 @@ func TestOpeningAnArticleMarksItReadAndOffersUndo(t *testing.T) {
 // The drill-down layout depends on this: the article pane is swapped on its
 // own, so the pane-state checkbox has to ride along out of band or a phone
 // stays on the list after opening an article.
+//
+// The request has to actually claim to be an htmx one. The fragment-with-OOB
+// shape this asserts is the htmx response; a request without HX-Request is a
+// plain browser navigation and now correctly gets a whole page back (see
+// TestPlainGetOfAnItemRendersAWholePage), which has no reason to carry an
+// out-of-band anything. Asserting fragment markup on a non-htmx request was
+// pinning the right shape through the wrong door.
 func TestArticleResponseCarriesTheOOBPaneState(t *testing.T) {
 	s := newServer(t)
 	_, items := seedOne(t, s, "g1")
 
-	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil))
+	req := httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
 	body := rec.Body.String()
 	if !strings.Contains(body, `id="reader-article-open"`) {
 		t.Errorf("article response has no reader-article-open input:\n%s", body)
@@ -728,41 +737,60 @@ func TestNarrowViewportHasABackControlAtEachDrillDownLevel(t *testing.T) {
 	htmlassert.Parse(t, rec.Body.String()).MustHave(".reader-article label[for=reader-article-open]")
 }
 
-// Reading an article changes an unread count, so the tree has to come back
+// Reading an article changes an unread count, so the counts have to come back
 // with the article or the sidebar keeps the pre-click numbers until some
 // unrelated navigation reconciles them.
-func TestArticleResponseRedrawsTheTreeCounts(t *testing.T) {
+//
+// And *only* the counts. Opening an article is the most frequent action in the
+// app; sending the whole <nav> back would throw away a half-typed feed URL or
+// folder name, re-expand every folder the reader had collapsed and reset the
+// tree's scroll position, every single time. The absence assertions below are
+// the direct proof the swap is narrow — a Go http test cannot simulate
+// unsubmitted client-side form state, but markup that never reaches the
+// browser cannot overwrite anything.
+func TestArticleResponseSwapsOnlyTheSidebarCounts(t *testing.T) {
 	s := newServer(t)
 	subID, items := seedOne(t, s, "a", "b")
 
-	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet,
-		"/reader/item/"+itoa(items[0].ID)+"?scope=feed&sub="+itoa(subID)+"&filter=unread", nil))
+	req := httptest.NewRequest(http.MethodGet,
+		"/reader/item/"+itoa(items[0].ID)+"?scope=feed&sub="+itoa(subID)+"&filter=unread", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("article returned %d: %s", rec.Code, rec.Body.String())
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
 
-	tree := doc.MustHave("nav#reader-tree")
-	if _, ok := htmlassert.Attr(tree, "hx-swap-oob"); !ok {
-		t.Error("the tree rides along without hx-swap-oob, so htmx would discard it")
-	}
-	counts := doc.QueryAll(".reader-count")
-	if len(counts) == 0 {
-		t.Fatalf("no unread counts in the redrawn tree:\n%s", rec.Body.String())
-	}
-	for _, c := range counts {
-		if got := strings.TrimSpace(htmlassert.Text(c)); got != "1" {
-			t.Errorf("tree count = %q after reading one of two articles, want 1", got)
+	// The counts that changed, addressed by their stable ids.
+	for _, id := range []string{"#reader-count-all", "#reader-count-sub-" + itoa(subID)} {
+		span := doc.MustHave(id)
+		if got, _ := htmlassert.Attr(span, "hx-swap-oob"); got != "true" {
+			t.Errorf("%s hx-swap-oob = %q, want true — htmx would discard it", id, got)
+		}
+		if got := strings.TrimSpace(htmlassert.Text(span)); got != "1" {
+			t.Errorf("%s = %q after reading one of two articles, want 1", id, got)
 		}
 	}
-	if doc.Query("li.is-active") == nil {
-		t.Error("the tree redraw lost the selected feed; the article link has to carry its list context")
+	// Zero still renders, as an empty span: an element that disappears at
+	// zero cannot be swapped back when the count rises again.
+	starred := doc.MustHave("#reader-count-starred")
+	if got := strings.TrimSpace(htmlassert.Text(starred)); got != "" {
+		t.Errorf("#reader-count-starred = %q with nothing starred, want no visible number", got)
 	}
+
+	// Nothing else from the tree is in the response.
+	doc.MustNotHave("nav")
+	doc.MustNotHave("#feed-url")
+	doc.MustNotHave("#folder-name")
+	doc.MustNotHave("details")
+	doc.MustNotHave("form.reader-add")
 }
 
-// The star form's own POST has to keep the tree in step too, and stay on the
-// list the article was opened from.
-func TestStarResponseRedrawsTheTreeForTheSameList(t *testing.T) {
+// The star form's own POST has to keep the counts in step too, and the article
+// it sends back has to stay pointed at the list it was opened from — that
+// context lives only in the form's hidden fields, so a round trip that drops
+// it strands the next star or unread post on All/Unread.
+func TestStarResponseKeepsTheCountsAndTheListContext(t *testing.T) {
 	s := newServer(t)
 	subID, items := seedOne(t, s, "a", "b")
 
@@ -775,9 +803,49 @@ func TestStarResponseRedrawsTheTreeForTheSameList(t *testing.T) {
 		t.Fatalf("star returned %d: %s", rec.Code, rec.Body.String())
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustHave("nav#reader-tree")
-	if doc.Query("li.is-active") == nil {
-		t.Error("starring redrew the tree with no selected feed; the form has to carry its list context")
+
+	starred := doc.MustHave("#reader-count-starred")
+	if got := strings.TrimSpace(htmlassert.Text(starred)); got != "1" {
+		t.Errorf("#reader-count-starred = %q after starring one item, want 1", got)
+	}
+	doc.MustNotHave("nav")
+
+	for sel, want := range map[string]string{
+		`input[name=scope]`:  "feed",
+		`input[name=sub]`:    itoa(subID),
+		`input[name=filter]`: "all",
+	} {
+		field := doc.MustHave(sel)
+		if got, _ := htmlassert.Attr(field, "value"); got != want {
+			t.Errorf("%s value = %q, want %q — the article forms lost their list context", sel, got, want)
+		}
+	}
+}
+
+// A plain item link click with JavaScript off must land on the whole app, not
+// a floating <article>. Reading an article is what this app is for, so this is
+// the one place a bare fragment would have made the no-JS path useless.
+func TestPlainGetOfAnItemRendersAWholePage(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	_, items := seedOne(t, s, "a", "b")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("plain GET of an item = %d: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("main")
+	doc.MustHave("nav.reader-tree")
+	doc.MustHave("section.reader-list")
+	doc.MustHave("article.reader-article .reader-body")
+
+	// Marking read on open is the R2 design's core behaviour and does not
+	// depend on which shape the response takes.
+	if read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, items[0].ID); err != nil {
+		t.Fatal(err)
+	} else if !read {
+		t.Error("the whole-page render skipped marking the item read")
 	}
 }
 
