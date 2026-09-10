@@ -55,6 +55,9 @@ type listView struct {
 	Filter Filter
 	// BasePath is the path the filter links point at, without the query.
 	BasePath string
+	// Shell carries the CSRF token the mark-all-read form needs. It is set by
+	// renderIndex rather than viewList, which has no request to read it from.
+	Shell render.Shell
 }
 
 type listItem struct {

@@ -11,6 +11,15 @@
 
 {{define "panes"}}
 <div class="reader-panes" id="reader-panes">
+  {{/* Two hidden checkboxes drive the narrow-viewport drill-down with no
+       JavaScript, the same technique #paste-detail-open uses. They are
+       siblings of the three panes so the CSS can reach the panes with ~, and
+       the server sets them: a feed selected checks the first, an open article
+       checks the second. */}}
+  <input type="checkbox" id="reader-list-open" class="visually-hidden"
+         {{if .List.Selected}}checked{{end}} aria-hidden="true" tabindex="-1">
+  <input type="checkbox" id="reader-article-open" class="visually-hidden"
+         {{if .Article.Selected}}checked{{end}} aria-hidden="true" tabindex="-1">
   {{template "tree" .}}
   {{template "list" .List}}
   {{template "article" .Article}}
@@ -20,6 +29,7 @@
 {{define "tree"}}
 <nav class="reader-tree" aria-label="Feeds">
   <form class="reader-add" hx-post="/reader/subscribe" hx-target="#reader-panes" hx-swap="outerHTML">
+    <input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
     <label for="feed-url">Add a feed</label>
     <input id="feed-url" name="url" type="url" placeholder="https://example.com/feed.xml" required>
     <label for="feed-folder">Folder</label>
@@ -34,12 +44,26 @@
   </form>
 
   <form class="reader-add-folder" hx-post="/reader/folder" hx-target="#reader-panes" hx-swap="outerHTML">
+    <input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
     <label for="folder-name">New folder</label>
     <input id="folder-name" name="name" type="text" placeholder="Folder name" required>
     <button type="submit">Create folder</button>
   </form>
 
   <button type="button" hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">Refresh</button>
+
+  <ul class="reader-nodes">
+    <li class="reader-node{{if eq .Tree.Scope "all"}} is-active{{end}}">
+      <a href="/reader/" hx-get="/reader/" hx-target="#reader-panes"
+         hx-swap="outerHTML" hx-push-url="true">All</a>
+      {{if .Tree.Counts.Total}}<span class="reader-count">{{.Tree.Counts.Total}}</span>{{end}}
+    </li>
+    <li class="reader-node{{if eq .Tree.Scope "starred"}} is-active{{end}}">
+      <a href="/reader/starred" hx-get="/reader/starred" hx-target="#reader-panes"
+         hx-swap="outerHTML" hx-push-url="true">Starred</a>
+      {{if .Tree.Counts.Starred}}<span class="reader-count">{{.Tree.Counts.Starred}}</span>{{end}}
+    </li>
+  </ul>
 
   {{/* Empty means no subscriptions anywhere — a folder with nothing in it
        still deserves to be shown (and deletable), so the folder/root loops
@@ -57,8 +81,10 @@
       </summary>
       <ul>
         {{range .Subs}}
-          <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
+          <li class="reader-sub{{if eq .ID $.Tree.ActiveID}} is-active{{end}}">
+            <a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
                  hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
+            {{with index $.Tree.Counts.BySub .ID}}{{if .}}<span class="reader-count">{{.}}</span>{{end}}{{end}}
             <button type="button" class="reader-sub-delete"
                     hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
                     hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
@@ -70,8 +96,10 @@
   {{end}}
   <ul>
     {{range .Tree.Root}}
-      <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
+      <li class="reader-sub{{if eq .ID $.Tree.ActiveID}} is-active{{end}}">
+        <a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
              hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
+        {{with index $.Tree.Counts.BySub .ID}}{{if .}}<span class="reader-count">{{.}}</span>{{end}}{{end}}
         <button type="button" class="reader-sub-delete"
                 hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
                 hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
@@ -84,30 +112,71 @@
 
 {{define "list"}}
 <section class="reader-list" aria-label="Articles">
-  {{if .Selected}}
-    <h2>{{.FeedTitle}}</h2>
-    {{if .EmptyState}}<p class="empty">{{.EmptyState}}</p>{{end}}
-    <ul>
-      {{range .Items}}
-        <li><a href="/reader/item/{{.ID}}" hx-get="/reader/item/{{.ID}}"
-               hx-target="#reader-article" hx-swap="outerHTML">
-          <span class="title">{{.Title}}</span>
+  <header class="reader-list-head">
+    <h2>{{.Title}}</h2>
+    <nav class="reader-filters" aria-label="Filter">
+      <a href="{{.BasePath}}?filter=unread" hx-get="{{.BasePath}}?filter=unread"
+         hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+         class="{{if eq .Filter "unread"}}is-active{{end}}"
+         {{if eq .Filter "unread"}}aria-current="page"{{end}}>Unread</a>
+      <a href="{{.BasePath}}?filter=starred" hx-get="{{.BasePath}}?filter=starred"
+         hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+         class="{{if eq .Filter "starred"}}is-active{{end}}"
+         {{if eq .Filter "starred"}}aria-current="page"{{end}}>Starred</a>
+      <a href="{{.BasePath}}?filter=all" hx-get="{{.BasePath}}?filter=all"
+         hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+         class="{{if eq .Filter "all"}}is-active{{end}}"
+         {{if eq .Filter "all"}}aria-current="page"{{end}}>All</a>
+    </nav>
+    <form class="reader-mark-all" hx-post="/reader/read-all"
+          hx-target="#reader-panes" hx-swap="outerHTML">
+      <input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+      <input type="hidden" name="scope" value="{{.Scope}}">
+      <input type="hidden" name="sub" value="{{.SubID}}">
+      <button type="submit">Mark all read</button>
+    </form>
+  </header>
+
+  {{if .EmptyState}}<p class="empty">{{.EmptyState}}</p>{{end}}
+  <ul class="reader-rows">
+    {{range .Items}}
+      <li class="reader-row{{if .Read}} is-read{{end}}{{if .Starred}} is-starred{{end}}">
+        <a href="/reader/item/{{.ID}}" hx-get="/reader/item/{{.ID}}"
+           hx-target="#reader-article" hx-swap="outerHTML">
+          <span class="title">{{if .Starred}}<span class="reader-star" aria-label="Starred">&#9733;</span> {{end}}{{.Title}}</span>
           <span class="meta">{{.FeedName}} · {{.Published}}</span>
-        </a></li>
-      {{end}}
-    </ul>
-  {{else}}
-    <p class="empty">Pick a feed.</p>
-  {{end}}
+        </a>
+      </li>
+    {{end}}
+  </ul>
 </section>
 {{end}}
+
+{{/* article-oob is the response to anything that changes only the article:
+     opening one, starring it, or undoing the automatic mark-as-read. The
+     pane-state checkbox rides along out of band so the narrow layout drills
+     down into the article — without it, opening an article on a phone swaps a
+     pane the viewport is not showing. */}}
+{{define "article-oob"}}<input type="checkbox" id="reader-article-open" class="visually-hidden" hx-swap-oob="true" checked aria-hidden="true" tabindex="-1">{{template "article" .}}{{end}}
 
 {{define "article"}}
 <article class="reader-article" id="reader-article">
   {{if .Selected}}
     <h1>{{.Title}}</h1>
     <p class="meta">{{.FeedName}}{{if .Author}} · {{.Author}}{{end}}{{if .When}} · {{.When}}{{end}}</p>
-    {{if .URL}}<p><a href="{{.URL}}" target="_blank" rel="noopener noreferrer">Open original</a></p>{{end}}
+    <div class="reader-actions">
+      {{if .URL}}<a class="button" href="{{.URL}}" target="_blank" rel="noopener noreferrer">Open original</a>{{end}}
+      <form hx-post="/reader/item/{{.ID}}/star" hx-target="#reader-article" hx-swap="outerHTML">
+        <input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+        <button type="submit">{{if .Starred}}&#9733; Starred{{else}}&#9734; Star{{end}}</button>
+      </form>
+      {{if .Read}}
+        <form hx-post="/reader/item/{{.ID}}/unread" hx-target="#reader-article" hx-swap="outerHTML">
+          <input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+          <button type="submit">Mark unread</button>
+        </form>
+      {{end}}
+    </div>
     <div class="reader-body">{{.Body}}</div>
   {{else}}
     <p class="empty">Pick an article.</p>

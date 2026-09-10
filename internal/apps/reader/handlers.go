@@ -141,6 +141,7 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID, subID 
 		pageTitle = listTitleStr
 	}
 	page := a.deps.Page(r, pageTitle)
+	view.List.Shell = page.Shell
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
 		view.Title, view.Shell = page.Title, page.Shell
 		// Always 200 for a fragment: htmx's default responseHandling only
