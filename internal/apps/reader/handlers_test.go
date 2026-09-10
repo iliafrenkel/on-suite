@@ -974,3 +974,55 @@ func TestReaderPageEmitsTheSidebarCountIdsTheOOBSwapTargets(t *testing.T) {
 	doc.MustHave("#reader-count-sub-" + itoa(folderSub.ID))
 	doc.MustHave("#reader-count-sub-" + itoa(rootSubID))
 }
+
+// The whole of R3 in one assertion: an article that arrived full of remote
+// images renders with none of them, and with proxy URLs instead.
+func TestArticlePaneNeverEmitsAPublisherImageHost(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := reader.ParseFeed([]byte(`<?xml version="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel><title>T</title><link>https://example.com/</link>
+    <item>
+      <title>Pictures</title>
+      <link>https://example.com/post</link>
+      <guid>g1</guid>
+      <content:encoded><![CDATA[
+        <p>Words</p>
+        <img src="https://tracker.example/pixel.gif">
+        <img src="/relative.png">
+      ]]></content:encoded>
+    </item>
+  </channel>
+</rss>`), "https://example.com/feed.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, parsed.Items, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil))
+	body := rec.Body.String()
+
+	for _, host := range []string{"tracker.example", "/relative.png"} {
+		if strings.Contains(body, host) {
+			t.Errorf("rendered page still references %q:\n%s", host, body)
+		}
+	}
+	if n := strings.Count(body, "/reader/img/"); n != 2 {
+		t.Errorf("page has %d proxy image URLs, want 2:\n%s", n, body)
+	}
+	if !strings.Contains(body, `loading="lazy"`) {
+		t.Error("proxied images are not lazy-loaded")
+	}
+}
