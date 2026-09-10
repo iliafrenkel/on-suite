@@ -27,9 +27,15 @@ type indexView struct {
 }
 
 type treeView struct {
-	Folders  []TreeFolder
-	Root     []Subscription
+	Folders []TreeFolder
+	Root    []Subscription
+	// ActiveID is the selected subscription, 0 for the All and Starred nodes.
 	ActiveID int64
+	// Scope marks which pseudo-node is active, so All and Starred can be
+	// highlighted the same way a subscription is.
+	Scope Scope
+	// Counts drives every number in the sidebar.
+	Counts Counts
 	// Empty is true when the user has no subscriptions at all, which is a
 	// different thing from a folder having none.
 	Empty bool
@@ -38,9 +44,20 @@ type treeView struct {
 type listView struct {
 	Items      []listItem
 	ActiveID   int64
-	FeedTitle  string
+	Title      string
 	Selected   bool
 	EmptyState string
+	// Scope and SubID are echoed back into the filter links and the
+	// mark-all-read form, so those controls stay on the list you are looking
+	// at rather than resetting to All.
+	Scope  Scope
+	SubID  int64
+	Filter Filter
+	// BasePath is the path the filter links point at, without the query.
+	BasePath string
+	// Shell carries the CSRF token the mark-all-read form needs. It is set by
+	// renderIndex rather than viewList, which has no request to read it from.
+	Shell render.Shell
 }
 
 type listItem struct {
@@ -48,39 +65,61 @@ type listItem struct {
 	Title     string
 	FeedName  string
 	Published string
+	Read      bool
+	Starred   bool
 }
 
 type articleView struct {
+	ID       int64
 	Selected bool
 	Title    string
 	URL      string
 	Author   string
 	FeedName string
 	When     string
-	// Body is publisher HTML that SanitizeHTML has already been through.
-	//
-	// This is the ONLY template.HTML conversion in the app. Never convert a
-	// string here that has not come out of SanitizeHTML: html/template's
-	// escaping is the last thing standing between a feed and a stored XSS in
-	// a signed-in page, and template.HTML switches it off.
+	Read     bool
+	Starred  bool
+	// Body is publisher HTML that SanitizeHTML has already been through. This
+	// is the only template.HTML conversion in the app; never convert a string
+	// here that has not been through SanitizeHTML.
 	Body template.HTML
+	// Shell is carried so the article fragment can render the CSRF field its
+	// star and unread forms need.
+	Shell render.Shell
+	// Scope, SubID and Filter are the list this article was opened from,
+	// echoed back into the star and unread forms. The article's own path names
+	// an item, so without them a state-change POST has no way to say which
+	// list the tree redraw riding along with it should keep selected.
+	Scope  Scope
+	SubID  int64
+	Filter Filter
 }
 
-func viewTree(t Tree, activeID int64) treeView {
+func viewTree(t Tree, activeID int64, scope Scope, counts Counts) treeView {
 	empty := len(t.Root) == 0
 	for _, f := range t.Folders {
 		if len(f.Subs) > 0 {
 			empty = false
 		}
 	}
-	return treeView{Folders: t.Folders, Root: t.Root, ActiveID: activeID, Empty: empty}
+	return treeView{
+		Folders:  t.Folders,
+		Root:     t.Root,
+		ActiveID: activeID,
+		Scope:    scope,
+		Counts:   counts,
+		Empty:    empty,
+	}
 }
 
-func viewList(items []Item, sub Subscription, activeID int64) listView {
+func viewList(items []Item, title string, scope Scope, subID int64, filter Filter, basePath string) listView {
 	out := listView{
-		ActiveID:  activeID,
-		FeedTitle: sub.DisplayName(),
-		Selected:  true,
+		Title:    title,
+		Selected: true,
+		Scope:    scope,
+		SubID:    subID,
+		Filter:   filter,
+		BasePath: basePath,
 	}
 	for _, it := range items {
 		out.Items = append(out.Items, listItem{
@@ -88,24 +127,39 @@ func viewList(items []Item, sub Subscription, activeID int64) listView {
 			Title:     firstNonEmpty(it.Title, it.URL, "(untitled)"),
 			FeedName:  it.FeedName,
 			Published: humanTime(it.PublishedAt),
+			Read:      it.Read,
+			Starred:   it.Starred,
 		})
 	}
 	if len(out.Items) == 0 {
-		out.EmptyState = "Nothing here yet. This feed has not been fetched, or it published nothing."
+		switch filter {
+		case FilterUnread:
+			out.EmptyState = "Nothing unread here. Try the All filter."
+		case FilterStarred:
+			out.EmptyState = "Nothing saved here yet."
+		default:
+			out.EmptyState = "Nothing here yet. This feed has not been fetched, or it published nothing."
+		}
 	}
 	return out
 }
 
-func viewArticle(it Item) articleView {
+func viewArticle(it Item, shell render.Shell, lc listContext) articleView {
 	return articleView{
+		Scope:    lc.Scope,
+		SubID:    lc.SubID,
+		Filter:   lc.Filter,
+		ID:       it.ID,
 		Selected: true,
 		Title:    firstNonEmpty(it.Title, "(untitled)"),
 		URL:      it.URL,
 		Author:   it.Author,
 		FeedName: it.FeedName,
 		When:     humanTime(it.PublishedAt),
-		// Safe: Body() returns content that ParseFeed sanitized on the way in.
-		Body: template.HTML(it.Body()),
+		Read:     it.Read,
+		Starred:  it.Starred,
+		Body:     template.HTML(it.Body()),
+		Shell:    shell,
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"io/fs"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
@@ -63,17 +64,46 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /folder", a.createFolder)
 	r.HandleFunc("POST /folder/{id}/delete", a.deleteFolder)
 	r.HandleFunc("POST /refresh", a.refresh)
+
+	// Scope lives in the path and the filter in the query string, so a URL is
+	// shareable and hx-push-url writes something meaningful into history.
+	r.HandleFunc("GET /starred", a.index)
+	r.HandleFunc("POST /item/{id}/read", a.setRead)
+	r.HandleFunc("POST /item/{id}/unread", a.setRead)
+	r.HandleFunc("POST /item/{id}/star", a.toggleStar)
+	r.HandleFunc("POST /read-all", a.markAllRead)
 }
+
+// purgeTick is daily. Retention is a housekeeping concern, not a
+// user-visible one, so it runs rarely and off the read path.
+const purgeTick = 24 * time.Hour
 
 // Jobs implements app.Scheduler. RegisterJobs runs after Mount, so the poller
 // this closure captures is already built.
 func (a *App) Jobs(deps app.Deps) []app.Job {
-	return []app.Job{{
-		Name:        "refresh feeds",
-		Description: "Fetches every feed whose polling interval has elapsed.",
-		Every:       pollTick,
-		Run: func(ctx context.Context) error {
-			return a.poller.PollDue(ctx)
+	return []app.Job{
+		{
+			Name:        "refresh feeds",
+			Description: "Fetches every feed whose polling interval has elapsed.",
+			Every:       pollTick,
+			Run: func(ctx context.Context) error {
+				return a.poller.PollDue(ctx)
+			},
 		},
-	}}
+		{
+			Name:        "purge old articles",
+			Description: "Deletes read, unstarred articles older than the retention window.",
+			Every:       purgeTick,
+			Run: func(ctx context.Context) error {
+				n, err := a.store.PurgeItems(ctx, time.Now().UTC().Add(-RetentionAge))
+				if err != nil {
+					return err
+				}
+				if n > 0 {
+					a.deps.Log.Info("reader purged old articles", "count", n)
+				}
+				return nil
+			},
+		},
+	}
 }

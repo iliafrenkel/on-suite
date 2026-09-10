@@ -380,6 +380,11 @@ type Item struct {
 	SummaryHTML string
 	ContentHTML string
 	FeedName    string
+
+	// Read and Starred are this viewer's state. They are populated by
+	// ItemsForScope and Item, and are meaningless on a zero Item.
+	Read    bool
+	Starred bool
 }
 
 // Body is what the article pane renders: the full content when the publisher
@@ -389,6 +394,115 @@ func (i Item) Body() string {
 		return i.ContentHTML
 	}
 	return i.SummaryHTML
+}
+
+// Scope is which set of items a list is drawn from.
+type Scope string
+
+const (
+	// ScopeAll is every item in every feed the user subscribes to.
+	ScopeAll Scope = "all"
+	// ScopeStarred is everything the user saved, across feeds.
+	ScopeStarred Scope = "starred"
+	// ScopeFeed is one subscription.
+	ScopeFeed Scope = "feed"
+)
+
+// Filter narrows a scope by this user's own state.
+type Filter string
+
+const (
+	FilterUnread  Filter = "unread"
+	FilterStarred Filter = "starred"
+	FilterAll     Filter = "all"
+)
+
+// ParseScope and ParseFilter map a URL parameter onto the typed value,
+// defaulting rather than erroring: a hand-edited query string should show a
+// sensible list, not a 400.
+func ParseFilter(raw string) Filter {
+	switch Filter(raw) {
+	case FilterStarred:
+		return FilterStarred
+	case FilterAll:
+		return FilterAll
+	default:
+		// Unread is the default because the whole point of the read model is
+		// that the list answers "what is new".
+		return FilterUnread
+	}
+}
+
+// itemColumns is the shared SELECT list. Every item query returns the same
+// shape so scanItems stays one function.
+const itemColumns = `
+	i.id, i.feed_id, i.guid, i.url, i.title, i.author,
+	i.published_at, i.fetched_at, i.summary_html, i.content_html, f.title,
+	st.read_at IS NOT NULL, st.starred_at IS NOT NULL`
+
+// ItemsForScope is the one query path for listing items.
+//
+// The unread predicate is a NOT EXISTS rather than the "count minus
+// read-states" subtraction the design spec suggested. Subtraction is only
+// correct if every read-state row falls inside the counted range, and
+// subs.added_at means it does not: a user can hold a read-state row for an item
+// published before they subscribed, and subtracting it would hide a genuinely
+// unread article.
+func (s *Store) ItemsForScope(ctx context.Context, userID int64, scope Scope, subID int64, filter Filter, limit int) ([]Item, error) {
+	// Every scope is bounded by the user's own subscriptions and by each
+	// subscription's added_at, so authorisation and the unread cutoff are the
+	// same join rather than two things to keep in step.
+	//
+	// The cutoff compares against fetched_at, not published_at. published_at
+	// is set by the feed publisher and has no relationship to when we
+	// discovered the item; fetched_at is when this system learned of it,
+	// which is the actual question a cutoff needs answered: did this item
+	// exist in the feed before the user subscribed? A backfilled old article
+	// discovered by a poll that ran before the subscription is backlog; one
+	// discovered by a poll that ran after is not, regardless of its stated
+	// publish date.
+	query := `
+		SELECT ` + itemColumns + `
+		  FROM reader_items i
+		  JOIN reader_feeds f ON f.id = i.feed_id
+		  JOIN reader_subs sub ON sub.feed_id = i.feed_id AND sub.user_id = ?
+		  LEFT JOIN reader_item_state st ON st.user_id = sub.user_id AND st.item_id = i.id
+		 WHERE i.fetched_at >= sub.added_at`
+	args := []any{userID}
+
+	switch scope {
+	case ScopeFeed:
+		query += ` AND sub.id = ?`
+		args = append(args, subID)
+	case ScopeStarred:
+		query += ` AND st.starred_at IS NOT NULL`
+	case ScopeAll:
+		// No extra predicate: the subscription join is the bound.
+	default:
+		return nil, fmt.Errorf("%w: unknown scope %q", ErrInvalid, scope)
+	}
+
+	switch filter {
+	case FilterUnread:
+		query += ` AND st.read_at IS NULL`
+	case FilterStarred:
+		query += ` AND st.starred_at IS NOT NULL`
+	case FilterAll:
+		// No extra predicate.
+	default:
+		return nil, fmt.Errorf("%w: unknown filter %q", ErrInvalid, filter)
+	}
+
+	query += ` ORDER BY i.published_at DESC, i.id DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("reader: list items for scope %s: %w", scope, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanItems(rows)
 }
 
 // SaveItems inserts new items and updates ones whose GUID is already known,
@@ -459,35 +573,31 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 	return inserted, nil
 }
 
-// ItemsForSubscription lists one subscription's items, newest first.
-//
-// The subscription is looked up by (id, user_id) first so a subscription that
-// belongs to somebody else is ErrNotFound rather than an empty list — an empty
-// list would tell a caller the id exists.
+// ItemsForSubscription lists one subscription's items regardless of state.
+// It is a thin wrapper over ItemsForScope so there is exactly one item query.
 func (s *Store) ItemsForSubscription(ctx context.Context, userID, subID int64, limit int) ([]Item, error) {
-	var feedID int64
-	if err := s.db.QueryRowContext(ctx,
-		`SELECT feed_id FROM reader_subs WHERE id = ? AND user_id = ?`,
-		subID, userID).Scan(&feedID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("reader: load subscription: %w", err)
+	// The scope query returns an empty list for a subscription that is not
+	// this user's, where R1 returned ErrNotFound. Preserve the old contract:
+	// callers rely on 404-not-403 for someone else's subscription.
+	if err := s.ownsSubscription(ctx, userID, subID); err != nil {
+		return nil, err
 	}
+	return s.ItemsForScope(ctx, userID, ScopeFeed, subID, FilterAll, limit)
+}
 
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT i.id, i.feed_id, i.guid, i.url, i.title, i.author,
-		       i.published_at, i.fetched_at, i.summary_html, i.content_html, f.title
-		  FROM reader_items i JOIN reader_feeds f ON f.id = i.feed_id
-		 WHERE i.feed_id = ?
-		 ORDER BY i.published_at DESC, i.id DESC
-		 LIMIT ?`, feedID, limit)
+// ownsSubscription is the ErrNotFound-or-nil ownership check R1's
+// ItemsForSubscription did inline.
+func (s *Store) ownsSubscription(ctx context.Context, userID, subID int64) error {
+	var id int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM reader_subs WHERE id = ? AND user_id = ?`, subID, userID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
 	if err != nil {
-		return nil, fmt.Errorf("reader: list items: %w", err)
+		return fmt.Errorf("reader: load subscription: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
-	return scanItems(rows)
+	return nil
 }
 
 // Item loads one article, but only for a user who subscribes to its feed. The
@@ -495,13 +605,14 @@ func (s *Store) ItemsForSubscription(ctx context.Context, userID, subID int64, l
 // any signed-in user could read any item in the database.
 func (s *Store) Item(ctx context.Context, userID, itemID int64) (Item, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT i.id, i.feed_id, i.guid, i.url, i.title, i.author,
-		       i.published_at, i.fetched_at, i.summary_html, i.content_html, f.title
-		  FROM reader_items i JOIN reader_feeds f ON f.id = i.feed_id
+		SELECT `+itemColumns+`
+		  FROM reader_items i
+		  JOIN reader_feeds f ON f.id = i.feed_id
+		  LEFT JOIN reader_item_state st ON st.user_id = ? AND st.item_id = i.id
 		 WHERE i.id = ?
 		   AND EXISTS (SELECT 1 FROM reader_subs s
 		                WHERE s.feed_id = i.feed_id AND s.user_id = ?)`,
-		itemID, userID)
+		userID, itemID, userID)
 	if err != nil {
 		return Item{}, fmt.Errorf("reader: load item: %w", err)
 	}
@@ -523,7 +634,8 @@ func scanItems(rows *sql.Rows) ([]Item, error) {
 		var it Item
 		var published, fetched string
 		if err := rows.Scan(&it.ID, &it.FeedID, &it.GUID, &it.URL, &it.Title, &it.Author,
-			&published, &fetched, &it.SummaryHTML, &it.ContentHTML, &it.FeedName); err != nil {
+			&published, &fetched, &it.SummaryHTML, &it.ContentHTML, &it.FeedName,
+			&it.Read, &it.Starred); err != nil {
 			return nil, fmt.Errorf("reader: scan item: %w", err)
 		}
 		it.PublishedAt = parseTime(published)
@@ -624,4 +736,236 @@ func (s *Store) SaveFetchResult(ctx context.Context, r FetchResult) error {
 		return fmt.Errorf("reader: save fetch result: %w", err)
 	}
 	return nil
+}
+
+// canSeeItem reports whether a user subscribes to the feed an item belongs to.
+//
+// Item ids are global, so every state change needs this: without it any
+// signed-in user could mark any item in the database read or starred, and the
+// row they wrote would be a durable record that they probed for it.
+func (s *Store) canSeeItem(ctx context.Context, userID, itemID int64) error {
+	var ok int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT 1
+		  FROM reader_items i
+		 WHERE i.id = ?
+		   AND EXISTS (SELECT 1 FROM reader_subs sub
+		                WHERE sub.feed_id = i.feed_id AND sub.user_id = ?)`,
+		itemID, userID).Scan(&ok)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("reader: check item visibility: %w", err)
+	}
+	return nil
+}
+
+// SetRead marks an item read or unread.
+//
+// The upsert writes only read_at, leaving starred_at alone: the two axes share
+// a row, and a whole-row replace here would silently drop a star every time
+// something was marked read.
+func (s *Store) SetRead(ctx context.Context, userID, itemID int64, read bool, now time.Time) error {
+	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
+		return err
+	}
+	var readAt any
+	if read {
+		readAt = formatTime(now)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO reader_item_state (user_id, item_id, read_at, starred_at)
+		VALUES (?, ?, ?, NULL)
+		ON CONFLICT (user_id, item_id) DO UPDATE SET read_at = excluded.read_at`,
+		userID, itemID, readAt); err != nil {
+		return fmt.Errorf("reader: set read state: %w", err)
+	}
+	return nil
+}
+
+// SetStarred stars or unstars an item, leaving read state alone for the same
+// reason SetRead leaves the star alone.
+func (s *Store) SetStarred(ctx context.Context, userID, itemID int64, starred bool, now time.Time) error {
+	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
+		return err
+	}
+	var starredAt any
+	if starred {
+		starredAt = formatTime(now)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO reader_item_state (user_id, item_id, read_at, starred_at)
+		VALUES (?, ?, NULL, ?)
+		ON CONFLICT (user_id, item_id) DO UPDATE SET starred_at = excluded.starred_at`,
+		userID, itemID, starredAt); err != nil {
+		return fmt.Errorf("reader: set starred state: %w", err)
+	}
+	return nil
+}
+
+// ItemState reports one item's read and starred flags. A missing row is not an
+// error: absence means unread and unstarred.
+func (s *Store) ItemState(ctx context.Context, userID, itemID int64) (read, starred bool, err error) {
+	var readAt, starredAt sql.NullString
+	err = s.db.QueryRowContext(ctx,
+		`SELECT read_at, starred_at FROM reader_item_state WHERE user_id = ? AND item_id = ?`,
+		userID, itemID).Scan(&readAt, &starredAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, fmt.Errorf("reader: load item state: %w", err)
+	}
+	return readAt.Valid, starredAt.Valid, nil
+}
+
+// Counts is the sidebar's unread numbers in one round trip.
+type Counts struct {
+	// BySub has an entry for every subscription, including those at zero.
+	BySub map[int64]int
+	// Total is unread across every subscription.
+	Total int
+	// Starred is how many items the user has saved, read or not.
+	Starred int
+}
+
+// UnreadCounts computes the whole sidebar in two queries.
+//
+// The LEFT JOIN is what keeps a subscription with nothing unread in the map at
+// zero rather than dropping it — an inner join here silently removes feeds from
+// the sidebar the moment they are all read, which looks exactly like data loss.
+//
+// The cutoff compares against fetched_at, not published_at, for the same
+// reason ItemsForScope does: published_at is the publisher's own date and has
+// no relationship to when we discovered the item, while fetched_at is when
+// this system learned of it — the actual question a cutoff needs answered.
+func (s *Store) UnreadCounts(ctx context.Context, userID int64) (Counts, error) {
+	out := Counts{BySub: map[int64]int{}}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT sub.id, count(i.id)
+		  FROM reader_subs sub
+		  LEFT JOIN reader_items i
+		         ON i.feed_id = sub.feed_id
+		        AND i.fetched_at >= sub.added_at
+		        AND NOT EXISTS (SELECT 1 FROM reader_item_state st
+		                         WHERE st.user_id = sub.user_id
+		                           AND st.item_id = i.id
+		                           AND st.read_at IS NOT NULL)
+		 WHERE sub.user_id = ?
+		 GROUP BY sub.id`, userID)
+	if err != nil {
+		return Counts{}, fmt.Errorf("reader: unread counts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var subID int64
+		var n int
+		if err := rows.Scan(&subID, &n); err != nil {
+			return Counts{}, fmt.Errorf("reader: scan unread count: %w", err)
+		}
+		out.BySub[subID] = n
+		out.Total += n
+	}
+	if err := rows.Err(); err != nil {
+		return Counts{}, fmt.Errorf("reader: iterate unread counts: %w", err)
+	}
+
+	// Starred is counted separately rather than folded into the grouped query
+	// above, which counts only unread items — a starred article that has been
+	// read still belongs in the Starred node.
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT count(*)
+		  FROM reader_item_state st
+		 WHERE st.user_id = ? AND st.starred_at IS NOT NULL`,
+		userID).Scan(&out.Starred); err != nil {
+		return Counts{}, fmt.Errorf("reader: starred count: %w", err)
+	}
+	return out, nil
+}
+
+// MarkAllRead marks everything currently unread in a scope as read, returning
+// how many rows it touched.
+//
+// It writes state rows for exactly the items the same predicate as
+// ItemsForScope would list — including ItemsForScope's fetched_at cutoff — so
+// "mark all read" and "what is unread" can never disagree.
+func (s *Store) MarkAllRead(ctx context.Context, userID int64, scope Scope, subID int64, now time.Time) (int, error) {
+	query := `
+		INSERT INTO reader_item_state (user_id, item_id, read_at, starred_at)
+		SELECT sub.user_id, i.id, ?, NULL
+		  FROM reader_items i
+		  JOIN reader_subs sub ON sub.feed_id = i.feed_id AND sub.user_id = ?
+		 WHERE i.fetched_at >= sub.added_at`
+	args := []any{formatTime(now), userID}
+
+	switch scope {
+	case ScopeFeed:
+		query += ` AND sub.id = ?`
+		args = append(args, subID)
+	case ScopeAll:
+		// Everything the user subscribes to.
+	case ScopeStarred:
+		query += ` AND EXISTS (SELECT 1 FROM reader_item_state st
+		                        WHERE st.user_id = sub.user_id AND st.item_id = i.id
+		                          AND st.starred_at IS NOT NULL)`
+	default:
+		return 0, fmt.Errorf("%w: unknown scope %q", ErrInvalid, scope)
+	}
+
+	query += ` ON CONFLICT (user_id, item_id) DO UPDATE SET read_at = excluded.read_at
+	            WHERE reader_item_state.read_at IS NULL`
+
+	res, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("reader: mark all read: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reader: mark all read rows: %w", err)
+	}
+	return int(n), nil
+}
+
+// RetentionAge is how long a read, unstarred article is kept.
+//
+// A constant rather than a flag: the platform's config is a deliberately small,
+// closed set of server settings, and adding per-app configuration is a separate
+// design question this app should not answer on its own.
+const RetentionAge = 60 * 24 * time.Hour
+
+// PurgeItems deletes articles published before the cutoff, keeping anything
+// anyone starred and anything anyone still has unread.
+//
+// The items are shared across the household but the state is not, so "read" has
+// to mean read by every subscriber who can see it. Deleting an article one
+// person finished while another has it waiting would be quiet data loss.
+func (s *Store) PurgeItems(ctx context.Context, before time.Time) (int, error) {
+	res, err := s.db.ExecContext(ctx, `
+		DELETE FROM reader_items
+		 WHERE published_at < ?
+		   AND NOT EXISTS (
+		       SELECT 1 FROM reader_item_state st
+		        WHERE st.item_id = reader_items.id
+		          AND st.starred_at IS NOT NULL)
+		   AND NOT EXISTS (
+		       SELECT 1 FROM reader_subs sub
+		        WHERE sub.feed_id = reader_items.feed_id
+		          AND reader_items.fetched_at >= sub.added_at
+		          AND NOT EXISTS (
+		              SELECT 1 FROM reader_item_state st2
+		               WHERE st2.user_id = sub.user_id
+		                 AND st2.item_id = reader_items.id
+		                 AND st2.read_at IS NOT NULL))`,
+		formatTime(before))
+	if err != nil {
+		return 0, fmt.Errorf("reader: purge items: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reader: purge rows: %w", err)
+	}
+	return int(n), nil
 }

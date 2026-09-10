@@ -9,17 +9,73 @@
      (commit c96a03f) elsewhere in this codebase. */}}
 {{define "panes-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "panes" .}}{{end}}
 
+{{/* reader-ctx is the hidden state every reader POST carries: the CSRF token,
+     and the list the control fired from. Without the scope/sub/filter fields a
+     POST re-render has nothing to derive them from — it has no query string,
+     and its path names an item, a folder or a subscription rather than the
+     list on screen — so "Mark all read" from Starred would come back as
+     All/Unread while the address bar still said /reader/starred?filter=all.
+     It is rendered with either .List or the article view; both carry Shell,
+     Scope, SubID and Filter. */}}
+{{define "reader-ctx"}}<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}"><input type="hidden" name="scope" value="{{.Scope}}"><input type="hidden" name="sub" value="{{.SubID}}"><input type="hidden" name="filter" value="{{.Filter}}">{{end}}
+
+{{/* reader-back is the narrow-viewport back control: a real <label> whose for=
+     names the drill-down checkbox, so clicking it natively unchecks that box
+     and the CSS uncovers the pane behind — no JavaScript, and no round trip.
+     Same spirit as paste's .paste-back-btn, which is the only reason a phone
+     can get out of paste's detail pane. Before this existed the reader had no
+     way back at all: the server checks #reader-list-open on every render, so
+     below 640px the feed tree, both pseudo-nodes, the add-feed and add-folder
+     forms and Refresh were unreachable for the rest of the session. */}}
+{{define "reader-back"}}<label class="toolbar-btn reader-back-btn" for="{{.For}}"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>{{.Label}}</label>{{end}}
+
+{{/* count-span is one sidebar number. It always renders, with an empty body
+     when the count is zero, because "counts-oob" swaps these by id: an element
+     that disappears at zero cannot be swapped back, so the last read in a feed
+     would leave a stale number on screen forever. Empty is the same thing
+     visually — .reader-count has no box of its own — so a column of noughts is
+     still avoided; the conditional just moved inside the span.
+     ID is the stable target, N the count, OOB set only by "counts-oob". */}}
+{{define "count-span"}}<span class="reader-count" id="{{.ID}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{if .N}}{{.N}}{{end}}</span>{{end}}
+
+{{/* counts-oob is the sidebar's numbers and nothing else, for the article
+     response. Reading or starring changes an unread count, but it changes
+     nothing else in the tree, and swapping the whole <nav> to deliver three
+     numbers threw away everything the tree was holding: whatever was half
+     typed into #feed-url or #folder-name, which <details> folders the reader
+     had collapsed, and the pane's scroll position — on opening an article,
+     the single most frequent action in the app. So only the spans move.
+     It reads the same Counts "tree" does, so there is still one source for
+     every number. */}}
+{{define "counts-oob"}}{{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total "OOB" true)}}{{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred "OOB" true)}}{{range .Tree.Folders}}{{range .Subs}}{{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID) "OOB" true)}}{{end}}{{end}}{{range .Tree.Root}}{{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID) "OOB" true)}}{{end}}{{end}}
+
 {{define "panes"}}
 <div class="reader-panes" id="reader-panes">
+  {{/* Two hidden checkboxes drive the narrow-viewport drill-down, the same
+       technique #paste-detail-open uses. They are siblings of the three panes
+       so the CSS can reach the panes with ~, and the server sets them: a list
+       shown checks the first, an open article the second. The back labels
+       inside the list and article panes uncheck them again. */}}
+  <input type="checkbox" id="reader-list-open" class="visually-hidden"
+         {{if .List.Selected}}checked{{end}} aria-hidden="true" tabindex="-1">
+  <input type="checkbox" id="reader-article-open" class="visually-hidden"
+         {{if .Article.Selected}}checked{{end}} aria-hidden="true" tabindex="-1">
   {{template "tree" .}}
   {{template "list" .List}}
   {{template "article" .Article}}
 </div>
 {{end}}
 
+{{/* Every form here pairs method/action with hx-post rather than using hx-post
+     alone, the way paste's forms do. With JavaScript off, hx-post on its own
+     submits nowhere — which would also make the CSRF hidden fields decorative,
+     since the token otherwise only travels in the X-CSRF-Token header base.html
+     sets for htmx. */}}
 {{define "tree"}}
-<nav class="reader-tree" aria-label="Feeds">
-  <form class="reader-add" hx-post="/reader/subscribe" hx-target="#reader-panes" hx-swap="outerHTML">
+<nav class="reader-tree" id="reader-tree" aria-label="Feeds">
+  <form class="reader-add" method="post" action="/reader/subscribe"
+        hx-post="/reader/subscribe" hx-target="#reader-panes" hx-swap="outerHTML">
+    {{template "reader-ctx" .List}}
     <label for="feed-url">Add a feed</label>
     <input id="feed-url" name="url" type="url" placeholder="https://example.com/feed.xml" required>
     <label for="feed-folder">Folder</label>
@@ -33,13 +89,32 @@
     {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
   </form>
 
-  <form class="reader-add-folder" hx-post="/reader/folder" hx-target="#reader-panes" hx-swap="outerHTML">
+  <form class="reader-add-folder" method="post" action="/reader/folder"
+        hx-post="/reader/folder" hx-target="#reader-panes" hx-swap="outerHTML">
+    {{template "reader-ctx" .List}}
     <label for="folder-name">New folder</label>
     <input id="folder-name" name="name" type="text" placeholder="Folder name" required>
     <button type="submit">Create folder</button>
   </form>
 
-  <button type="button" hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">Refresh</button>
+  <form class="reader-refresh" method="post" action="/reader/refresh"
+        hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">
+    {{template "reader-ctx" .List}}
+    <button type="submit">Refresh</button>
+  </form>
+
+  <ul class="reader-nodes">
+    <li class="reader-node{{if eq .Tree.Scope "all"}} is-active{{end}}">
+      <a href="/reader/" hx-get="/reader/" hx-target="#reader-panes"
+         hx-swap="outerHTML" hx-push-url="true">All</a>
+      {{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total)}}
+    </li>
+    <li class="reader-node{{if eq .Tree.Scope "starred"}} is-active{{end}}">
+      <a href="/reader/starred" hx-get="/reader/starred" hx-target="#reader-panes"
+         hx-swap="outerHTML" hx-push-url="true">Starred</a>
+      {{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred)}}
+    </li>
+  </ul>
 
   {{/* Empty means no subscriptions anywhere — a folder with nothing in it
        still deserves to be shown (and deletable), so the folder/root loops
@@ -49,20 +124,32 @@
   {{end}}
   {{range .Tree.Folders}}
     <details open>
-      <summary>{{.Name}}
-        <button type="button" class="reader-folder-delete"
+      <summary>{{.Name}}</summary>
+      {{/* The hx-* attributes stay on the button and the method/action on the
+           form around it: htmx posts from the button, including the enclosing
+           form's fields, and with JavaScript off the same button submits the
+           form the ordinary way. The form sits outside <summary> because a
+           click inside one toggles the <details>. */}}
+      <form method="post" action="/reader/folder/{{.ID}}/delete">
+        {{template "reader-ctx" $.List}}
+        <button type="submit" class="reader-folder-delete"
                 hx-post="/reader/folder/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
                 hx-confirm="Delete the folder &#8220;{{.Name}}&#8221;? Its feeds move to the root."
                 aria-label="Delete folder {{.Name}}">Delete</button>
-      </summary>
+      </form>
       <ul>
         {{range .Subs}}
-          <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
+          <li class="reader-sub{{if eq .ID $.Tree.ActiveID}} is-active{{end}}">
+            <a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
                  hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
-            <button type="button" class="reader-sub-delete"
-                    hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
-                    hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
-                    aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
+            {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID))}}
+            <form method="post" action="/reader/sub/{{.ID}}/delete">
+              {{template "reader-ctx" $.List}}
+              <button type="submit" class="reader-sub-delete"
+                      hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                      hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
+                      aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
+            </form>
           </li>
         {{end}}
       </ul>
@@ -70,12 +157,17 @@
   {{end}}
   <ul>
     {{range .Tree.Root}}
-      <li><a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
+      <li class="reader-sub{{if eq .ID $.Tree.ActiveID}} is-active{{end}}">
+        <a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
              hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
-        <button type="button" class="reader-sub-delete"
-                hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
-                hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
-                aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
+        {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID))}}
+        <form method="post" action="/reader/sub/{{.ID}}/delete">
+          {{template "reader-ctx" $.List}}
+          <button type="submit" class="reader-sub-delete"
+                  hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                  hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
+                  aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
+        </form>
       </li>
     {{end}}
   </ul>
@@ -83,31 +175,82 @@
 {{end}}
 
 {{define "list"}}
-<section class="reader-list" aria-label="Articles">
-  {{if .Selected}}
-    <h2>{{.FeedTitle}}</h2>
-    {{if .EmptyState}}<p class="empty">{{.EmptyState}}</p>{{end}}
-    <ul>
-      {{range .Items}}
-        <li><a href="/reader/item/{{.ID}}" hx-get="/reader/item/{{.ID}}"
-               hx-target="#reader-article" hx-swap="outerHTML">
-          <span class="title">{{.Title}}</span>
+<section class="reader-list" id="reader-list" aria-label="Articles">
+  <header class="reader-list-head">
+    {{template "reader-back" (dict "For" "reader-list-open" "Label" "Feeds")}}
+    <h2>{{.Title}}</h2>
+    <nav class="reader-filters" aria-label="Filter">
+      <a href="{{.BasePath}}?filter=unread" hx-get="{{.BasePath}}?filter=unread"
+         hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+         class="{{if eq .Filter "unread"}}is-active{{end}}"
+         {{if eq .Filter "unread"}}aria-current="page"{{end}}>Unread</a>
+      <a href="{{.BasePath}}?filter=starred" hx-get="{{.BasePath}}?filter=starred"
+         hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+         class="{{if eq .Filter "starred"}}is-active{{end}}"
+         {{if eq .Filter "starred"}}aria-current="page"{{end}}>Starred</a>
+      <a href="{{.BasePath}}?filter=all" hx-get="{{.BasePath}}?filter=all"
+         hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+         class="{{if eq .Filter "all"}}is-active{{end}}"
+         {{if eq .Filter "all"}}aria-current="page"{{end}}>All</a>
+    </nav>
+    <form class="reader-mark-all" method="post" action="/reader/read-all"
+          hx-post="/reader/read-all" hx-target="#reader-panes" hx-swap="outerHTML">
+      {{template "reader-ctx" .}}
+      <button type="submit">Mark all read</button>
+    </form>
+  </header>
+
+  {{if .EmptyState}}<p class="empty">{{.EmptyState}}</p>{{end}}
+  <ul class="reader-rows">
+    {{range .Items}}
+      <li class="reader-row{{if .Read}} is-read{{end}}{{if .Starred}} is-starred{{end}}">
+        {{/* The list context rides in the query string so the tree redraw the
+             article response carries can keep the selection where it is. */}}
+        <a href="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}"
+           hx-get="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}"
+           hx-target="#reader-article" hx-swap="outerHTML">
+          <span class="title">{{if .Starred}}<span class="reader-star" aria-label="Starred">&#9733;</span> {{end}}{{.Title}}</span>
           <span class="meta">{{.FeedName}} · {{.Published}}</span>
-        </a></li>
-      {{end}}
-    </ul>
-  {{else}}
-    <p class="empty">Pick a feed.</p>
-  {{end}}
+        </a>
+      </li>
+    {{end}}
+  </ul>
 </section>
 {{end}}
+
+{{/* article-swap is the response to anything that changes only the article:
+     opening one, starring it, or undoing the automatic mark-as-read. Two
+     things ride along out of band. The pane-state checkbox, so the narrow
+     layout drills down into the article — without it, opening an article on a
+     phone swaps a pane the viewport is not showing. And the sidebar counts,
+     because reading or starring changes an unread count and the sidebar would
+     otherwise keep the pre-click numbers until some unrelated navigation
+     reconciled them. Only the counts, not the whole tree: see "counts-oob". */}}
+{{define "article-swap"}}{{template "article-oob" .Article}}{{template "counts-oob" .}}{{end}}
+
+{{define "article-oob"}}<input type="checkbox" id="reader-article-open" class="visually-hidden" hx-swap-oob="true" checked aria-hidden="true" tabindex="-1">{{template "article" .}}{{end}}
 
 {{define "article"}}
 <article class="reader-article" id="reader-article">
   {{if .Selected}}
+    {{template "reader-back" (dict "For" "reader-article-open" "Label" "Articles")}}
     <h1>{{.Title}}</h1>
     <p class="meta">{{.FeedName}}{{if .Author}} · {{.Author}}{{end}}{{if .When}} · {{.When}}{{end}}</p>
-    {{if .URL}}<p><a href="{{.URL}}" target="_blank" rel="noopener noreferrer">Open original</a></p>{{end}}
+    <div class="reader-actions">
+      {{if .URL}}<a class="button" href="{{.URL}}" target="_blank" rel="noopener noreferrer">Open original</a>{{end}}
+      <form method="post" action="/reader/item/{{.ID}}/star"
+            hx-post="/reader/item/{{.ID}}/star" hx-target="#reader-article" hx-swap="outerHTML">
+        {{template "reader-ctx" .}}
+        <button type="submit">{{if .Starred}}&#9733; Starred{{else}}&#9734; Star{{end}}</button>
+      </form>
+      {{if .Read}}
+        <form method="post" action="/reader/item/{{.ID}}/unread"
+              hx-post="/reader/item/{{.ID}}/unread" hx-target="#reader-article" hx-swap="outerHTML">
+          {{template "reader-ctx" .}}
+          <button type="submit">Mark unread</button>
+        </form>
+      {{end}}
+    </div>
     <div class="reader-body">{{.Body}}</div>
   {{else}}
     <p class="empty">Pick an article.</p>
