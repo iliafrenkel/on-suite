@@ -203,6 +203,7 @@ func TestSaveItemsIsIdempotentOnGUID(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC)
+	fetchedAt := time.Now().UTC()
 	items := []reader.ParsedItem{{
 		GUID:        "g1",
 		URL:         "https://example.com/1",
@@ -211,7 +212,7 @@ func TestSaveItemsIsIdempotentOnGUID(t *testing.T) {
 		ContentHTML: "<p>one</p>",
 	}}
 
-	inserted, err := f.store.SaveItems(ctx, sub.FeedID, items, now)
+	inserted, err := f.store.SaveItems(ctx, sub.FeedID, items, fetchedAt)
 	if err != nil {
 		t.Fatalf("SaveItems: %v", err)
 	}
@@ -221,7 +222,7 @@ func TestSaveItemsIsIdempotentOnGUID(t *testing.T) {
 
 	// A publisher edited the title in place. Same GUID, so it updates.
 	items[0].Title = "First, corrected"
-	inserted, err = f.store.SaveItems(ctx, sub.FeedID, items, now)
+	inserted, err = f.store.SaveItems(ctx, sub.FeedID, items, fetchedAt)
 	if err != nil {
 		t.Fatalf("second SaveItems: %v", err)
 	}
@@ -249,10 +250,10 @@ func TestSaveItemsFallsBackToFetchTimeForAnUndatedItem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC)
+	fetchedAt := time.Now().UTC()
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
 		GUID: "g1", Title: "Undated",
-	}}, now); err != nil {
+	}}, fetchedAt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -260,8 +261,8 @@ func TestSaveItemsFallsBackToFetchTimeForAnUndatedItem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got[0].PublishedAt.Equal(now) {
-		t.Errorf("PublishedAt = %v, want the fetch time %v", got[0].PublishedAt, now)
+	if !got[0].PublishedAt.Equal(fetchedAt) {
+		t.Errorf("PublishedAt = %v, want the fetch time %v", got[0].PublishedAt, fetchedAt)
 	}
 }
 

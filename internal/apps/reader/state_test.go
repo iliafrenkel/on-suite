@@ -129,3 +129,144 @@ func TestSetReadRefusesAnItemTheUserCannotSee(t *testing.T) {
 		t.Fatalf("SetStarred for a non-subscriber returned %v, want ErrNotFound", err)
 	}
 }
+
+func TestItemsForScopeFiltersUnread(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "A", PublishedAt: now.Add(-2 * time.Hour)},
+		{GUID: "b", Title: "B", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	all, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("FilterAll returned %d items, want 2", len(all))
+	}
+	if err := f.store.SetRead(ctx, f.alice.ID, all[0].ID, true, now); err != nil {
+		t.Fatal(err)
+	}
+
+	unread, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterUnread, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unread) != 1 {
+		t.Fatalf("FilterUnread returned %d items, want 1", len(unread))
+	}
+	if unread[0].ID == all[0].ID {
+		t.Error("the item just marked read is still in the unread list")
+	}
+}
+
+func TestItemsCarryTheirOwnState(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	item := seedItem(t, f, "g1")
+	now := time.Now().UTC()
+
+	if err := f.store.SetStarred(ctx, f.alice.ID, item.ID, true, now); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeAll, 0, reader.FilterAll, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d items, want 1", len(got))
+	}
+	if !got[0].Starred {
+		t.Error("Starred is false on an item that was just starred; the list must carry state, not just ids")
+	}
+	if got[0].Read {
+		t.Error("Read is true on an item nobody read")
+	}
+}
+
+func TestScopeStarredCrossesFeeds(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	var starred []int64
+	for _, u := range []string{"https://a.example/feed", "https://b.example/feed"} {
+		sub, err := f.store.Subscribe(ctx, f.alice.ID, u, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fetchedAt := time.Now().UTC()
+		if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+			{GUID: "x", Title: "From " + u, PublishedAt: now.Add(-time.Hour)},
+		}, fetchedAt); err != nil {
+			t.Fatal(err)
+		}
+		items, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := f.store.SetStarred(ctx, f.alice.ID, items[0].ID, true, now); err != nil {
+			t.Fatal(err)
+		}
+		starred = append(starred, items[0].ID)
+	}
+
+	got, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeStarred, 0, reader.FilterAll, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(starred) {
+		t.Errorf("starred scope returned %d items, want %d across both feeds", len(got), len(starred))
+	}
+}
+
+// The added_at cutoff is what stops a second household member inheriting a
+// backlog they never asked for.
+func TestItemsPublishedBeforeSubscribingAreNotUnread(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// Alice subscribes and the feed backfills a month of history.
+	aliceSub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliceFetchedAt := time.Now().UTC()
+	if _, err := f.store.SaveItems(ctx, aliceSub.FeedID, []reader.ParsedItem{
+		{GUID: "old", Title: "Old", PublishedAt: now.Add(-30 * 24 * time.Hour)},
+	}, aliceFetchedAt); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bob subscribes now. The old item predates his subscription.
+	bobSub, err := f.store.Subscribe(ctx, f.bob.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bobUnread, err := f.store.ItemsForScope(ctx, f.bob.ID, reader.ScopeFeed, bobSub.ID, reader.FilterUnread, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bobUnread) != 0 {
+		t.Errorf("bob has %d unread items from before he subscribed; added_at must exclude them", len(bobUnread))
+	}
+
+	aliceUnread, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, aliceSub.ID, reader.FilterUnread, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(aliceUnread) != 1 {
+		t.Errorf("alice has %d unread items; the cutoff must not hide items from the original subscriber", len(aliceUnread))
+	}
+}
