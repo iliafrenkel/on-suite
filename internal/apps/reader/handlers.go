@@ -56,19 +56,106 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	a.renderIndex(w, r, userID, subID, "")
+	a.renderIndex(w, r, userID, pathContext(r, subID), "")
 }
 
-// scopeOf derives the list scope from the request path.
-func scopeOf(r *http.Request) Scope {
+// listContext is which list a render draws: the scope, the subscription that
+// scope names, and this viewer's filter. It travels as one value because the
+// three are only ever meaningful together — a ScopeFeed with no SubID is not a
+// list, it is a bug.
+type listContext struct {
+	Scope  Scope
+	SubID  int64
+	Filter Filter
+}
+
+// parseScope maps a form or query value onto a Scope, reporting whether it was
+// one. Unlike ParseFilter it does not default: a caller needs to know the
+// difference between "no scope was sent" (fall back to the path) and "the
+// scope sent was All".
+func parseScope(raw string) (Scope, bool) {
+	switch Scope(raw) {
+	case ScopeAll:
+		return ScopeAll, true
+	case ScopeStarred:
+		return ScopeStarred, true
+	case ScopeFeed:
+		return ScopeFeed, true
+	default:
+		return ScopeAll, false
+	}
+}
+
+// pathContext is the GET context: the scope comes from the path, the filter
+// from the query string, so a reader URL stays shareable.
+//
+// The scope keys off the subID the caller resolved rather than PathValue("id")
+// directly, because several POST paths carry an id that is not a subscription
+// (an item, a folder) and treating those as ScopeFeed would render — and, with
+// the ownership gate in renderIndex, 404 — an empty feed list.
+func pathContext(r *http.Request, subID int64) listContext {
+	scope := ScopeAll
 	switch {
 	case strings.HasSuffix(r.URL.Path, "/starred"):
-		return ScopeStarred
-	case r.PathValue("id") != "":
-		return ScopeFeed
-	default:
-		return ScopeAll
+		scope = ScopeStarred
+	case subID != 0:
+		scope = ScopeFeed
 	}
+	return listContext{
+		Scope:  scope,
+		SubID:  subID,
+		Filter: ParseFilter(r.URL.Query().Get("filter")),
+	}
+}
+
+// formContext is pathContext overridden by the hidden fields a POST carries.
+//
+// A POST that redraws the panes has no query string and usually no path
+// segment naming the current list, so without this "Mark all read" from
+// Starred/All silently re-renders as All/Unread while the address bar (from
+// the last hx-push-url) still says /reader/starred?filter=all. Only PostForm
+// values are read: a GET has no body, so the path stays authoritative there.
+func formContext(r *http.Request, subID int64) listContext {
+	out := pathContext(r, subID)
+	if s, ok := parseScope(r.PostFormValue("scope")); ok {
+		out.Scope = s
+		out.SubID = 0
+		if s == ScopeFeed {
+			if id, err := strconv.ParseInt(r.PostFormValue("sub"), 10, 64); err == nil && id > 0 {
+				out.SubID = id
+			} else {
+				// A feed scope with no subscription is not a list. Fall back
+				// rather than 404 on a form that lost a field.
+				out.Scope = ScopeAll
+			}
+		}
+	}
+	if raw := r.PostFormValue("filter"); raw != "" {
+		out.Filter = ParseFilter(raw)
+	}
+	return out
+}
+
+// articleContext is the list an article was opened from.
+//
+// The article's own path names an item, not a list, so the scope arrives in
+// the item link's query string or the star/unread form's hidden fields. It is
+// needed because the article response redraws the tree out of band (so unread
+// counts stop going stale the moment you read something), and a tree drawn
+// without this would move the selection to All under the reader's feet.
+func articleContext(r *http.Request) listContext {
+	out := listContext{Scope: ScopeAll, Filter: ParseFilter(r.FormValue("filter"))}
+	if s, ok := parseScope(r.FormValue("scope")); ok {
+		out.Scope = s
+	}
+	if out.Scope == ScopeFeed {
+		if id, err := strconv.ParseInt(r.FormValue("sub"), 10, 64); err == nil && id > 0 {
+			out.SubID = id
+		} else {
+			out.Scope = ScopeAll
+		}
+	}
+	return out
 }
 
 // listTitle names the pane for a scope.
@@ -100,7 +187,15 @@ func basePathFor(scope Scope, subID int64) string {
 // panes that changed. Every handler that can land the user on a different
 // tree/list/article state (selecting a feed, subscribing, unsubscribing,
 // managing a folder, or refreshing) goes through here.
-func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID, subID int64, formErr string) {
+func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr string) {
+	a.renderPanes(w, r, userID, lc, formErr, articleView{})
+}
+
+// renderPanes is renderIndex with an optional third pane already loaded. Only
+// the JavaScript-less star/unread path passes an article: with htmx those
+// routes answer with the article fragment, and without it they have to answer
+// with a whole page or the browser lands on a bare <article> with no shell.
+func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr string, art articleView) {
 	ctx := r.Context()
 
 	tree, err := a.store.Tree(ctx, userID)
@@ -114,31 +209,38 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID, subID 
 		return
 	}
 
-	scope := scopeOf(r)
-	// A POST that names a subscription (mark-all-read, subscribe) is a feed
-	// scope even though its path has no {id}.
-	if scope == ScopeAll && subID != 0 {
-		scope = ScopeFeed
+	sub := findSub(tree, lc.SubID)
+	// The ownership gate ItemsForSubscription used to provide. ItemsForScope is
+	// the single query path now, and it answers "not your subscription" with an
+	// empty list rather than ErrNotFound — which would render a blank page with
+	// a 200 for somebody else's feed id, where R1 returned 404. Tree is already
+	// scoped to this user, so a subID missing from it is either nonexistent or
+	// somebody else's, and both are correctly a 404.
+	if lc.Scope == ScopeFeed && sub.ID == 0 {
+		a.fail(w, r, ErrNotFound)
+		return
 	}
-	filter := ParseFilter(r.URL.Query().Get("filter"))
 
-	view := indexView{Tree: viewTree(tree, subID, scope, counts), Error: formErr}
+	view := indexView{Tree: viewTree(tree, lc.SubID, lc.Scope, counts), Article: art, Error: formErr}
 
-	items, err := a.store.ItemsForScope(ctx, userID, scope, subID, filter, 200)
+	items, err := a.store.ItemsForScope(ctx, userID, lc.Scope, lc.SubID, lc.Filter, 200)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	listTitleStr := listTitle(scope, findSub(tree, subID))
-	view.List = viewList(items, listTitleStr, scope, subID, filter, basePathFor(scope, subID))
+	listTitleStr := listTitle(lc.Scope, sub)
+	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID))
 
 	// The shell crumb and <title> follow the selected feed, not the generic
 	// "All articles" list heading — ScopeAll keeps the app's own name so the
 	// tab and breadcrumb do not read "All articles · ON Suite" on the default
 	// view.
 	pageTitle := "ON Reader"
-	if scope != ScopeAll {
+	if lc.Scope != ScopeAll {
 		pageTitle = listTitleStr
+	}
+	if art.Selected {
+		pageTitle = art.Title
 	}
 	page := a.deps.Page(r, pageTitle)
 	view.List.Shell = page.Shell
@@ -189,15 +291,55 @@ func findSub(t Tree, id int64) Subscription {
 // phone swaps a pane the viewport is not showing. (R1 had an article OOB swap
 // reverted as unrequested — this one is requested, deliberately, and
 // TestArticleResponseCarriesTheOOBPaneState pins it.)
+// It also redraws the tree out of band. Reading or starring an article changes
+// an unread count, and without this the sidebar keeps the pre-click numbers
+// until some unrelated navigation happens to reconcile them. The tree comes
+// from the same viewTree/"tree" pair "panes-oob" uses, so there is one way to
+// render it.
+//
+// The list pane is deliberately *not* swapped along with it: under the Unread
+// filter a fresh list would drop the article out from under the reader the
+// instant opening it marked it read. Its row keeps the styling it had until
+// the next list render, which is the lesser of the two staleness problems.
 func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, itemID int64) {
-	item, err := a.store.Item(r.Context(), userID, itemID)
+	ctx := r.Context()
+
+	item, err := a.store.Item(ctx, userID, itemID)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
+	tree, err := a.store.Tree(ctx, userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	counts, err := a.store.UnreadCounts(ctx, userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	lc := articleContext(r)
 	page := a.deps.Page(r, item.Title)
-	if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article-oob",
-		viewArticle(item, page.Shell)); err != nil {
+
+	// A POST that did not come from htmx is a plain form submission — the
+	// star and unread forms carry method/action for exactly that case — so it
+	// gets the whole page back rather than a fragment with no shell around it.
+	// A GET stays a fragment: the item link is an htmx swap of one pane.
+	if r.Method == http.MethodPost && !web.IsHTMX(r) {
+		a.renderPanes(w, r, userID, lc, "", viewArticle(item, page.Shell, lc))
+		return
+	}
+
+	view := indexView{
+		Tree:    viewTree(tree, lc.SubID, lc.Scope, counts),
+		List:    listView{Scope: lc.Scope, SubID: lc.SubID, Filter: lc.Filter, Shell: page.Shell},
+		Article: viewArticle(item, page.Shell, lc),
+		Shell:   page.Shell,
+	}
+	view.Tree.OOB = true
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article-swap", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
 }
@@ -270,16 +412,14 @@ func (a *App) markAllRead(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	scope := Scope(r.FormValue("scope"))
-	if scope == "" {
-		scope = ScopeAll
-	}
-	subID, _ := strconv.ParseInt(r.FormValue("sub"), 10, 64)
-	if _, err := a.store.MarkAllRead(r.Context(), userID, scope, subID, time.Now().UTC()); err != nil {
+	// The form carries the list it fired from, so the re-render stays there
+	// instead of resetting to All/Unread.
+	lc := formContext(r, 0)
+	if _, err := a.store.MarkAllRead(r.Context(), userID, lc.Scope, lc.SubID, time.Now().UTC()); err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderIndex(w, r, userID, subID, "")
+	a.renderIndex(w, r, userID, lc, "")
 }
 
 // subscribe adds a feed. A rejected URL re-renders with the message on the
@@ -290,16 +430,22 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	lc := formContext(r, 0)
 	sub, err := a.store.Subscribe(r.Context(), userID, r.FormValue("url"), folderParam(r))
 	if err != nil {
 		if errors.Is(err, ErrInvalidURL) {
-			a.renderIndex(w, r, userID, 0, "That is not a feed address. It needs to start with http:// or https://.")
+			// Stay on whatever list the form was submitted from: a typo'd URL
+			// should not also throw away the reader's place.
+			a.renderIndex(w, r, userID, lc, "That is not a feed address. It needs to start with http:// or https://.")
 			return
 		}
 		a.fail(w, r, err)
 		return
 	}
-	a.renderIndex(w, r, userID, sub.ID, "")
+	// Adding a feed selects it, which is the one case where the new state wins
+	// over the list the form came from.
+	lc.Scope, lc.SubID = ScopeFeed, sub.ID
+	a.renderIndex(w, r, userID, lc, "")
 }
 
 // folderParam reads an optional folder id from the form. Absent or unparseable
@@ -325,11 +471,17 @@ func (a *App) unsubscribe(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	lc := formContext(r, 0)
 	if err := a.store.Unsubscribe(r.Context(), userID, subID); err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderIndex(w, r, userID, 0, "")
+	// Unsubscribing from the feed you are reading has to fall back to All:
+	// the list the form named no longer exists, and rendering it would 404.
+	if lc.Scope == ScopeFeed && lc.SubID == subID {
+		lc.Scope, lc.SubID = ScopeAll, 0
+	}
+	a.renderIndex(w, r, userID, lc, "")
 }
 
 func (a *App) createFolder(w http.ResponseWriter, r *http.Request) {
@@ -337,15 +489,16 @@ func (a *App) createFolder(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	lc := formContext(r, 0)
 	if _, err := a.store.CreateFolder(r.Context(), userID, r.FormValue("name")); err != nil {
 		if errors.Is(err, ErrInvalid) {
-			a.renderIndex(w, r, userID, 0, "A folder needs a name.")
+			a.renderIndex(w, r, userID, lc, "A folder needs a name.")
 			return
 		}
 		a.fail(w, r, err)
 		return
 	}
-	a.renderIndex(w, r, userID, 0, "")
+	a.renderIndex(w, r, userID, lc, "")
 }
 
 func (a *App) deleteFolder(w http.ResponseWriter, r *http.Request) {
@@ -357,11 +510,14 @@ func (a *App) deleteFolder(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	lc := formContext(r, 0)
 	if err := a.store.DeleteFolder(r.Context(), userID, folderID); err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderIndex(w, r, userID, 0, "")
+	// Deleting a folder moves its feeds to the root rather than removing them,
+	// so a feed scope the form named is still a valid list.
+	a.renderIndex(w, r, userID, lc, "")
 }
 
 // refresh polls now. It calls the same PollDue the scheduled job calls, which
@@ -371,9 +527,10 @@ func (a *App) refresh(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	lc := formContext(r, 0)
 	if err := a.poller.PollDue(r.Context()); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderIndex(w, r, userID, 0, "")
+	a.renderIndex(w, r, userID, lc, "")
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
+	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
 // The harness already creates Alice and Bob and signs them in: Server.Alice is
@@ -583,5 +584,288 @@ func TestStarredScopeHasItsOwnPage(t *testing.T) {
 	doc := s.Get(t, s.Alice, "/reader/starred?filter=all")
 	if n := len(doc.QueryAll(".reader-row")); n != 1 {
 		t.Errorf("starred page shows %d rows, want 1", n)
+	}
+}
+
+// ---- Whole-branch review fixes ------------------------------------------
+
+// R1 answered a GET for somebody else's subscription with 404, via
+// ItemsForSubscription's ownership check. R2 moved the list onto
+// ItemsForScope, which answers "not your subscription" with an empty list —
+// so the page came back 200 with an empty list and a blank heading, quietly
+// confirming nothing but also dropping the contract. The store-level test
+// still passed because it exercises the wrapper nothing calls any more.
+func TestFeedScopeIsNotFoundForAnotherUsersSubscription(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "a")
+
+	rec := s.Do(t, s.Bob, httptest.NewRequest(http.MethodGet, "/reader/feed/"+itoa(subID), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET another user's feed returned %d, want 404 — a 200 with an empty list still says the id exists", rec.Code)
+	}
+
+	rec = s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/feed/999999", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET a nonexistent feed returned %d, want 404", rec.Code)
+	}
+}
+
+// A POST carries no query string and its path names an item, a folder or a
+// subscription rather than the list on screen, so without the hidden fields
+// the re-render silently fell back to All/Unread while the address bar still
+// showed /reader/starred?filter=all.
+func TestMarkAllReadStaysOnTheListItFiredFrom(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	_, items := seedOne(t, s, "a", "b")
+
+	if err := s.Store.SetStarred(ctx, s.Alice.User.ID, items[0].ID, true, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/read-all", url.Values{
+		"scope":  {"starred"},
+		"filter": {"all"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("mark-all-read returned %d: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	if got := strings.TrimSpace(htmlassert.Text(doc.MustHave("h2"))); got != "Starred" {
+		t.Errorf("re-render shows the %q list, want Starred", got)
+	}
+	if got := strings.TrimSpace(htmlassert.Text(doc.MustHave(".reader-filters a[aria-current=page]"))); got != "All" {
+		t.Errorf("re-render is on the %q filter, want All", got)
+	}
+	if n := len(doc.QueryAll(".reader-row")); n != 1 {
+		t.Errorf("starred/all re-render shows %d rows, want 1 (the starred item, now read)", n)
+	}
+}
+
+// The mark-all-read form is the one that already carried scope and sub; every
+// other POST control has to carry them too or it drops the reader back to All.
+func TestEveryReaderFormCarriesTheCurrentList(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "a")
+
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(subID)+"?filter=all")
+	for _, sel := range []string{
+		`#reader-panes input[name=scope]`,
+		`#reader-panes input[name=sub]`,
+		`#reader-panes input[name=filter]`,
+	} {
+		got := doc.QueryAll(sel)
+		if len(got) < 4 {
+			t.Errorf("%s appears %d times; every POST control in the panes needs it", sel, len(got))
+			continue
+		}
+		for _, n := range got {
+			v, _ := htmlassert.Attr(n, "value")
+			if v == "" {
+				t.Errorf("%s has an empty value; the re-render would fall back to All/Unread", sel)
+			}
+		}
+	}
+	if got, _ := htmlassert.Attr(doc.MustHave(`#reader-panes input[name=filter]`), "value"); got != "all" {
+		t.Errorf("hidden filter field = %q, want all", got)
+	}
+}
+
+// With JavaScript off, hx-post on its own submits nowhere — which also makes
+// the CSRF hidden fields decorative, since the token otherwise only travels in
+// the header base.html sets for htmx.
+func TestEveryReaderFormHasANonJSSubmitPath(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	if _, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Tech"); err != nil {
+		t.Fatal(err)
+	}
+	seedOne(t, s, "a")
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	forms := doc.QueryAll("#reader-panes form")
+	if len(forms) < 5 {
+		t.Fatalf("only %d forms in the panes; expected add-feed, add-folder, refresh, folder-delete, unsubscribe and mark-all-read", len(forms))
+	}
+	for _, f := range forms {
+		method, _ := htmlassert.Attr(f, "method")
+		action, _ := htmlassert.Attr(f, "action")
+		if !strings.EqualFold(method, "post") || action == "" {
+			t.Errorf(`form has method=%q action=%q; without both it submits nowhere with JavaScript off`, method, action)
+		}
+		if hx, ok := htmlassert.Attr(f, "hx-post"); ok && hx != action {
+			t.Errorf("form action %q and hx-post %q disagree", action, hx)
+		}
+	}
+	if n := len(doc.QueryAll(`#reader-panes input[name=` + web.CSRFFormField + `]`)); n < len(forms) {
+		t.Errorf("%d CSRF fields for %d forms; a plain submission would be rejected", n, len(forms))
+	}
+}
+
+// Below 640px the server checks #reader-list-open on every render, so the CSS
+// hid the tree — the feed list, both pseudo-nodes, both forms and Refresh —
+// with nothing on screen able to bring it back. The back controls are plain
+// labels for the drill-down checkboxes, which is what makes them work with no
+// script.
+func TestNarrowViewportHasABackControlAtEachDrillDownLevel(t *testing.T) {
+	s := newServer(t)
+	subID, items := seedOne(t, s, "a")
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	doc.MustHave("input#reader-list-open")
+	doc.MustHave("input#reader-article-open")
+	back := doc.MustHave(".reader-list label[for=reader-list-open]")
+	if _, ok := htmlassert.Attr(back, "class"); !ok {
+		t.Error("the back control has no class, so no media query can reveal it")
+	}
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet,
+		"/reader/item/"+itoa(items[0].ID)+"?scope=feed&sub="+itoa(subID), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("article returned %d", rec.Code)
+	}
+	htmlassert.Parse(t, rec.Body.String()).MustHave(".reader-article label[for=reader-article-open]")
+}
+
+// Reading an article changes an unread count, so the tree has to come back
+// with the article or the sidebar keeps the pre-click numbers until some
+// unrelated navigation reconciles them.
+func TestArticleResponseRedrawsTheTreeCounts(t *testing.T) {
+	s := newServer(t)
+	subID, items := seedOne(t, s, "a", "b")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet,
+		"/reader/item/"+itoa(items[0].ID)+"?scope=feed&sub="+itoa(subID)+"&filter=unread", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("article returned %d: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	tree := doc.MustHave("nav#reader-tree")
+	if _, ok := htmlassert.Attr(tree, "hx-swap-oob"); !ok {
+		t.Error("the tree rides along without hx-swap-oob, so htmx would discard it")
+	}
+	counts := doc.QueryAll(".reader-count")
+	if len(counts) == 0 {
+		t.Fatalf("no unread counts in the redrawn tree:\n%s", rec.Body.String())
+	}
+	for _, c := range counts {
+		if got := strings.TrimSpace(htmlassert.Text(c)); got != "1" {
+			t.Errorf("tree count = %q after reading one of two articles, want 1", got)
+		}
+	}
+	if doc.Query("li.is-active") == nil {
+		t.Error("the tree redraw lost the selected feed; the article link has to carry its list context")
+	}
+}
+
+// The star form's own POST has to keep the tree in step too, and stay on the
+// list the article was opened from.
+func TestStarResponseRedrawsTheTreeForTheSameList(t *testing.T) {
+	s := newServer(t)
+	subID, items := seedOne(t, s, "a", "b")
+
+	rec := s.PostHX(t, s.Alice, "/reader/item/"+itoa(items[0].ID)+"/star", url.Values{
+		"scope":  {"feed"},
+		"sub":    {itoa(subID)},
+		"filter": {"all"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("star returned %d: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("nav#reader-tree")
+	if doc.Query("li.is-active") == nil {
+		t.Error("starring redrew the tree with no selected feed; the form has to carry its list context")
+	}
+}
+
+// A plain form POST — no htmx — must come back as a whole page, not a bare
+// fragment. This is the other half of giving the forms method/action: the
+// non-JS path has to land somewhere usable.
+func TestPlainPostRendersAWholePage(t *testing.T) {
+	s := newServer(t)
+	subID, items := seedOne(t, s, "a")
+
+	for _, tt := range []struct {
+		name string
+		path string
+		form url.Values
+	}{
+		{"read-all", "/reader/read-all", url.Values{"scope": {"feed"}, "sub": {itoa(subID)}, "filter": {"all"}}},
+		{"star", "/reader/item/" + itoa(items[0].ID) + "/star", url.Values{"scope": {"feed"}, "sub": {itoa(subID)}, "filter": {"all"}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := s.Post(t, s.Alice, tt.path, tt.form)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST %s = %d: %s", tt.path, rec.Code, rec.Body.String())
+			}
+			doc := htmlassert.Parse(t, rec.Body.String())
+			doc.MustHave("nav.reader-tree")
+			doc.MustHave("section.reader-list")
+			if doc.Query("main") == nil {
+				t.Errorf("POST %s answered with a fragment, not a page:\n%s", tt.path, rec.Body.String())
+			}
+		})
+	}
+}
+
+// This pins accepted behaviour rather than asking for new behaviour: the
+// added_at cutoff in ItemsForScope's base WHERE applies before the filter
+// switch, so a second household member who subscribes to an already-fetched
+// feed sees nothing from before their subscription under *any* filter, not
+// just Unread. The existing store-level test only covers Unread, which is why
+// nothing pinned the All case through the HTTP layer.
+func TestASecondSubscriberSeesNoBacklogUnderAnyFilter(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// The cutoff compares an item's fetched_at with a subscription's added_at,
+	// both of which the store stamps from its own clock. Setting added_at
+	// directly is what makes "alice was subscribed when this was fetched, bob
+	// was not" a fact of the fixture rather than a race on wall-clock order.
+	aliceSub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetchedAt := now.Add(-time.Hour)
+	setAddedAt(t, s, aliceSub.ID, now.Add(-2*time.Hour))
+
+	if _, err := s.Store.SaveItems(ctx, aliceSub.FeedID, []reader.ParsedItem{{
+		GUID:        "old",
+		Title:       "Published before bob subscribed",
+		PublishedAt: now.Add(-30 * 24 * time.Hour),
+	}}, fetchedAt); err != nil {
+		t.Fatal(err)
+	}
+	bobSub, err := s.Store.Subscribe(ctx, s.Bob.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setAddedAt(t, s, bobSub.ID, now)
+
+	for _, filter := range []string{"unread", "all"} {
+		doc := s.Get(t, s.Bob, "/reader/feed/"+itoa(bobSub.ID)+"?filter="+filter)
+		if n := len(doc.QueryAll(".reader-row")); n != 0 {
+			t.Errorf("filter=%s shows bob %d items from before he subscribed, want 0", filter, n)
+		}
+		doc = s.Get(t, s.Alice, "/reader/feed/"+itoa(aliceSub.ID)+"?filter="+filter)
+		if n := len(doc.QueryAll(".reader-row")); n != 1 {
+			t.Errorf("filter=%s shows alice %d items, want 1 — the cutoff must not hide the original subscriber's own backlog", filter, n)
+		}
+	}
+}
+
+// setAddedAt pins when a subscription started, the way retention_test.go does,
+// so a cutoff test does not depend on the order two wall-clock reads happen to
+// land in.
+func setAddedAt(t *testing.T, s *apptest.Server[*reader.Store], subID int64, at time.Time) {
+	t.Helper()
+	if _, err := s.Store.DB().ExecContext(context.Background(),
+		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
+		at.UTC().Format(time.RFC3339Nano), subID); err != nil {
+		t.Fatal(err)
 	}
 }

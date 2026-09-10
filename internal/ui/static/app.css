@@ -1635,11 +1635,22 @@ kbd {
 
 /* Three panes that scroll independently. A single page scroll is the thing
  * that makes a reader feel wrong: the tree should stay put while a long
- * article moves. */
+ * article moves.
+ *
+ * The height has to be a definite length, not a percentage. Nothing in the
+ * ancestor chain (#reader, main, .app-shell) has a definite height —
+ * .app-shell only sets min-height — so height: 100% here resolved to auto:
+ * the grid row grew to its tallest pane, the panes' own overflow-y: auto
+ * never engaged, and the whole page scrolled with the tree sliding away under
+ * a long article, which is precisely what this layout exists to prevent.
+ * The offset is .app-shell's own 8rem of header/footer chrome plus main's
+ * vertical padding, kept in a variable because that padding shrinks below
+ * 640px. */
 .reader-panes {
+	--reader-chrome: calc(8rem + var(--s-6) * 2);
 	display: grid;
 	grid-template-columns: minmax(12rem, 16rem) minmax(16rem, 24rem) 1fr;
-	height: 100%;
+	height: calc(100vh - var(--reader-chrome));
 	min-height: 0;
 	overflow: hidden;
 }
@@ -1771,6 +1782,16 @@ kbd {
 	color: var(--c-accent);
 }
 
+/* The narrow-viewport back control, hidden until a breakpoint actually
+ * collapses a pane away — the same shape as .paste-back-btn. It is a <label>
+ * for the drill-down checkbox, so clicking it unchecks that box and the pane
+ * behind reappears with no script and no round trip. The margin reset is
+ * because the global label rule gives every label bottom margin. */
+.reader-back-btn {
+	display: none;
+	margin-bottom: 0;
+}
+
 .reader-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -1815,20 +1836,40 @@ kbd {
 	#reader-article-open:checked ~ .reader-article {
 		display: block;
 	}
+	/* Only reachable — and only needed — once the list is covered up. */
+	#reader-article-open:checked ~ .reader-article .reader-back-btn {
+		display: inline-flex;
+	}
 }
 
-/* One pane. Drilling down: tree, then list, then article. The checkboxes are
- * set by the server and swapped out of band, so this needs no JavaScript —
- * the same mechanism as #paste-detail-open above. */
+/* One pane. Drilling down: tree, then list, then article.
+ *
+ * The collapse itself needs no JavaScript: the checkboxes are plain sibling
+ * inputs, the server sets them, and the back labels inside each pane uncheck
+ * them again. What does need JavaScript is htmx's out-of-band swapping — the
+ * unread counts, read/star state and mark-all-read updates all arrive that
+ * way — so this is a layout that degrades without script, not an app that
+ * runs without it. Same mechanism as #paste-detail-open above. */
 @media (max-width: 640px) {
 	.reader-panes {
+		/* main's padding drops to --s-4 at this width. */
+		--reader-chrome: calc(8rem + var(--s-4) * 2);
 		grid-template-columns: 1fr;
+	}
+	/* One pane means the list is hidden until it is drilled into. Without
+	 * this the "back to the feed tree" state showed the tree with the list
+	 * still stacked under it. */
+	.reader-list {
+		display: none;
 	}
 	#reader-list-open:checked ~ .reader-tree {
 		display: none;
 	}
 	#reader-list-open:checked ~ .reader-list {
 		display: block;
+	}
+	#reader-list-open:checked ~ .reader-list .reader-back-btn {
+		display: inline-flex;
 	}
 	#reader-article-open:checked ~ .reader-list {
 		display: none;

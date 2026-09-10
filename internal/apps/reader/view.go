@@ -39,6 +39,11 @@ type treeView struct {
 	// Empty is true when the user has no subscriptions at all, which is a
 	// different thing from a folder having none.
 	Empty bool
+	// OOB makes the tree an out-of-band swap. The article response redraws
+	// the tree so unread counts do not go stale the moment something is read;
+	// the panes response has the tree inside its own primary swap, where a
+	// second hx-swap-oob would be wrong.
+	OOB bool
 }
 
 type listView struct {
@@ -86,6 +91,13 @@ type articleView struct {
 	// Shell is carried so the article fragment can render the CSRF field its
 	// star and unread forms need.
 	Shell render.Shell
+	// Scope, SubID and Filter are the list this article was opened from,
+	// echoed back into the star and unread forms. The article's own path names
+	// an item, so without them a state-change POST has no way to say which
+	// list the tree redraw riding along with it should keep selected.
+	Scope  Scope
+	SubID  int64
+	Filter Filter
 }
 
 func viewTree(t Tree, activeID int64, scope Scope, counts Counts) treeView {
@@ -137,8 +149,11 @@ func viewList(items []Item, title string, scope Scope, subID int64, filter Filte
 	return out
 }
 
-func viewArticle(it Item, shell render.Shell) articleView {
+func viewArticle(it Item, shell render.Shell, lc listContext) articleView {
 	return articleView{
+		Scope:    lc.Scope,
+		SubID:    lc.SubID,
+		Filter:   lc.Filter,
 		ID:       it.ID,
 		Selected: true,
 		Title:    firstNonEmpty(it.Title, "(untitled)"),
