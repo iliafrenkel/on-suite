@@ -29,6 +29,10 @@ type ParsedItem struct {
 	PublishedAt time.Time
 	SummaryHTML string
 	ContentHTML string
+	// Images maps a proxy hash to the absolute publisher URL it stands for,
+	// for every image in SummaryHTML and ContentHTML. SaveItems persists it;
+	// nothing else in this package writes to the database.
+	Images map[string]string
 }
 
 // ParseFeed turns feed bytes into normalised items.
@@ -50,14 +54,35 @@ func ParseFeed(body []byte, feedURL string) (ParsedFeed, error) {
 		if item == nil {
 			continue
 		}
+		// The item's own URL is the base for relative image sources, falling
+		// back to the feed's site URL for items that carry no link.
+		base := strings.TrimSpace(item.Link)
+		if base == "" {
+			base = out.SiteURL
+		}
+		summary, summaryImages := SanitizeArticleHTML(item.Description, base)
+		content, contentImages := SanitizeArticleHTML(item.Content, base)
+
+		images := summaryImages
+		if images == nil {
+			images = map[string]string{}
+		}
+		for h, u := range contentImages {
+			images[h] = u
+		}
+		if len(images) == 0 {
+			images = nil
+		}
+
 		out.Items = append(out.Items, ParsedItem{
 			GUID:        itemGUID(item),
 			URL:         strings.TrimSpace(item.Link),
 			Title:       strings.TrimSpace(item.Title),
 			Author:      itemAuthor(item),
 			PublishedAt: itemPublished(item),
-			SummaryHTML: SanitizeHTML(item.Description),
-			ContentHTML: SanitizeHTML(item.Content),
+			SummaryHTML: summary,
+			ContentHTML: content,
+			Images:      images,
 		})
 	}
 	return out, nil

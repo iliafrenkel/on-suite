@@ -15,9 +15,10 @@ var policy = sync.OnceValue(buildPolicy)
 //
 // Deliberately excluded:
 //
-//   - img. R1 has no image proxy, and passing remote images through would hand
-//     every publisher a tracking pixel pointed at this household's IP. R3 adds
-//     img together with the proxy that makes it safe.
+//   - img. Excluded from this default policy so that passing remote images
+//     through would never hand a publisher a tracking pixel pointed at this
+//     household's IP. img is admitted only by policyWithImages, whose output
+//     is always rewritten to the proxy before it reaches a template.
 //   - style attributes and <style>. The suite's CSP forbids inline styles, so
 //     they would be dead weight even if they were harmless, which they are not.
 //   - iframe, object, embed, form, input. Nothing in an article needs them.
@@ -60,3 +61,25 @@ func buildPolicy() *bluemonday.Policy {
 func SanitizeHTML(raw string) string {
 	return policy().Sanitize(raw)
 }
+
+// policyWithImages is buildPolicy plus img. It is unexported and used only by
+// SanitizeArticleHTML, which rewrites every src to the proxy immediately
+// afterwards.
+//
+// Keeping it separate from SanitizeHTML is the safety property: a caller who
+// reaches for the obvious function still cannot emit a remote image, so
+// forgetting to rewrite fails closed rather than leaking.
+var policyWithImages = sync.OnceValue(func() *bluemonday.Policy {
+	p := buildPolicy()
+	p.AllowAttrs("src", "alt", "title", "width", "height").OnElements("img")
+	// Publishers commonly write site-relative image sources (e.g. "/img/a.png").
+	// buildPolicy leaves relative URLs disallowed, which is right for links —
+	// every feed item's own link is absolute — but here it would silently drop
+	// the src. rewriteImages resolves whatever bluemonday keeps against the
+	// article's URL and refuses anything that isn't http(s) afterwards, so
+	// allowing relative values through does not weaken the fail-closed guarantee.
+	p.AllowRelativeURLs(true)
+	// No srcset or sizes: each would be a second list of URLs to rewrite for
+	// no benefit at the sizes an article renders at here.
+	return p
+})
