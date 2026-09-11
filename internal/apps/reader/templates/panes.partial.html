@@ -252,18 +252,18 @@
       {{end}}
       {{if .HasFull}}
         {{if .ShowingFull}}
-          <a class="button" href="/reader/item/{{.ID}}?view=feed"
-             hx-get="/reader/item/{{.ID}}?view=feed"
+          <a class="button" href="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
+             hx-get="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
              hx-target="#reader-article" hx-swap="outerHTML">Show feed version</a>
         {{else}}
-          <a class="button" href="/reader/item/{{.ID}}"
-             hx-get="/reader/item/{{.ID}}"
+          <a class="button" href="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
+             hx-get="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
              hx-target="#reader-article" hx-swap="outerHTML">Show full article</a>
         {{end}}
       {{else}}
         <form method="post" action="/reader/item/{{.ID}}/full"
               hx-post="/reader/item/{{.ID}}/full" hx-target="#reader-article" hx-swap="outerHTML">
-          <input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+          {{template "reader-ctx" .}}
           <button type="submit">Fetch full article</button>
         </form>
       {{end}}
