@@ -196,7 +196,7 @@ func TestReindexBatchIndexesUnindexedRows(t *testing.T) {
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
 		{GUID: "a", Title: "Ordinary", ContentHTML: "<p>Something about telemetry.</p>",
 			PublishedAt: now.Add(-time.Hour)},
-	}, now); err != nil {
+	}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 
