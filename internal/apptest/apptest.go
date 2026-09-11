@@ -19,9 +19,11 @@
 package apptest
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -244,6 +246,37 @@ func (s *Server[S]) PostHX(t *testing.T, sess *Session, path string, form url.Va
 	form.Set(web.CSRFFormField, s.CSRFToken(t, sess))
 	req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	return s.Do(t, sess, req)
+}
+
+// UploadHX posts one file as multipart/form-data with the session's CSRF token
+// attached, as an htmx request.
+//
+// The token goes in the form rather than only in a header because
+// CSRF.Middleware calls ParseMultipartForm looking for it — see
+// internal/platform/web/csrf.go.
+func (s *Server[S]) UploadHX(t *testing.T, sess *Session, path, field, filename string, content []byte) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.WriteField(web.CSRFFormField, s.CSRFToken(t, sess)); err != nil {
+		t.Fatal(err)
+	}
+	part, err := mw.CreateFormFile(field, filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("HX-Request", "true")
 	return s.Do(t, sess, req)
 }

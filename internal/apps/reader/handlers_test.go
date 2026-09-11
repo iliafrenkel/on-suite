@@ -1176,3 +1176,85 @@ func TestFetchFullArticleRefusesAnotherUsersItem(t *testing.T) {
 		t.Errorf("bob got %d fetching a full article for a feed he does not subscribe to, want 404", rec.Code)
 	}
 }
+
+func TestExportOPMLDownloads(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Tech")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://a.example/feed.xml", &folder.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/opml", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export returned %d", rec.Code)
+	}
+	if cd := rec.Header().Get("Content-Disposition"); !strings.Contains(cd, "attachment") {
+		t.Errorf("Content-Disposition = %q, want an attachment", cd)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "xml") {
+		t.Errorf("Content-Type = %q", ct)
+	}
+
+	entries, err := reader.ParseOPML(rec.Body.Bytes())
+	if err != nil {
+		t.Fatalf("exported document does not parse: %v\n%s", err, rec.Body.String())
+	}
+	if len(entries) != 1 || entries[0].Folder != "Tech" {
+		t.Errorf("exported %+v, want one entry in Tech", entries)
+	}
+}
+
+func TestExportOPMLShowsOnlyYourOwnFeeds(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	if _, err := s.Store.Subscribe(ctx, s.Bob.User.ID, "https://bobs.example/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/opml", nil))
+	if strings.Contains(rec.Body.String(), "bobs.example") {
+		t.Errorf("alice's export contains bob's feed:\n%s", rec.Body.String())
+	}
+}
+
+func TestImportOPMLUpload(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	const doc = `<?xml version="1.0"?><opml version="2.0"><body>
+		<outline text="Tech"><outline type="rss" text="A" xmlUrl="https://a.example/feed.xml"/></outline>
+	</body></opml>`
+
+	rec := s.UploadHX(t, s.Alice, "/reader/opml", "file", "subs.opml", []byte(doc))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("import returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Folders) != 1 || len(tree.Folders[0].Subs) != 1 {
+		t.Errorf("import produced %+v", tree)
+	}
+	if !strings.Contains(rec.Body.String(), "1") {
+		t.Errorf("no count reported back to the user:\n%s", rec.Body.String())
+	}
+}
+
+func TestImportOPMLRejectsARubbishFile(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.UploadHX(t, s.Alice, "/reader/opml", "file", "notes.md", []byte("# not opml"))
+	if rec.Code == http.StatusInternalServerError {
+		t.Fatalf("a bad upload produced a 500; it is ordinary user input")
+	}
+	if !strings.Contains(strings.ToLower(rec.Body.String()), "opml") {
+		t.Errorf("no explanation of what was wrong:\n%s", rec.Body.String())
+	}
+}

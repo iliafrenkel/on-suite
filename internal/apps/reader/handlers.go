@@ -3,6 +3,7 @@ package reader
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -189,7 +190,23 @@ func basePathFor(scope Scope, subID int64) string {
 // tree/list/article state (selecting a feed, subscribing, unsubscribing,
 // managing a folder, or refreshing) goes through here.
 func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr string) {
-	a.renderPanes(w, r, userID, lc, formErr, articleView{})
+	a.renderIndexWith(w, r, userID, lc, formErr, "", nil)
+}
+
+// renderIndexWithNotice is renderIndex with a neutral message attached.
+//
+// It sets the field after building the view rather than widening renderIndex's
+// signature, so the eight existing call sites stay as they are.
+func (a *App) renderIndexWithNotice(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, notice string) {
+	a.renderIndexWith(w, r, userID, lc, "", notice, nil)
+}
+
+// renderIndexWith is renderIndex with its full parameter set: a form error, a
+// neutral notice, and the discovery chooser's candidates (Task 4). Task 2 only
+// ever passes "" and nil for the last two from renderIndex itself; the OPML
+// import handler is the first caller to use notice for real.
+func (a *App) renderIndexWith(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate) {
+	a.renderPanes(w, r, userID, lc, formErr, notice, candidates, articleView{})
 }
 
 // renderPanes is renderIndex with an optional third pane already loaded. Only
@@ -197,7 +214,7 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, 
 // or marking it unread: with htmx they answer with the article fragment, and
 // without it they have to answer with a whole page or the browser lands on a
 // bare <article> with no shell.
-func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr string, art articleView) {
+func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, art articleView) {
 	ctx := r.Context()
 
 	tree, err := a.store.Tree(ctx, userID)
@@ -223,7 +240,13 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		return
 	}
 
-	view := indexView{Tree: viewTree(tree, lc.SubID, lc.Scope, counts), Article: art, Error: formErr}
+	view := indexView{
+		Tree:       viewTree(tree, lc.SubID, lc.Scope, counts),
+		Article:    art,
+		Error:      formErr,
+		Notice:     notice,
+		Candidates: candidates,
+	}
 
 	items, err := a.store.ItemsForScope(ctx, userID, lc.Scope, lc.SubID, lc.Filter, 200)
 	if err != nil {
@@ -342,7 +365,7 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 	// stray out-of-band checkbox and no shell around either.
 	// An htmx request, GET or POST, still gets the one-pane fragment.
 	if !web.IsHTMX(r) {
-		a.renderPanes(w, r, userID, lc, "", viewArticle(item, page.Shell, lc, showFull))
+		a.renderPanes(w, r, userID, lc, "", "", nil, viewArticle(item, page.Shell, lc, showFull))
 		return
 	}
 
@@ -546,6 +569,94 @@ func (a *App) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.renderIndex(w, r, userID, lc, "")
+}
+
+// exportOPML sends this user's subscriptions as a file.
+func (a *App) exportOPML(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	tree, err := a.store.Tree(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	doc, err := BuildOPML(tree, "ON Reader subscriptions")
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/x-opml+xml; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="reader-subscriptions.opml"`)
+	if _, err := w.Write(doc); err != nil {
+		a.deps.Log.Info("reader writing an OPML export failed", "error", err)
+	}
+}
+
+// importOPML adds every subscription in an uploaded file.
+//
+// No http.MaxBytesReader here: CSRF.Middleware has already called
+// ParseMultipartForm on this request looking for the token, so r.Body is
+// consumed by the time this runs — wrapping it now would protect nothing.
+// MaxOPMLBytes is enforced against the upload's own reported size instead,
+// exactly as ON Notes' import does.
+func (a *App) importOPML(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	lc := formContext(r, 0)
+
+	if err := r.ParseMultipartForm(web.DefaultMaxBodyBytes); err != nil {
+		a.renderIndex(w, r, userID, lc, "That upload could not be read.")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		a.renderIndex(w, r, userID, lc, "Choose an OPML file to import.")
+		return
+	}
+	defer func() { _ = file.Close() }()
+
+	if header.Size > MaxOPMLBytes {
+		a.renderIndex(w, r, userID, lc, "That file is too large to be a subscription list.")
+		return
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		a.renderIndex(w, r, userID, lc, "That upload could not be read.")
+		return
+	}
+
+	entries, err := ParseOPML(data)
+	if err != nil {
+		// A wrong file is ordinary user input, not a server error.
+		a.renderIndex(w, r, userID, lc, "That does not look like an OPML file.")
+		return
+	}
+	res, err := a.store.ImportOPML(r.Context(), userID, entries)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	a.deps.Log.Info("reader imported OPML",
+		"added", res.Added, "existing", res.Existing, "failed", res.Failed)
+	a.renderIndexWithNotice(w, r, userID, lc, importMessage(res))
+}
+
+// importMessage phrases a result for a person: what happened, in one line.
+func importMessage(res ImportResult) string {
+	parts := []string{fmt.Sprintf("Added %d", res.Added)}
+	if res.Existing > 0 {
+		parts = append(parts, fmt.Sprintf("%d already subscribed", res.Existing))
+	}
+	if res.Failed > 0 {
+		parts = append(parts, fmt.Sprintf("%d could not be added", res.Failed))
+	}
+	return strings.Join(parts, ", ") + "."
 }
 
 // fetchFull retrieves an article's own page and extracts its body.

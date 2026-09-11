@@ -83,6 +83,9 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /item/{id}/star", a.toggleStar)
 	r.HandleFunc("POST /read-all", a.markAllRead)
 	r.HandleFunc("GET /img/{hash}", a.image)
+
+	r.HandleFunc("GET /opml", a.exportOPML)
+	r.HandleFunc("POST /opml", a.importOPML)
 }
 
 // purgeTick is daily. Retention is a housekeeping concern, not a
