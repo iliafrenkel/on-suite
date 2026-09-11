@@ -181,3 +181,93 @@ func TestEmptySearchReturnsEverything(t *testing.T) {
 		}
 	}
 }
+
+// Rows that predate migration 0006 have no search_text. A migration cannot fix
+// that — stripping HTML is not something SQL can do — so the job does.
+func TestReindexBatchIndexesUnindexedRows(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "Ordinary", ContentHTML: "<p>Something about telemetry.</p>",
+			PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a pre-0006 row: clear the indexed text behind the store's back.
+	if _, err := f.store.DB().ExecContext(ctx, `UPDATE reader_items SET search_text = ''`); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeAll, 0, reader.FilterAll, "telemetry", 50); err != nil || len(got) != 0 {
+		t.Fatalf("precondition: unindexed row was found (%d items, err %v)", len(got), err)
+	}
+
+	n, err := f.store.ReindexBatch(ctx, 100)
+	if err != nil {
+		t.Fatalf("ReindexBatch: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("reindexed %d rows, want 1", n)
+	}
+
+	got, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeAll, 0, reader.FilterAll, "telemetry", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Errorf("row is still unsearchable after reindexing")
+	}
+}
+
+// Once everything is indexed the pass must cost nothing, because it runs
+// nightly forever.
+func TestReindexBatchIsANoOpWhenNothingNeedsIt(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	n, err := f.store.ReindexBatch(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("reindexed %d rows in an empty database, want 0", n)
+	}
+}
+
+// An article that genuinely has no text must not be picked up every night
+// forever.
+func TestReindexBatchDoesNotLoopOnAnEmptyArticle(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "", ContentHTML: "", SummaryHTML: "", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().ExecContext(ctx, `UPDATE reader_items SET search_text = ''`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.store.ReindexBatch(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	n, err := f.store.ReindexBatch(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("second pass reindexed %d rows; an article with no text would be reindexed forever", n)
+	}
+}

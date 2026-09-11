@@ -1298,3 +1298,63 @@ func displayURL(u string) string {
 	}
 	return u[:max] + "…"
 }
+
+// reindexPlaceholder is stored for an article with no extractable text at all.
+//
+// Without it, such a row would match the "needs indexing" predicate on every
+// pass, forever. A single space is invisible to FTS5's tokenizer, so it indexes
+// nothing while still being distinguishable from "not yet indexed".
+const reindexPlaceholder = " "
+
+// ReindexBatch fills in search_text for rows that have none, up to limit.
+//
+// Rows predating migration 0006 have no indexed text and a migration cannot
+// give them any, since stripping HTML is not something SQL can do. The nightly
+// purge job calls this, so the index converges within a day of the migration
+// landing and the app self-heals if a row ever loses its text another way.
+func (s *Store) ReindexBatch(ctx context.Context, limit int) (int, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, title, content_html, summary_html, coalesce(full_html, '')
+		  FROM reader_items
+		 WHERE search_text = ''
+		 LIMIT ?`, limit)
+	if err != nil {
+		return 0, fmt.Errorf("reader: find unindexed items: %w", err)
+	}
+
+	type pending struct {
+		id   int64
+		text string
+	}
+	var batch []pending
+	for rows.Next() {
+		var id int64
+		var title, content, summary, full string
+		if err := rows.Scan(&id, &title, &content, &summary, &full); err != nil {
+			_ = rows.Close()
+			return 0, fmt.Errorf("reader: scan unindexed item: %w", err)
+		}
+		text := SearchText(title + " " + full + " " + content + " " + summary)
+		if text == "" {
+			text = reindexPlaceholder
+		}
+		batch = append(batch, pending{id: id, text: text})
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, fmt.Errorf("reader: iterate unindexed items: %w", err)
+	}
+	// Closed explicitly rather than deferred: the writes below need the single
+	// connection this pool is configured with, and a still-open read holds it.
+	if err := rows.Close(); err != nil {
+		return 0, fmt.Errorf("reader: close unindexed items: %w", err)
+	}
+
+	for _, p := range batch {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE reader_items SET search_text = ? WHERE id = ?`, p.text, p.id); err != nil {
+			return 0, fmt.Errorf("reader: reindex item %d: %w", p.id, err)
+		}
+	}
+	return len(batch), nil
+}
