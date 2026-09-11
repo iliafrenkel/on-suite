@@ -561,7 +561,10 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 			author       = excluded.author,
 			summary_html = excluded.summary_html,
 			content_html = excluded.content_html,
-			search_text  = excluded.search_text`)
+			search_text  = CASE WHEN coalesce(reader_items.full_html, '') = ''
+			                    THEN excluded.search_text
+			                    ELSE reader_items.search_text
+			               END`)
 	if err != nil {
 		return 0, fmt.Errorf("reader: prepare save item: %w", err)
 	}
@@ -587,10 +590,12 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 			return 0, fmt.Errorf("reader: check existing item: %w", err)
 		}
 
-		// Indexed text is derived from what is actually shown, so the full
-		// article (when one exists) is not indexed here — SaveFullArticle
-		// extends it.
-		searchText := SearchText(it.Title + " " + it.ContentHTML + " " + it.SummaryHTML)
+		// Indexed text is derived from what is actually shown. This row has no
+		// full article yet (there is none to have on a fresh feed body), so
+		// pass "" for it; the ON CONFLICT clause above keeps an existing
+		// full-article's indexed text intact instead of overwriting it with
+		// this feed-only value on a re-poll.
+		searchText := itemSearchText(it.Title, "", it.ContentHTML, it.SummaryHTML)
 
 		if _, err := stmt.ExecContext(ctx, feedID, it.GUID, it.URL, it.Title, it.Author,
 			formatTime(published), formatTime(now), it.SummaryHTML, it.ContentHTML, searchText); err != nil {
@@ -1123,10 +1128,15 @@ func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Ex
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Fetch the item's title to include in the search index.
-	var itemTitle string
-	if err := tx.QueryRowContext(ctx, `SELECT title FROM reader_items WHERE id = ?`, itemID).Scan(&itemTitle); err != nil {
-		return fmt.Errorf("reader: load item title: %w", err)
+	// Fetch the fields that feed the search index alongside the new full
+	// article, so the indexed text stays the union of everything (title,
+	// full article, feed content, feed summary) rather than just this one
+	// field — see itemSearchText.
+	var itemTitle, contentHTML, summaryHTML string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT title, content_html, summary_html FROM reader_items WHERE id = ?`,
+		itemID).Scan(&itemTitle, &contentHTML, &summaryHTML); err != nil {
+		return fmt.Errorf("reader: load item fields: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx, `
@@ -1134,7 +1144,7 @@ func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Ex
 		   SET full_html = ?, full_fetched_at = ?, full_error = '',
 		       search_text = ?
 		 WHERE id = ?`,
-		ex.HTML, formatTime(now), SearchText(itemTitle+" "+ex.HTML), itemID); err != nil {
+		ex.HTML, formatTime(now), itemSearchText(itemTitle, ex.HTML, contentHTML, summaryHTML), itemID); err != nil {
 		return fmt.Errorf("reader: save full article: %w", err)
 	}
 
@@ -1334,7 +1344,7 @@ func (s *Store) ReindexBatch(ctx context.Context, limit int) (int, error) {
 			_ = rows.Close()
 			return 0, fmt.Errorf("reader: scan unindexed item: %w", err)
 		}
-		text := SearchText(title + " " + full + " " + content + " " + summary)
+		text := itemSearchText(title, full, content, summary)
 		if text == "" {
 			text = reindexPlaceholder
 		}

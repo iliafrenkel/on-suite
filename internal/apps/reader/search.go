@@ -47,6 +47,18 @@ func SearchText(fragment string) string {
 	return strings.Join(strings.Fields(b.String()), " ")
 }
 
+// itemSearchText computes the indexed text for an item from every field that
+// can contribute to it. Callers that don't yet have one of these fields (a
+// brand-new row has no full article, for instance) pass "" for it — the
+// concatenation degrades gracefully since SearchText collapses whitespace.
+//
+// This is the single definition of "the indexed text": SaveItems, SaveFullArticle
+// and ReindexBatch must all compute it the same way, or a later write can
+// silently drop text an earlier one indexed.
+func itemSearchText(title, full, content, summary string) string {
+	return SearchText(title + " " + full + " " + content + " " + summary)
+}
+
 // ftsQuery turns free text into an FTS5 MATCH expression that can never be a
 // syntax error.
 //

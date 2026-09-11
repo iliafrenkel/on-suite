@@ -67,6 +67,67 @@ func TestSearchFindsAnArticleByItsBody(t *testing.T) {
 	}
 }
 
+// A poll re-upserts every item still in the feed XML, which includes exactly
+// the recent articles that just got a full-article extraction. SaveItems must
+// not blindly overwrite search_text with the feed body on that re-save — it
+// would silently drop the extracted full-article text out of the index on
+// every subsequent poll, and ReindexBatch would never repair it since the
+// row's search_text is non-empty (it only fills in empty ones).
+func TestSaveItemsDoesNotRevertAFullArticlesIndexedText(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Captured after Subscribe: ItemsForScope only returns items fetched at or
+	// after the subscription's own added_at, so an item timestamped before it
+	// (as it would be if "now" were captured first) is invisible.
+	now := time.Now().UTC()
+	feedItem := reader.ParsedItem{
+		GUID:        "a",
+		Title:       "Formula One",
+		SummaryHTML: "<p>A short teaser.</p>",
+		PublishedAt: now.Add(-2 * time.Hour),
+	}
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{feedItem}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	itemID := items[0].ID
+
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, itemID, reader.Extracted{
+		HTML: "<p>A deep dive into aerodynamics and downforce.</p>",
+	}, now); err != nil {
+		t.Fatalf("SaveFullArticle: %v", err)
+	}
+
+	// The next poll re-saves the same feed item — same title, same summary,
+	// no change at all — exactly as a real poll would.
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{feedItem}, now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeAll, 0, reader.FilterAll, "aerodynamics", 50)
+	if err != nil {
+		t.Fatalf("ItemsForScope: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("full-article word not found after a re-poll: got %d matches, want 1", len(got))
+	}
+	if got[0].ID != itemID {
+		t.Errorf("matched item %d, want %d", got[0].ID, itemID)
+	}
+}
+
 func TestSearchMatchesAPrefixWhileTyping(t *testing.T) {
 	f := newStoreFixture(t)
 	ctx := context.Background()
