@@ -1749,6 +1749,16 @@ kbd {
 	text-decoration: none;
 }
 
+.reader-search {
+	flex: 1 1 100%;
+	margin: 0;
+}
+
+.reader-search input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
 .reader-row a {
 	display: block;
 	padding: var(--s-2);

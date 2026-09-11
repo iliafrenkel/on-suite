@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/html"
+
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
@@ -696,6 +698,125 @@ func TestEveryReaderFormCarriesTheCurrentList(t *testing.T) {
 	}
 }
 
+// An active search must survive a full click-through round trip with
+// JavaScript off: list (searching) -> click an article row -> the article's
+// own forms (star, mark read) -> back to a list re-render (mark all read).
+// Losing "q" anywhere in that loop silently reloads the unfiltered list, the
+// same failure mode TestEveryReaderFormCarriesTheCurrentList pins for
+// scope/sub/filter.
+func TestSearchQuerySurvivesArticleOpenAndFormPost(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "Aerodynamics explained", PublishedAt: now.Add(-2 * time.Hour)},
+		{GUID: "b", Title: "Table tennis grips", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	// A plain (non-htmx) search: this is what a JavaScript-less GET of the
+	// search form looks like.
+	list := s.Get(t, s.Alice, "/reader/?filter=all&q=aero")
+	if n := len(list.QueryAll(".reader-row")); n != 1 {
+		t.Fatalf("search list has %d rows, want 1", n)
+	}
+	row := list.MustHave(".reader-row a")
+	href, _ := htmlassert.Attr(row, "href")
+	if !strings.Contains(href, "q=aero") {
+		t.Fatalf("article row link %q does not carry the search query", href)
+	}
+
+	// Click the row with JavaScript off: a plain GET, no HX-Request header.
+	article := s.Get(t, s.Alice, href)
+	qInput := article.MustHave(`#reader-panes input[name=q]`)
+	if v, _ := htmlassert.Attr(qInput, "value"); v != "aero" {
+		t.Errorf("article view's hidden q field = %q, want aero", v)
+	}
+
+	// Submit the article's own star form exactly as a JavaScript-less browser
+	// would: read every field the form itself carries — nothing supplied by
+	// the test — and POST them to the form's own action. If reader-ctx ever
+	// stops carrying q, this form simply would not have it to submit.
+	starBtn := article.MustHave(".reader-article-star")
+	starForm := formFields(t, starBtn)
+	if got := starForm.Get("q"); got != "aero" {
+		t.Fatalf("star form's own q field = %q, want aero — it cannot submit what it does not carry", got)
+	}
+	starAction, _ := htmlassert.Attr(ancestorForm(t, starBtn), "action")
+	rec := s.Post(t, s.Alice, starAction, starForm)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("star post returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Finally, a list-redrawing POST (mark all read) submitted the same way —
+	// reading whatever fields the rendered form actually carries — must still
+	// come back filtered and with the search box still showing the query, not
+	// silently reset to the unfiltered list.
+	list2 := s.Get(t, s.Alice, "/reader/?filter=all&q=aero")
+	markAllBtn := list2.MustHave(".reader-mark-all button")
+	markAllForm := formFields(t, markAllBtn)
+	if got := markAllForm.Get("q"); got != "aero" {
+		t.Fatalf("mark-all-read form's own q field = %q, want aero", got)
+	}
+	markAllAction, _ := htmlassert.Attr(ancestorForm(t, markAllBtn), "action")
+	rec = s.Post(t, s.Alice, markAllAction, markAllForm)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("mark-all-read returned %d: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if n := len(doc.QueryAll(".reader-row")); n != 1 {
+		t.Errorf("mark-all-read re-render shows %d rows, want 1 (search still applied)", n)
+	}
+	input := doc.MustHave(`input[name="q"]`)
+	if v, _ := htmlassert.Attr(input, "value"); v != "aero" {
+		t.Errorf("search box value after mark-all-read = %q, want aero", v)
+	}
+}
+
+// ancestorForm walks up from n to the <form> that contains it — the way a
+// real browser knows which form a button submits.
+func ancestorForm(t *testing.T, n *html.Node) *html.Node {
+	t.Helper()
+	for cur := n; cur != nil; cur = cur.Parent {
+		if cur.Type == html.ElementNode && cur.Data == "form" {
+			return cur
+		}
+	}
+	t.Fatal("no ancestor <form> found")
+	return nil
+}
+
+// formFields collects every <input name=... value=...> inside n's ancestor
+// form, the way a browser assembles a submission — so a test exercises
+// whatever the template actually rendered rather than fields the test made up
+// itself.
+func formFields(t *testing.T, n *html.Node) url.Values {
+	t.Helper()
+	form := ancestorForm(t, n)
+	out := url.Values{}
+	var walk func(*html.Node)
+	walk = func(cur *html.Node) {
+		if cur.Type == html.ElementNode && cur.Data == "input" {
+			name, hasName := htmlassert.Attr(cur, "name")
+			value, _ := htmlassert.Attr(cur, "value")
+			if hasName {
+				out.Set(name, value)
+			}
+		}
+		for c := cur.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(form)
+	return out
+}
+
 // With JavaScript off, hx-post on its own submits nowhere — which also makes
 // the CSRF hidden fields decorative, since the token otherwise only travels in
 // the header base.html sets for htmx.
@@ -712,8 +833,16 @@ func TestEveryReaderFormHasANonJSSubmitPath(t *testing.T) {
 	if len(forms) < 5 {
 		t.Fatalf("only %d forms in the panes; expected add-feed, add-folder, refresh, folder-delete, unsubscribe and mark-all-read", len(forms))
 	}
+	// The search box is a real form too, but a GET one: it has nowhere to
+	// carry a CSRF token and needs none, the same exception ON Notes' own
+	// search form makes (TestSearchFormWorksWithoutJavaScript-equivalent).
+	csrfForms := 0
 	for _, f := range forms {
 		method, _ := htmlassert.Attr(f, "method")
+		if strings.EqualFold(method, "get") {
+			continue
+		}
+		csrfForms++
 		action, _ := htmlassert.Attr(f, "action")
 		if !strings.EqualFold(method, "post") || action == "" {
 			t.Errorf(`form has method=%q action=%q; without both it submits nowhere with JavaScript off`, method, action)
@@ -722,8 +851,8 @@ func TestEveryReaderFormHasANonJSSubmitPath(t *testing.T) {
 			t.Errorf("form action %q and hx-post %q disagree", action, hx)
 		}
 	}
-	if n := len(doc.QueryAll(`#reader-panes input[name=` + web.CSRFFormField + `]`)); n < len(forms) {
-		t.Errorf("%d CSRF fields for %d forms; a plain submission would be rejected", n, len(forms))
+	if n := len(doc.QueryAll(`#reader-panes input[name=` + web.CSRFFormField + `]`)); n < csrfForms {
+		t.Errorf("%d CSRF fields for %d POST forms; a plain submission would be rejected", n, csrfForms)
 	}
 }
 
@@ -1538,5 +1667,191 @@ func TestDiscoveryEnforcesAnOverallDeadline(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(rec.Body.String()), "reach") {
 		t.Errorf("no explanation shown for the timed-out fetch:\n%s", rec.Body.String())
+	}
+}
+
+func TestSearchNarrowsTheList(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "Aerodynamics", PublishedAt: now.Add(-2 * time.Hour)},
+		{GUID: "b", Title: "Table tennis", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	all := s.Get(t, s.Alice, "/reader/?filter=all")
+	if n := len(all.QueryAll(".reader-row")); n != 2 {
+		t.Fatalf("unfiltered list has %d rows, want 2", n)
+	}
+	hit := s.Get(t, s.Alice, "/reader/?filter=all&q=aero")
+	if n := len(hit.QueryAll(".reader-row")); n != 1 {
+		t.Errorf("search returned %d rows, want 1", n)
+	}
+}
+
+// The query has to survive in the box, or a live filter clears itself on every
+// keystroke's response.
+func TestSearchQueryIsPrefilledInTheBox(t *testing.T) {
+	s := newServer(t)
+
+	doc := s.Get(t, s.Alice, "/reader/?q=aero")
+	input := doc.Query(`input[name="q"]`)
+	if input == nil {
+		t.Fatal("no search input in the list pane")
+	}
+	var value string
+	for _, a := range input.Attr {
+		if a.Key == "value" {
+			value = a.Val
+		}
+	}
+	if value != "aero" {
+		t.Errorf("search box value = %q, want the current query", value)
+	}
+}
+
+// Search must not silently widen the scope: searching inside one feed stays
+// inside it.
+func TestSearchStaysWithinTheCurrentFeed(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	a, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://a.example/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://b.example/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Captured after both Subscribe calls, not before: an item's fetched_at
+	// must land at or after its subscription's added_at (ItemsForScope's
+	// cutoff), and capturing "now" first — the brief's original ordering —
+	// races that cutoff against whatever Subscribe's own internal clock read
+	// a moment later, which is flaky whenever the two happen to fall in the
+	// same instant.
+	now := time.Now().UTC()
+	for _, x := range []struct {
+		feed int64
+		guid string
+	}{{a.FeedID, "a"}, {b.FeedID, "b"}} {
+		if _, err := s.Store.SaveItems(ctx, x.feed, []reader.ParsedItem{
+			{GUID: x.guid, Title: "Racing report", PublishedAt: now.Add(-time.Hour)},
+		}, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(a.ID)+"?filter=all&q=racing")
+	if n := len(doc.QueryAll(".reader-row")); n != 1 {
+		t.Errorf("searching within one feed returned %d rows, want 1", n)
+	}
+}
+
+func TestScriptIsServed(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/reader.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reader.js returned %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
+		t.Errorf("Content-Type = %q", ct)
+	}
+}
+
+// The whole reason prefetch needed a variant: arrowing past an article must
+// not mark it read.
+func TestPrefetchDoesNotMarkAnArticleRead(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	_, items := seedOne(t, s, "g1")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet,
+		"/reader/item/"+itoa(items[0].ID)+"?prefetch=1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("prefetch returned %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Body of g1") {
+		t.Errorf("prefetch did not render the article:\n%s", rec.Body.String())
+	}
+
+	read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read {
+		t.Error("a prefetch marked the article read")
+	}
+}
+
+// reader.js's keyboard fast path installs a prefetched response with a plain
+// outerHTML assignment, not an htmx-processed swap, so the OOB checkbox and
+// OOB count spans a normal article response carries would land as permanent,
+// duplicate-id sibling markup instead of being specially handled. The
+// prefetch response must be just the bare article fragment.
+func TestPrefetchResponseHasNoOOBMarkup(t *testing.T) {
+	s := newServer(t)
+	_, items := seedOne(t, s, "g1")
+
+	req := httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID)+"?prefetch=1", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "Body of g1") {
+		t.Fatalf("prefetch response did not render the article:\n%s", body)
+	}
+	if strings.Contains(body, `id="reader-article-open"`) {
+		t.Errorf("prefetch response carries the OOB pane-state checkbox:\n%s", body)
+	}
+	if strings.Contains(body, "reader-count") {
+		t.Errorf("prefetch response carries OOB sidebar count spans:\n%s", body)
+	}
+	if strings.Contains(body, "hx-swap-oob") {
+		t.Errorf("prefetch response carries out-of-band markup:\n%s", body)
+	}
+}
+
+// A normal (non-prefetch) open is the control: it must still carry the OOB
+// markup the prefetch response above must not have.
+func TestNormalOpenStillCarriesOOBMarkup(t *testing.T) {
+	s := newServer(t)
+	_, items := seedOne(t, s, "g1")
+
+	req := httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `id="reader-article-open"`) {
+		t.Errorf("normal open response has no OOB pane-state checkbox:\n%s", body)
+	}
+	if !strings.Contains(body, "reader-count") {
+		t.Errorf("normal open response has no OOB count spans:\n%s", body)
+	}
+}
+
+// ...and a normal open still does.
+func TestNormalOpenStillMarksRead(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	_, items := seedOne(t, s, "g1")
+
+	s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil))
+
+	read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !read {
+		t.Error("a normal open no longer marks the article read")
 	}
 }

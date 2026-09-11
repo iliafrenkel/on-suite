@@ -68,6 +68,9 @@ type listView struct {
 	Filter Filter
 	// BasePath is the path the filter links point at, without the query.
 	BasePath string
+	// Query is the live search filter, echoed back into the search box so it
+	// does not clear itself on every keystroke's response.
+	Query string
 	// Shell carries the CSRF token the mark-all-read form needs. It is set by
 	// renderIndex rather than viewList, which has no request to read it from.
 	Shell render.Shell
@@ -106,6 +109,10 @@ type articleView struct {
 	Scope  Scope
 	SubID  int64
 	Filter Filter
+	// Query is the active search filter, echoed back into the star/unread/
+	// full-article forms' hidden fields (via reader-ctx) so submitting one
+	// does not drop the search the article was opened from.
+	Query string
 	// HasFull reports that an extracted body is stored, which is what decides
 	// whether the toggle renders at all.
 	HasFull bool
@@ -132,7 +139,7 @@ func viewTree(t Tree, activeID int64, scope Scope, counts Counts) treeView {
 	}
 }
 
-func viewList(items []Item, title string, scope Scope, subID int64, filter Filter, basePath string) listView {
+func viewList(items []Item, title string, scope Scope, subID int64, filter Filter, basePath, query string) listView {
 	out := listView{
 		Title:    title,
 		Selected: true,
@@ -140,6 +147,7 @@ func viewList(items []Item, title string, scope Scope, subID int64, filter Filte
 		SubID:    subID,
 		Filter:   filter,
 		BasePath: basePath,
+		Query:    query,
 	}
 	for _, it := range items {
 		out.Items = append(out.Items, listItem{
@@ -152,10 +160,12 @@ func viewList(items []Item, title string, scope Scope, subID int64, filter Filte
 		})
 	}
 	if len(out.Items) == 0 {
-		switch filter {
-		case FilterUnread:
+		switch {
+		case query != "":
+			out.EmptyState = "Nothing matches " + query + "."
+		case filter == FilterUnread:
 			out.EmptyState = "Nothing unread here. Try the All filter."
-		case FilterStarred:
+		case filter == FilterStarred:
 			out.EmptyState = "Nothing saved here yet."
 		default:
 			out.EmptyState = "Nothing here yet. This feed has not been fetched, or it published nothing."
@@ -175,6 +185,7 @@ func viewArticle(it Item, shell render.Shell, lc listContext, showFull bool) art
 		Scope:    lc.Scope,
 		SubID:    lc.SubID,
 		Filter:   lc.Filter,
+		Query:    lc.Query,
 		ID:       it.ID,
 		Selected: true,
 		Title:    firstNonEmpty(it.Title, "(untitled)"),

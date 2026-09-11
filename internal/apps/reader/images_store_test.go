@@ -112,7 +112,7 @@ func TestPurgeOrphanImagesFollowsItems(t *testing.T) {
 		t.Fatalf("PurgeOrphanImages removed %d images while the item still exists (err %v)", n, err)
 	}
 
-	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, 10)
+	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestPurgeOrphanImagesRespectsSharedReferences(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, 10)
+	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

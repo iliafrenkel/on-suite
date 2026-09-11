@@ -16,8 +16,10 @@
      list on screen — so "Mark all read" from Starred would come back as
      All/Unread while the address bar still said /reader/starred?filter=all.
      It is rendered with either .List or the article view; both carry Shell,
-     Scope, SubID and Filter. */}}
-{{define "reader-ctx"}}<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}"><input type="hidden" name="scope" value="{{.Scope}}"><input type="hidden" name="sub" value="{{.SubID}}"><input type="hidden" name="filter" value="{{.Filter}}">{{end}}
+     Scope, SubID, Filter and Query — the last so an active search survives a
+     form submission too, with JavaScript off, instead of the re-rendered list
+     silently coming back unfiltered. */}}
+{{define "reader-ctx"}}<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}"><input type="hidden" name="scope" value="{{.Scope}}"><input type="hidden" name="sub" value="{{.SubID}}"><input type="hidden" name="filter" value="{{.Filter}}"><input type="hidden" name="q" value="{{.Query}}">{{end}}
 
 {{/* reader-back is the narrow-viewport back control: a real <label> whose for=
      names the drill-down checkbox, so clicking it natively unchecks that box
@@ -126,11 +128,23 @@
   </form>
   <a href="/reader/opml" download>Export OPML</a>
 
-  <form class="reader-refresh" method="post" action="/reader/refresh"
+  <form method="post" action="/reader/refresh"
         hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">
     {{template "reader-ctx" .List}}
-    <button type="submit">Refresh</button>
+    <button type="submit" class="reader-refresh">Refresh</button>
   </form>
+
+  <details class="reader-shortcuts">
+    <summary>Keyboard shortcuts</summary>
+    <dl>
+      <dt>j / k</dt><dd>next / previous article</dd>
+      <dt>o / Enter</dt><dd>open</dd>
+      <dt>m</dt><dd>mark read or unread</dd>
+      <dt>s</dt><dd>star</dd>
+      <dt>r</dt><dd>refresh feeds</dd>
+      <dt>/</dt><dd>search</dd>
+    </dl>
+  </details>
 
   <ul class="reader-nodes">
     <li class="reader-node{{if eq .Tree.Scope "all"}} is-active{{end}}">
@@ -209,19 +223,37 @@
     {{template "reader-back" (dict "For" "reader-list-open" "Label" "Feeds")}}
     <h2>{{.Title}}</h2>
     <nav class="reader-filters" aria-label="Filter">
-      <a href="{{.BasePath}}?filter=unread" hx-get="{{.BasePath}}?filter=unread"
+      <a href="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}"
          hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
          class="{{if eq .Filter "unread"}}is-active{{end}}"
          {{if eq .Filter "unread"}}aria-current="page"{{end}}>Unread</a>
-      <a href="{{.BasePath}}?filter=starred" hx-get="{{.BasePath}}?filter=starred"
+      <a href="{{.BasePath}}?filter=starred{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=starred{{if .Query}}&amp;q={{.Query}}{{end}}"
          hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
          class="{{if eq .Filter "starred"}}is-active{{end}}"
          {{if eq .Filter "starred"}}aria-current="page"{{end}}>Starred</a>
-      <a href="{{.BasePath}}?filter=all" hx-get="{{.BasePath}}?filter=all"
+      <a href="{{.BasePath}}?filter=all{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=all{{if .Query}}&amp;q={{.Query}}{{end}}"
          hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
          class="{{if eq .Filter "all"}}is-active{{end}}"
          {{if eq .Filter "all"}}aria-current="page"{{end}}>All</a>
     </nav>
+    {{/* The live filter. Mirrors ON Notes' notes-search-box
+         (internal/apps/notes/templates/toolbar.partial.html) — copied rather
+         than shared because apps never import each other, per PATTERNS.md.
+         hx-replace-url rather than hx-push-url: a debounced typing session
+         would otherwise push one history entry per keystroke, so the back
+         button would walk backwards through half-typed queries instead of
+         returning where the reader was before searching. "search" as a trigger
+         fires the moment the native clear (x) button is used, rather than
+         waiting out the debounce. */}}
+    <form method="get" action="{{.BasePath}}" class="reader-search" role="search">
+      <input type="hidden" name="filter" value="{{.Filter}}">
+      <input type="search" id="reader-search-input" name="q" value="{{.Query}}"
+             placeholder="Search articles…" aria-label="Search articles"
+             hx-get="{{.BasePath}}" hx-target="#reader-panes" hx-swap="outerHTML"
+             hx-include="closest form"
+             hx-trigger="input changed delay:300ms, search"
+             hx-replace-url="true">
+    </form>
     <form class="reader-mark-all" method="post" action="/reader/read-all"
           hx-post="/reader/read-all" hx-target="#reader-panes" hx-swap="outerHTML">
       {{template "reader-ctx" .}}
@@ -235,8 +267,8 @@
       <li class="reader-row{{if .Read}} is-read{{end}}{{if .Starred}} is-starred{{end}}">
         {{/* The list context rides in the query string so the tree redraw the
              article response carries can keep the selection where it is. */}}
-        <a href="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}"
-           hx-get="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}"
+        <a href="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}{{if $.Query}}&q={{$.Query}}{{end}}"
+           hx-get="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}{{if $.Query}}&q={{$.Query}}{{end}}"
            hx-target="#reader-article" hx-swap="outerHTML">
           <span class="title">{{if .Starred}}<span class="reader-star" aria-label="Starred">&#9733;</span> {{end}}{{.Title}}</span>
           <span class="meta">{{.FeedName}} · {{.Published}}</span>
@@ -270,23 +302,22 @@
       <form method="post" action="/reader/item/{{.ID}}/star"
             hx-post="/reader/item/{{.ID}}/star" hx-target="#reader-article" hx-swap="outerHTML">
         {{template "reader-ctx" .}}
-        <button type="submit">{{if .Starred}}&#9733; Starred{{else}}&#9734; Star{{end}}</button>
+        <button type="submit" class="reader-article-star">{{if .Starred}}&#9733; Starred{{else}}&#9734; Star{{end}}</button>
       </form>
-      {{if .Read}}
-        <form method="post" action="/reader/item/{{.ID}}/unread"
-              hx-post="/reader/item/{{.ID}}/unread" hx-target="#reader-article" hx-swap="outerHTML">
-          {{template "reader-ctx" .}}
-          <button type="submit">Mark unread</button>
-        </form>
-      {{end}}
+      <form method="post" action="/reader/item/{{.ID}}/{{if .Read}}unread{{else}}read{{end}}"
+            hx-post="/reader/item/{{.ID}}/{{if .Read}}unread{{else}}read{{end}}"
+            hx-target="#reader-article" hx-swap="outerHTML">
+        {{template "reader-ctx" .}}
+        <button type="submit" class="reader-article-read-toggle">{{if .Read}}Mark unread{{else}}Mark read{{end}}</button>
+      </form>
       {{if .HasFull}}
         {{if .ShowingFull}}
-          <a class="button" href="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
-             hx-get="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
+          <a class="button" href="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
+             hx-get="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
              hx-target="#reader-article" hx-swap="outerHTML">Show feed version</a>
         {{else}}
-          <a class="button" href="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
-             hx-get="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
+          <a class="button" href="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
+             hx-get="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
              hx-target="#reader-article" hx-swap="outerHTML">Show full article</a>
         {{end}}
       {{else}}

@@ -36,7 +36,7 @@ func TestPurgeKeepsStarredAndUnreadItems(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, 50)
+	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestPurgeKeepsStarredAndUnreadItems(t *testing.T) {
 		t.Errorf("purged %d items, want 1 (only the old read unstarred one)", deleted)
 	}
 
-	left, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, 50)
+	left, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestPurgeKeepsAnItemAnotherUserHasNotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, aliceSub.ID, reader.FilterAll, 10)
+	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, aliceSub.ID, reader.FilterAll, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

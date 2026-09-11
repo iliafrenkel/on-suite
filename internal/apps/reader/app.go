@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"io/fs"
+	"net/http"
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
@@ -19,6 +20,9 @@ var (
 
 //go:embed templates/*.html
 var templateFiles embed.FS
+
+//go:embed static/reader.js
+var scriptFiles embed.FS
 
 // App is ON Reader.
 type App struct {
@@ -57,6 +61,15 @@ func (a *App) Templates() fs.FS {
 	return sub
 }
 
+// script serves reader.js, behind the same sign-in requirement as every other
+// route here — no page loads it without already being on an authenticated
+// reader page.
+func (a *App) script(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeFileFS(w, r, scriptFiles, "static/reader.js")
+}
+
 func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.deps = deps
 	a.store = NewStore(deps.DB)
@@ -66,6 +79,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.fullSem = make(chan struct{}, articleFetchConcurrency)
 
 	r.HandleFunc("GET /{$}", a.index)
+	r.HandleFunc("GET /reader.js", a.script)
 	r.HandleFunc("GET /feed/{id}", a.index)
 	r.HandleFunc("GET /item/{id}", a.article)
 	r.HandleFunc("POST /item/{id}/full", a.fetchFull)
@@ -92,6 +106,11 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 // user-visible one, so it runs rarely and off the read path.
 const purgeTick = 24 * time.Hour
 
+// ReindexBatchSize bounds one night's search reindexing. A household's sixty
+// days of articles is a few thousand rows, so this converges in one or two
+// nights after migration 0006 and costs one cheap indexed query thereafter.
+const ReindexBatchSize = 2000
+
 // Jobs implements app.Scheduler. RegisterJobs runs after Mount, so the poller
 // this closure captures is already built.
 func (a *App) Jobs(deps app.Deps) []app.Job {
@@ -106,7 +125,7 @@ func (a *App) Jobs(deps app.Deps) []app.Job {
 		},
 		{
 			Name:        "purge old articles",
-			Description: "Deletes read, unstarred articles older than the retention window.",
+			Description: "Deletes read, unstarred articles older than the retention window and reindexes articles for search.",
 			Every:       purgeTick,
 			Run: func(ctx context.Context) error {
 				n, err := a.store.PurgeItems(ctx, time.Now().UTC().Add(-RetentionAge))
@@ -119,6 +138,13 @@ func (a *App) Jobs(deps app.Deps) []app.Job {
 				}
 				if n > 0 || images > 0 {
 					a.deps.Log.Info("reader purged old articles", "items", n, "images", images)
+				}
+				indexed, err := a.store.ReindexBatch(ctx, ReindexBatchSize)
+				if err != nil {
+					return err
+				}
+				if indexed > 0 {
+					a.deps.Log.Info("reader reindexed articles for search", "count", indexed)
 				}
 				return nil
 			},

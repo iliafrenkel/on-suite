@@ -465,7 +465,7 @@ const itemColumns = `
 // subs.added_at means it does not: a user can hold a read-state row for an item
 // published before they subscribed, and subtracting it would hide a genuinely
 // unread article.
-func (s *Store) ItemsForScope(ctx context.Context, userID int64, scope Scope, subID int64, filter Filter, limit int) ([]Item, error) {
+func (s *Store) ItemsForScope(ctx context.Context, userID int64, scope Scope, subID int64, filter Filter, search string, limit int) ([]Item, error) {
 	// Every scope is bounded by the user's own subscriptions and by each
 	// subscription's added_at, so authorisation and the unread cutoff are the
 	// same join rather than two things to keep in step.
@@ -510,6 +510,17 @@ func (s *Store) ItemsForScope(ctx context.Context, userID int64, scope Scope, su
 		return nil, fmt.Errorf("%w: unknown filter %q", ErrInvalid, filter)
 	}
 
+	// An empty search means "no search", not "match nothing": FTS5 treats an
+	// empty MATCH as a syntax error, so it must never reach one.
+	//
+	// The subquery names reader_items_fts rather than aliasing it, because
+	// this driver resolves MATCH against the table's real name — the same
+	// constraint ON Notes documents in its own search query.
+	if match := ftsQuery(search); match != "" {
+		query += ` AND i.id IN (SELECT rowid FROM reader_items_fts WHERE reader_items_fts MATCH ?)`
+		args = append(args, match)
+	}
+
 	query += ` ORDER BY i.published_at DESC, i.id DESC LIMIT ?`
 	args = append(args, limit)
 
@@ -542,14 +553,18 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO reader_items
-			(feed_id, guid, url, title, author, published_at, fetched_at, summary_html, content_html)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(feed_id, guid, url, title, author, published_at, fetched_at, summary_html, content_html, search_text)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (feed_id, guid) DO UPDATE SET
 			url          = excluded.url,
 			title        = excluded.title,
 			author       = excluded.author,
 			summary_html = excluded.summary_html,
-			content_html = excluded.content_html`)
+			content_html = excluded.content_html,
+			search_text  = CASE WHEN coalesce(reader_items.full_html, '') = ''
+			                    THEN excluded.search_text
+			                    ELSE reader_items.search_text
+			               END`)
 	if err != nil {
 		return 0, fmt.Errorf("reader: prepare save item: %w", err)
 	}
@@ -575,8 +590,15 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 			return 0, fmt.Errorf("reader: check existing item: %w", err)
 		}
 
+		// Indexed text is derived from what is actually shown. This row has no
+		// full article yet (there is none to have on a fresh feed body), so
+		// pass "" for it; the ON CONFLICT clause above keeps an existing
+		// full-article's indexed text intact instead of overwriting it with
+		// this feed-only value on a re-poll.
+		searchText := itemSearchText(it.Title, "", it.ContentHTML, it.SummaryHTML)
+
 		if _, err := stmt.ExecContext(ctx, feedID, it.GUID, it.URL, it.Title, it.Author,
-			formatTime(published), formatTime(now), it.SummaryHTML, it.ContentHTML); err != nil {
+			formatTime(published), formatTime(now), it.SummaryHTML, it.ContentHTML, searchText); err != nil {
 			return 0, fmt.Errorf("reader: save item %q: %w", it.GUID, err)
 		}
 
@@ -630,7 +652,7 @@ func (s *Store) ItemsForSubscription(ctx context.Context, userID, subID int64, l
 	if err := s.ownsSubscription(ctx, userID, subID); err != nil {
 		return nil, err
 	}
-	return s.ItemsForScope(ctx, userID, ScopeFeed, subID, FilterAll, limit)
+	return s.ItemsForScope(ctx, userID, ScopeFeed, subID, FilterAll, "", limit)
 }
 
 // ownsSubscription is the ErrNotFound-or-nil ownership check R1's
@@ -1106,11 +1128,23 @@ func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Ex
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Fetch the fields that feed the search index alongside the new full
+	// article, so the indexed text stays the union of everything (title,
+	// full article, feed content, feed summary) rather than just this one
+	// field — see itemSearchText.
+	var itemTitle, contentHTML, summaryHTML string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT title, content_html, summary_html FROM reader_items WHERE id = ?`,
+		itemID).Scan(&itemTitle, &contentHTML, &summaryHTML); err != nil {
+		return fmt.Errorf("reader: load item fields: %w", err)
+	}
+
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE reader_items
-		   SET full_html = ?, full_fetched_at = ?, full_error = ''
+		   SET full_html = ?, full_fetched_at = ?, full_error = '',
+		       search_text = ?
 		 WHERE id = ?`,
-		ex.HTML, formatTime(now), itemID); err != nil {
+		ex.HTML, formatTime(now), itemSearchText(itemTitle, ex.HTML, contentHTML, summaryHTML), itemID); err != nil {
 		return fmt.Errorf("reader: save full article: %w", err)
 	}
 
@@ -1273,4 +1307,64 @@ func displayURL(u string) string {
 		return u
 	}
 	return u[:max] + "…"
+}
+
+// reindexPlaceholder is stored for an article with no extractable text at all.
+//
+// Without it, such a row would match the "needs indexing" predicate on every
+// pass, forever. A single space is invisible to FTS5's tokenizer, so it indexes
+// nothing while still being distinguishable from "not yet indexed".
+const reindexPlaceholder = " "
+
+// ReindexBatch fills in search_text for rows that have none, up to limit.
+//
+// Rows predating migration 0006 have no indexed text and a migration cannot
+// give them any, since stripping HTML is not something SQL can do. The nightly
+// purge job calls this, so the index converges within a day of the migration
+// landing and the app self-heals if a row ever loses its text another way.
+func (s *Store) ReindexBatch(ctx context.Context, limit int) (int, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, title, content_html, summary_html, coalesce(full_html, '')
+		  FROM reader_items
+		 WHERE search_text = ''
+		 LIMIT ?`, limit)
+	if err != nil {
+		return 0, fmt.Errorf("reader: find unindexed items: %w", err)
+	}
+
+	type pending struct {
+		id   int64
+		text string
+	}
+	var batch []pending
+	for rows.Next() {
+		var id int64
+		var title, content, summary, full string
+		if err := rows.Scan(&id, &title, &content, &summary, &full); err != nil {
+			_ = rows.Close()
+			return 0, fmt.Errorf("reader: scan unindexed item: %w", err)
+		}
+		text := itemSearchText(title, full, content, summary)
+		if text == "" {
+			text = reindexPlaceholder
+		}
+		batch = append(batch, pending{id: id, text: text})
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, fmt.Errorf("reader: iterate unindexed items: %w", err)
+	}
+	// Closed explicitly rather than deferred: the writes below need the single
+	// connection this pool is configured with, and a still-open read holds it.
+	if err := rows.Close(); err != nil {
+		return 0, fmt.Errorf("reader: close unindexed items: %w", err)
+	}
+
+	for _, p := range batch {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE reader_items SET search_text = ? WHERE id = ?`, p.text, p.id); err != nil {
+			return 0, fmt.Errorf("reader: reindex item %d: %w", p.id, err)
+		}
+	}
+	return len(batch), nil
 }

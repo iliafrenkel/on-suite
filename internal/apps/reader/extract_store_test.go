@@ -179,7 +179,7 @@ func TestPurgeFreesAFullArticlesImages(t *testing.T) {
 	}, now); err != nil {
 		t.Fatal(err)
 	}
-	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, 10)
+	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
