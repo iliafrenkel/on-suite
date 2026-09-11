@@ -2,6 +2,7 @@ package reader
 
 import (
 	"bytes"
+	"errors"
 	"net/url"
 	"sort"
 	"strings"
@@ -9,6 +10,10 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
+
+// ErrNoFeedFound means a URL was fetched successfully and was neither a feed
+// nor a page advertising one.
+var ErrNoFeedFound = errors.New("reader: no feed found at that address")
 
 // ProbePaths are tried when a page advertises no feed at all. They are the
 // paths that actually appear in the wild, in rough order of likelihood, and

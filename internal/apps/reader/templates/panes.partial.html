@@ -90,6 +90,21 @@
     {{if .Notice}}<p class="notice" role="status">{{.Notice}}</p>{{end}}
   </form>
 
+  {{if .Candidates}}
+    <div class="reader-candidates">
+      <p>That page offers more than one feed. Which one?</p>
+      {{range .Candidates}}
+        <form method="post" action="/reader/subscribe"
+              hx-post="/reader/subscribe" hx-target="#reader-panes" hx-swap="outerHTML">
+          {{template "reader-ctx" $.List}}
+          <input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+          <input type="hidden" name="url" value="{{.URL}}">
+          <button type="submit">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</button>
+        </form>
+      {{end}}
+    </div>
+  {{end}}
+
   <form class="reader-add-folder" method="post" action="/reader/folder"
         hx-post="/reader/folder" hx-target="#reader-panes" hx-swap="outerHTML">
     {{template "reader-ctx" .List}}

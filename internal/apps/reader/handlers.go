@@ -1,10 +1,12 @@
 package reader
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -467,12 +469,33 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lc := formContext(r, 0)
-	sub, err := a.store.Subscribe(r.Context(), userID, r.FormValue("url"), folderParam(r))
+
+	raw := strings.TrimSpace(r.FormValue("url"))
+	if _, err := NormalizeFeedURL(raw); err != nil {
+		a.renderIndex(w, r, userID, lc, "That is not a web address. It needs to start with http:// or https://.")
+		return
+	}
+
+	feedURL, candidates, err := a.resolveFeedURL(r.Context(), raw)
+	switch {
+	case errors.Is(err, ErrNoFeedFound):
+		a.renderIndex(w, r, userID, lc, "No feed found at that address.")
+		return
+	case err != nil:
+		// A fetch that failed — offline, refused, a private address — is
+		// ordinary input, not a server error.
+		a.deps.Log.Info("reader feed discovery failed", "url", raw, "error", err)
+		a.renderIndex(w, r, userID, lc, "That address could not be reached.")
+		return
+	case len(candidates) > 0:
+		a.renderChooser(w, r, userID, lc, raw, candidates)
+		return
+	}
+
+	sub, err := a.store.Subscribe(r.Context(), userID, feedURL, folderParam(r))
 	if err != nil {
 		if errors.Is(err, ErrInvalidURL) {
-			// Stay on whatever list the form was submitted from: a typo'd URL
-			// should not also throw away the reader's place.
-			a.renderIndex(w, r, userID, lc, "That is not a feed address. It needs to start with http:// or https://.")
+			a.renderIndex(w, r, userID, lc, "That is not a feed address.")
 			return
 		}
 		a.fail(w, r, err)
@@ -482,6 +505,82 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 	// over the list the form came from.
 	lc.Scope, lc.SubID = ScopeFeed, sub.ID
 	a.renderIndex(w, r, userID, lc, "")
+}
+
+// resolveFeedURL turns whatever someone pasted into a feed URL.
+//
+// Order matters: the pasted URL is fetched once and tried as a feed first, so
+// pasting an actual feed address costs exactly one request and never triggers
+// discovery. Only when that fails is the response treated as a web page.
+//
+// Every fetch goes through a.client, so the SSRF dialer guard, redirect cap
+// and size caps apply to discovery exactly as they do to polling — this is a
+// server fetching a URL a user typed, which is the case that guard exists for.
+func (a *App) resolveFeedURL(ctx context.Context, raw string) (string, []FeedCandidate, error) {
+	res, err := a.client.Get(ctx, raw, GetOptions{MaxBytes: MaxFeedBytes})
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Already a feed? Then we are done, and the poller will refetch it on its
+	// own schedule.
+	if _, err := ParseFeed(res.Body, res.FinalURL); err == nil {
+		return res.FinalURL, nil, nil
+	}
+
+	candidates := FeedsInPage(res.Body, res.FinalURL)
+	if len(candidates) == 1 {
+		return candidates[0].URL, nil, nil
+	}
+	if len(candidates) > 1 {
+		// Ranked best-first, but let the person choose: a site with several
+		// feeds usually means several topics, and guessing wrong is worse than
+		// asking.
+		return "", candidates, nil
+	}
+
+	if found, ok := a.probeForFeed(ctx, res.FinalURL); ok {
+		return found, nil, nil
+	}
+	return "", nil, ErrNoFeedFound
+}
+
+// probeForFeed tries the handful of conventional paths, in order, stopping at
+// the first that parses as a feed.
+//
+// Sequential rather than concurrent on purpose: this sends requests to
+// somebody's server on the strength of a guess, and firing five at once to
+// save a second is not a trade worth making against a stranger's bandwidth.
+func (a *App) probeForFeed(ctx context.Context, pageURL string) (string, bool) {
+	base, err := url.Parse(pageURL)
+	if err != nil {
+		return "", false
+	}
+	for _, p := range ProbePaths {
+		ref, err := url.Parse(p)
+		if err != nil {
+			continue
+		}
+		candidate := base.ResolveReference(ref).String()
+		res, err := a.client.Get(ctx, candidate, GetOptions{MaxBytes: MaxFeedBytes})
+		if err != nil {
+			continue
+		}
+		if _, err := ParseFeed(res.Body, res.FinalURL); err == nil {
+			return res.FinalURL, true
+		}
+	}
+	return "", false
+}
+
+// renderChooser redraws the page with the feeds a pasted page advertised.
+//
+// Each candidate posts back to /reader/subscribe with a plain feed URL, so the
+// second pass through resolveFeedURL parses it as a feed on the first request
+// and no chooser reappears — the branch is naturally non-recursive.
+func (a *App) renderChooser(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, pasted string, candidates []FeedCandidate) {
+	a.deps.Log.Info("reader offering feed candidates", "url", pasted, "count", len(candidates))
+	a.renderIndexWith(w, r, userID, lc, "", "", candidates)
 }
 
 // folderParam reads an optional folder id from the form. Absent or unparseable

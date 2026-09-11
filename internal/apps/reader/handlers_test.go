@@ -63,17 +63,24 @@ func TestIndexShowsAnEmptyState(t *testing.T) {
 }
 
 func TestSubscribeAddsAFeedToTheTree(t *testing.T) {
-	s := newServer(t)
+	s, a := newServerWithApp(t)
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
 
 	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
-		"url": {"https://example.com/feed.xml"},
+		"url": {origin.URL + "/feed.xml"},
 	})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
 	}
 
 	doc := s.Get(t, s.Alice, "/reader/")
-	if !strings.Contains(doc.Text(), "example.com/feed.xml") {
+	if !strings.Contains(doc.Text(), origin.URL+"/feed.xml") {
 		t.Errorf("new subscription is not in the tree:\n%s", doc.Text())
 	}
 }
@@ -84,7 +91,7 @@ func TestSubscribeRejectsANonHTTPURL(t *testing.T) {
 	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
 		"url": {"file:///etc/passwd"},
 	})
-	if !strings.Contains(rec.Body.String(), "not a feed address") {
+	if !strings.Contains(rec.Body.String(), "not a web address") {
 		t.Errorf("no validation message shown for a file:// URL:\n%s", rec.Body.String())
 	}
 
@@ -285,7 +292,7 @@ func TestFolderDeleteControlRemovesAFolder(t *testing.T) {
 // the handler already accepted folder_id, but nothing rendered a way to send
 // one.
 func TestAddFeedFormHasFolderPicker(t *testing.T) {
-	s := newServer(t)
+	s, a := newServerWithApp(t)
 	ctx := context.Background()
 
 	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Tech")
@@ -300,8 +307,15 @@ func TestAddFeedFormHasFolderPicker(t *testing.T) {
 		t.Errorf("folder option text = %q, want Tech", got)
 	}
 
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
 	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
-		"url":       {"https://example.com/feed.xml"},
+		"url":       {origin.URL + "/feed.xml"},
 		"folder_id": {itoa(folder.ID)},
 	})
 	if rec.Code != http.StatusOK {
@@ -360,7 +374,7 @@ func TestHealthySubscriptionShowsNoMarker(t *testing.T) {
 // HTTP render of what the poll fetched — all through the same store the HTTP
 // handlers themselves use.
 func TestSubscribePollAndRenderComposedFlow(t *testing.T) {
-	s := newServer(t)
+	s, a := newServerWithApp(t)
 	ctx := context.Background()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -378,6 +392,7 @@ func TestSubscribePollAndRenderComposedFlow(t *testing.T) {
 </channel></rss>`))
 	}))
 	defer srv.Close()
+	a.AllowPrivateFetchesForTest()
 
 	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {srv.URL + "/feed.xml"}})
 	if rec.Code != http.StatusOK {
@@ -1256,5 +1271,110 @@ func TestImportOPMLRejectsARubbishFile(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(rec.Body.String()), "opml") {
 		t.Errorf("no explanation of what was wrong:\n%s", rec.Body.String())
+	}
+}
+
+func TestSubscribeAcceptsASiteURLAndFindsTheFeed(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	})
+	origin := httptest.NewServer(mux)
+	defer origin.Close()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><link rel="alternate" type="application/rss+xml" href="` +
+			origin.URL + `/feed.xml"></head><body>hi</body></html>`))
+	})
+	a.AllowPrivateFetchesForTest()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 1 {
+		t.Fatalf("subscribed to %d feeds, want 1", len(tree.Root))
+	}
+	if tree.Root[0].FeedURL != origin.URL+"/feed.xml" {
+		t.Errorf("subscribed to %q, want the discovered feed URL", tree.Root[0].FeedURL)
+	}
+}
+
+// A URL that is already a feed must not need discovery, and must not cost an
+// extra request.
+func TestSubscribeToADirectFeedURLStillWorks(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+
+	var hits int
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	if rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/feed.xml"}}); rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d", rec.Code)
+	}
+	if hits != 1 {
+		t.Errorf("origin was fetched %d times for a direct feed URL, want 1", hits)
+	}
+
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 1 {
+		t.Errorf("subscribed to %d feeds, want 1", len(tree.Root))
+	}
+}
+
+func TestSubscribeReportsWhenNoFeedCanBeFound(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body>No feed here at all.</body></html>`))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("returned %d, want 200 with a message", rec.Code)
+	}
+	if !strings.Contains(strings.ToLower(rec.Body.String()), "feed") {
+		t.Errorf("no explanation shown:\n%s", rec.Body.String())
+	}
+}
+
+// The SSRF guard must still apply to discovery: it is a fetch of a URL a user
+// typed, which is exactly the case the dialer guard exists for.
+func TestSubscribeDiscoveryRefusesAPrivateAddress(t *testing.T) {
+	s := newServer(t) // no AllowPrivateFetchesForTest: the real guard is live
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
+		"url": {"http://169.254.169.254/latest/meta-data/"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("returned %d, want 200 with a message", rec.Code)
+	}
+	tree, err := s.Store.Tree(context.Background(), s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 0 {
+		t.Errorf("a link-local address was subscribed to: %+v", tree.Root)
 	}
 }
