@@ -23,9 +23,7 @@ type indexView struct {
 	// failure, whatever the words say.
 	Notice string
 	// Candidates is the discovery chooser's list, populated by Task 4's
-	// handler. FeedCandidate is a forward-reference placeholder here: it has
-	// no fields yet because discovery (Task 3/4) has not landed. It exists
-	// only so renderIndexWith's final signature can be written once.
+	// handler. FeedCandidate is defined in discover.go.
 	Candidates []FeedCandidate
 	// Title and Shell are only populated by the HTMX fragment path, for the
 	// shell-crumb-tail OOB block "panes-oob" emits — a full page render's
@@ -34,13 +32,6 @@ type indexView struct {
 	Title string
 	Shell render.Shell
 }
-
-// FeedCandidate is a forward-reference placeholder for Task 3/4's discovery
-// feature (internal/apps/reader/discover.go, not yet written). It exists only
-// so this task can write renderIndexWith's final signature —
-// (formErr, notice string, candidates []FeedCandidate) — once, instead of
-// changing it twice. Task 3/4 is expected to give it real fields.
-type FeedCandidate struct{}
 
 type treeView struct {
 	Folders []TreeFolder
