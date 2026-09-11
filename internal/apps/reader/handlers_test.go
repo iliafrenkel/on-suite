@@ -1633,3 +1633,57 @@ func TestSearchStaysWithinTheCurrentFeed(t *testing.T) {
 		t.Errorf("searching within one feed returned %d rows, want 1", n)
 	}
 }
+
+func TestScriptIsServed(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/reader.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reader.js returned %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
+		t.Errorf("Content-Type = %q", ct)
+	}
+}
+
+// The whole reason prefetch needed a variant: arrowing past an article must
+// not mark it read.
+func TestPrefetchDoesNotMarkAnArticleRead(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	_, items := seedOne(t, s, "g1")
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet,
+		"/reader/item/"+itoa(items[0].ID)+"?prefetch=1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("prefetch returned %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Body of g1") {
+		t.Errorf("prefetch did not render the article:\n%s", rec.Body.String())
+	}
+
+	read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read {
+		t.Error("a prefetch marked the article read")
+	}
+}
+
+// ...and a normal open still does.
+func TestNormalOpenStillMarksRead(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	_, items := seedOne(t, s, "g1")
+
+	s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil))
+
+	read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !read {
+		t.Error("a normal open no longer marks the article read")
+	}
+}

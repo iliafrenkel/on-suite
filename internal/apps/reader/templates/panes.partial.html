@@ -126,11 +126,23 @@
   </form>
   <a href="/reader/opml" download>Export OPML</a>
 
-  <form class="reader-refresh" method="post" action="/reader/refresh"
+  <form method="post" action="/reader/refresh"
         hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">
     {{template "reader-ctx" .List}}
-    <button type="submit">Refresh</button>
+    <button type="submit" class="reader-refresh">Refresh</button>
   </form>
+
+  <details class="reader-shortcuts">
+    <summary>Keyboard shortcuts</summary>
+    <dl>
+      <dt>j / k</dt><dd>next / previous article</dd>
+      <dt>o / Enter</dt><dd>open</dd>
+      <dt>m</dt><dd>mark read or unread</dd>
+      <dt>s</dt><dd>star</dd>
+      <dt>r</dt><dd>refresh feeds</dd>
+      <dt>/</dt><dd>search</dd>
+    </dl>
+  </details>
 
   <ul class="reader-nodes">
     <li class="reader-node{{if eq .Tree.Scope "all"}} is-active{{end}}">
@@ -288,15 +300,14 @@
       <form method="post" action="/reader/item/{{.ID}}/star"
             hx-post="/reader/item/{{.ID}}/star" hx-target="#reader-article" hx-swap="outerHTML">
         {{template "reader-ctx" .}}
-        <button type="submit">{{if .Starred}}&#9733; Starred{{else}}&#9734; Star{{end}}</button>
+        <button type="submit" class="reader-article-star">{{if .Starred}}&#9733; Starred{{else}}&#9734; Star{{end}}</button>
       </form>
-      {{if .Read}}
-        <form method="post" action="/reader/item/{{.ID}}/unread"
-              hx-post="/reader/item/{{.ID}}/unread" hx-target="#reader-article" hx-swap="outerHTML">
-          {{template "reader-ctx" .}}
-          <button type="submit">Mark unread</button>
-        </form>
-      {{end}}
+      <form method="post" action="/reader/item/{{.ID}}/{{if .Read}}unread{{else}}read{{end}}"
+            hx-post="/reader/item/{{.ID}}/{{if .Read}}unread{{else}}read{{end}}"
+            hx-target="#reader-article" hx-swap="outerHTML">
+        {{template "reader-ctx" .}}
+        <button type="submit" class="reader-article-read-toggle">{{if .Read}}Mark unread{{else}}Mark read{{end}}</button>
+      </form>
       {{if .HasFull}}
         {{if .ShowingFull}}
           <a class="button" href="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"

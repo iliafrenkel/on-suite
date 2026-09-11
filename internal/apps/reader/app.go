@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"io/fs"
+	"net/http"
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
@@ -19,6 +20,9 @@ var (
 
 //go:embed templates/*.html
 var templateFiles embed.FS
+
+//go:embed static/reader.js
+var scriptFiles embed.FS
 
 // App is ON Reader.
 type App struct {
@@ -57,6 +61,15 @@ func (a *App) Templates() fs.FS {
 	return sub
 }
 
+// script serves reader.js, behind the same sign-in requirement as every other
+// route here — no page loads it without already being on an authenticated
+// reader page.
+func (a *App) script(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeFileFS(w, r, scriptFiles, "static/reader.js")
+}
+
 func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.deps = deps
 	a.store = NewStore(deps.DB)
@@ -66,6 +79,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.fullSem = make(chan struct{}, articleFetchConcurrency)
 
 	r.HandleFunc("GET /{$}", a.index)
+	r.HandleFunc("GET /reader.js", a.script)
 	r.HandleFunc("GET /feed/{id}", a.index)
 	r.HandleFunc("GET /item/{id}", a.article)
 	r.HandleFunc("POST /item/{id}/full", a.fetchFull)

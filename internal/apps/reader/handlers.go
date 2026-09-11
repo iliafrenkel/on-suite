@@ -402,9 +402,14 @@ func (a *App) article(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := a.store.SetRead(r.Context(), userID, itemID, true, time.Now().UTC()); err != nil {
-		a.fail(w, r, err)
-		return
+	// A prefetch renders without mutating: reader.js fetches the adjacent
+	// article so that moving with j/k is instant, and arrowing past something
+	// must not mark it read. The real open, when it happens, marks it.
+	if r.URL.Query().Get("prefetch") != "1" {
+		if err := a.store.SetRead(r.Context(), userID, itemID, true, time.Now().UTC()); err != nil {
+			a.fail(w, r, err)
+			return
+		}
 	}
 	a.renderArticle(w, r, userID, itemID)
 }
