@@ -58,7 +58,7 @@ func TestSanitizeHTMLStripsHostileMarkup(t *testing.T) {
 			mustNot: []string{"<form", "<input"},
 		},
 		{
-			name:     "R1 strips images entirely, proxy arrives in R3",
+			name:     "SanitizeHTML strips images; only SanitizeArticleHTML admits them",
 			in:       `<p>a</p><img src="https://tracker.example/px.gif">`,
 			mustNot:  []string{"<img", "tracker.example"},
 			mustHave: []string{"<p>a</p>"},

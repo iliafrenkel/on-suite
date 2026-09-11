@@ -124,10 +124,15 @@ func Recover(log *slog.Logger, e *Errors) Middleware {
 //
 // HTMX works under this policy: hx-* are HTML attributes, not inline script.
 // An onclick= handler or a <script> block will not.
+//
+// img-src has no data: because there is no longer any reason for one: the
+// reader's image proxy rewrites every article image to a same-origin
+// /reader/img/<hash> URL before it is ever rendered, so every image the app
+// serves, including third-party article images, comes from this origin.
 const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self'; " +
 	"style-src 'self'; " +
-	"img-src 'self' data:; " +
+	"img-src 'self'; " +
 	"font-src 'self'; " +
 	"connect-src 'self'; " +
 	"form-action 'self'; " +

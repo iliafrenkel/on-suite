@@ -143,9 +143,15 @@ Eight tables, migrations namespaced `reader:`.
 
 **`reader_items_fts`** — FTS5 over title and body text, kept in sync by trigger.
 
-**`reader_images`** — the proxy cache. `id`, `item_id`, `src_url`,
-`content_type`, `bytes`, `fetched_at`. `UNIQUE(item_id, src_url)`,
-`ON DELETE CASCADE` from the item.
+**`reader_images`** — the proxy cache, content-addressed. `url_hash`
+PRIMARY KEY (128 bits of SHA-256 over the source URL), `src_url`,
+`content_type`, `bytes` NULL until first requested, `fetched_at`,
+`last_error`, `error_count`. An image reused across articles is stored once.
+
+**`reader_item_images`** — which items reference which images. `item_id`,
+`url_hash`, `PRIMARY KEY(item_id, url_hash)`, both columns
+`ON DELETE CASCADE`. This is what lets retention free an image once the last
+article referencing it is gone.
 
 ### Per user
 
@@ -245,15 +251,29 @@ predefined set.
 
 ### The image proxy needs no signing secret
 
-The platform has no server-side signing key today, and this design does not
-introduce one. Instead of signing arbitrary URLs, sanitization *records* each
-`img src` it rewrites as a `reader_images` row and emits `/reader/img/<id>`.
-The proxy can only ever fetch a URL that already arrived in a feed the server
-ingested; there is no input that makes it fetch something else. Combined with
-the router's default-deny authentication it is not an open proxy in any sense,
-and there is no key to rotate or leak.
+The platform has no server-side signing key, and this design does not introduce
+one. Instead of signing arbitrary URLs, the proxy is **content-addressed**:
+sanitization rewrites every `img src` to `/reader/img/<hash>`, where the hash
+is 128 bits of SHA-256 over the absolute source URL, and records the
+hash-to-URL mapping in `reader_images`.
 
-With every image served from `/reader/img/<id>`, the CSP for Reader's pages
+The proxy therefore takes a hash, never a URL. The only way a hash resolves is
+if a feed this server ingested contained exactly that image URL; there is no
+input that makes it fetch anything else, and there is no key to rotate or leak.
+Combined with the router's default-deny authentication it is not an open proxy
+in any sense.
+
+Content-addressing rather than an `(item_id, src_url)` key is what lets the
+rewrite happen in `parse.go`, which never touches the database — an item's id
+does not exist until `SaveItems` has run. It also means an image reused across
+articles is stored once. A `reader_item_images` join table records which items
+reference which images, so retention can free an image once the last article
+using it is gone.
+
+Bytes are fetched on first view, not at poll time: downloading every image of
+every article would fetch a great deal nobody looks at.
+
+With every image served from `/reader/img/<hash>`, the CSP for Reader's pages
 tightens to `img-src 'self'`.
 
 ## 6. Polling

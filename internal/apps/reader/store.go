@@ -562,6 +562,34 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 			formatTime(published), formatTime(now), it.SummaryHTML, it.ContentHTML); err != nil {
 			return 0, fmt.Errorf("reader: save item %q: %w", it.GUID, err)
 		}
+
+		var itemID int64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT id FROM reader_items WHERE feed_id = ? AND guid = ?`,
+			feedID, it.GUID).Scan(&itemID); err != nil {
+			return 0, fmt.Errorf("reader: load saved item %q: %w", it.GUID, err)
+		}
+
+		// Replace the links rather than adding to them: an edit that removed
+		// an image must let that image become an orphan, or a picture the
+		// publisher deleted stays cached forever.
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM reader_item_images WHERE item_id = ?`, itemID); err != nil {
+			return 0, fmt.Errorf("reader: clear image links: %w", err)
+		}
+		for hash, src := range it.Images {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO reader_images (url_hash, src_url) VALUES (?, ?)
+				ON CONFLICT (url_hash) DO NOTHING`, hash, src); err != nil {
+				return 0, fmt.Errorf("reader: record image: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO reader_item_images (item_id, url_hash) VALUES (?, ?)
+				ON CONFLICT (item_id, url_hash) DO NOTHING`, itemID, hash); err != nil {
+				return 0, fmt.Errorf("reader: link image: %w", err)
+			}
+		}
+
 		if existing == 0 {
 			inserted++
 		}
@@ -966,6 +994,87 @@ func (s *Store) PurgeItems(ctx context.Context, before time.Time) (int, error) {
 	n, err := res.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("reader: purge rows: %w", err)
+	}
+	return int(n), nil
+}
+
+// Image is one cached remote image.
+type Image struct {
+	Hash        string
+	SrcURL      string
+	ContentType string
+	Bytes       []byte
+	FetchedAt   time.Time
+	ErrorCount  int
+	LastError   string
+}
+
+// Cached reports whether the bytes are in hand. An image row exists from the
+// moment an article mentions it; the bytes arrive on first view.
+func (i Image) Cached() bool { return len(i.Bytes) > 0 }
+
+// ImageByHash loads one image record. An unknown hash is ErrNotFound, which is
+// what stops the proxy being asked to fetch a URL no feed ever delivered.
+func (s *Store) ImageByHash(ctx context.Context, hash string) (Image, error) {
+	var img Image
+	var bytes []byte
+	var fetched sql.NullString
+	err := s.db.QueryRowContext(ctx, `
+		SELECT url_hash, src_url, content_type, bytes, fetched_at, error_count, last_error
+		  FROM reader_images WHERE url_hash = ?`, hash).
+		Scan(&img.Hash, &img.SrcURL, &img.ContentType, &bytes, &fetched,
+			&img.ErrorCount, &img.LastError)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Image{}, ErrNotFound
+	}
+	if err != nil {
+		return Image{}, fmt.Errorf("reader: load image: %w", err)
+	}
+	img.Bytes = bytes
+	if fetched.Valid {
+		img.FetchedAt = parseTime(fetched.String)
+	}
+	return img, nil
+}
+
+// SaveImageBytes caches a fetched image and clears any recorded failure.
+func (s *Store) SaveImageBytes(ctx context.Context, hash, contentType string, data []byte, now time.Time) error {
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE reader_images
+		   SET bytes = ?, content_type = ?, fetched_at = ?, last_error = '', error_count = 0
+		 WHERE url_hash = ?`,
+		data, contentType, formatTime(now), hash); err != nil {
+		return fmt.Errorf("reader: cache image: %w", err)
+	}
+	return nil
+}
+
+// SaveImageFailure records that a fetch failed, so a dead image is not
+// re-fetched on every page view.
+func (s *Store) SaveImageFailure(ctx context.Context, hash, msg string, now time.Time) error {
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE reader_images
+		   SET last_error = ?, error_count = error_count + 1, fetched_at = ?
+		 WHERE url_hash = ?`,
+		msg, formatTime(now), hash); err != nil {
+		return fmt.Errorf("reader: record image failure: %w", err)
+	}
+	return nil
+}
+
+// PurgeOrphanImages deletes cached images no item references any more. The
+// retention job calls it straight after PurgeItems.
+func (s *Store) PurgeOrphanImages(ctx context.Context) (int, error) {
+	res, err := s.db.ExecContext(ctx, `
+		DELETE FROM reader_images
+		 WHERE NOT EXISTS (SELECT 1 FROM reader_item_images li
+		                    WHERE li.url_hash = reader_images.url_hash)`)
+	if err != nil {
+		return 0, fmt.Errorf("reader: purge orphan images: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reader: purge orphan image rows: %w", err)
 	}
 	return int(n), nil
 }

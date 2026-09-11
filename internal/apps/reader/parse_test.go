@@ -46,8 +46,11 @@ func TestParseFeedRSS2(t *testing.T) {
 	if strings.Contains(it.SummaryHTML, "<script") {
 		t.Errorf("summary was not sanitized: %s", it.SummaryHTML)
 	}
-	if strings.Contains(it.ContentHTML, "<img") {
-		t.Errorf("content kept an image; R1 strips them: %s", it.ContentHTML)
+	if strings.Contains(it.ContentHTML, "tracker.example") {
+		t.Errorf("publisher host survived rewriting: %s", it.ContentHTML)
+	}
+	if !strings.Contains(it.ContentHTML, "/reader/img/") {
+		t.Errorf("image was not proxied: %s", it.ContentHTML)
 	}
 	if !strings.Contains(it.ContentHTML, "The full body.") {
 		t.Errorf("content:encoded was not used: %s", it.ContentHTML)

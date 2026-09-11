@@ -75,7 +75,12 @@ func TestGetSendsConditionalHeadersAndHandles304(t *testing.T) {
 	}
 }
 
-func TestGetTruncatesAnOversizedBody(t *testing.T) {
+// An oversized body must be a hard error, not a silently truncated success.
+// io.LimitReader alone returns exactly the cap's worth of bytes with a nil
+// error whether the real body was that size or ten times that size, which
+// for an image would mean caching a truncated file as if it were whole and
+// valid, forever, since nothing ever revalidates it.
+func TestGetRejectsAnOversizedBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Far more than the cap, written without ever allocating it all.
 		chunk := strings.Repeat("x", 4096)
@@ -87,12 +92,9 @@ func TestGetTruncatesAnOversizedBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := testClient().Get(context.Background(), srv.URL, reader.GetOptions{MaxBytes: 1024})
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if len(got.Body) > 1024 {
-		t.Errorf("body is %d bytes; the cap must bound it at 1024", len(got.Body))
+	_, err := testClient().Get(context.Background(), srv.URL, reader.GetOptions{MaxBytes: 1024})
+	if err == nil {
+		t.Fatal("Get: want an error for a body over the cap, got nil")
 	}
 }
 

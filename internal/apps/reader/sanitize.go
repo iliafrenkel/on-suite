@@ -15,9 +15,10 @@ var policy = sync.OnceValue(buildPolicy)
 //
 // Deliberately excluded:
 //
-//   - img. R1 has no image proxy, and passing remote images through would hand
-//     every publisher a tracking pixel pointed at this household's IP. R3 adds
-//     img together with the proxy that makes it safe.
+//   - img. Excluded from this default policy so that passing remote images
+//     through would never hand a publisher a tracking pixel pointed at this
+//     household's IP. img is admitted only by policyWithImages, whose output
+//     is always rewritten to the proxy before it reaches a template.
 //   - style attributes and <style>. The suite's CSP forbids inline styles, so
 //     they would be dead weight even if they were harmless, which they are not.
 //   - iframe, object, embed, form, input. Nothing in an article needs them.
@@ -60,3 +61,27 @@ func buildPolicy() *bluemonday.Policy {
 func SanitizeHTML(raw string) string {
 	return policy().Sanitize(raw)
 }
+
+// policyWithImages is buildPolicy plus img. It is unexported and used only by
+// SanitizeArticleHTML, which rewrites every src to the proxy immediately
+// afterwards.
+//
+// Keeping it separate from SanitizeHTML is the safety property: a caller who
+// reaches for the obvious function still cannot emit a remote image, so
+// forgetting to rewrite fails closed rather than leaking.
+var policyWithImages = sync.OnceValue(func() *bluemonday.Policy {
+	p := buildPolicy()
+	p.AllowAttrs("src", "alt", "title", "width", "height").OnElements("img")
+	// Publishers commonly write site-relative image sources (e.g. "/img/a.png").
+	// AllowRelativeURLs is a policy-wide switch in bluemonday, not a per-element
+	// one — turning it on here would also let a relative <a href> survive
+	// unresolved, breaking the "links are always absolute" invariant that
+	// buildPolicy relies on. So relative image sources are resolved to absolute
+	// URLs by absolutizeImageSources *before* this policy ever sanitizes the
+	// fragment; by the time Sanitize runs, every img src it sees is already
+	// absolute, and this policy stays exactly as strict about relative URLs as
+	// the default one.
+	// No srcset or sizes: each would be a second list of URLs to rewrite for
+	// no benefit at the sizes an article renders at here.
+	return p
+})
