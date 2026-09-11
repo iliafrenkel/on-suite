@@ -16,8 +16,10 @@
      list on screen — so "Mark all read" from Starred would come back as
      All/Unread while the address bar still said /reader/starred?filter=all.
      It is rendered with either .List or the article view; both carry Shell,
-     Scope, SubID and Filter. */}}
-{{define "reader-ctx"}}<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}"><input type="hidden" name="scope" value="{{.Scope}}"><input type="hidden" name="sub" value="{{.SubID}}"><input type="hidden" name="filter" value="{{.Filter}}">{{end}}
+     Scope, SubID, Filter and Query — the last so an active search survives a
+     form submission too, with JavaScript off, instead of the re-rendered list
+     silently coming back unfiltered. */}}
+{{define "reader-ctx"}}<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}"><input type="hidden" name="scope" value="{{.Scope}}"><input type="hidden" name="sub" value="{{.SubID}}"><input type="hidden" name="filter" value="{{.Filter}}"><input type="hidden" name="q" value="{{.Query}}">{{end}}
 
 {{/* reader-back is the narrow-viewport back control: a real <label> whose for=
      names the drill-down checkbox, so clicking it natively unchecks that box
@@ -265,8 +267,8 @@
       <li class="reader-row{{if .Read}} is-read{{end}}{{if .Starred}} is-starred{{end}}">
         {{/* The list context rides in the query string so the tree redraw the
              article response carries can keep the selection where it is. */}}
-        <a href="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}"
-           hx-get="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}"
+        <a href="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}{{if $.Query}}&q={{$.Query}}{{end}}"
+           hx-get="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}{{if $.Query}}&q={{$.Query}}{{end}}"
            hx-target="#reader-article" hx-swap="outerHTML">
           <span class="title">{{if .Starred}}<span class="reader-star" aria-label="Starred">&#9733;</span> {{end}}{{.Title}}</span>
           <span class="meta">{{.FeedName}} · {{.Published}}</span>
@@ -310,12 +312,12 @@
       </form>
       {{if .HasFull}}
         {{if .ShowingFull}}
-          <a class="button" href="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
-             hx-get="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
+          <a class="button" href="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
+             hx-get="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
              hx-target="#reader-article" hx-swap="outerHTML">Show feed version</a>
         {{else}}
-          <a class="button" href="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
-             hx-get="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}"
+          <a class="button" href="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
+             hx-get="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
              hx-target="#reader-article" hx-swap="outerHTML">Show full article</a>
         {{end}}
       {{else}}

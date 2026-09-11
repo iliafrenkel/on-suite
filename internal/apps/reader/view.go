@@ -109,6 +109,10 @@ type articleView struct {
 	Scope  Scope
 	SubID  int64
 	Filter Filter
+	// Query is the active search filter, echoed back into the star/unread/
+	// full-article forms' hidden fields (via reader-ctx) so submitting one
+	// does not drop the search the article was opened from.
+	Query string
 	// HasFull reports that an extracted body is stored, which is what decides
 	// whether the toggle renders at all.
 	HasFull bool
@@ -181,6 +185,7 @@ func viewArticle(it Item, shell render.Shell, lc listContext, showFull bool) art
 		Scope:    lc.Scope,
 		SubID:    lc.SubID,
 		Filter:   lc.Filter,
+		Query:    lc.Query,
 		ID:       it.ID,
 		Selected: true,
 		Title:    firstNonEmpty(it.Title, "(untitled)"),

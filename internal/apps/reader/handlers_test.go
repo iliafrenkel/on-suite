@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/html"
+
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
@@ -694,6 +696,125 @@ func TestEveryReaderFormCarriesTheCurrentList(t *testing.T) {
 	if got, _ := htmlassert.Attr(doc.MustHave(`#reader-panes input[name=filter]`), "value"); got != "all" {
 		t.Errorf("hidden filter field = %q, want all", got)
 	}
+}
+
+// An active search must survive a full click-through round trip with
+// JavaScript off: list (searching) -> click an article row -> the article's
+// own forms (star, mark read) -> back to a list re-render (mark all read).
+// Losing "q" anywhere in that loop silently reloads the unfiltered list, the
+// same failure mode TestEveryReaderFormCarriesTheCurrentList pins for
+// scope/sub/filter.
+func TestSearchQuerySurvivesArticleOpenAndFormPost(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "Aerodynamics explained", PublishedAt: now.Add(-2 * time.Hour)},
+		{GUID: "b", Title: "Table tennis grips", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	// A plain (non-htmx) search: this is what a JavaScript-less GET of the
+	// search form looks like.
+	list := s.Get(t, s.Alice, "/reader/?filter=all&q=aero")
+	if n := len(list.QueryAll(".reader-row")); n != 1 {
+		t.Fatalf("search list has %d rows, want 1", n)
+	}
+	row := list.MustHave(".reader-row a")
+	href, _ := htmlassert.Attr(row, "href")
+	if !strings.Contains(href, "q=aero") {
+		t.Fatalf("article row link %q does not carry the search query", href)
+	}
+
+	// Click the row with JavaScript off: a plain GET, no HX-Request header.
+	article := s.Get(t, s.Alice, href)
+	qInput := article.MustHave(`#reader-panes input[name=q]`)
+	if v, _ := htmlassert.Attr(qInput, "value"); v != "aero" {
+		t.Errorf("article view's hidden q field = %q, want aero", v)
+	}
+
+	// Submit the article's own star form exactly as a JavaScript-less browser
+	// would: read every field the form itself carries — nothing supplied by
+	// the test — and POST them to the form's own action. If reader-ctx ever
+	// stops carrying q, this form simply would not have it to submit.
+	starBtn := article.MustHave(".reader-article-star")
+	starForm := formFields(t, starBtn)
+	if got := starForm.Get("q"); got != "aero" {
+		t.Fatalf("star form's own q field = %q, want aero — it cannot submit what it does not carry", got)
+	}
+	starAction, _ := htmlassert.Attr(ancestorForm(t, starBtn), "action")
+	rec := s.Post(t, s.Alice, starAction, starForm)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("star post returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Finally, a list-redrawing POST (mark all read) submitted the same way —
+	// reading whatever fields the rendered form actually carries — must still
+	// come back filtered and with the search box still showing the query, not
+	// silently reset to the unfiltered list.
+	list2 := s.Get(t, s.Alice, "/reader/?filter=all&q=aero")
+	markAllBtn := list2.MustHave(".reader-mark-all button")
+	markAllForm := formFields(t, markAllBtn)
+	if got := markAllForm.Get("q"); got != "aero" {
+		t.Fatalf("mark-all-read form's own q field = %q, want aero", got)
+	}
+	markAllAction, _ := htmlassert.Attr(ancestorForm(t, markAllBtn), "action")
+	rec = s.Post(t, s.Alice, markAllAction, markAllForm)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("mark-all-read returned %d: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if n := len(doc.QueryAll(".reader-row")); n != 1 {
+		t.Errorf("mark-all-read re-render shows %d rows, want 1 (search still applied)", n)
+	}
+	input := doc.MustHave(`input[name="q"]`)
+	if v, _ := htmlassert.Attr(input, "value"); v != "aero" {
+		t.Errorf("search box value after mark-all-read = %q, want aero", v)
+	}
+}
+
+// ancestorForm walks up from n to the <form> that contains it — the way a
+// real browser knows which form a button submits.
+func ancestorForm(t *testing.T, n *html.Node) *html.Node {
+	t.Helper()
+	for cur := n; cur != nil; cur = cur.Parent {
+		if cur.Type == html.ElementNode && cur.Data == "form" {
+			return cur
+		}
+	}
+	t.Fatal("no ancestor <form> found")
+	return nil
+}
+
+// formFields collects every <input name=... value=...> inside n's ancestor
+// form, the way a browser assembles a submission — so a test exercises
+// whatever the template actually rendered rather than fields the test made up
+// itself.
+func formFields(t *testing.T, n *html.Node) url.Values {
+	t.Helper()
+	form := ancestorForm(t, n)
+	out := url.Values{}
+	var walk func(*html.Node)
+	walk = func(cur *html.Node) {
+		if cur.Type == html.ElementNode && cur.Data == "input" {
+			name, hasName := htmlassert.Attr(cur, "name")
+			value, _ := htmlassert.Attr(cur, "value")
+			if hasName {
+				out.Set(name, value)
+			}
+		}
+		for c := cur.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(form)
+	return out
 }
 
 // With JavaScript off, hx-post on its own submits nowhere — which also makes
@@ -1668,6 +1789,53 @@ func TestPrefetchDoesNotMarkAnArticleRead(t *testing.T) {
 	}
 	if read {
 		t.Error("a prefetch marked the article read")
+	}
+}
+
+// reader.js's keyboard fast path installs a prefetched response with a plain
+// outerHTML assignment, not an htmx-processed swap, so the OOB checkbox and
+// OOB count spans a normal article response carries would land as permanent,
+// duplicate-id sibling markup instead of being specially handled. The
+// prefetch response must be just the bare article fragment.
+func TestPrefetchResponseHasNoOOBMarkup(t *testing.T) {
+	s := newServer(t)
+	_, items := seedOne(t, s, "g1")
+
+	req := httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID)+"?prefetch=1", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "Body of g1") {
+		t.Fatalf("prefetch response did not render the article:\n%s", body)
+	}
+	if strings.Contains(body, `id="reader-article-open"`) {
+		t.Errorf("prefetch response carries the OOB pane-state checkbox:\n%s", body)
+	}
+	if strings.Contains(body, "reader-count") {
+		t.Errorf("prefetch response carries OOB sidebar count spans:\n%s", body)
+	}
+	if strings.Contains(body, "hx-swap-oob") {
+		t.Errorf("prefetch response carries out-of-band markup:\n%s", body)
+	}
+}
+
+// A normal (non-prefetch) open is the control: it must still carry the OOB
+// markup the prefetch response above must not have.
+func TestNormalOpenStillCarriesOOBMarkup(t *testing.T) {
+	s := newServer(t)
+	_, items := seedOne(t, s, "g1")
+
+	req := httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `id="reader-article-open"`) {
+		t.Errorf("normal open response has no OOB pane-state checkbox:\n%s", body)
+	}
+	if !strings.Contains(body, "reader-count") {
+		t.Errorf("normal open response has no OOB count spans:\n%s", body)
 	}
 }
 

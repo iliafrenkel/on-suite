@@ -71,6 +71,11 @@ type listContext struct {
 	Scope  Scope
 	SubID  int64
 	Filter Filter
+	// Query is the active search filter, carried through so a JavaScript-less
+	// interaction (a plain link click, a form submit) does not silently drop
+	// it and reload the unfiltered list. Only articleContext populates it —
+	// renderPanes reads the query string's own "q" directly for the list pane.
+	Query string
 }
 
 // parseScope maps a form or query value onto a Scope, reporting whether it was
@@ -148,7 +153,11 @@ func formContext(r *http.Request, subID int64) listContext {
 // counts stop going stale the moment you read something), and a tree drawn
 // without this would move the selection to All under the reader's feet.
 func articleContext(r *http.Request) listContext {
-	out := listContext{Scope: ScopeAll, Filter: ParseFilter(r.FormValue("filter"))}
+	out := listContext{
+		Scope:  ScopeAll,
+		Filter: ParseFilter(r.FormValue("filter")),
+		Query:  strings.TrimSpace(r.FormValue("q")),
+	}
 	if s, ok := parseScope(r.FormValue("scope")); ok {
 		out.Scope = s
 	}
@@ -382,6 +391,20 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 		List:    listView{Scope: lc.Scope, SubID: lc.SubID, Filter: lc.Filter, Shell: page.Shell},
 		Article: viewArticle(item, page.Shell, lc, showFull),
 		Shell:   page.Shell,
+	}
+	// A prefetch has no read state or counts to deliver — it deliberately
+	// doesn't mutate anything (see the article handler) — so it gets just the
+	// bare article fragment. The full "article-swap" fragment carries an
+	// out-of-band pane-state checkbox and out-of-band count spans meant for
+	// htmx's own swap machinery; reader.js's fast keyboard path installs a
+	// prefetched response with a plain outerHTML assignment, not an
+	// htmx-processed swap, so that OOB markup would land as permanent,
+	// duplicate-id sibling content instead of being specially handled.
+	if r.URL.Query().Get("prefetch") == "1" {
+		if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article", view.Article); err != nil {
+			a.deps.Errors.Internal(w, r, err)
+		}
+		return
 	}
 	if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article-swap", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
