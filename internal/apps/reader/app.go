@@ -31,16 +31,6 @@ type App struct {
 
 func New() *App { return &App{} }
 
-// AllowPrivateFetchesForTest lets this app's HTTP client reach loopback, so
-// handler tests can point it at an httptest origin. Production never calls it;
-// the real guard is what TestDefaultClientRefusesPrivateAddresses exercises.
-//
-// It must be called after Mount, which is where a.client is built —
-// apptest.NewServer has already mounted by the time it hands the App back.
-func (a *App) AllowPrivateFetchesForTest() {
-	a.client.DenyAddr = func(string) error { return nil }
-}
-
 func (a *App) Meta() app.Meta {
 	return app.Meta{
 		ID:      ID,

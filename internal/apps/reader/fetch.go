@@ -200,9 +200,18 @@ func (c *Client) Get(ctx context.Context, rawURL string, opts GetOptions) (*Resp
 	if limit <= 0 {
 		limit = MaxFeedBytes
 	}
-	body, err := io.ReadAll(io.LimitReader(res.Body, limit))
+	// Read one byte past the limit so an oversize body can be told apart from
+	// one that exactly fills it: io.LimitReader alone returns exactly `limit`
+	// bytes with a nil error either way, which would otherwise let a
+	// truncated body sail through as if it were complete. That matters most
+	// for images: a truncated one still sniffs a confident content-type from
+	// its leading magic bytes and would be cached as valid, corrupt, forever.
+	body, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
 	if err != nil {
 		return out, fmt.Errorf("reader: read body from %s: %w", u.Redacted(), err)
+	}
+	if int64(len(body)) > limit {
+		return out, fmt.Errorf("reader: response exceeds %d byte limit", limit)
 	}
 	out.Body = body
 	return out, nil

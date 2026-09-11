@@ -1,6 +1,7 @@
 package reader
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -20,6 +21,22 @@ const imageFetchConcurrency = 4
 // signed-in user, and long because the URL is content-addressed: a different
 // source URL is a different path.
 const imageCacheControl = "private, max-age=86400"
+
+// maxImageFetchAttempts is how many consecutive failures an image is allowed
+// before it is given up on permanently. This is a household RSS reader with
+// no per-image retry queue, so "permanently" just means "until the publisher
+// fixes it and re-publishes the item with a new image" — three tries is
+// enough to ride out a blip without letting one dead image become an
+// indefinite background retry burden.
+const maxImageFetchAttempts = 3
+
+// imageRetryBackoff is how long to wait after a failure before trying again.
+// An hour is long enough that a transient DNS blip or a publisher's brief
+// 503 has almost certainly cleared, and short enough that a real reader
+// browsing the next day sees a recovered image rather than a permanent gap —
+// this app has no external signal (webhook, cron) to know when to retry
+// sooner, so time is the only backoff signal available.
+const imageRetryBackoff = 1 * time.Hour
 
 // validImageHash reports whether the path segment could be one of our hashes.
 // Checked before any database work so a probe costs nothing.
@@ -61,14 +78,28 @@ func (a *App) image(w http.ResponseWriter, r *http.Request) {
 		a.writeImage(w, r, img)
 		return
 	}
-	// A source that has already failed is not retried on every page view.
-	if img.ErrorCount > 0 {
+	// Give up permanently past the attempt cap, and otherwise still refuse
+	// immediately inside the backoff window — but a failure older than the
+	// backoff window, under the cap, falls through to a real retry. Nothing
+	// but a successful SaveImageBytes ever clears error_count, so without
+	// this an image that failed once from a DNS blip would 404 for the
+	// household forever.
+	if img.ErrorCount >= maxImageFetchAttempts ||
+		(img.ErrorCount > 0 && time.Since(img.FetchedAt) < imageRetryBackoff) {
 		a.deps.Errors.Status(w, r, http.StatusNotFound)
 		return
 	}
 
 	fetched, err := a.fetchImage(r, img)
 	if err != nil {
+		// A canceled request context means the viewer navigated away or
+		// scrolled past a lazy-loaded image mid-fetch — that is
+		// user-navigation noise, not a publisher or network failure, and
+		// must not count toward the retry budget or reset the backoff clock.
+		if errors.Is(err, context.Canceled) || r.Context().Err() != nil {
+			a.deps.Log.Info("reader image fetch canceled", "src", img.SrcURL, "error", err)
+			return
+		}
 		a.deps.Log.Info("reader image fetch failed", "src", img.SrcURL, "error", err)
 		if err := a.store.SaveImageFailure(r.Context(), hash, err.Error(), time.Now().UTC()); err != nil {
 			a.deps.Log.Error("reader recording an image failure failed", "error", err)

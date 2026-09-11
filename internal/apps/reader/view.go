@@ -79,9 +79,9 @@ type articleView struct {
 	When     string
 	Read     bool
 	Starred  bool
-	// Body is publisher HTML that SanitizeHTML has already been through. This
-	// is the only template.HTML conversion in the app; never convert a string
-	// here that has not been through SanitizeHTML.
+	// Body is publisher HTML that SanitizeArticleHTML has already been
+	// through. This is the only template.HTML conversion in the app; never
+	// convert a string here that has not been through SanitizeArticleHTML.
 	Body template.HTML
 	// Shell is carried so the article fragment can render the CSRF field its
 	// star and unread forms need.

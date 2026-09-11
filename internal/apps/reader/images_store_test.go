@@ -135,6 +135,90 @@ func TestPurgeOrphanImagesFollowsItems(t *testing.T) {
 	}
 }
 
+// Two items sharing one image is the whole reason reader_item_images exists:
+// purging one of them must not free the image while the other still
+// references it, and purging the second must then free it.
+func TestPurgeOrphanImagesRespectsSharedReferences(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	old := now.Add(-90 * 24 * time.Hour)
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().ExecContext(ctx,
+		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
+		old.Add(-24*time.Hour).Format(time.RFC3339Nano), sub.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	hash := reader.ImageHash("https://cdn.example/shared.png")
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{
+			GUID: "shared-a", Title: "A", PublishedAt: old,
+			Images: map[string]string{hash: "https://cdn.example/shared.png"},
+		},
+		{
+			GUID: "shared-b", Title: "B", PublishedAt: old,
+			Images: map[string]string{hash: "https://cdn.example/shared.png"},
+		},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("saved %d items, want 2", len(items))
+	}
+	var itemA, itemB reader.Item
+	for _, it := range items {
+		switch it.Title {
+		case "A":
+			itemA = it
+		case "B":
+			itemB = it
+		}
+	}
+
+	// Mark A read and purge it; B still references the image, so it must
+	// survive.
+	if err := f.store.SetRead(ctx, f.alice.ID, itemA.ID, true, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.PurgeItems(ctx, now.Add(-reader.RetentionAge)); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := f.store.PurgeOrphanImages(ctx); err != nil || n != 0 {
+		t.Fatalf("purged %d images while item B still references it (err %v)", n, err)
+	}
+	if _, err := f.store.ImageByHash(ctx, hash); err != nil {
+		t.Errorf("shared image was purged while still referenced by B: %v", err)
+	}
+
+	// Now purge B too. Nothing references the image any more, so it must go.
+	if err := f.store.SetRead(ctx, f.alice.ID, itemB.ID, true, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.PurgeItems(ctx, now.Add(-reader.RetentionAge)); err != nil {
+		t.Fatal(err)
+	}
+	n, err := f.store.PurgeOrphanImages(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("purged %d images after both referencing items went, want 1", n)
+	}
+	if _, err := f.store.ImageByHash(ctx, hash); !errors.Is(err, reader.ErrNotFound) {
+		t.Error("the now-orphaned shared image is still fetchable")
+	}
+}
+
 // Re-saving an item whose images changed must drop the link to the old one,
 // or a removed image is pinned in the cache forever.
 func TestResavingAnItemReplacesItsImageLinks(t *testing.T) {
