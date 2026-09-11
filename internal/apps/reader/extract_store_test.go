@@ -98,6 +98,67 @@ func TestSaveFullArticleRefusesAnItemTheUserCannotSee(t *testing.T) {
 	}
 }
 
+// TestSaveItemsDoesNotDestroyFullArticleImageLinks reproduces the bug where a
+// feed re-poll's unconditional "delete all this item's image links, then
+// reinsert the feed body's own" wiped out a full article's image links too,
+// since both were recorded in the same reader_item_images table with no way
+// to tell them apart. A poll that runs after a full-article fetch must leave
+// that fetch's images referenced, or the orphan purge frees them out from
+// under a full_html that still points at them.
+func TestSaveItemsDoesNotDestroyFullArticleImageLinks(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "g1", Title: "An article", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	items, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := items[0]
+
+	fullHash := reader.ImageHash("https://cdn.example/full-only.png")
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, reader.Extracted{
+		HTML:   `<img src="` + reader.ImagePathPrefix + fullHash + `">`,
+		Images: map[string]string{fullHash: "https://cdn.example/full-only.png"},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate the next feed poll: same GUID, feed body has its own (different)
+	// image. This must not disturb the full article's image link above.
+	feedHash := reader.ImageHash("https://cdn.example/feed-body.png")
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{
+			GUID:        "g1",
+			Title:       "An article",
+			PublishedAt: now.Add(-time.Hour),
+			Images:      map[string]string{feedHash: "https://cdn.example/feed-body.png"},
+		},
+	}, now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.store.PurgeOrphanImages(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.store.ImageByHash(ctx, fullHash); err != nil {
+		t.Errorf("full article's image was freed by a feed re-poll: %v", err)
+	}
+	if _, err := f.store.ImageByHash(ctx, feedHash); err != nil {
+		t.Errorf("feed body's image was unexpectedly freed: %v", err)
+	}
+}
+
 func TestPurgeFreesAFullArticlesImages(t *testing.T) {
 	f := newStoreFixture(t)
 	ctx := context.Background()

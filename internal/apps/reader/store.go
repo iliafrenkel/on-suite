@@ -584,11 +584,14 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 			return 0, fmt.Errorf("reader: load saved item %q: %w", it.GUID, err)
 		}
 
-		// Replace the links rather than adding to them: an edit that removed
-		// an image must let that image become an orphan, or a picture the
-		// publisher deleted stays cached forever.
+		// Replace the feed-sourced links rather than adding to them: an edit
+		// that removed an image must let that image become an orphan, or a
+		// picture the publisher deleted stays cached forever. Scoped to
+		// source = 'feed' so this doesn't also wipe out a full article's
+		// image links (SaveFullArticle owns those, under source = 'full') —
+		// see migration 0005.
 		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM reader_item_images WHERE item_id = ?`, itemID); err != nil {
+			`DELETE FROM reader_item_images WHERE item_id = ? AND source = 'feed'`, itemID); err != nil {
 			return 0, fmt.Errorf("reader: clear image links: %w", err)
 		}
 		for hash, src := range it.Images {
@@ -598,7 +601,7 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 				return 0, fmt.Errorf("reader: record image: %w", err)
 			}
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO reader_item_images (item_id, url_hash) VALUES (?, ?)
+				INSERT INTO reader_item_images (item_id, url_hash, source) VALUES (?, ?, 'feed')
 				ON CONFLICT (item_id, url_hash) DO NOTHING`, itemID, hash); err != nil {
 				return 0, fmt.Errorf("reader: link image: %w", err)
 			}
@@ -1108,6 +1111,16 @@ func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Ex
 		return fmt.Errorf("reader: save full article: %w", err)
 	}
 
+	// Clear any prior full-article links before inserting the new set, so a
+	// re-fetch that dropped an image doesn't leave its old link (and the
+	// image behind it) around forever. Scoped to source = 'full' so this
+	// never touches the feed body's own links (SaveItems owns those, under
+	// source = 'feed') — see migration 0005.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM reader_item_images WHERE item_id = ? AND source = 'full'`, itemID); err != nil {
+		return fmt.Errorf("reader: clear full-article image links: %w", err)
+	}
+
 	for hash, src := range ex.Images {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO reader_images (url_hash, src_url) VALUES (?, ?)
@@ -1115,7 +1128,7 @@ func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Ex
 			return fmt.Errorf("reader: record full-article image: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO reader_item_images (item_id, url_hash) VALUES (?, ?)
+			INSERT INTO reader_item_images (item_id, url_hash, source) VALUES (?, ?, 'full')
 			ON CONFLICT (item_id, url_hash) DO NOTHING`, itemID, hash); err != nil {
 			return fmt.Errorf("reader: link full-article image: %w", err)
 		}
