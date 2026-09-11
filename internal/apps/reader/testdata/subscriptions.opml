@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Subscriptions</title></head>
+  <body>
+    <outline type="rss" text="Loose Feed" xmlUrl="https://loose.example/feed.xml" htmlUrl="https://loose.example/"/>
+    <outline text="Tech">
+      <outline type="rss" text="Feed A" xmlUrl="https://a.example/feed.xml" htmlUrl="https://a.example/"/>
+      <outline type="rss" title="Feed B" xmlUrl="https://b.example/atom.xml"/>
+      <outline type="rss" xmlUrl="https://c.example/rss"/>
+    </outline>
+    <outline text="Empty Folder"></outline>
+  </body>
+</opml>

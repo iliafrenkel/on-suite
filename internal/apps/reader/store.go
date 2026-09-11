@@ -89,7 +89,10 @@ type Subscription struct {
 	Title    string // override; empty means use FeedTitle
 	FeedURL  string
 	FeedName string
-	AddedAt  time.Time
+	// SiteURL is the feed's own site, used as OPML's htmlUrl on export. It is
+	// empty until the feed has been polled once successfully.
+	SiteURL string
+	AddedAt time.Time
 	// ErrorCount and LastError mirror the shared feed's own poller state
 	// (Feed.ErrorCount / Feed.LastError), so the sidebar can show a
 	// persistently-failing feed without a second query.
@@ -216,11 +219,11 @@ func (s *Store) Subscribe(ctx context.Context, userID int64, rawURL string, fold
 	var sub Subscription
 	var added string
 	if err := tx.QueryRowContext(ctx, `
-		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title
+		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title, f.site_url
 		  FROM reader_subs s JOIN reader_feeds f ON f.id = s.feed_id
 		 WHERE s.user_id = ? AND s.feed_id = ?`,
 		userID, feedID).Scan(&sub.ID, &sub.FeedID, &sub.FolderID, &sub.Title,
-		&added, &sub.FeedURL, &sub.FeedName); err != nil {
+		&added, &sub.FeedURL, &sub.FeedName, &sub.SiteURL); err != nil {
 		return Subscription{}, fmt.Errorf("reader: load subscription: %w", err)
 	}
 	sub.AddedAt = parseTime(added)
@@ -335,7 +338,7 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 
 	subRows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title,
-		       f.error_count, f.last_error
+		       f.site_url, f.error_count, f.last_error
 		  FROM reader_subs s JOIN reader_feeds f ON f.id = s.feed_id
 		 WHERE s.user_id = ?
 		 ORDER BY s.position, coalesce(nullif(s.title, ''), nullif(f.title, ''), f.url)`,
@@ -349,7 +352,7 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 		var sub Subscription
 		var added string
 		if err := subRows.Scan(&sub.ID, &sub.FeedID, &sub.FolderID, &sub.Title,
-			&added, &sub.FeedURL, &sub.FeedName, &sub.ErrorCount, &sub.LastError); err != nil {
+			&added, &sub.FeedURL, &sub.FeedName, &sub.SiteURL, &sub.ErrorCount, &sub.LastError); err != nil {
 			return Tree{}, fmt.Errorf("reader: scan subscription: %w", err)
 		}
 		sub.AddedAt = parseTime(added)
