@@ -385,6 +385,16 @@ type Item struct {
 	// ItemsForScope and Item, and are meaningless on a zero Item.
 	Read    bool
 	Starred bool
+
+	// FullHTML is the extracted article body, empty until someone fetches it.
+	// Unlike Read and Starred it is shared: one household member fetching an
+	// article gives it to everybody.
+	FullHTML string
+	// FullError is why the last fetch failed, empty when none has failed.
+	FullError string
+	// FullFetchedAt is when a fetch was last attempted, zero if never. It is
+	// what distinguishes "never tried" from "tried and got nothing".
+	FullFetchedAt time.Time
 }
 
 // Body is what the article pane renders: the full content when the publisher
@@ -395,6 +405,9 @@ func (i Item) Body() string {
 	}
 	return i.SummaryHTML
 }
+
+// HasFull reports whether an extracted article body is stored.
+func (i Item) HasFull() bool { return i.FullHTML != "" }
 
 // Scope is which set of items a list is drawn from.
 type Scope string
@@ -438,7 +451,8 @@ func ParseFilter(raw string) Filter {
 const itemColumns = `
 	i.id, i.feed_id, i.guid, i.url, i.title, i.author,
 	i.published_at, i.fetched_at, i.summary_html, i.content_html, f.title,
-	st.read_at IS NOT NULL, st.starred_at IS NOT NULL`
+	st.read_at IS NOT NULL, st.starred_at IS NOT NULL,
+	i.full_html, i.full_error, i.full_fetched_at`
 
 // ItemsForScope is the one query path for listing items.
 //
@@ -570,11 +584,14 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 			return 0, fmt.Errorf("reader: load saved item %q: %w", it.GUID, err)
 		}
 
-		// Replace the links rather than adding to them: an edit that removed
-		// an image must let that image become an orphan, or a picture the
-		// publisher deleted stays cached forever.
+		// Replace the feed-sourced links rather than adding to them: an edit
+		// that removed an image must let that image become an orphan, or a
+		// picture the publisher deleted stays cached forever. Scoped to
+		// source = 'feed' so this doesn't also wipe out a full article's
+		// image links (SaveFullArticle owns those, under source = 'full') —
+		// see migration 0005.
 		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM reader_item_images WHERE item_id = ?`, itemID); err != nil {
+			`DELETE FROM reader_item_images WHERE item_id = ? AND source = 'feed'`, itemID); err != nil {
 			return 0, fmt.Errorf("reader: clear image links: %w", err)
 		}
 		for hash, src := range it.Images {
@@ -584,7 +601,7 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 				return 0, fmt.Errorf("reader: record image: %w", err)
 			}
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO reader_item_images (item_id, url_hash) VALUES (?, ?)
+				INSERT INTO reader_item_images (item_id, url_hash, source) VALUES (?, ?, 'feed')
 				ON CONFLICT (item_id, url_hash) DO NOTHING`, itemID, hash); err != nil {
 				return 0, fmt.Errorf("reader: link image: %w", err)
 			}
@@ -661,13 +678,20 @@ func scanItems(rows *sql.Rows) ([]Item, error) {
 	for rows.Next() {
 		var it Item
 		var published, fetched string
+		var fullHTML, fullError, fullFetchedAt sql.NullString
 		if err := rows.Scan(&it.ID, &it.FeedID, &it.GUID, &it.URL, &it.Title, &it.Author,
 			&published, &fetched, &it.SummaryHTML, &it.ContentHTML, &it.FeedName,
-			&it.Read, &it.Starred); err != nil {
+			&it.Read, &it.Starred,
+			&fullHTML, &fullError, &fullFetchedAt); err != nil {
 			return nil, fmt.Errorf("reader: scan item: %w", err)
 		}
 		it.PublishedAt = parseTime(published)
 		it.FetchedAt = parseTime(fetched)
+		it.FullHTML = fullHTML.String
+		it.FullError = fullError.String
+		if fullFetchedAt.Valid {
+			it.FullFetchedAt = parseTime(fullFetchedAt.String)
+		}
 		out = append(out, it)
 	}
 	if err := rows.Err(); err != nil {
@@ -1058,6 +1082,74 @@ func (s *Store) SaveImageFailure(ctx context.Context, hash, msg string, now time
 		 WHERE url_hash = ?`,
 		msg, formatTime(now), hash); err != nil {
 		return fmt.Errorf("reader: record image failure: %w", err)
+	}
+	return nil
+}
+
+// SaveFullArticle stores an extracted article body and records its images.
+//
+// The image bookkeeping is deliberately identical to SaveItems': the same
+// reader_images rows and the same reader_item_images links, so retention frees
+// an image that only the full article used, and the proxy serves it with no
+// special case.
+func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Extracted, now time.Time) error {
+	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
+		return err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("reader: begin save full article: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE reader_items
+		   SET full_html = ?, full_fetched_at = ?, full_error = ''
+		 WHERE id = ?`,
+		ex.HTML, formatTime(now), itemID); err != nil {
+		return fmt.Errorf("reader: save full article: %w", err)
+	}
+
+	// Clear any prior full-article links before inserting the new set, so a
+	// re-fetch that dropped an image doesn't leave its old link (and the
+	// image behind it) around forever. Scoped to source = 'full' so this
+	// never touches the feed body's own links (SaveItems owns those, under
+	// source = 'feed') — see migration 0005.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM reader_item_images WHERE item_id = ? AND source = 'full'`, itemID); err != nil {
+		return fmt.Errorf("reader: clear full-article image links: %w", err)
+	}
+
+	for hash, src := range ex.Images {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO reader_images (url_hash, src_url) VALUES (?, ?)
+			ON CONFLICT (url_hash) DO NOTHING`, hash, src); err != nil {
+			return fmt.Errorf("reader: record full-article image: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO reader_item_images (item_id, url_hash, source) VALUES (?, ?, 'full')
+			ON CONFLICT (item_id, url_hash) DO NOTHING`, itemID, hash); err != nil {
+			return fmt.Errorf("reader: link full-article image: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("reader: commit full article: %w", err)
+	}
+	return nil
+}
+
+// SaveFullArticleFailure records why an extraction attempt produced nothing,
+// so the button can explain itself instead of appearing to do nothing.
+func (s *Store) SaveFullArticleFailure(ctx context.Context, userID, itemID int64, msg string, now time.Time) error {
+	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE reader_items SET full_error = ?, full_fetched_at = ? WHERE id = ?`,
+		msg, formatTime(now), itemID); err != nil {
+		return fmt.Errorf("reader: record full-article failure: %w", err)
 	}
 	return nil
 }

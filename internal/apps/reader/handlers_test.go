@@ -1026,3 +1026,153 @@ func TestArticlePaneNeverEmitsAPublisherImageHost(t *testing.T) {
 		t.Error("proxied images are not lazy-loaded")
 	}
 }
+
+func TestFetchFullArticleStoresAndShowsIt(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(articlePage))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Teaser", URL: origin.URL + "/post",
+		SummaryHTML: "<p>Only a teaser.</p>",
+		PublishedAt: time.Now().UTC().Add(-time.Hour),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/item/"+itoa(items[0].ID)+"/full", url.Values{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("fetch returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "First real paragraph") {
+		t.Errorf("the extracted body is not in the response:\n%s", rec.Body.String())
+	}
+
+	got, err := s.Store.Item(ctx, s.Alice.User.ID, items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.HasFull() {
+		t.Error("the extracted article was not stored")
+	}
+}
+
+func TestFullArticleTogglesBackToTheFeedBody(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "T", SummaryHTML: "<p>THE FEED VERSION.</p>",
+		PublishedAt: time.Now().UTC().Add(-time.Hour),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SaveFullArticle(ctx, s.Alice.User.ID, items[0].ID, reader.Extracted{
+		HTML: "<p>THE FULL VERSION.</p>", TextLength: 500,
+	}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	path := "/reader/item/" + itoa(items[0].ID)
+
+	// With a full article stored, that is what an open shows.
+	full := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, path, nil))
+	if !strings.Contains(full.Body.String(), "THE FULL VERSION") {
+		t.Errorf("stored full article is not shown by default:\n%s", full.Body.String())
+	}
+
+	// ...and the toggle goes back.
+	feed := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, path+"?view=feed", nil))
+	if !strings.Contains(feed.Body.String(), "THE FEED VERSION") {
+		t.Errorf("?view=feed did not show the feed body:\n%s", feed.Body.String())
+	}
+	if strings.Contains(feed.Body.String(), "THE FULL VERSION") {
+		t.Error("?view=feed showed the full body as well")
+	}
+}
+
+func TestFetchFullArticleReportsAFailureInThePane(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusPaymentRequired)
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "T", URL: origin.URL + "/post",
+		SummaryHTML: "<p>Teaser.</p>", PublishedAt: time.Now().UTC().Add(-time.Hour),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/item/"+itoa(items[0].ID)+"/full", url.Values{})
+	// A page that will not extract is an ordinary outcome, not a server error:
+	// the pane keeps the feed body and says what happened.
+	if rec.Code != http.StatusOK {
+		t.Fatalf("failed fetch returned %d, want 200 with a message", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Teaser.") {
+		t.Errorf("the feed body was lost when the fetch failed:\n%s", body)
+	}
+	if !strings.Contains(strings.ToLower(body), "could not") {
+		t.Errorf("no explanation shown for the failed fetch:\n%s", body)
+	}
+}
+
+func TestFetchFullArticleRefusesAnotherUsersItem(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Alice's", URL: "https://example.com/post",
+		PublishedAt: time.Now().UTC().Add(-time.Hour),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Bob, "/reader/item/"+itoa(items[0].ID)+"/full", url.Values{})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("bob got %d fetching a full article for a feed he does not subscribe to, want 404", rec.Code)
+	}
+}
