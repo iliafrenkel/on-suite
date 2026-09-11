@@ -261,7 +261,8 @@
              hx-target="#reader-article" hx-swap="outerHTML">Show full article</a>
         {{end}}
       {{else}}
-        <form hx-post="/reader/item/{{.ID}}/full" hx-target="#reader-article" hx-swap="outerHTML">
+        <form method="post" action="/reader/item/{{.ID}}/full"
+              hx-post="/reader/item/{{.ID}}/full" hx-target="#reader-article" hx-swap="outerHTML">
           <input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
           <button type="submit">Fetch full article</button>
         </form>
