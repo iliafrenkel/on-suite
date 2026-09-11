@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -243,5 +244,57 @@ func TestScanSeesTheRealTree(t *testing.T) {
 	}
 	if !found {
 		t.Error("internal/platform/app does not import web; the scan is probably wrong")
+	}
+}
+
+// TestReadabilityIsContained: go-readability brings two unmaintained
+// transitive modules, and R4's plan accepted it only on the condition that it
+// stays behind one file. A second importer makes it load-bearing, which is a
+// different decision and should be made deliberately.
+func TestReadabilityIsContained(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const lib = "github.com/go-shiori/go-readability"
+
+	var importers []string
+	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "docs", "dist":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") {
+			return nil
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		for _, spec := range f.Imports {
+			imported, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				return err
+			}
+			if imported == lib {
+				rel, _ := filepath.Rel(root, path)
+				importers = append(importers, filepath.ToSlash(rel))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"internal/apps/reader/extract.go"}
+	if !slices.Equal(importers, want) {
+		t.Errorf("go-readability is imported by %v, want only %v", importers, want)
 	}
 }
