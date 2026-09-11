@@ -94,7 +94,27 @@
 	function markRead(link) {
 		var path = link.getAttribute("href");
 		if (!window.htmx) return;
-		window.htmx.ajax("POST", path + "/read", { swap: "none" });
+		// The href carries a query string (?scope=...&sub=...&filter=...), so
+		// "/read" has to land before it, not after — appending blindly would
+		// build a URL like "/item/17?filter=unread/read", which 404s and
+		// silently leaves the article unread on the cached-swap fast path.
+		var q = path.indexOf("?");
+		var base = q === -1 ? path : path.slice(0, q);
+		window.htmx.ajax("POST", base + "/read" + (q === -1 ? "" : path.slice(q)), { swap: "none" });
+
+		// The pane just swapped in came from the prefetch cache, which never
+		// marks an article read, so its read-toggle button still says "Mark
+		// read" and posts to .../read. The request above is fire-and-forget
+		// (swap: none) and won't correct that on its own — without this, "m"
+		// pressed right after opening would hit the stale action and silently
+		// re-confirm read instead of toggling to unread.
+		var toggle = document.querySelector(".reader-article-read-toggle");
+		var form = toggle && toggle.closest("form");
+		if (form) {
+			form.setAttribute("hx-post", base + "/unread");
+			window.htmx.process(form);
+		}
+		if (toggle) toggle.textContent = "Mark unread";
 	}
 
 	function press(selector) {
