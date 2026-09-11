@@ -99,6 +99,7 @@
           {{template "reader-ctx" $.List}}
           <input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
           <input type="hidden" name="url" value="{{.URL}}">
+          {{if $.SelectedFolderID}}<input type="hidden" name="folder_id" value="{{$.SelectedFolderID}}">{{end}}
           <button type="submit">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</button>
         </form>
       {{end}}

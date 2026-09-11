@@ -25,6 +25,12 @@ type indexView struct {
 	// Candidates is the discovery chooser's list, populated by Task 4's
 	// handler. FeedCandidate is defined in discover.go.
 	Candidates []FeedCandidate
+	// SelectedFolderID is the folder the user had chosen on the add-feed form
+	// when a pasted site turned out to offer several feeds, 0 for none. The
+	// chooser's per-candidate forms carry it back as a hidden field so the
+	// folder survives the extra round trip instead of silently landing the
+	// subscription at the root.
+	SelectedFolderID int64
 	// Title and Shell are only populated by the HTMX fragment path, for the
 	// shell-crumb-tail OOB block "panes-oob" emits — a full page render's
 	// shell crumb comes from render.Page directly (via app.Deps.Page), which

@@ -8,10 +8,16 @@ import (
 	"strings"
 )
 
-// MaxOPMLBytes bounds an uploaded subscription list. A thousand feeds of OPML
-// is well under this; anything larger is a mistake or an attack, and either
-// way is better refused than parsed.
-const MaxOPMLBytes = 2 << 20
+// MaxOPMLBytes bounds an uploaded subscription list (POST
+// /reader/import). web.DefaultMaxBodyBytes already caps every request body
+// at 1 MiB before this app's handler ever runs
+// (internal/platform/web/middleware.go); a multipart file part carries
+// almost no encoding overhead of its own, so 768 KiB of file content leaves
+// comfortable headroom under that ceiling for the multipart boundaries and
+// the request's other fields — matching ON Notes' MaxImportFileBytes. A
+// thousand feeds of OPML is well under this; anything larger is a mistake
+// or an attack, and either way is better refused than parsed.
+const MaxOPMLBytes = 768 << 10
 
 // ErrNotOPML means the uploaded bytes were not an OPML document.
 var ErrNotOPML = errors.New("reader: not an OPML document")

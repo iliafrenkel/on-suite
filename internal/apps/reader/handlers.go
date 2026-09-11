@@ -192,7 +192,7 @@ func basePathFor(scope Scope, subID int64) string {
 // tree/list/article state (selecting a feed, subscribing, unsubscribing,
 // managing a folder, or refreshing) goes through here.
 func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr string) {
-	a.renderIndexWith(w, r, userID, lc, formErr, "", nil)
+	a.renderIndexWith(w, r, userID, lc, formErr, "", nil, 0)
 }
 
 // renderIndexWithNotice is renderIndex with a neutral message attached.
@@ -200,15 +200,16 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, 
 // It sets the field after building the view rather than widening renderIndex's
 // signature, so the eight existing call sites stay as they are.
 func (a *App) renderIndexWithNotice(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, notice string) {
-	a.renderIndexWith(w, r, userID, lc, "", notice, nil)
+	a.renderIndexWith(w, r, userID, lc, "", notice, nil, 0)
 }
 
 // renderIndexWith is renderIndex with its full parameter set: a form error, a
-// neutral notice, and the discovery chooser's candidates (Task 4). Task 2 only
-// ever passes "" and nil for the last two from renderIndex itself; the OPML
-// import handler is the first caller to use notice for real.
-func (a *App) renderIndexWith(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate) {
-	a.renderPanes(w, r, userID, lc, formErr, notice, candidates, articleView{})
+// neutral notice, the discovery chooser's candidates (Task 4), and the folder
+// the user had selected before the chooser interrupted the submission — 0
+// when there is none. Every caller but renderChooser passes nil/0 for the
+// last two.
+func (a *App) renderIndexWith(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64) {
+	a.renderPanes(w, r, userID, lc, formErr, notice, candidates, selectedFolderID, articleView{})
 }
 
 // renderPanes is renderIndex with an optional third pane already loaded. Only
@@ -216,7 +217,7 @@ func (a *App) renderIndexWith(w http.ResponseWriter, r *http.Request, userID int
 // or marking it unread: with htmx they answer with the article fragment, and
 // without it they have to answer with a whole page or the browser lands on a
 // bare <article> with no shell.
-func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, art articleView) {
+func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64, art articleView) {
 	ctx := r.Context()
 
 	tree, err := a.store.Tree(ctx, userID)
@@ -243,11 +244,12 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	}
 
 	view := indexView{
-		Tree:       viewTree(tree, lc.SubID, lc.Scope, counts),
-		Article:    art,
-		Error:      formErr,
-		Notice:     notice,
-		Candidates: candidates,
+		Tree:             viewTree(tree, lc.SubID, lc.Scope, counts),
+		Article:          art,
+		Error:            formErr,
+		Notice:           notice,
+		Candidates:       candidates,
+		SelectedFolderID: selectedFolderID,
 	}
 
 	items, err := a.store.ItemsForScope(ctx, userID, lc.Scope, lc.SubID, lc.Filter, 200)
@@ -367,7 +369,7 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 	// stray out-of-band checkbox and no shell around either.
 	// An htmx request, GET or POST, still gets the one-pane fragment.
 	if !web.IsHTMX(r) {
-		a.renderPanes(w, r, userID, lc, "", "", nil, viewArticle(item, page.Shell, lc, showFull))
+		a.renderPanes(w, r, userID, lc, "", "", nil, 0, viewArticle(item, page.Shell, lc, showFull))
 		return
 	}
 
@@ -507,6 +509,12 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 	a.renderIndex(w, r, userID, lc, "")
 }
 
+// discoveryTimeout bounds resolveFeedURL's entire attempt — the initial fetch
+// plus every probe it may go on to try — not any single request within it.
+// A var, not a const, so a test can shrink it rather than sleep past the
+// real thing (see SetDiscoveryTimeoutForTest in export_test.go).
+var discoveryTimeout = 25 * time.Second
+
 // resolveFeedURL turns whatever someone pasted into a feed URL.
 //
 // Order matters: the pasted URL is fetched once and tried as a feed first, so
@@ -517,6 +525,13 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 // and size caps apply to discovery exactly as they do to polling — this is a
 // server fetching a URL a user typed, which is the case that guard exists for.
 func (a *App) resolveFeedURL(ctx context.Context, raw string) (string, []FeedCandidate, error) {
+	// One fetch plus up to five sequential probes, each able to take the
+	// client's own 30s per-request timeout, could otherwise hold this whole
+	// request open for minutes against a slow or stalling host. This is a
+	// ceiling on the entire discovery attempt, not on any one fetch.
+	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
+	defer cancel()
+
 	res, err := a.client.Get(ctx, raw, GetOptions{MaxBytes: MaxFeedBytes})
 	if err != nil {
 		return "", nil, err
@@ -557,6 +572,12 @@ func (a *App) probeForFeed(ctx context.Context, pageURL string) (string, bool) {
 		return "", false
 	}
 	for _, p := range ProbePaths {
+		// The discovery deadline may already have passed after the initial
+		// fetch or an earlier probe; stop rather than iterate through the
+		// rest, which would each fail instantly anyway.
+		if ctx.Err() != nil {
+			return "", false
+		}
 		ref, err := url.Parse(p)
 		if err != nil {
 			continue
@@ -580,7 +601,11 @@ func (a *App) probeForFeed(ctx context.Context, pageURL string) (string, bool) {
 // and no chooser reappears — the branch is naturally non-recursive.
 func (a *App) renderChooser(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, pasted string, candidates []FeedCandidate) {
 	a.deps.Log.Info("reader offering feed candidates", "url", pasted, "count", len(candidates))
-	a.renderIndexWith(w, r, userID, lc, "", "", candidates)
+	var selectedFolderID int64
+	if id := folderParam(r); id != nil {
+		selectedFolderID = *id
+	}
+	a.renderIndexWith(w, r, userID, lc, "", "", candidates, selectedFolderID)
 }
 
 // folderParam reads an optional folder id from the form. Absent or unparseable
