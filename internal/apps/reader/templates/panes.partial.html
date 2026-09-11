@@ -87,7 +87,24 @@
     </select>
     <button type="submit">Add</button>
     {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    {{if .Notice}}<p class="notice" role="status">{{.Notice}}</p>{{end}}
   </form>
+
+  {{if .Candidates}}
+    <div class="reader-candidates">
+      <p>That page offers more than one feed. Which one?</p>
+      {{range .Candidates}}
+        <form method="post" action="/reader/subscribe"
+              hx-post="/reader/subscribe" hx-target="#reader-panes" hx-swap="outerHTML">
+          {{template "reader-ctx" $.List}}
+          <input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+          <input type="hidden" name="url" value="{{.URL}}">
+          {{if $.SelectedFolderID}}<input type="hidden" name="folder_id" value="{{$.SelectedFolderID}}">{{end}}
+          <button type="submit">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</button>
+        </form>
+      {{end}}
+    </div>
+  {{end}}
 
   <form class="reader-add-folder" method="post" action="/reader/folder"
         hx-post="/reader/folder" hx-target="#reader-panes" hx-swap="outerHTML">
@@ -96,6 +113,18 @@
     <input id="folder-name" name="name" type="text" placeholder="Folder name" required>
     <button type="submit">Create folder</button>
   </form>
+
+  <form class="reader-opml" method="post" action="/reader/opml"
+        enctype="multipart/form-data"
+        hx-post="/reader/opml" hx-encoding="multipart/form-data"
+        hx-target="#reader-panes" hx-swap="outerHTML">
+    {{template "reader-ctx" .List}}
+    <input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+    <label for="opml-file">Import OPML</label>
+    <input id="opml-file" name="file" type="file" accept=".opml,.xml,text/xml,text/x-opml" required>
+    <button type="submit">Import</button>
+  </form>
+  <a href="/reader/opml" download>Export OPML</a>
 
   <form class="reader-refresh" method="post" action="/reader/refresh"
         hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">

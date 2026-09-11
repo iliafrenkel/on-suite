@@ -89,7 +89,10 @@ type Subscription struct {
 	Title    string // override; empty means use FeedTitle
 	FeedURL  string
 	FeedName string
-	AddedAt  time.Time
+	// SiteURL is the feed's own site, used as OPML's htmlUrl on export. It is
+	// empty until the feed has been polled once successfully.
+	SiteURL string
+	AddedAt time.Time
 	// ErrorCount and LastError mirror the shared feed's own poller state
 	// (Feed.ErrorCount / Feed.LastError), so the sidebar can show a
 	// persistently-failing feed without a second query.
@@ -216,11 +219,11 @@ func (s *Store) Subscribe(ctx context.Context, userID int64, rawURL string, fold
 	var sub Subscription
 	var added string
 	if err := tx.QueryRowContext(ctx, `
-		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title
+		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title, f.site_url
 		  FROM reader_subs s JOIN reader_feeds f ON f.id = s.feed_id
 		 WHERE s.user_id = ? AND s.feed_id = ?`,
 		userID, feedID).Scan(&sub.ID, &sub.FeedID, &sub.FolderID, &sub.Title,
-		&added, &sub.FeedURL, &sub.FeedName); err != nil {
+		&added, &sub.FeedURL, &sub.FeedName, &sub.SiteURL); err != nil {
 		return Subscription{}, fmt.Errorf("reader: load subscription: %w", err)
 	}
 	sub.AddedAt = parseTime(added)
@@ -335,7 +338,7 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 
 	subRows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title,
-		       f.error_count, f.last_error
+		       f.site_url, f.error_count, f.last_error
 		  FROM reader_subs s JOIN reader_feeds f ON f.id = s.feed_id
 		 WHERE s.user_id = ?
 		 ORDER BY s.position, coalesce(nullif(s.title, ''), nullif(f.title, ''), f.url)`,
@@ -349,7 +352,7 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 		var sub Subscription
 		var added string
 		if err := subRows.Scan(&sub.ID, &sub.FeedID, &sub.FolderID, &sub.Title,
-			&added, &sub.FeedURL, &sub.FeedName, &sub.ErrorCount, &sub.LastError); err != nil {
+			&added, &sub.FeedURL, &sub.FeedName, &sub.SiteURL, &sub.ErrorCount, &sub.LastError); err != nil {
 			return Tree{}, fmt.Errorf("reader: scan subscription: %w", err)
 		}
 		sub.AddedAt = parseTime(added)
@@ -1169,4 +1172,105 @@ func (s *Store) PurgeOrphanImages(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("reader: purge orphan image rows: %w", err)
 	}
 	return int(n), nil
+}
+
+// ImportResult is what an OPML import did, for reporting back to the person
+// who ran it.
+type ImportResult struct {
+	Added    int
+	Existing int
+	Failed   int
+	// Errors holds one line per failed entry, already phrased for display.
+	Errors []string
+}
+
+// ImportOPML subscribes a user to everything in a parsed OPML file.
+//
+// It only ever adds. An entry already subscribed is counted and skipped, and
+// nothing is removed for being absent from the file — an import that reconciled
+// would be a sync feature that eats subscriptions, and nobody asked for sync.
+//
+// One bad entry does not fail the import: a forty-feed file with one dead URL
+// in it should add the other thirty-nine and say what it could not do.
+func (s *Store) ImportOPML(ctx context.Context, userID int64, entries []OPMLEntry) (ImportResult, error) {
+	var res ImportResult
+
+	// Folder names are resolved once. CreateFolder is unique per user, so a
+	// file naming the same folder forty times must not attempt forty inserts.
+	folders := map[string]*int64{}
+	existing, err := s.Tree(ctx, userID)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	for _, f := range existing.Folders {
+		id := f.ID
+		folders[f.Name] = &id
+	}
+
+	for _, e := range entries {
+		var folderID *int64
+		if name := strings.TrimSpace(e.Folder); name != "" {
+			id, ok := folders[name]
+			if !ok {
+				created, err := s.CreateFolder(ctx, userID, name)
+				if err != nil {
+					res.Failed++
+					res.Errors = append(res.Errors, fmt.Sprintf("folder %q: %v", name, err))
+					continue
+				}
+				newID := created.ID
+				id = &newID
+				folders[name] = id
+			}
+			folderID = id
+		}
+
+		before, err := s.subscriptionExists(ctx, userID, e.FeedURL)
+		if err != nil {
+			res.Failed++
+			res.Errors = append(res.Errors, fmt.Sprintf("%s: %v", e.FeedURL, err))
+			continue
+		}
+
+		if _, err := s.Subscribe(ctx, userID, e.FeedURL, folderID); err != nil {
+			res.Failed++
+			res.Errors = append(res.Errors, fmt.Sprintf("%s: %v", displayURL(e.FeedURL), err))
+			continue
+		}
+		if before {
+			res.Existing++
+		} else {
+			res.Added++
+		}
+	}
+	return res, nil
+}
+
+// subscriptionExists reports whether this user already follows a feed URL, so
+// an import can tell "added" from "already had it" without Subscribe having to
+// report which it did.
+func (s *Store) subscriptionExists(ctx context.Context, userID int64, rawURL string) (bool, error) {
+	feedURL, err := NormalizeFeedURL(rawURL)
+	if err != nil {
+		// An unusable URL is not an existing subscription; let Subscribe be
+		// the one place that decides a URL is invalid.
+		return false, nil
+	}
+	var n int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT count(*) FROM reader_subs sub JOIN reader_feeds f ON f.id = sub.feed_id
+		 WHERE sub.user_id = ? AND f.url = ?`, userID, feedURL).Scan(&n); err != nil {
+		return false, fmt.Errorf("reader: check existing subscription: %w", err)
+	}
+	return n > 0, nil
+}
+
+// displayURL trims a URL for a message, so one absurd entry in a file cannot
+// produce an error line that fills the pane.
+func displayURL(u string) string {
+	const max = 120
+	if len(u) <= max {
+		return u
+	}
+	return u[:max] + "…"
 }

@@ -1,9 +1,12 @@
 package reader
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -189,7 +192,24 @@ func basePathFor(scope Scope, subID int64) string {
 // tree/list/article state (selecting a feed, subscribing, unsubscribing,
 // managing a folder, or refreshing) goes through here.
 func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr string) {
-	a.renderPanes(w, r, userID, lc, formErr, articleView{})
+	a.renderIndexWith(w, r, userID, lc, formErr, "", nil, 0)
+}
+
+// renderIndexWithNotice is renderIndex with a neutral message attached.
+//
+// It sets the field after building the view rather than widening renderIndex's
+// signature, so the eight existing call sites stay as they are.
+func (a *App) renderIndexWithNotice(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, notice string) {
+	a.renderIndexWith(w, r, userID, lc, "", notice, nil, 0)
+}
+
+// renderIndexWith is renderIndex with its full parameter set: a form error, a
+// neutral notice, the discovery chooser's candidates (Task 4), and the folder
+// the user had selected before the chooser interrupted the submission — 0
+// when there is none. Every caller but renderChooser passes nil/0 for the
+// last two.
+func (a *App) renderIndexWith(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64) {
+	a.renderPanes(w, r, userID, lc, formErr, notice, candidates, selectedFolderID, articleView{})
 }
 
 // renderPanes is renderIndex with an optional third pane already loaded. Only
@@ -197,7 +217,7 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, 
 // or marking it unread: with htmx they answer with the article fragment, and
 // without it they have to answer with a whole page or the browser lands on a
 // bare <article> with no shell.
-func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr string, art articleView) {
+func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64, art articleView) {
 	ctx := r.Context()
 
 	tree, err := a.store.Tree(ctx, userID)
@@ -223,7 +243,14 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		return
 	}
 
-	view := indexView{Tree: viewTree(tree, lc.SubID, lc.Scope, counts), Article: art, Error: formErr}
+	view := indexView{
+		Tree:             viewTree(tree, lc.SubID, lc.Scope, counts),
+		Article:          art,
+		Error:            formErr,
+		Notice:           notice,
+		Candidates:       candidates,
+		SelectedFolderID: selectedFolderID,
+	}
 
 	items, err := a.store.ItemsForScope(ctx, userID, lc.Scope, lc.SubID, lc.Filter, 200)
 	if err != nil {
@@ -342,7 +369,7 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 	// stray out-of-band checkbox and no shell around either.
 	// An htmx request, GET or POST, still gets the one-pane fragment.
 	if !web.IsHTMX(r) {
-		a.renderPanes(w, r, userID, lc, "", viewArticle(item, page.Shell, lc, showFull))
+		a.renderPanes(w, r, userID, lc, "", "", nil, 0, viewArticle(item, page.Shell, lc, showFull))
 		return
 	}
 
@@ -444,12 +471,33 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lc := formContext(r, 0)
-	sub, err := a.store.Subscribe(r.Context(), userID, r.FormValue("url"), folderParam(r))
+
+	raw := strings.TrimSpace(r.FormValue("url"))
+	if _, err := NormalizeFeedURL(raw); err != nil {
+		a.renderIndex(w, r, userID, lc, "That is not a web address. It needs to start with http:// or https://.")
+		return
+	}
+
+	feedURL, candidates, err := a.resolveFeedURL(r.Context(), raw)
+	switch {
+	case errors.Is(err, ErrNoFeedFound):
+		a.renderIndex(w, r, userID, lc, "No feed found at that address.")
+		return
+	case err != nil:
+		// A fetch that failed — offline, refused, a private address — is
+		// ordinary input, not a server error.
+		a.deps.Log.Info("reader feed discovery failed", "url", raw, "error", err)
+		a.renderIndex(w, r, userID, lc, "That address could not be reached.")
+		return
+	case len(candidates) > 0:
+		a.renderChooser(w, r, userID, lc, raw, candidates)
+		return
+	}
+
+	sub, err := a.store.Subscribe(r.Context(), userID, feedURL, folderParam(r))
 	if err != nil {
 		if errors.Is(err, ErrInvalidURL) {
-			// Stay on whatever list the form was submitted from: a typo'd URL
-			// should not also throw away the reader's place.
-			a.renderIndex(w, r, userID, lc, "That is not a feed address. It needs to start with http:// or https://.")
+			a.renderIndex(w, r, userID, lc, "That is not a feed address.")
 			return
 		}
 		a.fail(w, r, err)
@@ -459,6 +507,105 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 	// over the list the form came from.
 	lc.Scope, lc.SubID = ScopeFeed, sub.ID
 	a.renderIndex(w, r, userID, lc, "")
+}
+
+// discoveryTimeout bounds resolveFeedURL's entire attempt — the initial fetch
+// plus every probe it may go on to try — not any single request within it.
+// A var, not a const, so a test can shrink it rather than sleep past the
+// real thing (see SetDiscoveryTimeoutForTest in export_test.go).
+var discoveryTimeout = 25 * time.Second
+
+// resolveFeedURL turns whatever someone pasted into a feed URL.
+//
+// Order matters: the pasted URL is fetched once and tried as a feed first, so
+// pasting an actual feed address costs exactly one request and never triggers
+// discovery. Only when that fails is the response treated as a web page.
+//
+// Every fetch goes through a.client, so the SSRF dialer guard, redirect cap
+// and size caps apply to discovery exactly as they do to polling — this is a
+// server fetching a URL a user typed, which is the case that guard exists for.
+func (a *App) resolveFeedURL(ctx context.Context, raw string) (string, []FeedCandidate, error) {
+	// One fetch plus up to five sequential probes, each able to take the
+	// client's own 30s per-request timeout, could otherwise hold this whole
+	// request open for minutes against a slow or stalling host. This is a
+	// ceiling on the entire discovery attempt, not on any one fetch.
+	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
+	defer cancel()
+
+	res, err := a.client.Get(ctx, raw, GetOptions{MaxBytes: MaxFeedBytes})
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Already a feed? Then we are done, and the poller will refetch it on its
+	// own schedule.
+	if _, err := ParseFeed(res.Body, res.FinalURL); err == nil {
+		return res.FinalURL, nil, nil
+	}
+
+	candidates := FeedsInPage(res.Body, res.FinalURL)
+	if len(candidates) == 1 {
+		return candidates[0].URL, nil, nil
+	}
+	if len(candidates) > 1 {
+		// Ranked best-first, but let the person choose: a site with several
+		// feeds usually means several topics, and guessing wrong is worse than
+		// asking.
+		return "", candidates, nil
+	}
+
+	if found, ok := a.probeForFeed(ctx, res.FinalURL); ok {
+		return found, nil, nil
+	}
+	return "", nil, ErrNoFeedFound
+}
+
+// probeForFeed tries the handful of conventional paths, in order, stopping at
+// the first that parses as a feed.
+//
+// Sequential rather than concurrent on purpose: this sends requests to
+// somebody's server on the strength of a guess, and firing five at once to
+// save a second is not a trade worth making against a stranger's bandwidth.
+func (a *App) probeForFeed(ctx context.Context, pageURL string) (string, bool) {
+	base, err := url.Parse(pageURL)
+	if err != nil {
+		return "", false
+	}
+	for _, p := range ProbePaths {
+		// The discovery deadline may already have passed after the initial
+		// fetch or an earlier probe; stop rather than iterate through the
+		// rest, which would each fail instantly anyway.
+		if ctx.Err() != nil {
+			return "", false
+		}
+		ref, err := url.Parse(p)
+		if err != nil {
+			continue
+		}
+		candidate := base.ResolveReference(ref).String()
+		res, err := a.client.Get(ctx, candidate, GetOptions{MaxBytes: MaxFeedBytes})
+		if err != nil {
+			continue
+		}
+		if _, err := ParseFeed(res.Body, res.FinalURL); err == nil {
+			return res.FinalURL, true
+		}
+	}
+	return "", false
+}
+
+// renderChooser redraws the page with the feeds a pasted page advertised.
+//
+// Each candidate posts back to /reader/subscribe with a plain feed URL, so the
+// second pass through resolveFeedURL parses it as a feed on the first request
+// and no chooser reappears — the branch is naturally non-recursive.
+func (a *App) renderChooser(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, pasted string, candidates []FeedCandidate) {
+	a.deps.Log.Info("reader offering feed candidates", "url", pasted, "count", len(candidates))
+	var selectedFolderID int64
+	if id := folderParam(r); id != nil {
+		selectedFolderID = *id
+	}
+	a.renderIndexWith(w, r, userID, lc, "", "", candidates, selectedFolderID)
 }
 
 // folderParam reads an optional folder id from the form. Absent or unparseable
@@ -546,6 +693,94 @@ func (a *App) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.renderIndex(w, r, userID, lc, "")
+}
+
+// exportOPML sends this user's subscriptions as a file.
+func (a *App) exportOPML(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	tree, err := a.store.Tree(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	doc, err := BuildOPML(tree, "ON Reader subscriptions")
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/x-opml+xml; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="reader-subscriptions.opml"`)
+	if _, err := w.Write(doc); err != nil {
+		a.deps.Log.Info("reader writing an OPML export failed", "error", err)
+	}
+}
+
+// importOPML adds every subscription in an uploaded file.
+//
+// No http.MaxBytesReader here: CSRF.Middleware has already called
+// ParseMultipartForm on this request looking for the token, so r.Body is
+// consumed by the time this runs — wrapping it now would protect nothing.
+// MaxOPMLBytes is enforced against the upload's own reported size instead,
+// exactly as ON Notes' import does.
+func (a *App) importOPML(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	lc := formContext(r, 0)
+
+	if err := r.ParseMultipartForm(web.DefaultMaxBodyBytes); err != nil {
+		a.renderIndex(w, r, userID, lc, "That upload could not be read.")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		a.renderIndex(w, r, userID, lc, "Choose an OPML file to import.")
+		return
+	}
+	defer func() { _ = file.Close() }()
+
+	if header.Size > MaxOPMLBytes {
+		a.renderIndex(w, r, userID, lc, "That file is too large to be a subscription list.")
+		return
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		a.renderIndex(w, r, userID, lc, "That upload could not be read.")
+		return
+	}
+
+	entries, err := ParseOPML(data)
+	if err != nil {
+		// A wrong file is ordinary user input, not a server error.
+		a.renderIndex(w, r, userID, lc, "That does not look like an OPML file.")
+		return
+	}
+	res, err := a.store.ImportOPML(r.Context(), userID, entries)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	a.deps.Log.Info("reader imported OPML",
+		"added", res.Added, "existing", res.Existing, "failed", res.Failed)
+	a.renderIndexWithNotice(w, r, userID, lc, importMessage(res))
+}
+
+// importMessage phrases a result for a person: what happened, in one line.
+func importMessage(res ImportResult) string {
+	parts := []string{fmt.Sprintf("Added %d", res.Added)}
+	if res.Existing > 0 {
+		parts = append(parts, fmt.Sprintf("%d already subscribed", res.Existing))
+	}
+	if res.Failed > 0 {
+		parts = append(parts, fmt.Sprintf("%d could not be added", res.Failed))
+	}
+	return strings.Join(parts, ", ") + "."
 }
 
 // fetchFull retrieves an article's own page and extracts its body.

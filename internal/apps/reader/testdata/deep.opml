@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Deep</title></head>
+  <body>
+    <outline text="Top">
+      <outline text="Nested">
+        <outline type="rss" text="Buried Feed" xmlUrl="https://buried.example/feed.xml"/>
+      </outline>
+      <outline type="rss" text="Shallow Feed" xmlUrl="https://shallow.example/feed.xml"/>
+    </outline>
+  </body>
+</opml>
