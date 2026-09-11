@@ -465,7 +465,7 @@ const itemColumns = `
 // subs.added_at means it does not: a user can hold a read-state row for an item
 // published before they subscribed, and subtracting it would hide a genuinely
 // unread article.
-func (s *Store) ItemsForScope(ctx context.Context, userID int64, scope Scope, subID int64, filter Filter, limit int) ([]Item, error) {
+func (s *Store) ItemsForScope(ctx context.Context, userID int64, scope Scope, subID int64, filter Filter, search string, limit int) ([]Item, error) {
 	// Every scope is bounded by the user's own subscriptions and by each
 	// subscription's added_at, so authorisation and the unread cutoff are the
 	// same join rather than two things to keep in step.
@@ -510,6 +510,17 @@ func (s *Store) ItemsForScope(ctx context.Context, userID int64, scope Scope, su
 		return nil, fmt.Errorf("%w: unknown filter %q", ErrInvalid, filter)
 	}
 
+	// An empty search means "no search", not "match nothing": FTS5 treats an
+	// empty MATCH as a syntax error, so it must never reach one.
+	//
+	// The subquery names reader_items_fts rather than aliasing it, because
+	// this driver resolves MATCH against the table's real name — the same
+	// constraint ON Notes documents in its own search query.
+	if match := ftsQuery(search); match != "" {
+		query += ` AND i.id IN (SELECT rowid FROM reader_items_fts WHERE reader_items_fts MATCH ?)`
+		args = append(args, match)
+	}
+
 	query += ` ORDER BY i.published_at DESC, i.id DESC LIMIT ?`
 	args = append(args, limit)
 
@@ -542,14 +553,15 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO reader_items
-			(feed_id, guid, url, title, author, published_at, fetched_at, summary_html, content_html)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(feed_id, guid, url, title, author, published_at, fetched_at, summary_html, content_html, search_text)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (feed_id, guid) DO UPDATE SET
 			url          = excluded.url,
 			title        = excluded.title,
 			author       = excluded.author,
 			summary_html = excluded.summary_html,
-			content_html = excluded.content_html`)
+			content_html = excluded.content_html,
+			search_text  = excluded.search_text`)
 	if err != nil {
 		return 0, fmt.Errorf("reader: prepare save item: %w", err)
 	}
@@ -575,8 +587,13 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 			return 0, fmt.Errorf("reader: check existing item: %w", err)
 		}
 
+		// Indexed text is derived from what is actually shown, so the full
+		// article (when one exists) is not indexed here — SaveFullArticle
+		// extends it.
+		searchText := SearchText(it.Title + " " + it.ContentHTML + " " + it.SummaryHTML)
+
 		if _, err := stmt.ExecContext(ctx, feedID, it.GUID, it.URL, it.Title, it.Author,
-			formatTime(published), formatTime(now), it.SummaryHTML, it.ContentHTML); err != nil {
+			formatTime(published), formatTime(now), it.SummaryHTML, it.ContentHTML, searchText); err != nil {
 			return 0, fmt.Errorf("reader: save item %q: %w", it.GUID, err)
 		}
 
@@ -630,7 +647,7 @@ func (s *Store) ItemsForSubscription(ctx context.Context, userID, subID int64, l
 	if err := s.ownsSubscription(ctx, userID, subID); err != nil {
 		return nil, err
 	}
-	return s.ItemsForScope(ctx, userID, ScopeFeed, subID, FilterAll, limit)
+	return s.ItemsForScope(ctx, userID, ScopeFeed, subID, FilterAll, "", limit)
 }
 
 // ownsSubscription is the ErrNotFound-or-nil ownership check R1's
@@ -1106,11 +1123,18 @@ func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Ex
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Fetch the item's title to include in the search index.
+	var itemTitle string
+	if err := tx.QueryRowContext(ctx, `SELECT title FROM reader_items WHERE id = ?`, itemID).Scan(&itemTitle); err != nil {
+		return fmt.Errorf("reader: load item title: %w", err)
+	}
+
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE reader_items
-		   SET full_html = ?, full_fetched_at = ?, full_error = ''
+		   SET full_html = ?, full_fetched_at = ?, full_error = '',
+		       search_text = ?
 		 WHERE id = ?`,
-		ex.HTML, formatTime(now), itemID); err != nil {
+		ex.HTML, formatTime(now), SearchText(itemTitle+" "+ex.HTML), itemID); err != nil {
 		return fmt.Errorf("reader: save full article: %w", err)
 	}
 

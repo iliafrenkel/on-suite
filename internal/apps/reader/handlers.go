@@ -252,7 +252,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		SelectedFolderID: selectedFolderID,
 	}
 
-	items, err := a.store.ItemsForScope(ctx, userID, lc.Scope, lc.SubID, lc.Filter, 200)
+	items, err := a.store.ItemsForScope(ctx, userID, lc.Scope, lc.SubID, lc.Filter, "", 200)
 	if err != nil {
 		a.fail(w, r, err)
 		return

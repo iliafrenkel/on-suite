@@ -146,7 +146,7 @@ func TestItemsForScopeFiltersUnread(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	all, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, 50)
+	all, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestItemsForScopeFiltersUnread(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	unread, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterUnread, 50)
+	unread, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterUnread, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestItemsCarryTheirOwnState(t *testing.T) {
 	if err := f.store.SetStarred(ctx, f.alice.ID, item.ID, true, now); err != nil {
 		t.Fatal(err)
 	}
-	got, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeAll, 0, reader.FilterAll, 50)
+	got, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeAll, 0, reader.FilterAll, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func TestScopeStarredCrossesFeeds(t *testing.T) {
 		starred = append(starred, items[0].ID)
 	}
 
-	got, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeStarred, 0, reader.FilterAll, 50)
+	got, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeStarred, 0, reader.FilterAll, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func TestItemsPublishedBeforeSubscribingAreNotUnread(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	bobUnread, err := f.store.ItemsForScope(ctx, f.bob.ID, reader.ScopeFeed, bobSub.ID, reader.FilterUnread, 50)
+	bobUnread, err := f.store.ItemsForScope(ctx, f.bob.ID, reader.ScopeFeed, bobSub.ID, reader.FilterUnread, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestItemsPublishedBeforeSubscribingAreNotUnread(t *testing.T) {
 		t.Errorf("bob has %d unread items from before he subscribed; added_at must exclude them", len(bobUnread))
 	}
 
-	aliceUnread, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, aliceSub.ID, reader.FilterUnread, 50)
+	aliceUnread, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, aliceSub.ID, reader.FilterUnread, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func TestUnreadCounts(t *testing.T) {
 		t.Errorf("Total = %d, want 3", counts.Total)
 	}
 
-	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, 50)
+	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, reader.FilterAll, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
