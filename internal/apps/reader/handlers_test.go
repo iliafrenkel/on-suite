@@ -712,8 +712,16 @@ func TestEveryReaderFormHasANonJSSubmitPath(t *testing.T) {
 	if len(forms) < 5 {
 		t.Fatalf("only %d forms in the panes; expected add-feed, add-folder, refresh, folder-delete, unsubscribe and mark-all-read", len(forms))
 	}
+	// The search box is a real form too, but a GET one: it has nowhere to
+	// carry a CSRF token and needs none, the same exception ON Notes' own
+	// search form makes (TestSearchFormWorksWithoutJavaScript-equivalent).
+	csrfForms := 0
 	for _, f := range forms {
 		method, _ := htmlassert.Attr(f, "method")
+		if strings.EqualFold(method, "get") {
+			continue
+		}
+		csrfForms++
 		action, _ := htmlassert.Attr(f, "action")
 		if !strings.EqualFold(method, "post") || action == "" {
 			t.Errorf(`form has method=%q action=%q; without both it submits nowhere with JavaScript off`, method, action)
@@ -722,8 +730,8 @@ func TestEveryReaderFormHasANonJSSubmitPath(t *testing.T) {
 			t.Errorf("form action %q and hx-post %q disagree", action, hx)
 		}
 	}
-	if n := len(doc.QueryAll(`#reader-panes input[name=` + web.CSRFFormField + `]`)); n < len(forms) {
-		t.Errorf("%d CSRF fields for %d forms; a plain submission would be rejected", n, len(forms))
+	if n := len(doc.QueryAll(`#reader-panes input[name=` + web.CSRFFormField + `]`)); n < csrfForms {
+		t.Errorf("%d CSRF fields for %d POST forms; a plain submission would be rejected", n, csrfForms)
 	}
 }
 
@@ -1538,5 +1546,90 @@ func TestDiscoveryEnforcesAnOverallDeadline(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(rec.Body.String()), "reach") {
 		t.Errorf("no explanation shown for the timed-out fetch:\n%s", rec.Body.String())
+	}
+}
+
+func TestSearchNarrowsTheList(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "Aerodynamics", PublishedAt: now.Add(-2 * time.Hour)},
+		{GUID: "b", Title: "Table tennis", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	all := s.Get(t, s.Alice, "/reader/?filter=all")
+	if n := len(all.QueryAll(".reader-row")); n != 2 {
+		t.Fatalf("unfiltered list has %d rows, want 2", n)
+	}
+	hit := s.Get(t, s.Alice, "/reader/?filter=all&q=aero")
+	if n := len(hit.QueryAll(".reader-row")); n != 1 {
+		t.Errorf("search returned %d rows, want 1", n)
+	}
+}
+
+// The query has to survive in the box, or a live filter clears itself on every
+// keystroke's response.
+func TestSearchQueryIsPrefilledInTheBox(t *testing.T) {
+	s := newServer(t)
+
+	doc := s.Get(t, s.Alice, "/reader/?q=aero")
+	input := doc.Query(`input[name="q"]`)
+	if input == nil {
+		t.Fatal("no search input in the list pane")
+	}
+	var value string
+	for _, a := range input.Attr {
+		if a.Key == "value" {
+			value = a.Val
+		}
+	}
+	if value != "aero" {
+		t.Errorf("search box value = %q, want the current query", value)
+	}
+}
+
+// Search must not silently widen the scope: searching inside one feed stays
+// inside it.
+func TestSearchStaysWithinTheCurrentFeed(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	a, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://a.example/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://b.example/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Captured after both Subscribe calls, not before: an item's fetched_at
+	// must land at or after its subscription's added_at (ItemsForScope's
+	// cutoff), and capturing "now" first — the brief's original ordering —
+	// races that cutoff against whatever Subscribe's own internal clock read
+	// a moment later, which is flaky whenever the two happen to fall in the
+	// same instant.
+	now := time.Now().UTC()
+	for _, x := range []struct {
+		feed int64
+		guid string
+	}{{a.FeedID, "a"}, {b.FeedID, "b"}} {
+		if _, err := s.Store.SaveItems(ctx, x.feed, []reader.ParsedItem{
+			{GUID: x.guid, Title: "Racing report", PublishedAt: now.Add(-time.Hour)},
+		}, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(a.ID)+"?filter=all&q=racing")
+	if n := len(doc.QueryAll(".reader-row")); n != 1 {
+		t.Errorf("searching within one feed returned %d rows, want 1", n)
 	}
 }

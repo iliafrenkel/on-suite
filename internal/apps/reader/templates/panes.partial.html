@@ -209,19 +209,37 @@
     {{template "reader-back" (dict "For" "reader-list-open" "Label" "Feeds")}}
     <h2>{{.Title}}</h2>
     <nav class="reader-filters" aria-label="Filter">
-      <a href="{{.BasePath}}?filter=unread" hx-get="{{.BasePath}}?filter=unread"
+      <a href="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}"
          hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
          class="{{if eq .Filter "unread"}}is-active{{end}}"
          {{if eq .Filter "unread"}}aria-current="page"{{end}}>Unread</a>
-      <a href="{{.BasePath}}?filter=starred" hx-get="{{.BasePath}}?filter=starred"
+      <a href="{{.BasePath}}?filter=starred{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=starred{{if .Query}}&amp;q={{.Query}}{{end}}"
          hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
          class="{{if eq .Filter "starred"}}is-active{{end}}"
          {{if eq .Filter "starred"}}aria-current="page"{{end}}>Starred</a>
-      <a href="{{.BasePath}}?filter=all" hx-get="{{.BasePath}}?filter=all"
+      <a href="{{.BasePath}}?filter=all{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=all{{if .Query}}&amp;q={{.Query}}{{end}}"
          hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
          class="{{if eq .Filter "all"}}is-active{{end}}"
          {{if eq .Filter "all"}}aria-current="page"{{end}}>All</a>
     </nav>
+    {{/* The live filter. Mirrors ON Notes' notes-search-box
+         (internal/apps/notes/templates/toolbar.partial.html) — copied rather
+         than shared because apps never import each other, per PATTERNS.md.
+         hx-replace-url rather than hx-push-url: a debounced typing session
+         would otherwise push one history entry per keystroke, so the back
+         button would walk backwards through half-typed queries instead of
+         returning where the reader was before searching. "search" as a trigger
+         fires the moment the native clear (x) button is used, rather than
+         waiting out the debounce. */}}
+    <form method="get" action="{{.BasePath}}" class="reader-search" role="search">
+      <input type="hidden" name="filter" value="{{.Filter}}">
+      <input type="search" id="reader-search-input" name="q" value="{{.Query}}"
+             placeholder="Search articles…" aria-label="Search articles"
+             hx-get="{{.BasePath}}" hx-target="#reader-panes" hx-swap="outerHTML"
+             hx-include="closest form"
+             hx-trigger="input changed delay:300ms, search"
+             hx-replace-url="true">
+    </form>
     <form class="reader-mark-all" method="post" action="/reader/read-all"
           hx-post="/reader/read-all" hx-target="#reader-panes" hx-swap="outerHTML">
       {{template "reader-ctx" .}}

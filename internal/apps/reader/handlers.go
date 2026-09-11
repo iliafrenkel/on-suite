@@ -220,6 +220,10 @@ func (a *App) renderIndexWith(w http.ResponseWriter, r *http.Request, userID int
 func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64, art articleView) {
 	ctx := r.Context()
 
+	// Trimmed here rather than in the store, so the value echoed back into the
+	// box is what the person typed.
+	search := strings.TrimSpace(r.FormValue("q"))
+
 	tree, err := a.store.Tree(ctx, userID)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
@@ -252,13 +256,13 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		SelectedFolderID: selectedFolderID,
 	}
 
-	items, err := a.store.ItemsForScope(ctx, userID, lc.Scope, lc.SubID, lc.Filter, "", 200)
+	items, err := a.store.ItemsForScope(ctx, userID, lc.Scope, lc.SubID, lc.Filter, search, 200)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	listTitleStr := listTitle(lc.Scope, sub)
-	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID))
+	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID), search)
 
 	// The shell crumb and <title> follow the selected feed, not the generic
 	// "All articles" list heading — ScopeAll keeps the app's own name so the
