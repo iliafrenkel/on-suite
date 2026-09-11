@@ -2,6 +2,7 @@ package reader
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -327,6 +328,11 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 	lc := articleContext(r)
 	page := a.deps.Page(r, item.Title)
 
+	// The full article wins by default once it exists; ?view=feed is the way
+	// back, because extraction sometimes does worse than the publisher's own
+	// summary.
+	showFull := r.URL.Query().Get("view") != "feed"
+
 	// Anything that did not come from htmx is a plain browser navigation and
 	// gets the whole page back: a form submission from the star or unread
 	// forms (which carry method/action for exactly that case), or a click on
@@ -336,14 +342,14 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 	// stray out-of-band checkbox and no shell around either.
 	// An htmx request, GET or POST, still gets the one-pane fragment.
 	if !web.IsHTMX(r) {
-		a.renderPanes(w, r, userID, lc, "", viewArticle(item, page.Shell, lc))
+		a.renderPanes(w, r, userID, lc, "", viewArticle(item, page.Shell, lc, showFull))
 		return
 	}
 
 	view := indexView{
 		Tree:    viewTree(tree, lc.SubID, lc.Scope, counts),
 		List:    listView{Scope: lc.Scope, SubID: lc.SubID, Filter: lc.Filter, Shell: page.Shell},
-		Article: viewArticle(item, page.Shell, lc),
+		Article: viewArticle(item, page.Shell, lc, showFull),
 		Shell:   page.Shell,
 	}
 	if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article-swap", view); err != nil {
@@ -540,4 +546,85 @@ func (a *App) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.renderIndex(w, r, userID, lc, "")
+}
+
+// fetchFull retrieves an article's own page and extracts its body.
+//
+// A page that will not extract — a paywall, a listing, a JavaScript-rendered
+// shell — is an ordinary outcome rather than an error: the failure is recorded
+// against the item and the pane keeps showing the feed body with an
+// explanation. Only a genuine server-side problem produces a 5xx.
+func (a *App) fetchFull(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	itemID, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	item, err := a.store.Item(r.Context(), userID, itemID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if item.URL == "" {
+		a.recordFullFailure(r, userID, itemID, "this article has no link to fetch")
+		a.renderArticle(w, r, userID, itemID)
+		return
+	}
+
+	if err := a.extractInto(r, userID, item); err != nil {
+		a.deps.Log.Info("reader full-article fetch failed", "url", item.URL, "error", err)
+		a.recordFullFailure(r, userID, itemID, fullFailureMessage(err))
+	}
+	a.renderArticle(w, r, userID, itemID)
+}
+
+// recordFullFailure stores a failure, logging rather than surfacing an error if
+// even that fails — the user is about to get a rendered pane either way.
+func (a *App) recordFullFailure(r *http.Request, userID, itemID int64, msg string) {
+	if err := a.store.SaveFullArticleFailure(r.Context(), userID, itemID, msg, time.Now().UTC()); err != nil {
+		a.deps.Log.Error("reader recording a full-article failure failed", "error", err)
+	}
+}
+
+// fullFailureMessage turns an error into something worth showing a person.
+func fullFailureMessage(err error) string {
+	if errors.Is(err, ErrNotExtractable) {
+		return "could not find an article in that page — it may be a paywall, or built by JavaScript"
+	}
+	return "could not fetch the page"
+}
+
+// extractInto fetches, extracts and stores. It is separate from the handler so
+// the handler reads as the decision tree it is.
+func (a *App) extractInto(r *http.Request, userID int64, item Item) error {
+	select {
+	case a.fullSem <- struct{}{}:
+		defer func() { <-a.fullSem }()
+	case <-r.Context().Done():
+		return r.Context().Err()
+	}
+
+	res, err := a.client.Get(r.Context(), item.URL, GetOptions{
+		MaxBytes: MaxArticleBytes,
+		Accept:   "text/html, application/xhtml+xml;q=0.9, */*;q=0.5",
+	})
+	if err != nil {
+		return err
+	}
+	// Only HTML extracts. A PDF or an image behind an article link is a
+	// perfectly ordinary thing to find and not something to hand to a parser.
+	if ct := res.ContentType; ct != "" && !strings.Contains(ct, "html") {
+		return fmt.Errorf("%w: content type %s", ErrNotExtractable, ct)
+	}
+
+	ex, err := ExtractArticle(res.Body, res.FinalURL)
+	if err != nil {
+		return err
+	}
+	a.deps.Log.Info("reader extracted a full article",
+		"url", item.URL, "chars", ex.TextLength, "images", len(ex.Images))
+	return a.store.SaveFullArticle(r.Context(), userID, item.ID, ex, time.Now().UTC())
 }

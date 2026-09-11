@@ -22,12 +22,18 @@ var templateFiles embed.FS
 
 // App is ON Reader.
 type App struct {
-	store  *Store
-	client *Client
-	poller *Poller
-	deps   app.Deps
-	imgSem chan struct{}
+	store   *Store
+	client  *Client
+	poller  *Poller
+	deps    app.Deps
+	imgSem  chan struct{}
+	fullSem chan struct{}
 }
+
+// articleFetchConcurrency bounds full-article extraction. Fetching is
+// user-initiated and rare, but extraction parses a whole page, and nothing
+// stops two people clicking at once.
+const articleFetchConcurrency = 2
 
 func New() *App { return &App{} }
 
@@ -57,10 +63,12 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.client = NewClient(deps.Version)
 	a.poller = NewPoller(a.store, a.client, deps.Log)
 	a.imgSem = make(chan struct{}, imageFetchConcurrency)
+	a.fullSem = make(chan struct{}, articleFetchConcurrency)
 
 	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("GET /feed/{id}", a.index)
 	r.HandleFunc("GET /item/{id}", a.article)
+	r.HandleFunc("POST /item/{id}/full", a.fetchFull)
 	r.HandleFunc("POST /subscribe", a.subscribe)
 	r.HandleFunc("POST /sub/{id}/delete", a.unsubscribe)
 	r.HandleFunc("POST /folder", a.createFolder)

@@ -250,7 +250,24 @@
           <button type="submit">Mark unread</button>
         </form>
       {{end}}
+      {{if .HasFull}}
+        {{if .ShowingFull}}
+          <a class="button" href="/reader/item/{{.ID}}?view=feed"
+             hx-get="/reader/item/{{.ID}}?view=feed"
+             hx-target="#reader-article" hx-swap="outerHTML">Show feed version</a>
+        {{else}}
+          <a class="button" href="/reader/item/{{.ID}}"
+             hx-get="/reader/item/{{.ID}}"
+             hx-target="#reader-article" hx-swap="outerHTML">Show full article</a>
+        {{end}}
+      {{else}}
+        <form hx-post="/reader/item/{{.ID}}/full" hx-target="#reader-article" hx-swap="outerHTML">
+          <input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+          <button type="submit">Fetch full article</button>
+        </form>
+      {{end}}
     </div>
+    {{if .FullError}}<p class="notice notice-error" role="status">{{.FullError}}</p>{{end}}
     <div class="reader-body">{{.Body}}</div>
   {{else}}
     <p class="empty">Pick an article.</p>

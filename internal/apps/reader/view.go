@@ -93,6 +93,13 @@ type articleView struct {
 	Scope  Scope
 	SubID  int64
 	Filter Filter
+	// HasFull reports that an extracted body is stored, which is what decides
+	// whether the toggle renders at all.
+	HasFull bool
+	// ShowingFull is which body Body currently holds.
+	ShowingFull bool
+	// FullError explains a failed fetch, empty when there is nothing to say.
+	FullError string
 }
 
 func viewTree(t Tree, activeID int64, scope Scope, counts Counts) treeView {
@@ -144,7 +151,13 @@ func viewList(items []Item, title string, scope Scope, subID int64, filter Filte
 	return out
 }
 
-func viewArticle(it Item, shell render.Shell, lc listContext) articleView {
+func viewArticle(it Item, shell render.Shell, lc listContext, showFull bool) articleView {
+	// showFull is honoured only when there is a full article to show, so a
+	// stale ?view= on an item nobody has fetched still renders the feed body.
+	body := it.Body()
+	if showFull && it.HasFull() {
+		body = it.FullHTML
+	}
 	return articleView{
 		Scope:    lc.Scope,
 		SubID:    lc.SubID,
@@ -158,8 +171,13 @@ func viewArticle(it Item, shell render.Shell, lc listContext) articleView {
 		When:     humanTime(it.PublishedAt),
 		Read:     it.Read,
 		Starred:  it.Starred,
-		Body:     template.HTML(it.Body()),
-		Shell:    shell,
+		// Safe: both bodies have been through SanitizeArticleHTML — the feed
+		// one in ParseFeed, the full one in ExtractArticle.
+		Body:        template.HTML(body),
+		Shell:       shell,
+		HasFull:     it.HasFull(),
+		ShowingFull: showFull && it.HasFull(),
+		FullError:   it.FullError,
 	}
 }
 
