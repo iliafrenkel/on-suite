@@ -125,9 +125,17 @@ func (a *App) Jobs(deps app.Deps) []app.Job {
 		},
 		{
 			Name:        "purge old articles",
-			Description: "Deletes read, unstarred articles older than the retention window and reindexes articles for search.",
+			Description: "Records daily reading statistics, backfills history, deletes read, unstarred articles older than the retention window, and reindexes articles for search.",
 			Every:       purgeTick,
 			Run: func(ctx context.Context) error {
+				// Before the purge, always: retention is about to delete the
+				// articles these counts are drawn from.
+				if _, err := a.store.BackfillDailyStats(ctx); err != nil {
+					return err
+				}
+				if err := a.store.RecordDailyStats(ctx, time.Now().UTC()); err != nil {
+					return err
+				}
 				n, err := a.store.PurgeItems(ctx, time.Now().UTC().Add(-RetentionAge))
 				if err != nil {
 					return err
