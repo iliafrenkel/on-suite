@@ -227,3 +227,107 @@ func (s *Store) Stats(ctx context.Context) ([]app.Stat, error) {
 	}
 	return out, nil
 }
+
+// FeedStat is one subscription's numbers, for the per-feed table.
+type FeedStat struct {
+	SubID    int64
+	Name     string
+	FeedURL  string
+	Articles int
+	Read     int
+	// LastArticle is the newest article still stored for this feed, zero if
+	// none remain.
+	LastArticle time.Time
+	// AddedAt is when this user subscribed, so a feed too young to judge is
+	// not called dead.
+	AddedAt time.Time
+	Failing bool
+}
+
+// ReadRatio is the fraction read, 0 when there is nothing to read.
+func (f FeedStat) ReadRatio() float64 {
+	if f.Articles == 0 {
+		return 0
+	}
+	return float64(f.Read) / float64(f.Articles)
+}
+
+// ReadPercent is ReadRatio as a whole number, for display and for a bar width.
+func (f FeedStat) ReadPercent() int { return int(f.ReadRatio()*100 + 0.5) }
+
+// Quiet reports a feed that has published nothing recently — usually dead.
+//
+// It is judged on the newest article still stored, so a feed whose articles
+// have all been purged reads as quiet. That is the right answer: retention only
+// removes articles older than RetentionAge, so if nothing newer survives,
+// nothing newer arrived.
+//
+// A subscription younger than the threshold is never called quiet, whatever it
+// has published. A feed added last week has not had time to be dead, and
+// telling someone to prune the feed they just added is the fastest way to make
+// them stop trusting the page.
+func (f FeedStat) Quiet() bool {
+	if time.Since(f.AddedAt) < QuietAfter {
+		return false
+	}
+	return f.LastArticle.IsZero() || time.Since(f.LastArticle) > QuietAfter
+}
+
+// QuietAfter is how long a feed must go without publishing to be called quiet.
+const QuietAfter = 60 * 24 * time.Hour
+
+// Neglected reports a feed that produces a lot and is read very little — the
+// other prune candidate, and the one people are usually surprised by.
+func (f FeedStat) Neglected() bool {
+	return f.Articles >= NeglectedMinArticles && f.ReadRatio() < NeglectedRatio
+}
+
+const (
+	NeglectedMinArticles = 20
+	NeglectedRatio       = 0.1
+)
+
+// FeedStats returns one row per subscription, busiest first.
+func (s *Store) FeedStats(ctx context.Context, userID int64) ([]FeedStat, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT sub.id,
+		       coalesce(nullif(sub.title, ''), nullif(f.title, ''), f.url),
+		       f.url,
+		       count(i.id),
+		       count(st.read_at),
+		       coalesce(max(i.published_at), ''),
+		       sub.added_at,
+		       f.error_count > 0
+		  FROM reader_subs sub
+		  JOIN reader_feeds f ON f.id = sub.feed_id
+		  LEFT JOIN reader_items i
+		         ON i.feed_id = sub.feed_id AND i.fetched_at >= sub.added_at
+		  LEFT JOIN reader_item_state st
+		         ON st.item_id = i.id AND st.user_id = sub.user_id
+		 WHERE sub.user_id = ?
+		 GROUP BY sub.id
+		 ORDER BY count(i.id) DESC, 2`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("reader: feed stats: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []FeedStat
+	for rows.Next() {
+		var f FeedStat
+		var last, added string
+		if err := rows.Scan(&f.SubID, &f.Name, &f.FeedURL, &f.Articles, &f.Read,
+			&last, &added, &f.Failing); err != nil {
+			return nil, fmt.Errorf("reader: scan feed stat: %w", err)
+		}
+		if last != "" {
+			f.LastArticle = parseTime(last)
+		}
+		f.AddedAt = parseTime(added)
+		out = append(out, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reader: iterate feed stats: %w", err)
+	}
+	return out, nil
+}

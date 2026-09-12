@@ -90,6 +90,8 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 
 	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("GET /reader.js", a.script)
+	// Registered before the {id} patterns below so the literal path wins.
+	r.HandleFunc("GET /stats", a.stats)
 	r.HandleFunc("GET /feed/{id}", a.index)
 	r.HandleFunc("GET /item/{id}", a.article)
 	r.HandleFunc("POST /item/{id}/full", a.fetchFull)

@@ -1,0 +1,124 @@
+{{define "content"}}
+<div class="stack reader-stats">
+	<div class="reader-stats-head">
+		<h1>Reading stats</h1>
+		<a href="/reader/">Back to reader</a>
+	</div>
+
+	<div class="reader-stat-tiles">
+		{{range .Data.Tiles}}
+		<div class="reader-stat-tile">
+			<div class="value">{{.Value}}</div>
+			<div class="label">{{.Label}}</div>
+		</div>
+		{{end}}
+	</div>
+
+	<figure class="reader-chart">
+		<figcaption>{{.Data.Fetched.Title}}</figcaption>
+		{{if .Data.Fetched.Empty}}
+			<p class="empty">Nothing yet.</p>
+		{{else}}
+			<svg viewBox="0 0 {{.Data.Fetched.Width}} {{.Data.Fetched.Height}}" role="img"
+			     aria-label="{{.Data.Fetched.Title}}, daily, peak {{.Data.Fetched.Max}}" preserveAspectRatio="none">
+				{{range .Data.Fetched.Bars}}
+				<rect x="{{.X}}" y="{{.Y}}" width="{{.Width}}" height="{{.Height}}" rx="1">
+					<title>{{.Label}}</title>
+				</rect>
+				{{end}}
+			</svg>
+			{{if .Data.Fetched.Reconstructed}}
+			<p class="dim">Part of this period was reconstructed from surviving articles.</p>
+			{{end}}
+		{{end}}
+	</figure>
+
+	<figure class="reader-chart">
+		<figcaption>{{.Data.Read.Title}}</figcaption>
+		{{if .Data.Read.Empty}}
+			<p class="empty">Nothing yet.</p>
+		{{else}}
+			<svg viewBox="0 0 {{.Data.Read.Width}} {{.Data.Read.Height}}" role="img"
+			     aria-label="{{.Data.Read.Title}}, daily, peak {{.Data.Read.Max}}" preserveAspectRatio="none">
+				{{range .Data.Read.Bars}}
+				<rect x="{{.X}}" y="{{.Y}}" width="{{.Width}}" height="{{.Height}}" rx="1">
+					<title>{{.Label}}</title>
+				</rect>
+				{{end}}
+			</svg>
+			{{if .Data.Read.Reconstructed}}
+			<p class="dim">Part of this period was reconstructed from surviving articles.</p>
+			{{end}}
+		{{end}}
+	</figure>
+
+	<figure class="reader-chart">
+		<figcaption>{{.Data.Backlog.Title}}</figcaption>
+		{{if .Data.Backlog.Empty}}
+			<p class="empty">Nothing yet.</p>
+		{{else}}
+			<svg viewBox="0 0 {{.Data.Backlog.Width}} {{.Data.Backlog.Height}}" role="img"
+			     aria-label="{{.Data.Backlog.Title}}, currently {{.Data.Backlog.Last}}" preserveAspectRatio="none">
+				<polyline points="{{.Data.Backlog.Points}}" class="reader-line"/>
+			</svg>
+		{{end}}
+	</figure>
+
+	<h2>Feeds</h2>
+	{{if .Data.Feeds}}
+	<div class="table-scroll">
+		<table class="reader-stats-table">
+			<thead>
+				<tr>
+					<th>Feed</th>
+					<th>Articles</th>
+					<th>Read</th>
+					<th>Read ratio</th>
+					<th>Last article</th>
+				</tr>
+			</thead>
+			<tbody>
+				{{range .Data.Feeds}}
+				<tr>
+					<td>{{.Name}}</td>
+					<td>{{.Articles}}</td>
+					<td>{{.Read}}</td>
+					<td>
+						<svg class="reader-ratio" viewBox="0 0 100 4" preserveAspectRatio="none" role="img"
+						     aria-label="{{.ReadPercent}} percent read">
+							<rect x="0" y="0" width="100" height="4" rx="2" class="track"/>
+							<rect x="0" y="0" width="{{.ReadPercent}}" height="4" rx="2" class="fill"/>
+						</svg>
+						{{.ReadPercent}}%
+					</td>
+					<td>{{if .LastArticle.IsZero}}&mdash;{{else}}{{.LastArticle.Format "2 Jan 2006"}}{{end}}</td>
+				</tr>
+				{{end}}
+			</tbody>
+		</table>
+	</div>
+	{{else}}
+	<p class="empty">No feeds yet.</p>
+	{{end}}
+
+	{{if .Data.Quiet}}
+	<h2>Gone quiet</h2>
+	<p class="dim">Nothing published in over {{"60"}} days.</p>
+	<ul>
+		{{range .Data.Quiet}}
+		<li>{{.Name}}</li>
+		{{end}}
+	</ul>
+	{{end}}
+
+	{{if .Data.Neglected}}
+	<h2>Rarely read</h2>
+	<p class="dim">Plenty of articles, almost none of them read.</p>
+	<ul>
+		{{range .Data.Neglected}}
+		<li>{{.Name}} &mdash; {{.ReadPercent}}% read</li>
+		{{end}}
+	</ul>
+	{{end}}
+</div>
+{{end}}

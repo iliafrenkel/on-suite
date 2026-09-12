@@ -1855,3 +1855,69 @@ func TestNormalOpenStillMarksRead(t *testing.T) {
 		t.Error("a normal open no longer marks the article read")
 	}
 }
+
+func TestStatsPageRenders(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://a.example/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "A", PublishedAt: now.Add(-time.Hour)},
+		{GUID: "b", Title: "B", PublishedAt: now.Add(-2 * time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.RecordDailyStats(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/stats")
+	text := doc.Text()
+	if !strings.Contains(text, "a.example") {
+		t.Errorf("per-feed table missing:\n%s", text)
+	}
+	// The accessible view the charts lean on must be real markup, not an image.
+	if doc.Query("table") == nil {
+		t.Error("no table on the stats page; the charts have no accessible equivalent")
+	}
+	if len(doc.QueryAll("svg rect")) == 0 {
+		t.Error("no chart bars rendered")
+	}
+}
+
+func TestStatsPageIsPerUser(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	if _, err := s.Store.Subscribe(ctx, s.Bob.User.ID, "https://bobs.example/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/reader/stats")
+	if strings.Contains(doc.Text(), "bobs.example") {
+		t.Errorf("alice's stats page shows bob's feed:\n%s", doc.Text())
+	}
+}
+
+func TestStatsPageIsBehindAuth(t *testing.T) {
+	s := newServer(t)
+	rec := s.Do(t, s.Anonymous(t), httptest.NewRequest(http.MethodGet, "/reader/stats", nil))
+	if rec.Code == http.StatusOK {
+		t.Error("anonymous request got the stats page")
+	}
+}
+
+// A brand-new account must get an empty state, not a division by zero or a
+// chart with no bars and no explanation.
+func TestStatsPageOnAnEmptyAccount(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/reader/stats")
+	// Assert on the element, not on wording: a substring match for "no " would
+	// pass on the word "normal" and fail the moment the copy is reworded.
+	if doc.Query(".empty") == nil {
+		t.Errorf("no empty state on a fresh account:\n%s", doc.Text())
+	}
+}
