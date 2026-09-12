@@ -1,8 +1,10 @@
 package reader
 
 import (
+	"fmt"
 	"html/template"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
@@ -236,3 +238,185 @@ func humanTime(t time.Time) string {
 
 // itoaMinutes exists only so the switch above reads cleanly.
 func itoaMinutes(n int) string { return strconv.Itoa(n) }
+
+// chartBar is one already-positioned bar. Geometry is computed in Go because
+// html/template cannot do arithmetic, and a chart assembled out of template
+// expressions is unreadable and wrong.
+type chartBar struct {
+	X      float64
+	Y      float64
+	Width  float64
+	Height float64
+	// Label is the native tooltip text — a <title> child, which is how this
+	// gets a hover layer with no JavaScript and no CSP exemption.
+	Label string
+}
+
+type chartView struct {
+	Title  string
+	Bars   []chartBar
+	Width  float64
+	Height float64
+	Max    int
+	Empty  bool
+	// Reconstructed is true when any day shown was backfilled rather than
+	// measured, so the caption can say so.
+	Reconstructed bool
+}
+
+// buildChart lays out one series of daily counts.
+//
+// One series, one hue: this app has exactly one non-reserved accent, and a
+// second series would need a categorical palette it does not have. Two
+// measures means two charts.
+func buildChart(title string, days []DayStat, value func(DayStat) int) chartView {
+	const (
+		height = 120.0
+		barW   = 3.0
+		barGap = 2.0 // the surface gap that keeps adjacent bars legible
+	)
+	out := chartView{Title: title, Height: height}
+	if len(days) == 0 {
+		out.Empty = true
+		return out
+	}
+
+	for _, d := range days {
+		if v := value(d); v > out.Max {
+			out.Max = v
+		}
+		if d.Reconstructed {
+			out.Reconstructed = true
+		}
+	}
+	if out.Max == 0 {
+		out.Empty = true
+	}
+
+	out.Width = float64(len(days)) * (barW + barGap)
+
+	for i, d := range days {
+		v := value(d)
+		h := 0.0
+		if out.Max > 0 {
+			h = float64(v) / float64(out.Max) * height
+		}
+		out.Bars = append(out.Bars, chartBar{
+			X:      float64(i) * (barW + barGap),
+			Y:      height - h,
+			Width:  barW,
+			Height: h,
+			Label:  fmt.Sprintf("%s: %d", d.Day.Format("2 Jan"), v),
+		})
+	}
+	return out
+}
+
+// lineView is a stock over time: one polyline, one hue, no markers. Points is
+// pre-formatted for the SVG points attribute because html/template cannot
+// build it.
+type lineView struct {
+	Title  string
+	Points string
+	Width  float64
+	Height float64
+	Max    int
+	Empty  bool
+	// Last is the current value, shown as a number beside the line — the one
+	// figure on this chart worth reading exactly.
+	Last int
+	// Reconstructed is true when any day shown was backfilled rather than
+	// measured, so the caption can say so.
+	Reconstructed bool
+}
+
+func buildLine(title string, days []DayStat, value func(DayStat) int) lineView {
+	const (
+		height = 120.0
+		step   = 5.0
+	)
+	out := lineView{Title: title, Height: height}
+	if len(days) == 0 {
+		out.Empty = true
+		return out
+	}
+	for _, d := range days {
+		if v := value(d); v > out.Max {
+			out.Max = v
+		}
+		if d.Reconstructed {
+			out.Reconstructed = true
+		}
+	}
+	out.Last = value(days[len(days)-1])
+	if out.Max == 0 {
+		out.Empty = true
+		return out
+	}
+	out.Width = float64(len(days)-1) * step
+
+	var b strings.Builder
+	for i, d := range days {
+		y := height - float64(value(d))/float64(out.Max)*height
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "%.1f,%.1f", float64(i)*step, y)
+	}
+	out.Points = b.String()
+	return out
+}
+
+// statTile is one of the plain-number tiles at the top of the stats page.
+type statTile struct {
+	Label string
+	Value string
+}
+
+// statsView is the reading-stats page.
+type statsView struct {
+	Tiles     []statTile
+	Fetched   chartView
+	Read      chartView
+	Backlog   lineView
+	Feeds     []FeedStat
+	Quiet     []FeedStat
+	Neglected []FeedStat
+	// QuietAfterDays is QuietAfter expressed in days, for the "gone quiet"
+	// copy — computed here rather than hardcoded in the template so the two
+	// never drift apart if QuietAfter changes.
+	QuietAfterDays int
+}
+
+// buildStatsView assembles the reading-stats page from its three inputs: the
+// daily series (flows and stock), the per-feed rows, and the sidebar's own
+// unread/starred counts, so the tiles never disagree with the tree.
+func buildStatsView(days []DayStat, feeds []FeedStat, counts Counts) statsView {
+	var articles int
+	for _, f := range feeds {
+		articles += f.Articles
+	}
+
+	out := statsView{
+		Tiles: []statTile{
+			{Label: "Feeds", Value: strconv.Itoa(len(feeds))},
+			{Label: "Unread", Value: strconv.Itoa(counts.Total)},
+			{Label: "Starred", Value: strconv.Itoa(counts.Starred)},
+			{Label: "Articles stored", Value: strconv.Itoa(articles)},
+		},
+		Fetched:        buildChart("Articles arriving", days, func(d DayStat) int { return d.Fetched }),
+		Read:           buildChart("Articles read", days, func(d DayStat) int { return d.Read }),
+		Backlog:        buildLine("Backlog", days, func(d DayStat) int { return d.Backlog }),
+		Feeds:          feeds,
+		QuietAfterDays: int(QuietAfter / (24 * time.Hour)),
+	}
+	for _, f := range feeds {
+		if f.Quiet() {
+			out.Quiet = append(out.Quiet, f)
+		}
+		if f.Neglected() {
+			out.Neglected = append(out.Neglected, f)
+		}
+	}
+	return out
+}

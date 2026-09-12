@@ -1885,3 +1885,60 @@ kbd {
 		display: none;
 	}
 }
+
+/* Reading stats page. */
+.reader-stats-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--s-3);
+}
+
+.reader-chart { margin: 0 0 var(--s-5); }
+.reader-chart figcaption {
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+	margin-bottom: var(--s-2);
+}
+.reader-chart svg {
+	width: 100%;
+	height: 120px;
+	display: block;
+	overflow: visible;
+}
+/* One series, one hue. --c-accent-attention is reserved for things needing
+ * attention and is deliberately not used here. */
+.reader-chart rect { fill: var(--c-accent); }
+.reader-chart rect:hover { fill: var(--c-text); }
+.reader-line { fill: none; stroke: var(--c-accent); stroke-width: 2; }
+
+.reader-stat-tiles {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+	gap: var(--s-3);
+	margin-bottom: var(--s-5);
+}
+.reader-stat-tile { background: var(--c-bg-subtle); border-radius: 4px; padding: var(--s-3); }
+.reader-stat-tile .value { font-size: var(--fs-xl); }
+.reader-stat-tile .label { color: var(--c-text-dim); font-size: var(--fs-xs); }
+
+.table-scroll { overflow-x: auto; }
+.reader-stats-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--fs-sm);
+}
+.reader-stats-table th,
+.reader-stats-table td {
+	text-align: left;
+	padding: var(--s-2) var(--s-3);
+	border-bottom: 1px solid var(--c-border);
+	white-space: nowrap;
+}
+
+/* The ratio bar is an inline SVG, not a styled span: its width varies per
+ * row, and a style="width:37%" attribute is exactly what this app's CSP
+ * forbids — it would be dropped silently and every bar would look full. */
+.reader-ratio { width: 4rem; height: 4px; vertical-align: middle; }
+.reader-ratio .track { fill: var(--c-bg-inset); }
+.reader-ratio .fill { fill: var(--c-accent); }

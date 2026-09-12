@@ -63,6 +63,38 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 	a.renderIndex(w, r, userID, pathContext(r, subID), "")
 }
 
+// stats draws the reading-stats page: a different kind of view from the
+// three-pane reader, so it is its own full page rather than another pane.
+func (a *App) stats(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+
+	// 90 days before the purge in the same job.
+	days, err := a.store.DailyStats(r.Context(), userID, 90)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	feeds, err := a.store.FeedStats(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	counts, err := a.store.UnreadCounts(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+
+	page := a.deps.Page(r, "Reading stats")
+	page.Data = buildStatsView(days, feeds, counts)
+	if err := a.deps.Render.Page(w, http.StatusOK, "reader/stats", page); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
+}
+
 // listContext is which list a render draws: the scope, the subscription that
 // scope names, and this viewer's filter. It travels as one value because the
 // three are only ever meaningful together — a ScopeFeed with no SubID is not a

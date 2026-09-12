@@ -7,9 +7,11 @@ This file provides guidance to AI coding agents when working with code in this r
 ON Suite is a self-hosted suite of small web apps for one household: one
 account system, one shell, one SQLite file, one Go binary. It's deliberately
 not built for SaaS scale — no multi-tenancy, no CGO, no Node/npm/JS build
-step. **ON Paste** (snippets with syntax highlighting and shareable links) and
-**ON Notes** (a hierarchical outliner, still being built out) are registered
-today; ON Reader and ON Flash are reserved names with no code yet.
+step. **ON Paste** (snippets with syntax highlighting and shareable links),
+**ON Notes** (a hierarchical outliner, still being built out), and **ON
+Reader** (a feed reader, with search, OPML import/export, full-article
+extraction, and reading-stats) are registered today; ON Flash is a reserved
+name with no code yet.
 
 Full rationale for every design choice below lives in
 [docs/superpowers/specs/2026-08-18-on-suite-platform-design.md](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md).

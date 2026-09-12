@@ -63,16 +63,14 @@ func TestHomePageShowsRealCardAndNamesComingSoonApps(t *testing.T) {
 	}
 
 	// Coming-soon apps get no card of their own — equal card area for a
-	// shipped app and three that don't exist yet reads as a mockup — just a
+	// shipped app and one that doesn't exist yet reads as a mockup — just a
 	// single muted line naming them.
 	if cards := doc.QueryAll(".app-card"); len(cards) != 1 {
 		t.Errorf("got %d app cards, want exactly 1 (the real app)", len(cards))
 	}
 	text := doc.Text()
-	for _, name := range []string{"ON Reader", "ON Flash"} {
-		if !strings.Contains(text, name) {
-			t.Errorf("coming-soon app %q is not named anywhere on the page", name)
-		}
+	if !strings.Contains(text, "ON Flash") {
+		t.Error("coming-soon app \"ON Flash\" is not named anywhere on the page")
 	}
 }
 

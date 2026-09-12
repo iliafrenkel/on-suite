@@ -2,6 +2,7 @@ package reader
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 var (
 	_ app.App       = (*App)(nil)
 	_ app.Scheduler = (*App)(nil)
+	_ app.Stater    = (*App)(nil)
+	_ app.Exporter  = (*App)(nil)
 )
 
 //go:embed templates/*.html
@@ -70,6 +73,13 @@ func (a *App) script(w http.ResponseWriter, r *http.Request) {
 	http.ServeFileFS(w, r, scriptFiles, "static/reader.js")
 }
 
+// Stats implements app.Stater, putting ON Reader on the admin page. Like
+// Export it takes the database rather than using a.store, so it works on a
+// handle the platform already has without depending on Mount having run.
+func (a *App) Stats(ctx context.Context, handle *sql.DB) ([]app.Stat, error) {
+	return NewStore(handle).Stats(ctx)
+}
+
 func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.deps = deps
 	a.store = NewStore(deps.DB)
@@ -80,6 +90,8 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 
 	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("GET /reader.js", a.script)
+	// Registered before the {id} patterns below so the literal path wins.
+	r.HandleFunc("GET /stats", a.stats)
 	r.HandleFunc("GET /feed/{id}", a.index)
 	r.HandleFunc("GET /item/{id}", a.article)
 	r.HandleFunc("POST /item/{id}/full", a.fetchFull)
@@ -125,9 +137,17 @@ func (a *App) Jobs(deps app.Deps) []app.Job {
 		},
 		{
 			Name:        "purge old articles",
-			Description: "Deletes read, unstarred articles older than the retention window and reindexes articles for search.",
+			Description: "Records daily reading statistics, backfills history, deletes read, unstarred articles older than the retention window, and reindexes articles for search.",
 			Every:       purgeTick,
 			Run: func(ctx context.Context) error {
+				// Before the purge, always: retention is about to delete the
+				// articles these counts are drawn from.
+				if _, err := a.store.BackfillDailyStats(ctx); err != nil {
+					return err
+				}
+				if err := a.store.RecordDailyStats(ctx, time.Now().UTC()); err != nil {
+					return err
+				}
 				n, err := a.store.PurgeItems(ctx, time.Now().UTC().Add(-RetentionAge))
 				if err != nil {
 					return err
