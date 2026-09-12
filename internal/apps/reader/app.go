@@ -2,6 +2,7 @@ package reader
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 var (
 	_ app.App       = (*App)(nil)
 	_ app.Scheduler = (*App)(nil)
+	_ app.Stater    = (*App)(nil)
+	_ app.Exporter  = (*App)(nil)
 )
 
 //go:embed templates/*.html
@@ -68,6 +71,13 @@ func (a *App) script(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFileFS(w, r, scriptFiles, "static/reader.js")
+}
+
+// Stats implements app.Stater, putting ON Reader on the admin page. Like
+// Export it takes the database rather than using a.store, so it works on a
+// handle the platform already has without depending on Mount having run.
+func (a *App) Stats(ctx context.Context, handle *sql.DB) ([]app.Stat, error) {
+	return NewStore(handle).Stats(ctx)
 }
 
 func (a *App) Mount(r *app.Router, deps app.Deps) {

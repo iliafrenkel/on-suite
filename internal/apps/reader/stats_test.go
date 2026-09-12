@@ -177,6 +177,48 @@ func TestBackfillMarksRowsReconstructed(t *testing.T) {
 	}
 }
 
+func TestAppStatsReportsTheInstallation(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.store.Subscribe(ctx, f.alice.ID, "https://a.example/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Subscribe(ctx, f.bob.ID, "https://a.example/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.New().Stats(ctx, f.store.DB())
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if len(got) == 0 {
+		t.Fatal("Stats returned nothing; the admin card would be empty")
+	}
+
+	byLabel := map[string]string{}
+	for _, s := range got {
+		byLabel[s.Label] = s.Value
+	}
+	// One feed URL, two subscribers — the shared-feed design is exactly what
+	// an operator wants to see confirmed here.
+	if byLabel["Feeds"] != "1" {
+		t.Errorf("Feeds = %q, want 1", byLabel["Feeds"])
+	}
+	if byLabel["Subscriptions"] != "2" {
+		t.Errorf("Subscriptions = %q, want 2", byLabel["Subscriptions"])
+	}
+}
+
+// Stats takes a *sql.DB rather than using Mount's Deps, so it must work on an
+// App that was never mounted — that is the contract every Stater has.
+func TestAppStatsWorksWithoutMount(t *testing.T) {
+	f := newStoreFixture(t)
+	if _, err := reader.New().Stats(context.Background(), f.store.DB()); err != nil {
+		t.Errorf("Stats on an unmounted app: %v", err)
+	}
+}
+
 // Backfill must never overwrite a day that was measured for real.
 func TestBackfillDoesNotOverwriteMeasuredDays(t *testing.T) {
 	f := newStoreFixture(t)

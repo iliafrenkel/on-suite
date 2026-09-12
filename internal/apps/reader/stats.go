@@ -2,8 +2,12 @@ package reader
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
 
 // dayFormat is the key format for reader_daily_stats. Date-only and UTC, so
@@ -174,6 +178,52 @@ func (s *Store) DailyStats(ctx context.Context, userID int64, days int) ([]DaySt
 		stat := byDay[d.Format(dayFormat)]
 		stat.Day = d
 		out = append(out, stat)
+	}
+	return out, nil
+}
+
+// Stats describes the installation for the admin page.
+//
+// These are deliberately operator questions, not reader questions: how much is
+// stored, how much work the poller is doing, and whether anything is broken.
+// What someone reads is on the reading-stats page instead.
+func (s *Store) Stats(ctx context.Context) ([]app.Stat, error) {
+	var feeds, subs, items, failing, cachedImages int
+	var lastPoll sql.NullString
+
+	for _, q := range []struct {
+		sql  string
+		dest any
+	}{
+		{`SELECT count(*) FROM reader_feeds`, &feeds},
+		{`SELECT count(*) FROM reader_subs`, &subs},
+		{`SELECT count(*) FROM reader_items`, &items},
+		{`SELECT count(*) FROM reader_feeds WHERE error_count > 0`, &failing},
+		{`SELECT count(*) FROM reader_images WHERE bytes IS NOT NULL`, &cachedImages},
+		{`SELECT max(last_fetch_at) FROM reader_feeds`, &lastPoll},
+	} {
+		if err := s.db.QueryRowContext(ctx, q.sql).Scan(q.dest); err != nil {
+			return nil, fmt.Errorf("reader: stats query: %w", err)
+		}
+	}
+
+	out := []app.Stat{
+		{Label: "Feeds", Value: strconv.Itoa(feeds), Hint: "distinct feed URLs, polled once each however many people subscribe"},
+		{Label: "Subscriptions", Value: strconv.Itoa(subs)},
+		{Label: "Articles", Value: strconv.Itoa(items)},
+		{Label: "Cached images", Value: strconv.Itoa(cachedImages)},
+	}
+	if lastPoll.Valid {
+		out = append(out, app.Stat{Label: "Last poll", Value: humanTime(parseTime(lastPoll.String))})
+	}
+	// Only shown when it is non-zero: a permanent "Failing feeds: 0" teaches
+	// people to stop reading the line, which is the opposite of what it is for.
+	if failing > 0 {
+		out = append(out, app.Stat{
+			Label: "Failing feeds",
+			Value: strconv.Itoa(failing),
+			Hint:  "these are backing off; see the warning marks in the tree",
+		})
 	}
 	return out, nil
 }
