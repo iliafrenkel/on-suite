@@ -325,6 +325,9 @@ type lineView struct {
 	// Last is the current value, shown as a number beside the line — the one
 	// figure on this chart worth reading exactly.
 	Last int
+	// Reconstructed is true when any day shown was backfilled rather than
+	// measured, so the caption can say so.
+	Reconstructed bool
 }
 
 func buildLine(title string, days []DayStat, value func(DayStat) int) lineView {
@@ -340,6 +343,9 @@ func buildLine(title string, days []DayStat, value func(DayStat) int) lineView {
 	for _, d := range days {
 		if v := value(d); v > out.Max {
 			out.Max = v
+		}
+		if d.Reconstructed {
+			out.Reconstructed = true
 		}
 	}
 	out.Last = value(days[len(days)-1])
@@ -376,6 +382,10 @@ type statsView struct {
 	Feeds     []FeedStat
 	Quiet     []FeedStat
 	Neglected []FeedStat
+	// QuietAfterDays is QuietAfter expressed in days, for the "gone quiet"
+	// copy — computed here rather than hardcoded in the template so the two
+	// never drift apart if QuietAfter changes.
+	QuietAfterDays int
 }
 
 // buildStatsView assembles the reading-stats page from its three inputs: the
@@ -394,10 +404,11 @@ func buildStatsView(days []DayStat, feeds []FeedStat, counts Counts) statsView {
 			{Label: "Starred", Value: strconv.Itoa(counts.Starred)},
 			{Label: "Articles stored", Value: strconv.Itoa(articles)},
 		},
-		Fetched: buildChart("Articles arriving", days, func(d DayStat) int { return d.Fetched }),
-		Read:    buildChart("Articles read", days, func(d DayStat) int { return d.Read }),
-		Backlog: buildLine("Backlog", days, func(d DayStat) int { return d.Backlog }),
-		Feeds:   feeds,
+		Fetched:        buildChart("Articles arriving", days, func(d DayStat) int { return d.Fetched }),
+		Read:           buildChart("Articles read", days, func(d DayStat) int { return d.Read }),
+		Backlog:        buildLine("Backlog", days, func(d DayStat) int { return d.Backlog }),
+		Feeds:          feeds,
+		QuietAfterDays: int(QuietAfter / (24 * time.Hour)),
 	}
 	for _, f := range feeds {
 		if f.Quiet() {

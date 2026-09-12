@@ -61,6 +61,9 @@
 			     aria-label="{{.Data.Backlog.Title}}, currently {{.Data.Backlog.Last}}" preserveAspectRatio="none">
 				<polyline points="{{.Data.Backlog.Points}}" class="reader-line"/>
 			</svg>
+			{{if .Data.Backlog.Reconstructed}}
+			<p class="dim">Part of this period was reconstructed from surviving articles.</p>
+			{{end}}
 		{{end}}
 	</figure>
 
@@ -103,7 +106,7 @@
 
 	{{if .Data.Quiet}}
 	<h2>Gone quiet</h2>
-	<p class="dim">Nothing published in over {{"60"}} days.</p>
+	<p class="dim">Nothing published in over {{.Data.QuietAfterDays}} days.</p>
 	<ul>
 		{{range .Data.Quiet}}
 		<li>{{.Name}}</li>
