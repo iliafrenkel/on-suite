@@ -1012,6 +1012,7 @@ func TestTopToolbarHoldsFiltersAndMenu(t *testing.T) {
 
 	for _, id := range []string{"add-feed-dialog", "new-folder-dialog", "import-opml-dialog", "shortcuts-dialog"} {
 		doc.MustHave("[data-open-dialog=" + id + "]")
+		doc.MustHave("#" + id)
 	}
 	exportLink := doc.MustHave(".reader-menu-list a[href=\"/reader/opml\"]")
 	if _, ok := htmlassert.Attr(exportLink, "download"); !ok {
@@ -1638,11 +1639,11 @@ func TestChooserPreservesTheSelectedFolder(t *testing.T) {
 	}
 }
 
-// TestCandidatesDialogCarriesReopenFlag pins the one case where a dialog
-// must reopen itself after an outerHTML swap: when the subscribe flow comes
-// back with more than one candidate feed, #add-feed-dialog must carry
-// data-reopen so reader.js's htmx:afterSwap handler calls showModal() again
-// — otherwise the chooser would render into a closed, invisible dialog.
+// TestCandidatesDialogCarriesReopenFlag pins the negative case: a plain
+// validation error (no discovery candidates involved) must NOT set
+// data-reopen on #add-feed-dialog. data-reopen is reserved for the
+// .Candidates chooser case — see
+// TestCandidatesDialogReopensWhenMultipleFeedsFound for the positive case.
 func TestCandidatesDialogCarriesReopenFlag(t *testing.T) {
 	s := newServer(t)
 	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {"not a url"}})
@@ -1650,6 +1651,47 @@ func TestCandidatesDialogCarriesReopenFlag(t *testing.T) {
 	dialog := doc.MustHave("#add-feed-dialog")
 	if _, ok := htmlassert.Attr(dialog, "data-reopen"); ok {
 		t.Error("add-feed-dialog carries data-reopen on a plain validation error, want it reserved for .Candidates only")
+	}
+}
+
+// TestCandidatesDialogReopensWhenMultipleFeedsFound pins the positive
+// counterpart to TestCandidatesDialogCarriesReopenFlag: when the subscribe
+// flow comes back with more than one candidate feed, #add-feed-dialog must
+// carry data-reopen so reader.js's htmx:afterSwap handler calls
+// showModal() again — otherwise the chooser would render into a closed,
+// invisible dialog.
+func TestCandidatesDialogReopensWhenMultipleFeedsFound(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	mux := http.NewServeMux()
+	origin := httptest.NewServer(mux)
+	defer origin.Close()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head>` +
+			`<link rel="alternate" type="application/rss+xml" title="Posts" href="` + origin.URL + `/feed1.xml">` +
+			`<link rel="alternate" type="application/atom+xml" title="Comments" href="` + origin.URL + `/feed2.xml">` +
+			`</head><body>hi</body></html>`))
+	})
+	mux.HandleFunc("/feed1.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	})
+	mux.HandleFunc("/feed2.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	})
+	a.AllowPrivateFetchesForTest()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	dialog := doc.MustHave("#add-feed-dialog")
+	if _, ok := htmlassert.Attr(dialog, "data-reopen"); !ok {
+		t.Error("add-feed-dialog missing data-reopen when subscribe found multiple candidate feeds")
 	}
 }
 

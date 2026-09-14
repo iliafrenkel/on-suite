@@ -1903,18 +1903,6 @@ kbd {
 	letter-spacing: 0.04em;
 }
 
-.reader-filters {
-	display: flex;
-	gap: var(--s-2);
-	font-size: var(--fs-xs);
-}
-
-.reader-filters .is-active {
-	color: var(--c-text);
-	font-weight: 600;
-	text-decoration: none;
-}
-
 .reader-search {
 	flex: 1 1 100%;
 	margin: 0;

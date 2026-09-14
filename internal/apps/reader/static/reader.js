@@ -369,8 +369,21 @@
 		var ok = document.getElementById("reader-confirm-ok");
 		if (messageEl) messageEl.textContent = msg;
 
+		// Bind onOk through an AbortController tied to the dialog's own `close`
+		// event, which fires no matter how the dialog closes (Confirm, Cancel,
+		// or Escape). Without this, cancelling or pressing Escape left onOk
+		// attached forever, so confirming a *later*, unrelated action would
+		// also re-fire the earlier, declined one.
+		var controller = new AbortController();
+		dialog.addEventListener(
+			"close",
+			function () {
+				controller.abort();
+			},
+			{ once: true }
+		);
+
 		function onOk() {
-			ok.removeEventListener("click", onOk);
 			dialog.close();
 			// The `true` here is htmx's "skip the confirm gate" flag: without it
 			// issueRequest() re-enters the same htmx:confirm check and htmx falls
@@ -378,7 +391,7 @@
 			// right after ours.
 			e.detail.issueRequest(true);
 		}
-		ok.addEventListener("click", onOk, { once: true });
+		ok.addEventListener("click", onOk, { signal: controller.signal });
 		dialog.showModal();
 	});
 })();
