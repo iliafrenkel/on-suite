@@ -106,6 +106,7 @@ func NewRenderer(opts Options) (*Renderer, error) {
 		funcs: template.FuncMap{
 			"asset":     opts.AssetURL,
 			"icon":      ui.IconFor,
+			"ticon":     ui.ToolbarIconFor,
 			"dict":      dict,
 			"csrfField": func() string { return opts.CSRFFieldName },
 		},

@@ -370,6 +370,12 @@ kbd {
 }
 
 main { padding: var(--s-6) var(--s-5); max-width: var(--content-max); margin: 0 auto; width: 100%; }
+/* Reader's three-pane layout is the one page in the suite that wants edge-to-
+ * edge width rather than a comfortable reading measure — the whole point of
+ * the resizable layout is that the reading pane gets whatever room the
+ * viewport actually has. main's own reading-width cap would otherwise clip
+ * every pane to 75rem regardless of how wide the window is. */
+main:has(.reader-panes) { max-width: none; padding: 0;}
 .measure { max-width: var(--measure); }
 
 /* ---- Forms and buttons ------------------------------------------------- */
@@ -1646,13 +1652,189 @@ kbd {
  * The offset is .app-shell's own 8rem of header/footer chrome plus main's
  * vertical padding, kept in a variable because that padding shrinks below
  * 640px. */
+/* .reader-panes is now the outer vertical stack: the top toolbar, an
+ * optional error/notice banner, then .reader-panes-row — the three-pane
+ * flex row that used to be this element's own CSS grid. Splitting it this
+ * way (rather than making .reader-panes itself the flex row) is what lets
+ * the toolbar/banner sit above the resizable row without becoming grid/flex
+ * items of it themselves. */
 .reader-panes {
-	--reader-chrome: calc(8rem + var(--s-6) * 2);
-	display: grid;
-	grid-template-columns: minmax(12rem, 16rem) minmax(16rem, 24rem) 1fr;
+	--reader-chrome: calc(4rem + var(--s-6) * 2);
+	display: flex;
+	flex-direction: column;
 	height: calc(100vh - var(--reader-chrome));
 	min-height: 0;
 	overflow: hidden;
+}
+
+.reader-panes-row {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.reader-tree {
+	flex: 0 0 var(--reader-tree-w, 15rem);
+}
+
+.reader-list {
+	flex: 0 0 var(--reader-list-w, 20rem);
+}
+
+.reader-article {
+	flex: 1 1 auto;
+}
+
+/* The draggable divider between two panes. A thin hit target (8px) with a
+ * narrower visible bar (2px) centered in it, the same "generous hit target,
+ * modest visible line" trick a native OS window splitter uses. */
+.pane-gutter {
+	flex: 0 0 8px;
+	position: relative;
+	cursor: col-resize;
+	background: transparent;
+}
+
+.pane-gutter::after {
+	content: "";
+	position: absolute;
+	inset: 0 3px;
+	border-radius: 2px;
+	background: var(--c-bg);
+}
+
+.pane-gutter:hover::after,
+.pane-gutter.is-dragging::after {
+	background: var(--c-accent);
+}
+
+.pane-gutter:focus-visible {
+	outline: var(--ring);
+	outline-offset: -2px;
+}
+
+.reader-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2);
+	padding: var(--s-2) var(--s-3);
+	border-bottom: 1px solid var(--c-border);
+}
+
+.reader-filters {
+	display: flex;
+	gap: var(--s-1);
+}
+
+.reader-banner {
+	padding: 0 var(--s-3);
+	padding-top: var(--s-2);
+}
+
+.reader-banner .notice {
+	margin-bottom: var(--s-2);
+}
+
+.reader-menu {
+	position: relative;
+}
+
+.reader-menu-list {
+	position: absolute;
+	right: 0;
+	top: calc(100% + var(--s-1));
+	z-index: 20;
+	display: flex;
+	flex-direction: column;
+	min-width: 12rem;
+	padding: var(--s-1);
+	background: var(--c-bg);
+	border: var(--border);
+	border-radius: var(--radius);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.reader-menu-list[hidden] {
+	display: none;
+}
+
+.reader-menu-item,
+.reader-menu-item-form {
+	display: block;
+}
+
+.reader-menu-item {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	width: 100%;
+	padding: var(--s-2);
+	border: none;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--c-text);
+	font-size: var(--fs-sm);
+	text-decoration: none;
+	text-align: left;
+	cursor: pointer;
+}
+
+.reader-menu-item:hover {
+	background: var(--c-bg-subtle);
+}
+
+.reader-list-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2);
+	padding: var(--s-2) var(--s-3) 0;
+}
+
+.reader-mark-all {
+	flex: none;
+}
+
+.reader-mark-all button {
+	white-space: nowrap;
+}
+
+.reader-dialog {
+	position: relative;
+	width: min(28rem, calc(100vw - var(--s-6)));
+	padding: var(--s-4);
+	border: var(--border);
+	border-radius: var(--radius);
+	color: var(--c-text);
+	background: var(--c-bg);
+}
+
+.reader-dialog::backdrop {
+	background: rgba(0, 0, 0, 0.35);
+}
+
+.reader-dialog h2 {
+	margin-top: 0;
+}
+
+.reader-dialog-close {
+	position: absolute;
+	top: var(--s-3);
+	right: var(--s-3);
+	padding: var(--s-1);
+	border: none;
+	background: none;
+	color: var(--c-text-dim);
+	cursor: pointer;
+}
+
+.dialog-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--s-2);
+	margin-top: var(--s-4);
 }
 
 .reader-tree,
@@ -1666,7 +1848,7 @@ kbd {
 
 .reader-tree,
 .reader-list {
-	background: var(--c-bg-subtle);
+	background: var(--c-bg);
 	border-right: 1px solid var(--c-border);
 }
 
@@ -1674,7 +1856,6 @@ kbd {
 	background: var(--c-bg);
 }
 
-.reader-nodes,
 .reader-rows,
 .reader-tree ul {
 	list-style: none;
@@ -1682,8 +1863,33 @@ kbd {
 	padding: 0;
 }
 
+/* All/Starred moved out of the tree into a pair of toolbar-btn-nav buttons
+ * (see .reader-tree-nav below) — same look as Notes' Due/Archive/Export row,
+ * .toolbar-btn/.toolbar-btn-active/.toolbar-due-badge already do the rest. */
+.reader-tree-nav {
+	display: flex;
+	gap: var(--s-1);
+	padding: var(--s-1) 0 var(--s-2);
+	border-bottom: 1px solid var(--c-border);
+	margin-bottom: var(--s-2);
+}
+
+/* Folder header row: position: relative anchors .reader-folder-menu
+ * (below), and it shares the same plain-text/hover treatment as .reader-sub
+ * via the selector list two rules down, since a <summary> is not an <a>. */
+.reader-folder {
+	position: relative;
+}
+
+.reader-folder > summary {
+	border-radius: 3px;
+	padding: var(--s-1) var(--s-2);
+	cursor: pointer;
+}
+
 /* A count sits at the end of its row, quiet enough to scan past when it does
- * not matter. */
+ * not matter. The per-row "..." menu (an .outline-menu — see PATTERNS.md)
+ * comes last and stays out of the way until hovered/focused. */
 .reader-node,
 .reader-sub {
 	display: flex;
@@ -1700,6 +1906,11 @@ kbd {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	/* A bare <a> here (unlike .reader-row's, whose text lives in explicitly
+	 * colored .title/.meta spans) has nothing else setting its color, so the
+	 * browser default link blue/underline was showing through. */
+	color: inherit;
+	text-decoration: none;
 }
 
 .reader-count {
@@ -1709,9 +1920,66 @@ kbd {
 	font-variant-numeric: tabular-nums;
 }
 
+.reader-node:hover,
+.reader-sub:hover,
+.reader-folder > summary:hover {
+	background: var(--c-bg-subtle);
+}
+
 .reader-node.is-active,
 .reader-sub.is-active {
 	background: var(--c-accent-bg);
+}
+
+/* The per-row menu toggle stays invisible until its row is hovered/focused,
+ * exactly like Notes' outline rows (.outline-row) — reader's own rows just
+ * are not .outline-row, so that existing rule doesn't reach them. Touch
+ * devices have no hover to reveal it with, so it stays visible there. */
+.reader-node .outline-menu-toggle,
+.reader-sub .outline-menu-toggle,
+.reader-folder .outline-menu-toggle {
+	opacity: 0;
+}
+
+.reader-node:hover .outline-menu-toggle,
+.reader-node:focus-within .outline-menu-toggle,
+.reader-sub:hover .outline-menu-toggle,
+.reader-sub:focus-within .outline-menu-toggle,
+.reader-folder:hover .outline-menu-toggle,
+.reader-folder:focus-within .outline-menu-toggle,
+.reader-folder-menu[open] .outline-menu-toggle {
+	opacity: 1;
+}
+
+@media (hover: none) {
+	.reader-node .outline-menu-toggle,
+	.reader-sub .outline-menu-toggle,
+	.reader-folder .outline-menu-toggle {
+		opacity: 1;
+	}
+}
+
+/* The folder row's own menu is a sibling of <summary>, not nested inside it
+ * (nesting it would make the menu's own click also toggle the folder open/
+ * closed, since <summary> owns the native disclosure). Positioned over the
+ * folder header's line instead, anchored by .reader-folder's own
+ * position: relative above. */
+.reader-folder-menu {
+	position: absolute;
+	top: var(--s-1);
+	right: var(--s-2);
+}
+
+/* Notes' shared .outline-menu-list defaults to left:0 and a 16rem min-width,
+ * sized for its own wider outline column with more than one action in the
+ * list. Reader's tree pane can be dragged much narrower, and every reader
+ * menu here holds exactly one item — left-anchored and that wide, it forced
+ * the whole pane into horizontal scroll. Right-anchored and narrower keeps
+ * it inside the pane regardless of width. */
+.reader-row-menu-list {
+	left: auto;
+	right: 0;
+	min-width: 8rem;
 }
 
 /* A failing feed is one of the few things that genuinely needs attention, so
@@ -1737,25 +2005,30 @@ kbd {
 	letter-spacing: 0.04em;
 }
 
-.reader-filters {
-	display: flex;
-	gap: var(--s-2);
-	font-size: var(--fs-xs);
-}
-
-.reader-filters .is-active {
-	color: var(--c-text);
-	font-weight: 600;
-	text-decoration: none;
-}
-
+/* Moved into .reader-list-toolbar, alongside Mark all read — narrowed to
+ * Notes' fixed-width search box (.notes-search) instead of spanning the full
+ * pane width it used when it was its own row under the (now hidden) title. */
+/* flex: 1 1 auto plus min-width: 0 (not the flex default auto, which floors
+ * at content width) is what lets this shrink on a narrow toolbar rather than
+ * force .reader-mark-all's own label to wrap instead — confirmed at 375px:
+ * without min-width: 0 here, "Mark all read" wrapped onto three lines
+ * because the fixed-width search box refused to give up any space. */
 .reader-search {
-	flex: 1 1 100%;
+	flex: 1 1 auto;
+	min-width: 0;
 	margin: 0;
 }
 
 .reader-search input {
+	font: inherit;
+	font-size: var(--fs-sm);
+	color: var(--c-text);
+	background: var(--c-bg-subtle);
+	border: solid 1px var(--c-border);
+	border-radius: var(--radius);
+	padding: var(--s-1) var(--s-2);
 	width: 100%;
+	max-width: 12rem;
 	box-sizing: border-box;
 }
 
@@ -1764,6 +2037,15 @@ kbd {
 	padding: var(--s-2);
 	border-radius: 3px;
 	text-decoration: none;
+}
+
+.reader-row a:hover {
+	background: var(--c-bg-subtle);
+}
+
+.reader-row.is-active a,
+.reader-row.is-active a:hover {
+	background: var(--c-accent-bg);
 }
 
 .reader-row .title {
@@ -1834,8 +2116,14 @@ kbd {
 /* Two panes: the tree stays, and the article takes the list's column once
  * something is open. */
 @media (max-width: 900px) {
-	.reader-panes {
-		grid-template-columns: minmax(10rem, 14rem) 1fr;
+	.pane-gutter {
+		display: none;
+	}
+	.reader-tree {
+		flex: 0 0 12rem;
+	}
+	.reader-list {
+		flex: 1 1 auto;
 	}
 	.reader-article {
 		display: none;
@@ -1864,7 +2152,9 @@ kbd {
 	.reader-panes {
 		/* main's padding drops to --s-4 at this width. */
 		--reader-chrome: calc(8rem + var(--s-4) * 2);
-		grid-template-columns: 1fr;
+	}
+	.reader-tree {
+		flex: 1 1 100%;
 	}
 	/* One pane means the list is hidden until it is drilled into. Without
 	 * this the "back to the feed tree" state showed the tree with the list

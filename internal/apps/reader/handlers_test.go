@@ -993,6 +993,129 @@ func TestPlainGetOfAnItemRendersAWholePage(t *testing.T) {
 	}
 }
 
+// TestOpenArticleRowIsMarkedActive pins the UI-polish list-row highlight
+// (issue: "selected item should be highlighted"): the open article's own
+// <li class="reader-row"> carries is-active, and no other row does.
+func TestOpenArticleRowIsMarkedActive(t *testing.T) {
+	s := newServer(t)
+	_, items := seedOne(t, s, "a", "b")
+
+	// filter=all: opening the item marks it read, and the default filter is
+	// Unread (ParseFilter's zero value) — without this, the very row this
+	// test wants to inspect would no longer be in the list at all.
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID)+"?filter=all", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET item = %d: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	// htmlassert's selector engine matches only one qualifier per segment
+	// (see the same note on TestPaneGuttersSitBetweenTheThreePanes), so
+	// ".reader-row.is-active" (two classes on one token) isn't expressible —
+	// check each row's class attribute directly instead.
+	rows := doc.QueryAll(".reader-row")
+	if len(rows) != 2 {
+		t.Fatalf("seeded 2 items but found %d .reader-row elements", len(rows))
+	}
+	activeCount := 0
+	for _, row := range rows {
+		if class, _ := htmlassert.Attr(row, "class"); strings.Contains(class, "is-active") {
+			activeCount++
+		}
+	}
+	if activeCount != 1 {
+		t.Fatalf("%d of %d rows carry is-active, want exactly 1", activeCount, len(rows))
+	}
+	link := doc.Query(".is-active a")
+	if link == nil {
+		t.Fatal("the active row has no link to inspect")
+	}
+	href, _ := htmlassert.Attr(link, "href")
+	if !strings.Contains(href, "/reader/item/"+itoa(items[0].ID)) {
+		t.Errorf("the active row links to %q, want the opened item %d", href, items[0].ID)
+	}
+}
+
+// TestTopToolbarHoldsFiltersAndMenu pins the UI-polish move of the filter
+// pills out of the list pane's own header into a page-level toolbar, and
+// the new "..." overflow menu that replaced the tree pane's always-visible
+// forms/links.
+func TestTopToolbarHoldsFiltersAndMenu(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/reader/")
+
+	doc.MustHave(".reader-toolbar")
+	doc.MustHave(".reader-toolbar .reader-filters")
+	// Unread is the default filter (see ParseFilter in store.go): the whole
+	// point of the read model is that the list answers "what is new".
+	active := doc.MustHave(".reader-filters a[aria-current=page]")
+	if got := strings.TrimSpace(htmlassert.Text(active)); got != "Unread" {
+		t.Errorf("default active filter = %q, want Unread", got)
+	}
+
+	for _, id := range []string{"add-feed-dialog", "new-folder-dialog", "import-opml-dialog", "shortcuts-dialog"} {
+		doc.MustHave("[data-open-dialog=" + id + "]")
+		doc.MustHave("#" + id)
+	}
+	exportLink := doc.MustHave(".reader-menu-list a[href=\"/reader/opml\"]")
+	if _, ok := htmlassert.Attr(exportLink, "download"); !ok {
+		t.Error("export-OPML menu link is missing the download attribute")
+	}
+	doc.MustHave(".reader-menu-list a[href=\"/reader/stats\"]")
+}
+
+// TestTreeNavHoldsAllAndStarredAsToolbarButtons pins the UI-polish move of
+// the All/Starred pseudo-nodes out of the tree's row list into a pair of
+// toolbar-btn-nav buttons (same look as Notes' Due/Archive/Export row),
+// keeping the same #reader-count-all/#reader-count-starred ids the OOB swap
+// ("counts-oob") still targets.
+func TestTreeNavHoldsAllAndStarredAsToolbarButtons(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/reader/")
+
+	doc.MustHave(".reader-tree-nav")
+	// htmlassert's selector engine matches only one qualifier per segment (a
+	// tag plus a single class/id/attribute — see the same note on
+	// TestPaneGuttersSitBetweenTheThreePanes), so tag+class+attribute
+	// together in one token isn't expressible; check the class attribute
+	// directly on the href-matched link instead.
+	allLink := doc.MustHave(".reader-tree-nav a[href=\"/reader/\"]")
+	if got, _ := htmlassert.Attr(allLink, "class"); !strings.Contains(got, "toolbar-btn-nav") || !strings.Contains(got, "toolbar-btn-active") {
+		t.Errorf("All nav button class = %q, want toolbar-btn-nav and toolbar-btn-active (default scope)", got)
+	}
+	doc.MustHave(".reader-tree-nav a[href=\"/reader/starred\"]")
+	// htmlassert's selector engine matches only one qualifier per segment (see
+	// the same note on TestPaneGuttersSitBetweenTheThreePanes below), so class
+	// and id can't be combined in one selector here — check the class
+	// attribute directly on the id-matched element instead.
+	for _, id := range []string{"reader-count-all", "reader-count-starred"} {
+		badge := doc.MustHave("#" + id)
+		if got, _ := htmlassert.Attr(badge, "class"); got != "toolbar-due-badge" {
+			t.Errorf("#%s class = %q, want toolbar-due-badge", id, got)
+		}
+	}
+}
+
+// TestPaneGuttersSitBetweenTheThreePanes pins the resizable-layout markup:
+// two gutters, each naming which pane it resizes, both inside the new
+// #reader-panes-row wrapper alongside the three panes themselves.
+func TestPaneGuttersSitBetweenTheThreePanes(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/reader/")
+
+	doc.MustHave("#reader-panes-row")
+	if got := len(doc.QueryAll("#reader-panes-row .pane-gutter")); got != 2 {
+		t.Fatalf("#reader-panes-row has %d .pane-gutter elements, want 2", got)
+	}
+	// htmlassert's selector engine matches only one qualifier per segment, so
+	// a compound class+attribute selector isn't expressible; the attribute
+	// alone is specific enough (only one gutter names "tree").
+	treeGutter := doc.MustHave(`[data-gutter-for="tree"]`)
+	if got, _ := htmlassert.Attr(treeGutter, "role"); got != "separator" {
+		t.Errorf("tree gutter role = %q, want separator", got)
+	}
+}
+
 // A plain form POST — no htmx — must come back as a whole page, not a bare
 // fragment. This is the other half of giving the forms method/action: the
 // non-JS path has to land somewhere usable.
@@ -1588,6 +1711,62 @@ func TestChooserPreservesTheSelectedFolder(t *testing.T) {
 	sub := tree.Folders[0].Subs[0]
 	if sub.FolderID == nil || *sub.FolderID != folder.ID {
 		t.Errorf("subscription FolderID = %v, want %d", sub.FolderID, folder.ID)
+	}
+}
+
+// TestCandidatesDialogCarriesReopenFlag pins the negative case: a plain
+// validation error (no discovery candidates involved) must NOT set
+// data-reopen on #add-feed-dialog. data-reopen is reserved for the
+// .Candidates chooser case — see
+// TestCandidatesDialogReopensWhenMultipleFeedsFound for the positive case.
+func TestCandidatesDialogCarriesReopenFlag(t *testing.T) {
+	s := newServer(t)
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {"not a url"}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	dialog := doc.MustHave("#add-feed-dialog")
+	if _, ok := htmlassert.Attr(dialog, "data-reopen"); ok {
+		t.Error("add-feed-dialog carries data-reopen on a plain validation error, want it reserved for .Candidates only")
+	}
+}
+
+// TestCandidatesDialogReopensWhenMultipleFeedsFound pins the positive
+// counterpart to TestCandidatesDialogCarriesReopenFlag: when the subscribe
+// flow comes back with more than one candidate feed, #add-feed-dialog must
+// carry data-reopen so reader.js's htmx:afterSwap handler calls
+// showModal() again — otherwise the chooser would render into a closed,
+// invisible dialog.
+func TestCandidatesDialogReopensWhenMultipleFeedsFound(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	mux := http.NewServeMux()
+	origin := httptest.NewServer(mux)
+	defer origin.Close()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head>` +
+			`<link rel="alternate" type="application/rss+xml" title="Posts" href="` + origin.URL + `/feed1.xml">` +
+			`<link rel="alternate" type="application/atom+xml" title="Comments" href="` + origin.URL + `/feed2.xml">` +
+			`</head><body>hi</body></html>`))
+	})
+	mux.HandleFunc("/feed1.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	})
+	mux.HandleFunc("/feed2.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	})
+	a.AllowPrivateFetchesForTest()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	dialog := doc.MustHave("#add-feed-dialog")
+	if _, ok := htmlassert.Attr(dialog, "data-reopen"); !ok {
+		t.Error("add-feed-dialog missing data-reopen when subscribe found multiple candidate feeds")
 	}
 }
 

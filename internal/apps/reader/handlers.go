@@ -304,6 +304,11 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	}
 	listTitleStr := listTitle(lc.Scope, sub)
 	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID), search)
+	// The currently-open article's row is highlighted in the list, the same
+	// way the tree highlights the selected feed — real item ids start at 1,
+	// so 0 (art's zero value when nothing is open) correctly highlights
+	// nothing.
+	view.List.ActiveID = art.ID
 
 	// The shell crumb and <title> follow the selected feed, not the generic
 	// "All articles" list heading — ScopeAll keeps the app's own name so the
