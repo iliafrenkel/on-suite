@@ -286,4 +286,99 @@
 			prefetched = Object.create(null);
 		}
 	});
+
+	// --- Overflow menu ---------------------------------------------------
+
+	function closeMenu(menu) {
+		var list = menu.querySelector(".reader-menu-list");
+		var toggle = menu.querySelector(".reader-menu-toggle");
+		if (list) list.hidden = true;
+		if (toggle) toggle.setAttribute("aria-expanded", "false");
+	}
+
+	document.addEventListener("click", function (e) {
+		var toggle = e.target.closest(".reader-menu-toggle");
+		document.querySelectorAll(".reader-menu").forEach(function (menu) {
+			if (toggle && menu.contains(toggle)) {
+				var list = menu.querySelector(".reader-menu-list");
+				var wasOpen = !list.hidden;
+				closeMenu(menu);
+				if (!wasOpen) {
+					list.hidden = false;
+					toggle.setAttribute("aria-expanded", "true");
+				}
+			} else if (!menu.contains(e.target)) {
+				closeMenu(menu);
+			}
+		});
+	});
+
+	// Escape closes an open overflow menu. (Dialogs already close on Escape
+	// natively via <dialog>; this menu is a plain div, so it needs its own
+	// handler.)
+	document.addEventListener("keydown", function (e) {
+		if (e.key !== "Escape") return;
+		document.querySelectorAll(".reader-menu").forEach(function (menu) {
+			var list = menu.querySelector(".reader-menu-list");
+			if (list && !list.hidden) closeMenu(menu);
+		});
+	});
+
+	// --- Dialogs -----------------------------------------------------------
+
+	document.addEventListener("click", function (e) {
+		var opener = e.target.closest("[data-open-dialog]");
+		if (opener) {
+			var dialog = document.getElementById(opener.getAttribute("data-open-dialog"));
+			if (dialog && typeof dialog.showModal === "function") dialog.showModal();
+			return;
+		}
+		var closer = e.target.closest(".reader-dialog-cancel, .reader-dialog-close");
+		if (closer) {
+			var open = closer.closest("dialog");
+			if (open) open.close();
+		}
+	});
+
+	function reopenFlaggedDialogs() {
+		document.querySelectorAll("dialog[data-reopen]").forEach(function (d) {
+			if (typeof d.showModal === "function") d.showModal();
+		});
+	}
+	document.addEventListener("DOMContentLoaded", reopenFlaggedDialogs);
+	document.addEventListener("htmx:afterSwap", function (e) {
+		if (e.target && e.target.id === "reader-panes") reopenFlaggedDialogs();
+	});
+
+	// --- Confirm dialog, replacing window.confirm for hx-confirm ----------
+	//
+	// Scoped to #reader-panes so this never intercepts confirm() elsewhere in
+	// the suite - theme.js's own data-confirm gate (internal/ui/static/theme.js)
+	// is untouched and keeps handling every other app.
+	document.addEventListener("htmx:confirm", function (e) {
+		var panes = document.getElementById("reader-panes");
+		if (!panes || !e.target || !panes.contains(e.target)) return;
+		var msg = e.target.getAttribute("hx-confirm");
+		if (!msg) return;
+
+		var dialog = document.getElementById("reader-confirm-dialog");
+		if (!dialog || typeof dialog.showModal !== "function") return; // let htmx fall back to window.confirm
+
+		e.preventDefault();
+		var messageEl = document.getElementById("reader-confirm-message");
+		var ok = document.getElementById("reader-confirm-ok");
+		if (messageEl) messageEl.textContent = msg;
+
+		function onOk() {
+			ok.removeEventListener("click", onOk);
+			dialog.close();
+			// The `true` here is htmx's "skip the confirm gate" flag: without it
+			// issueRequest() re-enters the same htmx:confirm check and htmx falls
+			// back to its own window.confirm(), popping a second native dialog
+			// right after ours.
+			e.detail.issueRequest(true);
+		}
+		ok.addEventListener("click", onOk, { once: true });
+		dialog.showModal();
+	});
 })();
