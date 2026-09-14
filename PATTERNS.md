@@ -124,3 +124,23 @@ canonical example's own comment, not here.
   non-obvious choice, not just a restatement of what the code does.
   Canonical: pervasive — e.g. `internal/apps/notes/tree.go`'s `Ops` doc
   comment, `internal/apps/notes/store.go`'s `Outline`.
+
+- **JS-driven "..." overflow menu with native `<dialog>` popups** — reach for
+  this when a toolbar has more actions than fit inline: a `.reader-menu`
+  toggle button plus a `.reader-menu-list` shown/hidden via the `hidden`
+  attribute (not `display:none` in CSS, so no extra selector is needed to
+  reverse it), and destructive `hx-confirm` buttons routed through a single
+  shared `<dialog>` via `htmx:confirm` instead of `window.confirm`. Canonical:
+  `internal/apps/reader/templates/panes.partial.html`'s `reader-toolbar`/
+  `reader-dialogs` defines and `internal/apps/reader/static/reader.js`'s
+  menu/dialog sections.
+
+- **Draggable, persisted, keyboard-accessible pane gutters** — reach for this
+  for any multi-pane layout that wants real resize-by-drag: a flex row with
+  `role="separator"` gutter elements between panes, widths held as CSS custom
+  properties set by JS (never inline `flex-basis` directly, so a CSS default
+  via `var(--x, fallback)` still applies before JS runs), persisted to
+  `localStorage`, and cleared below the layout's own mobile breakpoint via a
+  `matchMedia` listener rather than left to silently misapply. Canonical:
+  `internal/ui/static/app.css`'s `.reader-panes-row`/`.pane-gutter` and
+  `internal/apps/reader/static/reader.js`'s resizable-panes section.
