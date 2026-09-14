@@ -1750,6 +1750,10 @@ kbd {
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
+.reader-menu-list[hidden] {
+	display: none;
+}
+
 .reader-menu-item,
 .reader-menu-item-form {
 	display: block;
