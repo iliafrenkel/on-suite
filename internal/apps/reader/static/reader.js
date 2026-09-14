@@ -241,11 +241,21 @@
 	}
 
 	document.addEventListener("DOMContentLoaded", initResizablePanes);
-	// A panes-wide swap (subscribing, refreshing, deleting) replaces
-	// #reader-panes-row outerHTML-style, wiping any inline custom
-	// properties JS had set — without re-running this, the layout would
-	// silently fall back to the CSS defaults on the very next feed click.
-	document.addEventListener("htmx:afterSwap", function (e) {
+	// A panes-wide swap (subscribing, refreshing, deleting, or just picking a
+	// feed or filter) replaces #reader-panes-row outerHTML-style, wiping any
+	// inline custom properties JS had set — without re-running this, the
+	// layout would silently fall back to the CSS defaults on the very next
+	// feed click.
+	//
+	// This has to run on "htmx:afterSettle", not "htmx:afterSwap": htmx's
+	// own settle step reverts "style" (along with class/width/height, see
+	// htmx.config.attributesToSettle) on the swapped element back to
+	// whatever the pre-swap element had, which is nothing — so a width set
+	// during afterSwap survives only until settle finishes a moment later
+	// and silently wipes it. Confirmed live: with this on afterSwap, a
+	// dragged width reappeared for a single frame and then reset the first
+	// time any filter/feed link was clicked.
+	document.addEventListener("htmx:afterSettle", function (e) {
 		if (e.target && e.target.id === "reader-panes") initResizablePanes();
 	});
 
