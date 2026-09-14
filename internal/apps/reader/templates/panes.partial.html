@@ -53,18 +53,79 @@
 
 {{define "panes"}}
 <div class="reader-panes" id="reader-panes">
-  {{/* Two hidden checkboxes drive the narrow-viewport drill-down, the same
-       technique #paste-detail-open uses. They are siblings of the three panes
-       so the CSS can reach the panes with ~, and the server sets them: a list
-       shown checks the first, an open article the second. The back labels
-       inside the list and article panes uncheck them again. */}}
-  <input type="checkbox" id="reader-list-open" class="visually-hidden"
-         {{if .List.Selected}}checked{{end}} aria-hidden="true" tabindex="-1">
-  <input type="checkbox" id="reader-article-open" class="visually-hidden"
-         {{if .Article.Selected}}checked{{end}} aria-hidden="true" tabindex="-1">
-  {{template "tree" .}}
-  {{template "list" .List}}
-  {{template "article" .Article}}
+  {{template "reader-toolbar" .List}}
+  {{if or .Error .Notice}}
+  <div class="reader-banner">
+    {{if .Error}}<p class="notice notice-error" role="alert">{{.Error}}</p>{{end}}
+    {{if .Notice}}<p class="notice" role="status">{{.Notice}}</p>{{end}}
+  </div>
+  {{end}}
+  <div class="reader-panes-row" id="reader-panes-row">
+    {{/* Two hidden checkboxes drive the narrow-viewport drill-down, the same
+         technique #paste-detail-open uses. They are siblings of the three
+         panes (and now the gutters) so the CSS can reach the panes with ~,
+         and the server sets them: a list shown checks the first, an open
+         article the second. The back labels inside the list and article
+         panes uncheck them again. */}}
+    <input type="checkbox" id="reader-list-open" class="visually-hidden"
+           {{if .List.Selected}}checked{{end}} aria-hidden="true" tabindex="-1">
+    <input type="checkbox" id="reader-article-open" class="visually-hidden"
+           {{if .Article.Selected}}checked{{end}} aria-hidden="true" tabindex="-1">
+    {{template "tree" .}}
+    <div class="pane-gutter" data-gutter-for="tree" role="separator"
+         aria-orientation="vertical" aria-label="Resize the feed list" tabindex="0"></div>
+    {{template "list" .List}}
+    <div class="pane-gutter" data-gutter-for="list" role="separator"
+         aria-orientation="vertical" aria-label="Resize the reading pane" tabindex="0"></div>
+    {{template "article" .Article}}
+  </div>
+  {{template "reader-dialogs" .}}
+</div>
+{{end}}
+
+{{/* reader-toolbar spans the full width above all three panes: the filter
+     pills (moved here from the list pane's own header — same classes, same
+     .Filter/.BasePath/.Query logic, just relocated) on the left, and the
+     "..." overflow menu — everything that used to be always-visible forms
+     and links inside the tree pane — on the right. Receives .List
+     (listView) as its root, exactly as "list" itself does, since every
+     field it needs (BasePath, Filter, Query, Shell, Scope, SubID) already
+     lives there. */}}
+{{define "reader-toolbar"}}
+<div class="reader-toolbar">
+  <nav class="reader-filters" aria-label="Filter">
+    <a href="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}"
+       hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+       class="toolbar-btn{{if eq .Filter "unread"}} toolbar-btn-active{{end}}"
+       {{if eq .Filter "unread"}}aria-current="page"{{end}}>Unread</a>
+    <a href="{{.BasePath}}?filter=starred{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=starred{{if .Query}}&amp;q={{.Query}}{{end}}"
+       hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+       class="toolbar-btn{{if eq .Filter "starred"}} toolbar-btn-active{{end}}"
+       {{if eq .Filter "starred"}}aria-current="page"{{end}}>Starred</a>
+    <a href="{{.BasePath}}?filter=all{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=all{{if .Query}}&amp;q={{.Query}}{{end}}"
+       hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+       class="toolbar-btn{{if eq .Filter "all"}} toolbar-btn-active{{end}}"
+       {{if eq .Filter "all"}}aria-current="page"{{end}}>All</a>
+  </nav>
+  <div class="reader-menu">
+    <button type="button" class="toolbar-btn reader-menu-toggle" aria-haspopup="true"
+            aria-expanded="false" aria-controls="reader-menu-list">
+      {{ticon "more"}}<span class="visually-hidden">More actions</span>
+    </button>
+    <div class="reader-menu-list" id="reader-menu-list" role="menu" hidden>
+      <button type="button" class="reader-menu-item" data-open-dialog="add-feed-dialog" role="menuitem">{{ticon "plus"}}Add feed…</button>
+      <button type="button" class="reader-menu-item" data-open-dialog="import-opml-dialog" role="menuitem">{{ticon "import"}}Import OPML…</button>
+      <a class="reader-menu-item" href="/reader/opml" download role="menuitem">{{ticon "export"}}Export OPML</a>
+      <button type="button" class="reader-menu-item" data-open-dialog="new-folder-dialog" role="menuitem">{{ticon "folder"}}New folder…</button>
+      <form method="post" action="/reader/refresh" class="reader-menu-item-form"
+            hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">
+        {{template "reader-ctx" .}}
+        <button type="submit" class="reader-menu-item reader-refresh" role="menuitem">{{ticon "refresh"}}Refresh all feeds</button>
+      </form>
+      <a class="reader-menu-item" href="/reader/stats" role="menuitem">{{ticon "stats"}}Reading stats</a>
+      <button type="button" class="reader-menu-item" data-open-dialog="shortcuts-dialog" role="menuitem">{{ticon "keyboard"}}Keyboard shortcuts</button>
+    </div>
+  </div>
 </div>
 {{end}}
 
@@ -223,20 +284,6 @@
   <header class="reader-list-head">
     {{template "reader-back" (dict "For" "reader-list-open" "Label" "Feeds")}}
     <h2>{{.Title}}</h2>
-    <nav class="reader-filters" aria-label="Filter">
-      <a href="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}"
-         hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
-         class="{{if eq .Filter "unread"}}is-active{{end}}"
-         {{if eq .Filter "unread"}}aria-current="page"{{end}}>Unread</a>
-      <a href="{{.BasePath}}?filter=starred{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=starred{{if .Query}}&amp;q={{.Query}}{{end}}"
-         hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
-         class="{{if eq .Filter "starred"}}is-active{{end}}"
-         {{if eq .Filter "starred"}}aria-current="page"{{end}}>Starred</a>
-      <a href="{{.BasePath}}?filter=all{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=all{{if .Query}}&amp;q={{.Query}}{{end}}"
-         hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
-         class="{{if eq .Filter "all"}}is-active{{end}}"
-         {{if eq .Filter "all"}}aria-current="page"{{end}}>All</a>
-    </nav>
     {{/* The live filter. Mirrors ON Notes' notes-search-box
          (internal/apps/notes/templates/toolbar.partial.html) — copied rather
          than shared because apps never import each other, per PATTERNS.md.

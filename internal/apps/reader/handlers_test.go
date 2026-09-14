@@ -993,6 +993,45 @@ func TestPlainGetOfAnItemRendersAWholePage(t *testing.T) {
 	}
 }
 
+// TestTopToolbarHoldsFiltersAndMenu pins the UI-polish move of the filter
+// pills out of the list pane's own header into a page-level toolbar, and
+// the new "..." overflow menu that replaced the tree pane's always-visible
+// forms/links.
+func TestTopToolbarHoldsFiltersAndMenu(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/reader/")
+
+	doc.MustHave(".reader-toolbar")
+	doc.MustHave(".reader-toolbar .reader-filters")
+	active := doc.MustHave(".reader-filters a[aria-current=page]")
+	if got := strings.TrimSpace(htmlassert.Text(active)); got != "All" {
+		t.Errorf("default active filter = %q, want All", got)
+	}
+
+	for _, id := range []string{"add-feed-dialog", "new-folder-dialog", "import-opml-dialog", "shortcuts-dialog"} {
+		doc.MustHave("[data-open-dialog=" + id + "]")
+	}
+	doc.MustHave(".reader-menu-list a[href=\"/reader/opml\"][download]")
+	doc.MustHave(".reader-menu-list a[href=\"/reader/stats\"]")
+}
+
+// TestPaneGuttersSitBetweenTheThreePanes pins the resizable-layout markup:
+// two gutters, each naming which pane it resizes, both inside the new
+// #reader-panes-row wrapper alongside the three panes themselves.
+func TestPaneGuttersSitBetweenTheThreePanes(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/reader/")
+
+	doc.MustHave("#reader-panes-row")
+	if got := len(doc.QueryAll("#reader-panes-row .pane-gutter")); got != 2 {
+		t.Fatalf("#reader-panes-row has %d .pane-gutter elements, want 2", got)
+	}
+	treeGutter := doc.MustHave(`.pane-gutter[data-gutter-for="tree"]`)
+	if got, _ := htmlassert.Attr(treeGutter, "role"); got != "separator" {
+		t.Errorf("tree gutter role = %q, want separator", got)
+	}
+}
+
 // A plain form POST — no htmx — must come back as a whole page, not a bare
 // fragment. This is the other half of giving the forms method/action: the
 // non-JS path has to land somewhere usable.
