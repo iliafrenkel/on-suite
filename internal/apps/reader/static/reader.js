@@ -117,6 +117,138 @@
 		if (toggle) toggle.textContent = "Mark unread";
 	}
 
+	// --- Resizable panes -----------------------------------------------
+	//
+	// Desktop-only (matches the 900px breakpoint where the CSS collapses to
+	// two panes): below it the flex/gutter layout stops being interactive
+	// and the CSS in app.css takes over pane widths entirely, so any stored
+	// inline custom property has to be cleared rather than just ignored —
+	// otherwise a width dragged wide on desktop would also apply the moment
+	// the media query's own rules stopped overriding it.
+	var PANE_STORE_KEY = "reader.paneWidths";
+	var PANE_MIN = { tree: 10, list: 14 }; // rem
+	var PANE_MAX = { tree: 24, list: 32 }; // rem
+	var DESKTOP_QUERY = window.matchMedia("(min-width: 901px)");
+
+	function remToPx(rem) {
+		var rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+		return rem * rootPx;
+	}
+
+	function loadPaneWidths() {
+		try {
+			var raw = window.localStorage.getItem(PANE_STORE_KEY);
+			if (!raw) return null;
+			var parsed = JSON.parse(raw);
+			if (typeof parsed.tree !== "number" || typeof parsed.list !== "number") return null;
+			return parsed;
+		} catch (e) {
+			return null;
+		}
+	}
+
+	function savePaneWidths(widths) {
+		try {
+			window.localStorage.setItem(PANE_STORE_KEY, JSON.stringify(widths));
+		} catch (e) {
+			// Private browsing or a full quota: the drag itself still worked,
+			// it just won't be remembered next time.
+		}
+	}
+
+	function currentPaneWidths(row) {
+		var tree = row.querySelector(".reader-tree");
+		var list = row.querySelector(".reader-list");
+		return {
+			tree: Math.round(tree.getBoundingClientRect().width),
+			list: Math.round(list.getBoundingClientRect().width),
+		};
+	}
+
+	function syncPaneWidths() {
+		var row = document.getElementById("reader-panes-row");
+		if (!row) return;
+		if (!DESKTOP_QUERY.matches) {
+			row.style.removeProperty("--reader-tree-w");
+			row.style.removeProperty("--reader-list-w");
+			return;
+		}
+		var stored = loadPaneWidths();
+		if (!stored) return;
+		row.style.setProperty("--reader-tree-w", stored.tree + "px");
+		row.style.setProperty("--reader-list-w", stored.list + "px");
+	}
+
+	function clampPx(rawPx, key) {
+		var min = remToPx(PANE_MIN[key]);
+		var max = remToPx(PANE_MAX[key]);
+		return Math.min(max, Math.max(min, rawPx));
+	}
+
+	function initResizablePanes() {
+		var row = document.getElementById("reader-panes-row");
+		if (!row) return;
+		syncPaneWidths();
+
+		var dragging = null; // { key: "tree"|"list", startX, startWidth }
+
+		function setWidth(key, px) {
+			row.style.setProperty("--reader-" + key + "-w", clampPx(px, key) + "px");
+		}
+
+		row.querySelectorAll(".pane-gutter").forEach(function (gutter) {
+			var key = gutter.getAttribute("data-gutter-for");
+
+			gutter.addEventListener("pointerdown", function (e) {
+				if (!DESKTOP_QUERY.matches) return;
+				var target = row.querySelector(key === "tree" ? ".reader-tree" : ".reader-list");
+				dragging = { key: key, startX: e.clientX, startWidth: target.getBoundingClientRect().width };
+				gutter.classList.add("is-dragging");
+				gutter.setPointerCapture(e.pointerId);
+				e.preventDefault();
+			});
+
+			// The WAI-ARIA "separator" keyboard pattern: arrow keys nudge the
+			// pane a fixed step, for anyone who cannot drag with a pointer.
+			gutter.addEventListener("keydown", function (e) {
+				if (!DESKTOP_QUERY.matches) return;
+				if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+				var target = row.querySelector(key === "tree" ? ".reader-tree" : ".reader-list");
+				var step = e.key === "ArrowRight" ? 16 : -16;
+				setWidth(key, target.getBoundingClientRect().width + step);
+				savePaneWidths(currentPaneWidths(row));
+				e.preventDefault();
+			});
+		});
+
+		row.addEventListener("pointermove", function (e) {
+			if (!dragging) return;
+			setWidth(dragging.key, dragging.startWidth + (e.clientX - dragging.startX));
+		});
+
+		function endDrag() {
+			if (!dragging) return;
+			dragging = null;
+			row.querySelectorAll(".pane-gutter.is-dragging").forEach(function (g) {
+				g.classList.remove("is-dragging");
+			});
+			savePaneWidths(currentPaneWidths(row));
+		}
+		row.addEventListener("pointerup", endDrag);
+		row.addEventListener("pointercancel", endDrag);
+
+		DESKTOP_QUERY.addEventListener("change", syncPaneWidths);
+	}
+
+	document.addEventListener("DOMContentLoaded", initResizablePanes);
+	// A panes-wide swap (subscribing, refreshing, deleting) replaces
+	// #reader-panes-row outerHTML-style, wiping any inline custom
+	// properties JS had set — without re-running this, the layout would
+	// silently fall back to the CSS defaults on the very next feed click.
+	document.addEventListener("htmx:afterSwap", function (e) {
+		if (e.target && e.target.id === "reader-panes") initResizablePanes();
+	});
+
 	function press(selector) {
 		var el = document.querySelector(selector);
 		if (el) el.click();
