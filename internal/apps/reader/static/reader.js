@@ -175,8 +175,8 @@
 		}
 		var stored = loadPaneWidths();
 		if (!stored) return;
-		row.style.setProperty("--reader-tree-w", stored.tree + "px");
-		row.style.setProperty("--reader-list-w", stored.list + "px");
+		row.style.setProperty("--reader-tree-w", clampPx(stored.tree, "tree") + "px");
+		row.style.setProperty("--reader-list-w", clampPx(stored.list, "list") + "px");
 	}
 
 	function clampPx(rawPx, key) {
