@@ -35,10 +35,16 @@
      when the count is zero, because "counts-oob" swaps these by id: an element
      that disappears at zero cannot be swapped back, so the last read in a feed
      would leave a stale number on screen forever. Empty is the same thing
-     visually — .reader-count has no box of its own — so a column of noughts is
-     still avoided; the conditional just moved inside the span.
-     ID is the stable target, N the count, OOB set only by "counts-oob". */}}
-{{define "count-span"}}<span class="reader-count" id="{{.ID}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{if .N}}{{.N}}{{end}}</span>{{end}}
+     visually — neither .reader-count nor .toolbar-due-badge has a box of its
+     own at zero — so a column of noughts is still avoided; the conditional
+     just moved inside the span.
+     ID is the stable target, N the count, OOB set only by "counts-oob". Class
+     defaults to "reader-count" (every per-feed count); the All/Starred nav
+     buttons pass "toolbar-due-badge" instead, to look like Notes' Due count —
+     both call sites (here and "counts-oob") have to agree, since an OOB swap
+     that changed the class would visually flip the badge back on every read
+     or star. */}}
+{{define "count-span"}}<span class="{{if .Class}}{{.Class}}{{else}}reader-count{{end}}" id="{{.ID}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{if .N}}{{.N}}{{end}}</span>{{end}}
 
 {{/* counts-oob is the sidebar's numbers and nothing else, for the article
      response. Reading or starring changes an unread count, but it changes
@@ -49,7 +55,7 @@
      the single most frequent action in the app. So only the spans move.
      It reads the same Counts "tree" does, so there is still one source for
      every number. */}}
-{{define "counts-oob"}}{{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total "OOB" true)}}{{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred "OOB" true)}}{{range .Tree.Folders}}{{range .Subs}}{{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID) "OOB" true)}}{{end}}{{end}}{{range .Tree.Root}}{{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID) "OOB" true)}}{{end}}{{end}}
+{{define "counts-oob"}}{{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total "OOB" true "Class" "toolbar-due-badge")}}{{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred "OOB" true "Class" "toolbar-due-badge")}}{{range .Tree.Folders}}{{range .Subs}}{{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID) "OOB" true)}}{{end}}{{end}}{{range .Tree.Root}}{{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID) "OOB" true)}}{{end}}{{end}}
 
 {{define "panes"}}
 <div class="reader-panes" id="reader-panes">
@@ -136,18 +142,22 @@
      sets for htmx. */}}
 {{define "tree"}}
 <nav class="reader-tree" id="reader-tree" aria-label="Feeds">
-  <ul class="reader-nodes">
-    <li class="reader-node{{if eq .Tree.Scope "all"}} is-active{{end}}">
-      <a href="/reader/" hx-get="/reader/" hx-target="#reader-panes"
-         hx-swap="outerHTML" hx-push-url="true">All</a>
-      {{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total)}}
-    </li>
-    <li class="reader-node{{if eq .Tree.Scope "starred"}} is-active{{end}}">
-      <a href="/reader/starred" hx-get="/reader/starred" hx-target="#reader-panes"
-         hx-swap="outerHTML" hx-push-url="true">Starred</a>
-      {{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred)}}
-    </li>
-  </ul>
+  {{/* All/Starred as a pair of nav buttons, not tree rows — same look as
+       Notes' Due/Archive/Export row (a .toolbar-btn.toolbar-btn-nav with an
+       icon and a count badge), since they are page-level scopes rather than
+       items in the feed/folder tree below. */}}
+  <div class="reader-tree-nav">
+    <a href="/reader/" hx-get="/reader/" hx-target="#reader-panes"
+       hx-swap="outerHTML" hx-push-url="true"
+       class="toolbar-btn toolbar-btn-nav{{if eq .Tree.Scope "all"}} toolbar-btn-active{{end}}">
+      {{ticon "inbox"}}All{{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total "Class" "toolbar-due-badge")}}
+    </a>
+    <a href="/reader/starred" hx-get="/reader/starred" hx-target="#reader-panes"
+       hx-swap="outerHTML" hx-push-url="true"
+       class="toolbar-btn toolbar-btn-nav{{if eq .Tree.Scope "starred"}} toolbar-btn-active{{end}}">
+      {{ticon "star-filled"}}Starred{{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred "Class" "toolbar-due-badge")}}
+    </a>
+  </div>
 
   {{/* Empty means no subscriptions anywhere — a folder with nothing in it
        still deserves to be shown (and deletable), so the folder/root loops
@@ -156,33 +166,48 @@
     <p class="empty">No feeds yet. Paste a feed address above to start.</p>
   {{end}}
   {{range .Tree.Folders}}
-    <details open>
+    <details open class="reader-folder">
       <summary>{{.Name}}</summary>
-      {{/* The hx-* attributes stay on the button and the method/action on the
-           form around it: htmx posts from the button, including the enclosing
-           form's fields, and with JavaScript off the same button submits the
-           form the ordinary way. The form sits outside <summary> because a
-           click inside one toggles the <details>. */}}
-      <form method="post" action="/reader/folder/{{.ID}}/delete">
-        {{template "reader-ctx" $.List}}
-        <button type="submit" class="reader-folder-delete"
-                hx-post="/reader/folder/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
-                hx-confirm="Delete the folder &#8220;{{.Name}}&#8221;? Its feeds move to the root."
-                aria-label="Delete folder {{.Name}}">Delete</button>
-      </form>
+      {{/* The per-row "..." menu is a sibling of <summary>, not nested inside
+           it: <summary> is what <details> uses as its native toggle, so a
+           menu nested inside it would also collapse/expand the folder on
+           every click. Positioned to sit visually beside the folder name via
+           .reader-folder-menu (app.css), not by DOM nesting. Reuses Notes'
+           .outline-menu chrome verbatim — see PATTERNS.md — since it already
+           lives in the shared internal/ui/static layer. The hx-* attributes
+           stay on the button and the method/action on the form around it:
+           htmx posts from the button, and with JavaScript off the same
+           button submits the form the ordinary way. */}}
+      <details class="outline-menu reader-folder-menu">
+        <summary class="outline-menu-toggle quiet" aria-label="Folder actions">{{ticon "more"}}</summary>
+        <div class="outline-menu-list reader-row-menu-list">
+          <form method="post" action="/reader/folder/{{.ID}}/delete">
+            {{template "reader-ctx" $.List}}
+            <button type="submit" class="outline-menu-delete reader-folder-delete"
+                    hx-post="/reader/folder/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                    hx-confirm="Delete the folder &#8220;{{.Name}}&#8221;? Its feeds move to the root."
+                    aria-label="Delete folder {{.Name}}">Delete</button>
+          </form>
+        </div>
+      </details>
       <ul>
         {{range .Subs}}
           <li class="reader-sub{{if eq .ID $.Tree.ActiveID}} is-active{{end}}">
             <a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
                  hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
             {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID))}}
-            <form method="post" action="/reader/sub/{{.ID}}/delete">
-              {{template "reader-ctx" $.List}}
-              <button type="submit" class="reader-sub-delete"
-                      hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
-                      hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
-                      aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
-            </form>
+            <details class="outline-menu">
+              <summary class="outline-menu-toggle quiet" aria-label="Feed actions">{{ticon "more"}}</summary>
+              <div class="outline-menu-list reader-row-menu-list">
+                <form method="post" action="/reader/sub/{{.ID}}/delete">
+                  {{template "reader-ctx" $.List}}
+                  <button type="submit" class="outline-menu-delete reader-sub-delete"
+                          hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                          hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
+                          aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
+                </form>
+              </div>
+            </details>
           </li>
         {{end}}
       </ul>
@@ -194,13 +219,18 @@
         <a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
              hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
         {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID))}}
-        <form method="post" action="/reader/sub/{{.ID}}/delete">
-          {{template "reader-ctx" $.List}}
-          <button type="submit" class="reader-sub-delete"
-                  hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
-                  hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
-                  aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
-        </form>
+        <details class="outline-menu">
+          <summary class="outline-menu-toggle quiet" aria-label="Feed actions">{{ticon "more"}}</summary>
+          <div class="outline-menu-list reader-row-menu-list">
+            <form method="post" action="/reader/sub/{{.ID}}/delete">
+              {{template "reader-ctx" $.List}}
+              <button type="submit" class="outline-menu-delete reader-sub-delete"
+                      hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                      hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
+                      aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
+            </form>
+          </div>
+        </details>
       </li>
     {{end}}
   </ul>
@@ -315,15 +345,6 @@
 {{define "list"}}
 <section class="reader-list" id="reader-list" aria-label="Articles">
   <div class="reader-list-toolbar">
-    <form class="reader-mark-all" method="post" action="/reader/read-all"
-          hx-post="/reader/read-all" hx-target="#reader-panes" hx-swap="outerHTML">
-      {{template "reader-ctx" .}}
-      <button type="submit" class="toolbar-btn">{{ticon "check"}}Mark all read</button>
-    </form>
-  </div>
-  <header class="reader-list-head">
-    {{template "reader-back" (dict "For" "reader-list-open" "Label" "Feeds")}}
-    <h2>{{.Title}}</h2>
     {{/* The live filter. Mirrors ON Notes' notes-search-box
          (internal/apps/notes/templates/toolbar.partial.html) — copied rather
          than shared because apps never import each other, per PATTERNS.md.
@@ -332,7 +353,9 @@
          button would walk backwards through half-typed queries instead of
          returning where the reader was before searching. "search" as a trigger
          fires the moment the native clear (x) button is used, rather than
-         waiting out the debounce. */}}
+         waiting out the debounce. Moved into this toolbar (was its own row
+         under the title) and narrowed to match Notes' fixed-width search box,
+         rather than spanning the full pane width. */}}
     <form method="get" action="{{.BasePath}}" class="reader-search" role="search">
       <input type="hidden" name="filter" value="{{.Filter}}">
       <input type="search" id="reader-search-input" name="q" value="{{.Query}}"
@@ -342,12 +365,25 @@
              hx-trigger="input changed delay:300ms, search"
              hx-replace-url="true">
     </form>
+    <form class="reader-mark-all" method="post" action="/reader/read-all"
+          hx-post="/reader/read-all" hx-target="#reader-panes" hx-swap="outerHTML">
+      {{template "reader-ctx" .}}
+      <button type="submit" class="toolbar-btn">{{ticon "check"}}Mark all read</button>
+    </form>
+  </div>
+  <header class="reader-list-head">
+    {{template "reader-back" (dict "For" "reader-list-open" "Label" "Feeds")}}
+    {{/* Visually hidden, not removed: the selected feed is already shown in
+         the tree pane, so repeating its name here added nothing to look at —
+         but a screen-reader user swapping lists still needs an announcement
+         of which list is now showing. */}}
+    <h2 class="visually-hidden">{{.Title}}</h2>
   </header>
 
   {{if .EmptyState}}<p class="empty">{{.EmptyState}}</p>{{end}}
   <ul class="reader-rows">
     {{range .Items}}
-      <li class="reader-row{{if .Read}} is-read{{end}}{{if .Starred}} is-starred{{end}}">
+      <li class="reader-row{{if .Read}} is-read{{end}}{{if .Starred}} is-starred{{end}}{{if eq .ID $.ActiveID}} is-active{{end}}">
         {{/* The list context rides in the query string so the tree redraw the
              article response carries can keep the selection where it is. */}}
         <a href="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}{{if $.Query}}&q={{$.Query}}{{end}}"

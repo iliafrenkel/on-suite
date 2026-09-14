@@ -46,17 +46,24 @@
 		});
 	}
 
+	// Shared by keyboard nav (select, below) and the plain-click handler
+	// further down: exactly one row is ever "is-active" — the currently open
+	// article — whichever of the two last touched it.
+	function highlightRow(link) {
+		rows().forEach(function (a) {
+			a.parentElement.classList.remove("is-active");
+		});
+		if (link) link.parentElement.classList.add("is-active");
+	}
+
 	function select(index) {
 		var all = rows();
 		if (!all.length) return;
 		if (index < 0) index = 0;
 		if (index >= all.length) index = all.length - 1;
 
-		all.forEach(function (a) {
-			a.parentElement.classList.remove("is-active");
-		});
 		var link = all[index];
-		link.parentElement.classList.add("is-active");
+		highlightRow(link);
 		link.scrollIntoView({ block: "nearest" });
 		link.focus({ preventScroll: true });
 
@@ -287,6 +294,19 @@
 			default: return;
 		}
 		e.preventDefault();
+	});
+
+	// A plain mouse click bypasses select()/move() entirely — those are what
+	// keep .is-active in sync for j/k navigation. Without this, clicking a
+	// different article with the mouse left whichever row a keyboard press
+	// had last highlighted (or nothing at all) still marked, instead of the
+	// row someone actually just opened. The server also renders the truly-
+	// open article's row as is-active on a full list render (indexView.List
+	// .ActiveID); this covers the same-list, mouse-driven case that render
+	// never sees.
+	document.addEventListener("click", function (e) {
+		var link = e.target.closest(".reader-row a");
+		if (link) highlightRow(link);
 	});
 
 	// A new list means new ids: anything prefetched against the old one is

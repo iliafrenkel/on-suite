@@ -993,6 +993,49 @@ func TestPlainGetOfAnItemRendersAWholePage(t *testing.T) {
 	}
 }
 
+// TestOpenArticleRowIsMarkedActive pins the UI-polish list-row highlight
+// (issue: "selected item should be highlighted"): the open article's own
+// <li class="reader-row"> carries is-active, and no other row does.
+func TestOpenArticleRowIsMarkedActive(t *testing.T) {
+	s := newServer(t)
+	_, items := seedOne(t, s, "a", "b")
+
+	// filter=all: opening the item marks it read, and the default filter is
+	// Unread (ParseFilter's zero value) — without this, the very row this
+	// test wants to inspect would no longer be in the list at all.
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID)+"?filter=all", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET item = %d: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	// htmlassert's selector engine matches only one qualifier per segment
+	// (see the same note on TestPaneGuttersSitBetweenTheThreePanes), so
+	// ".reader-row.is-active" (two classes on one token) isn't expressible —
+	// check each row's class attribute directly instead.
+	rows := doc.QueryAll(".reader-row")
+	if len(rows) != 2 {
+		t.Fatalf("seeded 2 items but found %d .reader-row elements", len(rows))
+	}
+	activeCount := 0
+	for _, row := range rows {
+		if class, _ := htmlassert.Attr(row, "class"); strings.Contains(class, "is-active") {
+			activeCount++
+		}
+	}
+	if activeCount != 1 {
+		t.Fatalf("%d of %d rows carry is-active, want exactly 1", activeCount, len(rows))
+	}
+	link := doc.Query(".is-active a")
+	if link == nil {
+		t.Fatal("the active row has no link to inspect")
+	}
+	href, _ := htmlassert.Attr(link, "href")
+	if !strings.Contains(href, "/reader/item/"+itoa(items[0].ID)) {
+		t.Errorf("the active row links to %q, want the opened item %d", href, items[0].ID)
+	}
+}
+
 // TestTopToolbarHoldsFiltersAndMenu pins the UI-polish move of the filter
 // pills out of the list pane's own header into a page-level toolbar, and
 // the new "..." overflow menu that replaced the tree pane's always-visible
@@ -1019,6 +1062,38 @@ func TestTopToolbarHoldsFiltersAndMenu(t *testing.T) {
 		t.Error("export-OPML menu link is missing the download attribute")
 	}
 	doc.MustHave(".reader-menu-list a[href=\"/reader/stats\"]")
+}
+
+// TestTreeNavHoldsAllAndStarredAsToolbarButtons pins the UI-polish move of
+// the All/Starred pseudo-nodes out of the tree's row list into a pair of
+// toolbar-btn-nav buttons (same look as Notes' Due/Archive/Export row),
+// keeping the same #reader-count-all/#reader-count-starred ids the OOB swap
+// ("counts-oob") still targets.
+func TestTreeNavHoldsAllAndStarredAsToolbarButtons(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/reader/")
+
+	doc.MustHave(".reader-tree-nav")
+	// htmlassert's selector engine matches only one qualifier per segment (a
+	// tag plus a single class/id/attribute — see the same note on
+	// TestPaneGuttersSitBetweenTheThreePanes), so tag+class+attribute
+	// together in one token isn't expressible; check the class attribute
+	// directly on the href-matched link instead.
+	allLink := doc.MustHave(".reader-tree-nav a[href=\"/reader/\"]")
+	if got, _ := htmlassert.Attr(allLink, "class"); !strings.Contains(got, "toolbar-btn-nav") || !strings.Contains(got, "toolbar-btn-active") {
+		t.Errorf("All nav button class = %q, want toolbar-btn-nav and toolbar-btn-active (default scope)", got)
+	}
+	doc.MustHave(".reader-tree-nav a[href=\"/reader/starred\"]")
+	// htmlassert's selector engine matches only one qualifier per segment (see
+	// the same note on TestPaneGuttersSitBetweenTheThreePanes below), so class
+	// and id can't be combined in one selector here — check the class
+	// attribute directly on the id-matched element instead.
+	for _, id := range []string{"reader-count-all", "reader-count-starred"} {
+		badge := doc.MustHave("#" + id)
+		if got, _ := htmlassert.Attr(badge, "class"); got != "toolbar-due-badge" {
+			t.Errorf("#%s class = %q, want toolbar-due-badge", id, got)
+		}
+	}
 }
 
 // TestPaneGuttersSitBetweenTheThreePanes pins the resizable-layout markup:
