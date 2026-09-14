@@ -87,17 +87,13 @@ A new toolbar spanning the full width above all three panes, in
 
 ## 4. Middle toolbar (above the article list pane)
 
-Per-feed/list-scoped actions, replacing controls currently stuffed into the
-tree pane:
-
-- Folder-select control (moved here from the tree pane, since it scopes
-  which article list is showing)
-- Refresh this feed
-- Mark all read (for the current list)
-
-Compact `.toolbar-btn` icon buttons, label text hidden below a width
-breakpoint (icon-only), matching Notes' existing toolbar-button responsive
-behaviour.
+Only one action here: **Mark all read** for the currently open list, restyled
+as a compact `.toolbar-btn` icon button. (Two ideas originally listed here —
+a folder-select and a per-feed refresh — don't correspond to anything in the
+codebase: the only folder-select today picks a folder for a *new*
+subscription, and there is no per-feed refresh route, only
+`POST /reader/refresh`, which refreshes every due feed. Corrected 2026-09-14,
+before implementation, once the mismatch surfaced during planning.)
 
 ## 5. Dialogs
 
