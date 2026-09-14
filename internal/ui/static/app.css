@@ -370,6 +370,12 @@ kbd {
 }
 
 main { padding: var(--s-6) var(--s-5); max-width: var(--content-max); margin: 0 auto; width: 100%; }
+/* Reader's three-pane layout is the one page in the suite that wants edge-to-
+ * edge width rather than a comfortable reading measure — the whole point of
+ * the resizable layout is that the reading pane gets whatever room the
+ * viewport actually has. main's own reading-width cap would otherwise clip
+ * every pane to 75rem regardless of how wide the window is. */
+main:has(.reader-panes) { max-width: none; }
 .measure { max-width: var(--measure); }
 
 /* ---- Forms and buttons ------------------------------------------------- */
