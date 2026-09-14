@@ -1646,13 +1646,175 @@ kbd {
  * The offset is .app-shell's own 8rem of header/footer chrome plus main's
  * vertical padding, kept in a variable because that padding shrinks below
  * 640px. */
+/* .reader-panes is now the outer vertical stack: the top toolbar, an
+ * optional error/notice banner, then .reader-panes-row — the three-pane
+ * flex row that used to be this element's own CSS grid. Splitting it this
+ * way (rather than making .reader-panes itself the flex row) is what lets
+ * the toolbar/banner sit above the resizable row without becoming grid/flex
+ * items of it themselves. */
 .reader-panes {
 	--reader-chrome: calc(8rem + var(--s-6) * 2);
-	display: grid;
-	grid-template-columns: minmax(12rem, 16rem) minmax(16rem, 24rem) 1fr;
+	display: flex;
+	flex-direction: column;
 	height: calc(100vh - var(--reader-chrome));
 	min-height: 0;
 	overflow: hidden;
+}
+
+.reader-panes-row {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.reader-tree {
+	flex: 0 0 var(--reader-tree-w, 15rem);
+}
+
+.reader-list {
+	flex: 0 0 var(--reader-list-w, 20rem);
+}
+
+.reader-article {
+	flex: 1 1 auto;
+}
+
+/* The draggable divider between two panes. A thin hit target (8px) with a
+ * narrower visible bar (2px) centered in it, the same "generous hit target,
+ * modest visible line" trick a native OS window splitter uses. */
+.pane-gutter {
+	flex: 0 0 8px;
+	position: relative;
+	cursor: col-resize;
+	background: transparent;
+}
+
+.pane-gutter::after {
+	content: "";
+	position: absolute;
+	inset: 0 3px;
+	border-radius: 2px;
+	background: var(--c-border);
+}
+
+.pane-gutter:hover::after,
+.pane-gutter.is-dragging::after {
+	background: var(--c-accent);
+}
+
+.pane-gutter:focus-visible {
+	outline: var(--ring);
+	outline-offset: -2px;
+}
+
+.reader-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2);
+	padding: var(--s-2) var(--s-3);
+	border-bottom: 1px solid var(--c-border);
+}
+
+.reader-filters {
+	display: flex;
+	gap: var(--s-1);
+}
+
+.reader-banner {
+	padding: 0 var(--s-3);
+	padding-top: var(--s-2);
+}
+
+.reader-banner .notice {
+	margin-bottom: var(--s-2);
+}
+
+.reader-menu {
+	position: relative;
+}
+
+.reader-menu-list {
+	position: absolute;
+	right: 0;
+	top: calc(100% + var(--s-1));
+	z-index: 20;
+	display: flex;
+	flex-direction: column;
+	min-width: 12rem;
+	padding: var(--s-1);
+	background: var(--c-bg);
+	border: var(--border);
+	border-radius: var(--radius);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.reader-menu-item,
+.reader-menu-item-form {
+	display: block;
+}
+
+.reader-menu-item {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	width: 100%;
+	padding: var(--s-2);
+	border: none;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--c-text);
+	font-size: var(--fs-sm);
+	text-decoration: none;
+	text-align: left;
+	cursor: pointer;
+}
+
+.reader-menu-item:hover {
+	background: var(--c-bg-subtle);
+}
+
+.reader-list-toolbar {
+	display: flex;
+	justify-content: flex-end;
+	padding: var(--s-2) var(--s-3) 0;
+}
+
+.reader-dialog {
+	position: relative;
+	width: min(28rem, calc(100vw - var(--s-6)));
+	padding: var(--s-4);
+	border: var(--border);
+	border-radius: var(--radius);
+	color: var(--c-text);
+	background: var(--c-bg);
+}
+
+.reader-dialog::backdrop {
+	background: rgba(0, 0, 0, 0.35);
+}
+
+.reader-dialog h2 {
+	margin-top: 0;
+}
+
+.reader-dialog-close {
+	position: absolute;
+	top: var(--s-3);
+	right: var(--s-3);
+	padding: var(--s-1);
+	border: none;
+	background: none;
+	color: var(--c-text-dim);
+	cursor: pointer;
+}
+
+.dialog-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--s-2);
+	margin-top: var(--s-4);
 }
 
 .reader-tree,
@@ -1834,8 +1996,14 @@ kbd {
 /* Two panes: the tree stays, and the article takes the list's column once
  * something is open. */
 @media (max-width: 900px) {
-	.reader-panes {
-		grid-template-columns: minmax(10rem, 14rem) 1fr;
+	.pane-gutter {
+		display: none;
+	}
+	.reader-tree {
+		flex: 0 0 12rem;
+	}
+	.reader-list {
+		flex: 1 1 auto;
 	}
 	.reader-article {
 		display: none;
@@ -1864,7 +2032,9 @@ kbd {
 	.reader-panes {
 		/* main's padding drops to --s-4 at this width. */
 		--reader-chrome: calc(8rem + var(--s-4) * 2);
-		grid-template-columns: 1fr;
+	}
+	.reader-tree {
+		flex: 1 1 100%;
 	}
 	/* One pane means the list is hidden until it is drilled into. Without
 	 * this the "back to the feed tree" state showed the tree with the list
