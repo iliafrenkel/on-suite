@@ -114,9 +114,13 @@ and the HTMX attributes to fire on confirm, so this isn't four bespoke
 confirm dialogs.
 
 All dialogs open via `showModal()` and close via a Cancel button, an "X", the
-Escape key (native `<dialog>` behaviour), or successful submission (HTMX
-`hx-on::after-request` closes the dialog on success, leaves it open with
-inline errors on failure).
+Escape key (native `<dialog>` behaviour), or form submission. Amended
+2026-09-14, after implementation, to match the built behaviour: every dialog
+form's HTMX request does a full `outerHTML` swap of `#reader-panes`, and that
+swap closes the dialog on *any* response, success or failure — there is no
+inline-error, stays-open state. Validation errors and notices instead surface
+as a page-level `.reader-banner` (`.Error` / `.Notice` set on the view model
+and rendered above the panes), the same banner used for non-dialog actions.
 
 ## 6. Icons
 
