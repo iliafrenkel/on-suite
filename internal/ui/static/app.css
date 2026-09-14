@@ -375,7 +375,7 @@ main { padding: var(--s-6) var(--s-5); max-width: var(--content-max); margin: 0 
  * the resizable layout is that the reading pane gets whatever room the
  * viewport actually has. main's own reading-width cap would otherwise clip
  * every pane to 75rem regardless of how wide the window is. */
-main:has(.reader-panes) { max-width: none; }
+main:has(.reader-panes) { max-width: none; padding: none;}
 .measure { max-width: var(--measure); }
 
 /* ---- Forms and buttons ------------------------------------------------- */
@@ -1701,7 +1701,7 @@ kbd {
 	position: absolute;
 	inset: 0 3px;
 	border-radius: 2px;
-	background: var(--c-border);
+	background: var(--c-bg);
 }
 
 .pane-gutter:hover::after,
@@ -1838,7 +1838,7 @@ kbd {
 
 .reader-tree,
 .reader-list {
-	background: var(--c-bg-subtle);
+	background: var(--c-bg);
 	border-right: 1px solid var(--c-border);
 }
 
