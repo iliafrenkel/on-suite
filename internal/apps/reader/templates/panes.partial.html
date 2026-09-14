@@ -314,6 +314,13 @@
 
 {{define "list"}}
 <section class="reader-list" id="reader-list" aria-label="Articles">
+  <div class="reader-list-toolbar">
+    <form class="reader-mark-all" method="post" action="/reader/read-all"
+          hx-post="/reader/read-all" hx-target="#reader-panes" hx-swap="outerHTML">
+      {{template "reader-ctx" .}}
+      <button type="submit" class="toolbar-btn">{{ticon "check"}}Mark all read</button>
+    </form>
+  </div>
   <header class="reader-list-head">
     {{template "reader-back" (dict "For" "reader-list-open" "Label" "Feeds")}}
     <h2>{{.Title}}</h2>
@@ -334,11 +341,6 @@
              hx-include="closest form"
              hx-trigger="input changed delay:300ms, search"
              hx-replace-url="true">
-    </form>
-    <form class="reader-mark-all" method="post" action="/reader/read-all"
-          hx-post="/reader/read-all" hx-target="#reader-panes" hx-swap="outerHTML">
-      {{template "reader-ctx" .}}
-      <button type="submit">Mark all read</button>
     </form>
   </header>
 
@@ -379,33 +381,33 @@
     <h1>{{.Title}}</h1>
     <p class="meta">{{.FeedName}}{{if .Author}} · {{.Author}}{{end}}{{if .When}} · {{.When}}{{end}}</p>
     <div class="reader-actions">
-      {{if .URL}}<a class="button" href="{{.URL}}" target="_blank" rel="noopener noreferrer">Open original</a>{{end}}
+      {{if .URL}}<a class="toolbar-btn" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{ticon "external"}}Open original</a>{{end}}
       <form method="post" action="/reader/item/{{.ID}}/star"
             hx-post="/reader/item/{{.ID}}/star" hx-target="#reader-article" hx-swap="outerHTML">
         {{template "reader-ctx" .}}
-        <button type="submit" class="reader-article-star">{{if .Starred}}&#9733; Starred{{else}}&#9734; Star{{end}}</button>
+        <button type="submit" class="toolbar-btn reader-article-star">{{if .Starred}}{{ticon "star-filled"}}Starred{{else}}{{ticon "star-outline"}}Star{{end}}</button>
       </form>
       <form method="post" action="/reader/item/{{.ID}}/{{if .Read}}unread{{else}}read{{end}}"
             hx-post="/reader/item/{{.ID}}/{{if .Read}}unread{{else}}read{{end}}"
             hx-target="#reader-article" hx-swap="outerHTML">
         {{template "reader-ctx" .}}
-        <button type="submit" class="reader-article-read-toggle">{{if .Read}}Mark unread{{else}}Mark read{{end}}</button>
+        <button type="submit" class="toolbar-btn reader-article-read-toggle">{{ticon "check"}}{{if .Read}}Mark unread{{else}}Mark read{{end}}</button>
       </form>
       {{if .HasFull}}
         {{if .ShowingFull}}
-          <a class="button" href="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
+          <a class="toolbar-btn" href="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
              hx-get="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
-             hx-target="#reader-article" hx-swap="outerHTML">Show feed version</a>
+             hx-target="#reader-article" hx-swap="outerHTML">{{ticon "doc"}}Show feed version</a>
         {{else}}
-          <a class="button" href="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
+          <a class="toolbar-btn" href="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
              hx-get="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
-             hx-target="#reader-article" hx-swap="outerHTML">Show full article</a>
+             hx-target="#reader-article" hx-swap="outerHTML">{{ticon "doc"}}Show full article</a>
         {{end}}
       {{else}}
         <form method="post" action="/reader/item/{{.ID}}/full"
               hx-post="/reader/item/{{.ID}}/full" hx-target="#reader-article" hx-swap="outerHTML">
           {{template "reader-ctx" .}}
-          <button type="submit">Fetch full article</button>
+          <button type="submit" class="toolbar-btn">{{ticon "doc"}}Fetch full article</button>
         </form>
       {{end}}
     </div>
