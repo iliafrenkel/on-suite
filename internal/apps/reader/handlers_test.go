@@ -1003,15 +1003,20 @@ func TestTopToolbarHoldsFiltersAndMenu(t *testing.T) {
 
 	doc.MustHave(".reader-toolbar")
 	doc.MustHave(".reader-toolbar .reader-filters")
+	// Unread is the default filter (see ParseFilter in store.go): the whole
+	// point of the read model is that the list answers "what is new".
 	active := doc.MustHave(".reader-filters a[aria-current=page]")
-	if got := strings.TrimSpace(htmlassert.Text(active)); got != "All" {
-		t.Errorf("default active filter = %q, want All", got)
+	if got := strings.TrimSpace(htmlassert.Text(active)); got != "Unread" {
+		t.Errorf("default active filter = %q, want Unread", got)
 	}
 
 	for _, id := range []string{"add-feed-dialog", "new-folder-dialog", "import-opml-dialog", "shortcuts-dialog"} {
 		doc.MustHave("[data-open-dialog=" + id + "]")
 	}
-	doc.MustHave(".reader-menu-list a[href=\"/reader/opml\"][download]")
+	exportLink := doc.MustHave(".reader-menu-list a[href=\"/reader/opml\"]")
+	if _, ok := htmlassert.Attr(exportLink, "download"); !ok {
+		t.Error("export-OPML menu link is missing the download attribute")
+	}
 	doc.MustHave(".reader-menu-list a[href=\"/reader/stats\"]")
 }
 
@@ -1026,7 +1031,10 @@ func TestPaneGuttersSitBetweenTheThreePanes(t *testing.T) {
 	if got := len(doc.QueryAll("#reader-panes-row .pane-gutter")); got != 2 {
 		t.Fatalf("#reader-panes-row has %d .pane-gutter elements, want 2", got)
 	}
-	treeGutter := doc.MustHave(`.pane-gutter[data-gutter-for="tree"]`)
+	// htmlassert's selector engine matches only one qualifier per segment, so
+	// a compound class+attribute selector isn't expressible; the attribute
+	// alone is specific enough (only one gutter names "tree").
+	treeGutter := doc.MustHave(`[data-gutter-for="tree"]`)
 	if got, _ := htmlassert.Attr(treeGutter, "role"); got != "separator" {
 		t.Errorf("tree gutter role = %q, want separator", got)
 	}
@@ -1627,6 +1635,21 @@ func TestChooserPreservesTheSelectedFolder(t *testing.T) {
 	sub := tree.Folders[0].Subs[0]
 	if sub.FolderID == nil || *sub.FolderID != folder.ID {
 		t.Errorf("subscription FolderID = %v, want %d", sub.FolderID, folder.ID)
+	}
+}
+
+// TestCandidatesDialogCarriesReopenFlag pins the one case where a dialog
+// must reopen itself after an outerHTML swap: when the subscribe flow comes
+// back with more than one candidate feed, #add-feed-dialog must carry
+// data-reopen so reader.js's htmx:afterSwap handler calls showModal() again
+// — otherwise the chooser would render into a closed, invisible dialog.
+func TestCandidatesDialogCarriesReopenFlag(t *testing.T) {
+	s := newServer(t)
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {"not a url"}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	dialog := doc.MustHave("#add-feed-dialog")
+	if _, ok := htmlassert.Attr(dialog, "data-reopen"); ok {
+		t.Error("add-feed-dialog carries data-reopen on a plain validation error, want it reserved for .Candidates only")
 	}
 }
 
