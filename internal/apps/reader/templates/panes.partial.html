@@ -346,6 +346,23 @@
 </dialog>
 {{end}}
 
+{{/* row is one article-list row. "list" renders every row this way (OOB
+     false); "article-swap" additionally renders just the one row for the
+     article that was opened, starred, or had its read state toggled (OOB
+     true), targeting the same id by out-of-band swap — see handlers.go's
+     renderArticle. Item only needs .ID/.Title/.FeedName/.Published/.Read/
+     .Starred, so either a listItem or a plain dict works as .Item. */}}
+{{define "row"}}
+<li id="reader-row-{{.Item.ID}}" class="reader-row{{if .Item.Read}} is-read{{end}}{{if .Item.Starred}} is-starred{{end}}{{if eq .Item.ID .ActiveID}} is-active{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
+  <a href="/reader/item/{{.Item.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
+     hx-get="/reader/item/{{.Item.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
+     hx-target="#reader-article" hx-swap="outerHTML">
+    <span class="title">{{if .Item.Starred}}<span class="reader-star" aria-label="Starred">&#9733;</span> {{end}}{{.Item.Title}}</span>
+    <span class="meta">{{.Item.FeedName}} · {{.Item.Published}}</span>
+  </a>
+</li>
+{{end}}
+
 {{define "list"}}
 <section class="reader-list" id="reader-list" aria-label="Articles">
   <div class="reader-list-toolbar">
@@ -387,16 +404,7 @@
   {{if .EmptyState}}<p class="empty">{{.EmptyState}}</p>{{end}}
   <ul class="reader-rows">
     {{range .Items}}
-      <li class="reader-row{{if .Read}} is-read{{end}}{{if .Starred}} is-starred{{end}}{{if eq .ID $.ActiveID}} is-active{{end}}">
-        {{/* The list context rides in the query string so the tree redraw the
-             article response carries can keep the selection where it is. */}}
-        <a href="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}{{if $.Query}}&q={{$.Query}}{{end}}"
-           hx-get="/reader/item/{{.ID}}?scope={{$.Scope}}&sub={{$.SubID}}&filter={{$.Filter}}{{if $.Query}}&q={{$.Query}}{{end}}"
-           hx-target="#reader-article" hx-swap="outerHTML">
-          <span class="title">{{if .Starred}}<span class="reader-star" aria-label="Starred">&#9733;</span> {{end}}{{.Title}}</span>
-          <span class="meta">{{.FeedName}} · {{.Published}}</span>
-        </a>
-      </li>
+      {{template "row" (dict "Item" . "Scope" $.Scope "SubID" $.SubID "Filter" $.Filter "Query" $.Query "ActiveID" $.ActiveID "OOB" false)}}
     {{end}}
   </ul>
 </section>
@@ -410,7 +418,7 @@
      because reading or starring changes an unread count and the sidebar would
      otherwise keep the pre-click numbers until some unrelated navigation
      reconciled them. Only the counts, not the whole tree: see "counts-oob". */}}
-{{define "article-swap"}}{{template "article-oob" .Article}}{{template "counts-oob" .}}{{end}}
+{{define "article-swap"}}{{template "article-oob" .Article}}{{template "counts-oob" .}}{{template "row" (dict "Item" (dict "ID" .Article.ID "Title" .Article.Title "FeedName" .Article.FeedName "Published" .Article.When "Read" .Article.Read "Starred" .Article.Starred) "Scope" .Article.Scope "SubID" .Article.SubID "Filter" .Article.Filter "Query" .Article.Query "ActiveID" .Article.ID "OOB" true)}}{{end}}
 
 {{define "article-oob"}}<input type="checkbox" id="reader-article-open" class="visually-hidden" hx-swap-oob="true" checked aria-hidden="true" tabindex="-1">{{template "article" .}}{{end}}
 

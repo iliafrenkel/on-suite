@@ -542,6 +542,36 @@ func TestArticleResponseCarriesTheOOBPaneState(t *testing.T) {
 	}
 }
 
+// TestReadingAnArticleUpdatesItsListRowOutOfBand guards the fix for the
+// list row staying bold after the read count already changed: opening an
+// article over htmx must carry an out-of-band update for that one row,
+// with is-read now present.
+func TestReadingAnArticleUpdatesItsListRowOutOfBand(t *testing.T) {
+	s := newServer(t)
+	subID, items := seedOne(t, s, "g1")
+	itemID := items[0].ID
+
+	listReq := httptest.NewRequest(http.MethodGet, "/reader/feed/"+itoa(subID), nil)
+	listReq.Header.Set("HX-Request", "true")
+	listRec := s.Do(t, s.Alice, listReq)
+	beforeRow := htmlassert.Parse(t, listRec.Body.String()).MustHave("li#reader-row-" + itoa(itemID))
+	if got, _ := htmlassert.Attr(beforeRow, "class"); strings.Contains(got, "is-read") {
+		t.Fatalf("row already marked read before opening it: class=%q", got)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(itemID), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	row := htmlassert.Parse(t, rec.Body.String()).MustHave("li#reader-row-" + itoa(itemID))
+	if got, _ := htmlassert.Attr(row, "hx-swap-oob"); got != "true" {
+		t.Errorf("row hx-swap-oob = %q, want \"true\"", got)
+	}
+	if got, _ := htmlassert.Attr(row, "class"); !strings.Contains(got, "is-read") {
+		t.Errorf("row class = %q, want it to include is-read", got)
+	}
+}
+
 func TestStarToggleRoundTrips(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
