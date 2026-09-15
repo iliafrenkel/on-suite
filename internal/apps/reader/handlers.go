@@ -290,6 +290,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 
 	view := indexView{
 		Tree:             viewTree(tree, lc.SubID, lc.Scope, counts, opts.HideRead),
+		AllFolders:       tree.Folders,
 		Article:          opts.Article,
 		Error:            opts.FormError,
 		Notice:           opts.Notice,

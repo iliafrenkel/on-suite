@@ -278,7 +278,7 @@
      inside keeps the exact method/action/hx-* it had when it lived inline
      in the tree pane — only its container changed. Receives the whole
      indexView as "." (same root "panes" itself has), since the add-feed
-     dialog needs .Candidates/.SelectedFolderID/.Tree.Folders and the others
+     dialog needs .Candidates/.SelectedFolderID/.AllFolders and the others
      need .List for reader-ctx. */}}
 {{define "reader-dialogs"}}
 <dialog id="add-feed-dialog" class="reader-dialog"{{if .Candidates}} data-reopen{{end}}>
@@ -307,7 +307,7 @@
       <label for="feed-folder">Folder</label>
       <select id="feed-folder" name="folder_id">
         <option value="">(no folder)</option>
-        {{range .Tree.Folders}}
+        {{range .AllFolders}}
           <option value="{{.ID}}">{{.Name}}</option>
         {{end}}
       </select>

@@ -27,6 +27,11 @@ type indexView struct {
 	// Candidates is the discovery chooser's list, populated by Task 4's
 	// handler. FeedCandidate is defined in discover.go.
 	Candidates []FeedCandidate
+	// AllFolders is every folder the user has, regardless of the "hide read"
+	// filter — the add-feed dialog's folder picker needs to offer folders
+	// that are currently hidden from the sidebar because everything in them
+	// is read (Tree.Folders would silently omit those with hideRead on).
+	AllFolders []TreeFolder
 	// SelectedFolderID is the folder the user had chosen on the add-feed form
 	// when a pasted site turned out to offer several feeds, 0 for none. The
 	// chooser's per-candidate forms carry it back as a hidden field so the
