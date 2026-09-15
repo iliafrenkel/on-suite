@@ -1935,6 +1935,10 @@ kbd {
 	border-radius: 2px;
 }
 
+.reader-favicon[hidden] {
+	display: none;
+}
+
 .reader-count {
 	flex: none;
 	color: var(--c-text-dim);
