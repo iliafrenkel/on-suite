@@ -608,11 +608,29 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+
+	// Fetch once, synchronously, so the feed already has articles by the time
+	// this response renders it — a slow or broken origin only costs this
+	// request up to fetchOnAddTimeout; either way the subscription itself is
+	// already committed above, and the poller's normal retry/backoff takes
+	// over from here.
+	fetchCtx, cancel := context.WithTimeout(r.Context(), fetchOnAddTimeout)
+	defer cancel()
+	if err := a.poller.FetchNow(fetchCtx, sub.FeedID); err != nil {
+		a.deps.Log.Info("reader fetch-on-add failed", "feed_id", sub.FeedID, "error", err)
+	}
+
 	// Adding a feed selects it, which is the one case where the new state wins
 	// over the list the form came from.
 	lc.Scope, lc.SubID = ScopeFeed, sub.ID
 	a.renderIndex(w, r, userID, lc, "")
 }
+
+// fetchOnAddTimeout bounds the synchronous fetch subscribe performs so a
+// slow origin cannot hold the add-feed request open indefinitely. A var, not
+// a const, for the same reason discoveryTimeout is: SetDiscoveryTimeoutForTest's
+// pattern is available if a test ever needs to shrink it.
+var fetchOnAddTimeout = 10 * time.Second
 
 // discoveryTimeout bounds resolveFeedURL's entire attempt — the initial fetch
 // plus every probe it may go on to try — not any single request within it.

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -81,9 +82,77 @@ func TestSubscribeAddsAFeedToTheTree(t *testing.T) {
 		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
 	}
 
+	// Fetch-on-add means the feed's real title ("Example Blog", from
+	// rss2.xml) is already known by the time this renders, so the tree shows
+	// that instead of falling back to the raw URL as its display name.
+	doc := s.Get(t, s.Alice, "/reader/")
+	if !strings.Contains(doc.Text(), "Example Blog") {
+		t.Errorf("new subscription is not in the tree:\n%s", doc.Text())
+	}
+}
+
+// TestSubscribeFetchesTheFeedImmediately guards the whole point of this
+// change: articles must be visible right after the add-feed response, not
+// only after a separate PollDue call (which TestSubscribePollAndRenderComposedFlow
+// already covers as the "old" two-step flow).
+func TestSubscribeFetchesTheFeedImmediately(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
+		"url": {origin.URL + "/feed.xml"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The subscribe response itself already redirects to the new feed's pane
+	// (handlers.go:613), so its own body is the feed pane — no second request
+	// needed to see whether the fetch happened.
+	if !strings.Contains(rec.Body.String(), "First post") {
+		t.Errorf("subscribe response has no article title; fetch-on-add did not happen:\n%s", rec.Body.String())
+	}
+}
+
+// TestSubscribeStillSucceedsWhenTheFetchFails pins that a slow or broken
+// origin must not stop the subscription itself from being created — the
+// poller's normal retry/backoff picks it up afterwards. The origin must serve
+// a valid feed on its first hit (resolveFeedURL's own discovery fetch, which
+// runs before Subscribe and would otherwise fail the whole request) and only
+// break starting on the second hit (the synchronous fetch-on-add call this
+// task adds), so the failure being pinned is actually the one this task
+// introduces rather than a pre-existing discovery failure.
+func TestSubscribeStillSucceedsWhenTheFetchFails(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	var hits atomic.Int32
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) == 1 {
+			w.Header().Set("Content-Type", "application/rss+xml")
+			_, _ = w.Write(fixture(t, "rss2.xml"))
+			return
+		}
+		http.Error(w, "nope", http.StatusInternalServerError)
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
+		"url": {origin.URL + "/feed.xml"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
 	doc := s.Get(t, s.Alice, "/reader/")
 	if !strings.Contains(doc.Text(), origin.URL+"/feed.xml") {
-		t.Errorf("new subscription is not in the tree:\n%s", doc.Text())
+		t.Errorf("subscription missing after a failed fetch-on-add:\n%s", doc.Text())
 	}
 }
 
@@ -1617,8 +1686,11 @@ func TestSubscribeAcceptsASiteURLAndFindsTheFeed(t *testing.T) {
 	}
 }
 
-// A URL that is already a feed must not need discovery, and must not cost an
-// extra request.
+// A URL that is already a feed must not need discovery probing. Fetch-on-add
+// (this task) means the total is 2, not 1: one hit from resolveFeedURL
+// confirming the URL is already a feed, one from the synchronous FetchNow
+// that follows Subscribe — but never the extra probe requests discovery
+// would cost for a URL that needed guessing.
 func TestSubscribeToADirectFeedURLStillWorks(t *testing.T) {
 	s, a := newServerWithApp(t)
 	ctx := context.Background()
@@ -1635,8 +1707,8 @@ func TestSubscribeToADirectFeedURLStillWorks(t *testing.T) {
 	if rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/feed.xml"}}); rec.Code != http.StatusOK {
 		t.Fatalf("subscribe returned %d", rec.Code)
 	}
-	if hits != 1 {
-		t.Errorf("origin was fetched %d times for a direct feed URL, want 1", hits)
+	if hits != 2 {
+		t.Errorf("origin was fetched %d times for a direct feed URL, want 2 (discovery + fetch-on-add)", hits)
 	}
 
 	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
