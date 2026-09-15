@@ -115,6 +115,18 @@ func (p *Poller) PollDue(ctx context.Context) error {
 	return nil
 }
 
+// FetchNow fetches one feed immediately, bypassing its due schedule. It is
+// what adding a feed and an explicit "refresh this feed" both call, so
+// neither has to wait for the next scheduled tick.
+func (p *Poller) FetchNow(ctx context.Context, feedID int64) error {
+	f, err := p.store.FeedByID(ctx, feedID)
+	if err != nil {
+		return err
+	}
+	p.pollOne(ctx, f)
+	return nil
+}
+
 // pollOne fetches, parses and stores one feed, recording the outcome either way.
 func (p *Poller) pollOne(ctx context.Context, f Feed) {
 	now := time.Now().UTC()
