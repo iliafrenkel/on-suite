@@ -761,6 +761,33 @@ func (s *Store) DueFeeds(ctx context.Context, now time.Time, limit int) ([]Feed,
 	return out, nil
 }
 
+// FeedByID loads one feed by id, regardless of whether it is due. This is the
+// entry point Poller.FetchNow uses to fetch a specific feed on demand — the
+// due-filtered DueFeeds is the wrong query for "fetch this one, right now".
+func (s *Store) FeedByID(ctx context.Context, feedID int64) (Feed, error) {
+	var f Feed
+	var next string
+	var interval sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, url, resolved_url, title, site_url, etag, last_modified,
+		       last_status, last_error, error_count, next_fetch_at, fetch_interval
+		  FROM reader_feeds
+		 WHERE id = ?`, feedID).Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL,
+		&f.ETag, &f.LastModified, &f.LastStatus, &f.LastError, &f.ErrorCount,
+		&next, &interval)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Feed{}, ErrNotFound
+	}
+	if err != nil {
+		return Feed{}, fmt.Errorf("reader: load feed: %w", err)
+	}
+	f.NextFetchAt = parseTime(next)
+	if interval.Valid {
+		f.FetchInterval = time.Duration(interval.Int64) * time.Second
+	}
+	return f, nil
+}
+
 // FetchResult is one poll's outcome, written back in a single statement.
 type FetchResult struct {
 	FeedID       int64

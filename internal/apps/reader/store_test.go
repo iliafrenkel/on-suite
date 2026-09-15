@@ -307,3 +307,31 @@ func TestItemRequiresASubscription(t *testing.T) {
 		t.Fatalf("alice cannot read her own item: %v", err)
 	}
 }
+
+func TestFeedByIDLoadsAFeedRegardlessOfDueStatus(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	feed, err := f.store.FeedByID(ctx, sub.FeedID)
+	if err != nil {
+		t.Fatalf("FeedByID: %v", err)
+	}
+	if feed.ID != sub.FeedID {
+		t.Errorf("ID = %d, want %d", feed.ID, sub.FeedID)
+	}
+	if feed.URL != "https://example.com/feed.xml" {
+		t.Errorf("URL = %q", feed.URL)
+	}
+
+	// A freshly subscribed feed is due immediately (next_fetch_at = now), but
+	// FeedByID must not filter on that the way DueFeeds does — it is the
+	// "load this specific feed" path, not "load whatever is due".
+	if _, err := f.store.FeedByID(ctx, feed.ID+999); !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("FeedByID(missing) = %v, want ErrNotFound", err)
+	}
+}
