@@ -1801,6 +1801,10 @@ kbd {
 	white-space: nowrap;
 }
 
+.reader-hide-read-form {
+	display: contents;
+}
+
 .reader-dialog {
 	position: relative;
 	width: min(28rem, calc(100vw - var(--s-6)));

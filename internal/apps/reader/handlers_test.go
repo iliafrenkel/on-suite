@@ -2156,3 +2156,81 @@ func TestStatsPageOnAnEmptyAccount(t *testing.T) {
 		t.Errorf("no empty state on a fresh account:\n%s", doc.Text())
 	}
 }
+
+// TestPrefsTogglesTheHideReadCookie mirrors Notes'
+// TestPrefsTogglesTheCookie (internal/apps/notes/handlers_test.go).
+func TestPrefsTogglesTheHideReadCookie(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.PostHX(t, s.Alice, "/reader/prefs", url.Values{"hide_read": {"1"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var got *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == reader.HideReadCookie {
+			got = c
+		}
+	}
+	if got == nil || got.Value != "1" {
+		t.Fatalf("hide-read cookie = %+v, want value 1", got)
+	}
+	if got.MaxAge <= 0 {
+		t.Errorf("hide-read cookie MaxAge = %d, want a durable positive value", got.MaxAge)
+	}
+}
+
+func TestPrefsRejectsAnUnknownHideReadValue(t *testing.T) {
+	s := newServer(t)
+	for _, v := range []string{"", "true", "2"} {
+		rec := s.Post(t, s.Alice, "/reader/prefs", url.Values{"hide_read": {v}})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("hide_read=%q gave %d, want 400", v, rec.Code)
+		}
+	}
+}
+
+// TestHideReadCookieHidesAnAllReadFeedAndItsEmptyFolder is the end-to-end
+// path view_test.go's unit tests already cover in isolation: seed a folder
+// with one feed, mark it fully read, confirm it disappears from the
+// rendered tree only once the cookie is set, and reappears when cleared.
+func TestHideReadCookieHidesAnAllReadFeedAndItsEmptyFolder(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Blogs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", &folder.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Only item",
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetRead(ctx, s.Alice.User.ID, items[0].ID, true, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/reader/", nil)
+	req.AddCookie(&http.Cookie{Name: reader.HideReadCookie, Value: "1"})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "Blogs") {
+		t.Errorf("hide_read=1 still shows the all-read folder:\n%s", rec.Body.String())
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	if !strings.Contains(doc.Text(), "Blogs") {
+		t.Error("folder is gone even with the hide-read cookie absent")
+	}
+}

@@ -112,6 +112,14 @@
        hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
        class="toolbar-btn{{if eq .Filter "all"}} toolbar-btn-active{{end}}"
        {{if eq .Filter "all"}}aria-current="page"{{end}}>All</a>
+    <form method="post" action="/reader/prefs" class="reader-hide-read-form"
+          hx-post="/reader/prefs" hx-target="#reader-panes" hx-swap="outerHTML">
+      {{template "reader-ctx" .}}
+      <input type="hidden" name="hide_read" value="{{if .HideRead}}0{{else}}1{{end}}">
+      <button type="submit" class="toolbar-btn{{if .HideRead}} toolbar-btn-active{{end}}"
+              aria-pressed="{{if .HideRead}}true{{else}}false{{end}}"
+              aria-label="Hide feeds with nothing unread">{{ticon "eye-off"}}</button>
+    </form>
   </nav>
   <div class="reader-menu">
     <button type="button" class="toolbar-btn reader-menu-toggle" aria-haspopup="true"

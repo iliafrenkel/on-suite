@@ -44,3 +44,66 @@ func TestBuildLineFlagsReconstructedDays(t *testing.T) {
 		}
 	})
 }
+
+func TestViewTreeHideReadFiltersZeroUnreadFeedsAndEmptyFolders(t *testing.T) {
+	folder := TreeFolder{
+		Folder: Folder{ID: 1, Name: "Blogs"},
+		Subs: []Subscription{
+			{ID: 10, Title: "Read feed"},
+			{ID: 11, Title: "Unread feed"},
+		},
+	}
+	emptyFolder := TreeFolder{
+		Folder: Folder{ID: 2, Name: "All caught up"},
+		Subs: []Subscription{
+			{ID: 12, Title: "Also read"},
+		},
+	}
+	tree := Tree{
+		Folders: []TreeFolder{folder, emptyFolder},
+		Root: []Subscription{
+			{ID: 20, Title: "Root read"},
+			{ID: 21, Title: "Root unread"},
+		},
+	}
+	counts := Counts{BySub: map[int64]int{
+		10: 0, 11: 3, 12: 0, 20: 0, 21: 2,
+	}}
+
+	t.Run("hideRead false keeps everything", func(t *testing.T) {
+		out := viewTree(tree, 0, ScopeAll, counts, false)
+		if len(out.Folders) != 2 || len(out.Folders[0].Subs) != 2 || len(out.Folders[1].Subs) != 1 {
+			t.Fatalf("hideRead=false changed the tree shape: %+v", out.Folders)
+		}
+		if len(out.Root) != 2 {
+			t.Fatalf("hideRead=false changed root: %+v", out.Root)
+		}
+	})
+
+	t.Run("hideRead true drops zero-unread subs and empty folders", func(t *testing.T) {
+		out := viewTree(tree, 0, ScopeAll, counts, true)
+		if len(out.Folders) != 1 || out.Folders[0].ID != 1 {
+			t.Fatalf("empty folder was not dropped: %+v", out.Folders)
+		}
+		if len(out.Folders[0].Subs) != 1 || out.Folders[0].Subs[0].ID != 11 {
+			t.Fatalf("read feed was not filtered from the surviving folder: %+v", out.Folders[0].Subs)
+		}
+		if len(out.Root) != 1 || out.Root[0].ID != 21 {
+			t.Fatalf("root feeds were not filtered: %+v", out.Root)
+		}
+	})
+
+	t.Run("hideRead true keeps the active feed even at zero unread", func(t *testing.T) {
+		out := viewTree(tree, 10, ScopeAll, counts, true)
+		if len(out.Folders) != 1 || len(out.Folders[0].Subs) != 2 {
+			t.Fatalf("active read feed was hidden: %+v", out.Folders)
+		}
+	})
+
+	t.Run("Empty reflects real subscriptions, not the filtered view", func(t *testing.T) {
+		out := viewTree(tree, 0, ScopeAll, counts, true)
+		if out.Empty {
+			t.Error("Empty is true even though real subscriptions exist, just all currently read")
+		}
+	})
+}

@@ -73,6 +73,10 @@ type listView struct {
 	// Query is the live search filter, echoed back into the search box so it
 	// does not clear itself on every keystroke's response.
 	Query string
+	// HideRead mirrors the cookie the toolbar's toggle button reflects, so
+	// the button's pressed state matches whatever was actually applied to
+	// this render.
+	HideRead bool
 	// Shell carries the CSRF token the mark-all-read form needs. It is set by
 	// renderIndex rather than viewList, which has no request to read it from.
 	Shell render.Shell
@@ -124,21 +128,52 @@ type articleView struct {
 	FullError string
 }
 
-func viewTree(t Tree, activeID int64, scope Scope, counts Counts) treeView {
+func viewTree(t Tree, activeID int64, scope Scope, counts Counts, hideRead bool) treeView {
 	empty := len(t.Root) == 0
 	for _, f := range t.Folders {
 		if len(f.Subs) > 0 {
 			empty = false
 		}
 	}
+
+	folders, root := t.Folders, t.Root
+	if hideRead {
+		folders = make([]TreeFolder, 0, len(t.Folders))
+		for _, f := range t.Folders {
+			f.Subs = filterUnread(f.Subs, counts, activeID)
+			if len(f.Subs) > 0 {
+				folders = append(folders, f)
+			}
+		}
+		root = filterUnread(t.Root, counts, activeID)
+	}
+
 	return treeView{
-		Folders:  t.Folders,
-		Root:     t.Root,
+		Folders:  folders,
+		Root:     root,
 		ActiveID: activeID,
 		Scope:    scope,
 		Counts:   counts,
-		Empty:    empty,
+		// Empty reflects whether the user has any subscriptions at all,
+		// unaffected by hideRead — a tree with real feeds that are all
+		// currently read is a different situation from having no feeds, and
+		// only the latter gets the "no feeds yet" hint.
+		Empty: empty,
 	}
+}
+
+// filterUnread drops every subscription with nothing unread, except the
+// currently open one: hiding the feed you are actively reading out from
+// under you the moment its last item is read would be more surprising than
+// useful, and the sidebar catches up as soon as you navigate away from it.
+func filterUnread(subs []Subscription, counts Counts, activeID int64) []Subscription {
+	out := make([]Subscription, 0, len(subs))
+	for _, s := range subs {
+		if s.ID == activeID || counts.BySub[s.ID] > 0 {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func viewList(items []Item, title string, scope Scope, subID int64, filter Filter, basePath, query string) listView {
