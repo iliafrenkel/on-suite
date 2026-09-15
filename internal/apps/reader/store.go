@@ -59,6 +59,7 @@ type Feed struct {
 	ResolvedURL   string
 	Title         string
 	SiteURL       string
+	FaviconURL    string
 	ETag          string
 	LastModified  string
 	LastStatus    int
@@ -94,7 +95,10 @@ type Subscription struct {
 	// SiteURL is the feed's own site, used as OPML's htmlUrl on export. It is
 	// empty until the feed has been polled once successfully.
 	SiteURL string
-	AddedAt time.Time
+	// FaviconURL is the feed's discovered favicon source URL, empty until a
+	// discovery or poll pass has found one.
+	FaviconURL string
+	AddedAt    time.Time
 	// ErrorCount and LastError mirror the shared feed's own poller state
 	// (Feed.ErrorCount / Feed.LastError), so the sidebar can show a
 	// persistently-failing feed without a second query.
@@ -106,6 +110,15 @@ type Subscription struct {
 // failure fetching this subscription's feed. It is what the tree template
 // checks to decide whether to render the failure marker.
 func (s Subscription) Failing() bool { return s.ErrorCount > 0 }
+
+// FaviconPath is the proxy URL for this feed's favicon, or "" if none is
+// known yet — the template's cue to render the generic icon instead.
+func (s Subscription) FaviconPath() string {
+	if s.FaviconURL == "" {
+		return ""
+	}
+	return "/reader/favicon/" + FaviconHash(s.FaviconURL)
+}
 
 // DisplayName is the override when set, then the feed's own title, then the
 // URL — so a feed that has never been polled successfully is still nameable.
@@ -379,7 +392,7 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 
 	subRows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title,
-		       f.site_url, f.error_count, f.last_error
+		       f.site_url, f.favicon_url, f.error_count, f.last_error
 		  FROM reader_subs s JOIN reader_feeds f ON f.id = s.feed_id
 		 WHERE s.user_id = ?
 		 ORDER BY s.position, coalesce(nullif(s.title, ''), nullif(f.title, ''), f.url)`,
@@ -393,7 +406,8 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 		var sub Subscription
 		var added string
 		if err := subRows.Scan(&sub.ID, &sub.FeedID, &sub.FolderID, &sub.Title,
-			&added, &sub.FeedURL, &sub.FeedName, &sub.SiteURL, &sub.ErrorCount, &sub.LastError); err != nil {
+			&added, &sub.FeedURL, &sub.FeedName, &sub.SiteURL, &sub.FaviconURL,
+			&sub.ErrorCount, &sub.LastError); err != nil {
 			return Tree{}, fmt.Errorf("reader: scan subscription: %w", err)
 		}
 		sub.AddedAt = parseTime(added)
@@ -750,7 +764,7 @@ func scanItems(rows *sql.Rows) ([]Item, error) {
 // DueFeeds returns feeds whose next_fetch_at has passed, oldest first.
 func (s *Store) DueFeeds(ctx context.Context, now time.Time, limit int) ([]Feed, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, url, resolved_url, title, site_url, etag, last_modified,
+		SELECT id, url, resolved_url, title, site_url, favicon_url, etag, last_modified,
 		       last_status, last_error, error_count, next_fetch_at, fetch_interval
 		  FROM reader_feeds
 		 WHERE next_fetch_at <= ?
@@ -766,7 +780,7 @@ func (s *Store) DueFeeds(ctx context.Context, now time.Time, limit int) ([]Feed,
 		var f Feed
 		var next string
 		var interval sql.NullInt64
-		if err := rows.Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL,
+		if err := rows.Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL, &f.FaviconURL,
 			&f.ETag, &f.LastModified, &f.LastStatus, &f.LastError, &f.ErrorCount,
 			&next, &interval); err != nil {
 			return nil, fmt.Errorf("reader: scan feed: %w", err)
@@ -791,10 +805,10 @@ func (s *Store) FeedByID(ctx context.Context, feedID int64) (Feed, error) {
 	var next string
 	var interval sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, url, resolved_url, title, site_url, etag, last_modified,
+		SELECT id, url, resolved_url, title, site_url, favicon_url, etag, last_modified,
 		       last_status, last_error, error_count, next_fetch_at, fetch_interval
 		  FROM reader_feeds
-		 WHERE id = ?`, feedID).Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL,
+		 WHERE id = ?`, feedID).Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL, &f.FaviconURL,
 		&f.ETag, &f.LastModified, &f.LastStatus, &f.LastError, &f.ErrorCount,
 		&next, &interval)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -860,6 +874,47 @@ func (s *Store) SaveFetchResult(ctx context.Context, r FetchResult) error {
 		formatTime(r.NextFetchAt), r.FeedID)
 	if err != nil {
 		return fmt.Errorf("reader: save fetch result: %w", err)
+	}
+	return nil
+}
+
+// SetFaviconIfEmpty records a feed's favicon URL, but only the first time:
+// the WHERE clause on the UPDATE is a no-op once favicon_url is already set,
+// so a later call — a second poll, a second discovery attempt — can never
+// clobber it. It also seeds the reader_feed_icons row the favicon proxy
+// (faviconproxy.go) looks up by hash, in the same transaction, so the two
+// are never out of sync.
+func (s *Store) SetFaviconIfEmpty(ctx context.Context, feedID int64, faviconURL string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("reader: begin set favicon: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE reader_feeds SET favicon_url = ? WHERE id = ? AND favicon_url = ''`,
+		faviconURL, feedID)
+	if err != nil {
+		return fmt.Errorf("reader: set favicon url: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reader: set favicon rows: %w", err)
+	}
+	if n == 0 {
+		// Already set (or the feed does not exist) — nothing to do.
+		return nil
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO reader_feed_icons (url_hash, src_url) VALUES (?, ?)
+		ON CONFLICT (url_hash) DO NOTHING`,
+		FaviconHash(faviconURL), faviconURL); err != nil {
+		return fmt.Errorf("reader: insert feed icon: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("reader: commit set favicon: %w", err)
 	}
 	return nil
 }

@@ -493,3 +493,88 @@ func TestSaveFeedIconBytesCachesAndClearsFailures(t *testing.T) {
 		t.Errorf("failure not cleared: ErrorCount=%d LastError=%q", got.ErrorCount, got.LastError)
 	}
 }
+
+func TestSetFaviconIfEmptySetsAndCachesTheURL(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, "https://example.com/favicon.ico"); err != nil {
+		t.Fatal(err)
+	}
+
+	feed, err := f.store.FeedByID(ctx, sub.FeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if feed.FaviconURL != "https://example.com/favicon.ico" {
+		t.Errorf("FaviconURL = %q, want the URL passed in", feed.FaviconURL)
+	}
+
+	hash := reader.FaviconHash("https://example.com/favicon.ico")
+	if _, err := f.store.FeedIconByHash(ctx, hash); err != nil {
+		t.Errorf("reader_feed_icons row was not created: %v", err)
+	}
+}
+
+func TestSetFaviconIfEmptyDoesNotOverwrite(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, "https://example.com/first.ico"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, "https://example.com/second.ico"); err != nil {
+		t.Fatal(err)
+	}
+
+	feed, err := f.store.FeedByID(ctx, sub.FeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if feed.FaviconURL != "https://example.com/first.ico" {
+		t.Errorf("FaviconURL = %q, a second call must not overwrite the first", feed.FaviconURL)
+	}
+}
+
+func TestSubscriptionFaviconPath(t *testing.T) {
+	withURL := reader.Subscription{FaviconURL: "https://example.com/favicon.ico"}
+	if withURL.FaviconPath() != "/reader/favicon/"+reader.FaviconHash("https://example.com/favicon.ico") {
+		t.Errorf("FaviconPath() = %q", withURL.FaviconPath())
+	}
+
+	without := reader.Subscription{}
+	if without.FaviconPath() != "" {
+		t.Errorf("FaviconPath() = %q, want empty when FaviconURL is empty", without.FaviconPath())
+	}
+}
+
+func TestTreeLoadsFaviconURL(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, "https://example.com/favicon.ico"); err != nil {
+		t.Fatal(err)
+	}
+
+	tree, err := f.store.Tree(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 1 || tree.Root[0].FaviconURL != "https://example.com/favicon.ico" {
+		t.Errorf("Tree did not load FaviconURL: %+v", tree.Root)
+	}
+}
