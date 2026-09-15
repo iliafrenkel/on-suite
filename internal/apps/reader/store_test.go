@@ -409,3 +409,27 @@ func TestRenameSubscriptionIsScopedToTheOwner(t *testing.T) {
 		t.Errorf("RenameSubscription(bob) = %v, want ErrNotFound for someone else's subscription", err)
 	}
 }
+
+func TestFavoritesMigrationAddsFaviconColumnAndTable(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	var faviconURL string
+	if err := f.db.QueryRowContext(ctx,
+		`SELECT favicon_url FROM reader_feeds WHERE url = ?`, "https://example.com/feed.xml").
+		Scan(&faviconURL); err != nil {
+		t.Fatalf("favicon_url column missing or unreadable: %v", err)
+	}
+	if faviconURL != "" {
+		t.Errorf("favicon_url = %q, want empty default", faviconURL)
+	}
+
+	if _, err := f.db.ExecContext(ctx,
+		`INSERT INTO reader_feed_icons (url_hash, src_url) VALUES ('abc', 'https://example.com/favicon.ico')`); err != nil {
+		t.Fatalf("reader_feed_icons missing or wrong shape: %v", err)
+	}
+}
