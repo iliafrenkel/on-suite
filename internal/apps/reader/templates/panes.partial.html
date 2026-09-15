@@ -226,8 +226,7 @@
 {{define "sub-row"}}
 <li class="reader-sub{{if eq .Sub.ID .Tree.ActiveID}} is-active{{end}}">
   {{if .Sub.FaviconPath}}
-    <img class="reader-favicon" src="{{.Sub.FaviconPath}}" width="16" height="16" alt=""
-         onerror="var f=this.nextElementSibling; f.hidden=false; this.remove()">
+    <img class="reader-favicon" src="{{.Sub.FaviconPath}}" width="16" height="16" alt="">
     <span class="reader-favicon" hidden>{{ticon "rss"}}</span>
   {{else}}
     <span class="reader-favicon">{{ticon "rss"}}</span>
