@@ -2,6 +2,7 @@ package reader_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -138,5 +139,58 @@ func TestPollDueRecordsAFailureWithoutFailingTheRun(t *testing.T) {
 	}
 	if lastErr == "" {
 		t.Error("last_error is empty; the tree needs something to show")
+	}
+}
+
+func TestFetchNowFetchesAFeedRegardlessOfDueStatus(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer srv.Close()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, srv.URL+"/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client := reader.NewClient("test")
+	client.DenyAddr = func(string) error { return nil }
+	poller := reader.NewPoller(f.store, client, quietLogger())
+
+	// Mark the feed as not due for another hour, the way a normal poll leaves
+	// it — FetchNow must still fetch it, which is the entire point of the
+	// method: "refresh this one, right now" cannot wait on next_fetch_at.
+	if _, err := f.db.ExecContext(ctx,
+		`UPDATE reader_feeds SET next_fetch_at = ? WHERE id = ?`,
+		time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano), sub.FeedID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := poller.FetchNow(ctx, sub.FeedID); err != nil {
+		t.Fatalf("FetchNow: %v", err)
+	}
+
+	items, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("stored %d items, want 1", len(items))
+	}
+}
+
+func TestFetchNowReturnsErrNotFoundForAMissingFeed(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	client := reader.NewClient("test")
+	poller := reader.NewPoller(f.store, client, quietLogger())
+
+	if err := poller.FetchNow(ctx, 999999); !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("FetchNow(missing) = %v, want ErrNotFound", err)
 	}
 }

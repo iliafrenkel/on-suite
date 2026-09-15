@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,6 +41,8 @@ func TestEveryReaderRouteIsBehindAuth(t *testing.T) {
 		{http.MethodGet, "/reader/item/1"},
 		{http.MethodPost, "/reader/subscribe"},
 		{http.MethodPost, "/reader/sub/1/delete"},
+		{http.MethodPost, "/reader/sub/1/refresh"},
+		{http.MethodPost, "/reader/sub/1/rename"},
 		{http.MethodPost, "/reader/folder"},
 		{http.MethodPost, "/reader/folder/1/delete"},
 		{http.MethodPost, "/reader/refresh"},
@@ -81,9 +84,137 @@ func TestSubscribeAddsAFeedToTheTree(t *testing.T) {
 		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
 	}
 
+	// Fetch-on-add means the feed's real title ("Example Blog", from
+	// rss2.xml) is already known by the time this renders, so the tree shows
+	// that instead of falling back to the raw URL as its display name.
+	doc := s.Get(t, s.Alice, "/reader/")
+	if !strings.Contains(doc.Text(), "Example Blog") {
+		t.Errorf("new subscription is not in the tree:\n%s", doc.Text())
+	}
+}
+
+// TestSubscribeFetchesTheFeedImmediately guards the whole point of this
+// change: articles must be visible right after the add-feed response, not
+// only after a separate PollDue call (which TestSubscribePollAndRenderComposedFlow
+// already covers as the "old" two-step flow).
+func TestSubscribeFetchesTheFeedImmediately(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
+		"url": {origin.URL + "/feed.xml"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The subscribe response itself already redirects to the new feed's pane
+	// (handlers.go:613), so its own body is the feed pane — no second request
+	// needed to see whether the fetch happened.
+	if !strings.Contains(rec.Body.String(), "First post") {
+		t.Errorf("subscribe response has no article title; fetch-on-add did not happen:\n%s", rec.Body.String())
+	}
+}
+
+// TestSubscribeStillSucceedsWhenTheFetchFails pins that a slow or broken
+// origin must not stop the subscription itself from being created — the
+// poller's normal retry/backoff picks it up afterwards. The origin must serve
+// a valid feed on its first hit (resolveFeedURL's own discovery fetch, which
+// runs before Subscribe and would otherwise fail the whole request) and only
+// break starting on the second hit (the synchronous fetch-on-add call this
+// task adds), so the failure being pinned is actually the one this task
+// introduces rather than a pre-existing discovery failure.
+func TestSubscribeStillSucceedsWhenTheFetchFails(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	var hits atomic.Int32
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) == 1 {
+			w.Header().Set("Content-Type", "application/rss+xml")
+			_, _ = w.Write(fixture(t, "rss2.xml"))
+			return
+		}
+		http.Error(w, "nope", http.StatusInternalServerError)
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
+		"url": {origin.URL + "/feed.xml"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, msg := range []string{
+		"That is not a web address",
+		"No feed found at that address",
+		"That address could not be reached",
+		"That is not a feed address",
+	} {
+		if strings.Contains(rec.Body.String(), msg) {
+			t.Errorf("subscribe response surfaced an error to the user (%q) despite the subscription succeeding:\n%s", msg, rec.Body.String())
+		}
+	}
+
 	doc := s.Get(t, s.Alice, "/reader/")
 	if !strings.Contains(doc.Text(), origin.URL+"/feed.xml") {
-		t.Errorf("new subscription is not in the tree:\n%s", doc.Text())
+		t.Errorf("subscription missing after a failed fetch-on-add:\n%s", doc.Text())
+	}
+}
+
+// TestSubscribeStillSucceedsWhenTheFetchTimesOut pins the other half of the
+// "no error surfaced to the user" requirement: a slow origin must degrade
+// exactly like a failing one, not hold the add-feed request open until the
+// production 10s deadline. It shrinks fetchOnAddTimeout via
+// SetFetchOnAddTimeoutForTest and points the origin's second hit (the
+// synchronous fetch-on-add call, after resolveFeedURL's own discovery fetch
+// on the first hit) at a sleep longer than the shrunk timeout.
+func TestSubscribeStillSucceedsWhenTheFetchTimesOut(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	restore := reader.SetFetchOnAddTimeoutForTest(50 * time.Millisecond)
+	defer restore()
+
+	var hits atomic.Int32
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) == 1 {
+			w.Header().Set("Content-Type", "application/rss+xml")
+			_, _ = w.Write(fixture(t, "rss2.xml"))
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
+		"url": {origin.URL + "/feed.xml"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, msg := range []string{
+		"That is not a web address",
+		"No feed found at that address",
+		"That address could not be reached",
+		"That is not a feed address",
+	} {
+		if strings.Contains(rec.Body.String(), msg) {
+			t.Errorf("subscribe response surfaced an error to the user (%q) despite the subscription succeeding:\n%s", msg, rec.Body.String())
+		}
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	if !strings.Contains(doc.Text(), origin.URL+"/feed.xml") {
+		t.Errorf("subscription missing after a timed-out fetch-on-add:\n%s", doc.Text())
 	}
 }
 
@@ -714,7 +845,7 @@ func TestMarkAllReadStaysOnTheListItFiredFrom(t *testing.T) {
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
 
-	if got := strings.TrimSpace(htmlassert.Text(doc.MustHave("h2"))); got != "Starred" {
+	if got := strings.TrimSpace(htmlassert.Text(doc.MustHave(".reader-list-head h2"))); got != "Starred" {
 		t.Errorf("re-render shows the %q list, want Starred", got)
 	}
 	if got := strings.TrimSpace(htmlassert.Text(doc.MustHave(".reader-filters a[aria-current=page]"))); got != "All" {
@@ -1617,8 +1748,11 @@ func TestSubscribeAcceptsASiteURLAndFindsTheFeed(t *testing.T) {
 	}
 }
 
-// A URL that is already a feed must not need discovery, and must not cost an
-// extra request.
+// A URL that is already a feed must not need discovery probing. Fetch-on-add
+// (this task) means the total is 2, not 1: one hit from resolveFeedURL
+// confirming the URL is already a feed, one from the synchronous FetchNow
+// that follows Subscribe — but never the extra probe requests discovery
+// would cost for a URL that needed guessing.
 func TestSubscribeToADirectFeedURLStillWorks(t *testing.T) {
 	s, a := newServerWithApp(t)
 	ctx := context.Background()
@@ -1635,8 +1769,8 @@ func TestSubscribeToADirectFeedURLStillWorks(t *testing.T) {
 	if rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/feed.xml"}}); rec.Code != http.StatusOK {
 		t.Fatalf("subscribe returned %d", rec.Code)
 	}
-	if hits != 1 {
-		t.Errorf("origin was fetched %d times for a direct feed URL, want 1", hits)
+	if hits != 2 {
+		t.Errorf("origin was fetched %d times for a direct feed URL, want 2 (discovery + fetch-on-add)", hits)
 	}
 
 	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
@@ -2232,5 +2366,125 @@ func TestHideReadCookieHidesAnAllReadFeedAndItsEmptyFolder(t *testing.T) {
 	doc := s.Get(t, s.Alice, "/reader/")
 	if !strings.Contains(doc.Text(), "Blogs") {
 		t.Error("folder is gone even with the hide-read cookie absent")
+	}
+}
+
+// TestRefreshFeedControlFetchesOneFeedRegardlessOfSchedule pins the per-row
+// "Refresh feed" action: it must fetch the one feed even though it is not due
+// (a real subscription is never due again for the default 30-minute interval
+// right after its own fetch-on-add).
+func TestRefreshFeedControlFetchesOneFeedRegardlessOfSchedule(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+	a.AllowPrivateFetchesForTest()
+
+	var hits int
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, origin.URL+"/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Mark the feed as freshly fetched and not due for another hour, exactly
+	// what fetch-on-add leaves behind — "Refresh feed" must still fetch it.
+	if _, err := s.Store.DB().ExecContext(ctx,
+		`UPDATE reader_feeds SET next_fetch_at = ? WHERE id = ?`,
+		time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano), sub.FeedID); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	btn := doc.MustHave("button.reader-sub-refresh")
+	if got, _ := htmlassert.Attr(btn, "hx-post"); got != "/reader/sub/"+itoa(sub.ID)+"/refresh" {
+		t.Errorf("refresh button hx-post = %q", got)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/refresh", url.Values{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refresh returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if hits != 1 {
+		t.Fatalf("origin hit %d times, want 1", hits)
+	}
+
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("stored %d items, want 1", len(items))
+	}
+}
+
+// TestRefreshFeedIsScopedToTheOwner guards against refreshing (and disclosing
+// the existence of) somebody else's subscription id.
+func TestRefreshFeedIsScopedToTheOwner(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Bob.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/refresh", url.Values{})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("refreshing another user's subscription returned %d, want 404", rec.Code)
+	}
+}
+
+// TestRenameFeedControlUpdatesTheDisplayName pins the rename dialog end to
+// end: it is pre-filled with the current display name, and submitting it
+// changes what the tree shows.
+func TestRenameFeedControlUpdatesTheDisplayName(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	doc.MustHave("button.reader-sub-rename")
+	input := doc.MustHave("dialog#rename-feed-dialog-" + itoa(sub.ID) + " input[name=title]")
+	if got, _ := htmlassert.Attr(input, "value"); got != "https://example.com/feed.xml" {
+		t.Errorf("rename input value = %q, want the current display name", got)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/rename", url.Values{
+		"title": {"My Favourite Blog"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("rename returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc = s.Get(t, s.Alice, "/reader/")
+	if !strings.Contains(doc.Text(), "My Favourite Blog") {
+		t.Errorf("renamed feed not in the tree:\n%s", doc.Text())
+	}
+}
+
+// TestRenameFeedIsScopedToTheOwner guards against renaming (and disclosing
+// the existence of) somebody else's subscription id.
+func TestRenameFeedIsScopedToTheOwner(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Bob.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/rename", url.Values{
+		"title": {"Hijacked"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("renaming another user's subscription returned %d, want 404", rec.Code)
 	}
 }

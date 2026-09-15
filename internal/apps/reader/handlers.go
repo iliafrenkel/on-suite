@@ -608,11 +608,30 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+
+	// Fetch once, synchronously, so the feed already has articles by the time
+	// this response renders it — a slow or broken origin only costs this
+	// request up to fetchOnAddTimeout; either way the subscription itself is
+	// already committed above, and the poller's normal retry/backoff takes
+	// over from here.
+	fetchCtx, cancel := context.WithTimeout(r.Context(), fetchOnAddTimeout)
+	defer cancel()
+	if err := a.poller.FetchNow(fetchCtx, sub.FeedID); err != nil {
+		a.deps.Log.Info("reader fetch-on-add failed", "feed_id", sub.FeedID, "error", err)
+	}
+
 	// Adding a feed selects it, which is the one case where the new state wins
 	// over the list the form came from.
 	lc.Scope, lc.SubID = ScopeFeed, sub.ID
 	a.renderIndex(w, r, userID, lc, "")
 }
+
+// fetchOnAddTimeout bounds the synchronous fetch subscribe performs so a
+// slow origin cannot hold the add-feed request open indefinitely. A var, not
+// a const, for the same reason discoveryTimeout is: SetFetchOnAddTimeoutForTest
+// (export_test.go) can shrink it for a test rather than sleep past the real
+// thing.
+var fetchOnAddTimeout = 10 * time.Second
 
 // discoveryTimeout bounds resolveFeedURL's entire attempt — the initial fetch
 // plus every probe it may go on to try — not any single request within it.
@@ -745,6 +764,51 @@ func (a *App) unsubscribe(w http.ResponseWriter, r *http.Request) {
 	// the list the form named no longer exists, and rendering it would 404.
 	if lc.Scope == ScopeFeed && lc.SubID == subID {
 		lc.Scope, lc.SubID = ScopeAll, 0
+	}
+	a.renderIndex(w, r, userID, lc, "")
+}
+
+// refreshOne fetches one feed immediately, regardless of its schedule — the
+// per-row counterpart to refresh's "refresh all feeds".
+func (a *App) refreshOne(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	subID, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	lc := formContext(r, 0)
+	feedID, err := a.store.FeedIDForSub(r.Context(), userID, subID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.poller.FetchNow(r.Context(), feedID); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	a.renderIndex(w, r, userID, lc, "")
+}
+
+// renameSub sets or clears this user's custom name for a subscription. An
+// empty submitted title is not an error: it clears the override back to the
+// feed's own title, which is why this does not special-case ErrInvalid the
+// way createFolder does for an empty folder name.
+func (a *App) renameSub(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	subID, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	lc := formContext(r, 0)
+	if err := a.store.RenameSubscription(r.Context(), userID, subID, r.FormValue("title")); err != nil {
+		a.fail(w, r, err)
+		return
 	}
 	a.renderIndex(w, r, userID, lc, "")
 }

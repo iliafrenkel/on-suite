@@ -311,6 +311,45 @@ func (s *Store) DeleteFolder(ctx context.Context, userID, folderID int64) error 
 	return nil
 }
 
+// FeedIDForSub returns the shared feed id behind one user's subscription. The
+// user_id predicate is the same ownership check Unsubscribe uses: a
+// subscription belonging to somebody else is reported exactly as one that
+// does not exist.
+func (s *Store) FeedIDForSub(ctx context.Context, userID, subID int64) (int64, error) {
+	var feedID int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT feed_id FROM reader_subs WHERE id = ? AND user_id = ?`, subID, userID).Scan(&feedID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("reader: load subscription feed: %w", err)
+	}
+	return feedID, nil
+}
+
+// RenameSubscription sets or clears this user's custom name for a
+// subscription. An empty title (after trimming) is a valid write, not an
+// error: it clears the override, and DisplayName falls back to the feed's
+// own title again — unlike CreateFolder, an empty name here is meaningful
+// rather than invalid.
+func (s *Store) RenameSubscription(ctx context.Context, userID, subID int64, title string) error {
+	title = strings.TrimSpace(title)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE reader_subs SET title = ? WHERE id = ? AND user_id = ?`, title, subID, userID)
+	if err != nil {
+		return fmt.Errorf("reader: rename subscription: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reader: rename subscription rows: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // Tree returns one user's whole sidebar in two queries.
 func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 	var out Tree
@@ -759,6 +798,33 @@ func (s *Store) DueFeeds(ctx context.Context, now time.Time, limit int) ([]Feed,
 		return nil, fmt.Errorf("reader: iterate feeds: %w", err)
 	}
 	return out, nil
+}
+
+// FeedByID loads one feed by id, regardless of whether it is due. This is the
+// entry point Poller.FetchNow uses to fetch a specific feed on demand — the
+// due-filtered DueFeeds is the wrong query for "fetch this one, right now".
+func (s *Store) FeedByID(ctx context.Context, feedID int64) (Feed, error) {
+	var f Feed
+	var next string
+	var interval sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, url, resolved_url, title, site_url, etag, last_modified,
+		       last_status, last_error, error_count, next_fetch_at, fetch_interval
+		  FROM reader_feeds
+		 WHERE id = ?`, feedID).Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL,
+		&f.ETag, &f.LastModified, &f.LastStatus, &f.LastError, &f.ErrorCount,
+		&next, &interval)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Feed{}, ErrNotFound
+	}
+	if err != nil {
+		return Feed{}, fmt.Errorf("reader: load feed: %w", err)
+	}
+	f.NextFetchAt = parseTime(next)
+	if interval.Valid {
+		f.FetchInterval = time.Duration(interval.Int64) * time.Second
+	}
+	return f, nil
 }
 
 // FetchResult is one poll's outcome, written back in a single statement.

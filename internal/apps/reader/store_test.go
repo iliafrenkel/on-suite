@@ -307,3 +307,105 @@ func TestItemRequiresASubscription(t *testing.T) {
 		t.Fatalf("alice cannot read her own item: %v", err)
 	}
 }
+
+func TestFeedByIDLoadsAFeedRegardlessOfDueStatus(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	feed, err := f.store.FeedByID(ctx, sub.FeedID)
+	if err != nil {
+		t.Fatalf("FeedByID: %v", err)
+	}
+	if feed.ID != sub.FeedID {
+		t.Errorf("ID = %d, want %d", feed.ID, sub.FeedID)
+	}
+	if feed.URL != "https://example.com/feed.xml" {
+		t.Errorf("URL = %q", feed.URL)
+	}
+
+	// A freshly subscribed feed is due immediately (next_fetch_at = now), but
+	// FeedByID must not filter on that the way DueFeeds does — it is the
+	// "load this specific feed" path, not "load whatever is due".
+	if _, err := f.store.FeedByID(ctx, feed.ID+999); !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("FeedByID(missing) = %v, want ErrNotFound", err)
+	}
+}
+
+func TestFeedIDForSubIsScopedToTheOwner(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	feedID, err := f.store.FeedIDForSub(ctx, f.alice.ID, sub.ID)
+	if err != nil {
+		t.Fatalf("FeedIDForSub(alice): %v", err)
+	}
+	if feedID != sub.FeedID {
+		t.Errorf("feedID = %d, want %d", feedID, sub.FeedID)
+	}
+
+	if _, err := f.store.FeedIDForSub(ctx, f.bob.ID, sub.ID); !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("FeedIDForSub(bob) = %v, want ErrNotFound for someone else's subscription", err)
+	}
+}
+
+func TestRenameSubscriptionSetsAndClearsTheOverride(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Before any poll, DisplayName falls back to the raw URL.
+	if got := sub.DisplayName(); got != "https://example.com/feed.xml" {
+		t.Fatalf("initial DisplayName = %q", got)
+	}
+
+	if err := f.store.RenameSubscription(ctx, f.alice.ID, sub.ID, "  My Feed  "); err != nil {
+		t.Fatalf("RenameSubscription: %v", err)
+	}
+	tree, err := f.store.Tree(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tree.Root[0].DisplayName(); got != "My Feed" {
+		t.Errorf("DisplayName after rename = %q, want trimmed %q", got, "My Feed")
+	}
+
+	// Clearing the override (empty string) falls back to the feed's own
+	// title/URL again, rather than being rejected as invalid input.
+	if err := f.store.RenameSubscription(ctx, f.alice.ID, sub.ID, ""); err != nil {
+		t.Fatalf("RenameSubscription(clear): %v", err)
+	}
+	tree, err = f.store.Tree(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tree.Root[0].DisplayName(); got != "https://example.com/feed.xml" {
+		t.Errorf("DisplayName after clearing = %q, want the raw URL fallback", got)
+	}
+}
+
+func TestRenameSubscriptionIsScopedToTheOwner(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.RenameSubscription(ctx, f.bob.ID, sub.ID, "Hijacked"); !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("RenameSubscription(bob) = %v, want ErrNotFound for someone else's subscription", err)
+	}
+}
