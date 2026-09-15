@@ -767,6 +767,30 @@ func (a *App) unsubscribe(w http.ResponseWriter, r *http.Request) {
 	a.renderIndex(w, r, userID, lc, "")
 }
 
+// refreshOne fetches one feed immediately, regardless of its schedule — the
+// per-row counterpart to refresh's "refresh all feeds".
+func (a *App) refreshOne(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	subID, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	lc := formContext(r, 0)
+	feedID, err := a.store.FeedIDForSub(r.Context(), userID, subID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.poller.FetchNow(r.Context(), feedID); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	a.renderIndex(w, r, userID, lc, "")
+}
+
 func (a *App) createFolder(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {

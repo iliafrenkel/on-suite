@@ -335,3 +335,25 @@ func TestFeedByIDLoadsAFeedRegardlessOfDueStatus(t *testing.T) {
 		t.Errorf("FeedByID(missing) = %v, want ErrNotFound", err)
 	}
 }
+
+func TestFeedIDForSubIsScopedToTheOwner(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	feedID, err := f.store.FeedIDForSub(ctx, f.alice.ID, sub.ID)
+	if err != nil {
+		t.Fatalf("FeedIDForSub(alice): %v", err)
+	}
+	if feedID != sub.FeedID {
+		t.Errorf("feedID = %d, want %d", feedID, sub.FeedID)
+	}
+
+	if _, err := f.store.FeedIDForSub(ctx, f.bob.ID, sub.ID); !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("FeedIDForSub(bob) = %v, want ErrNotFound for someone else's subscription", err)
+	}
+}

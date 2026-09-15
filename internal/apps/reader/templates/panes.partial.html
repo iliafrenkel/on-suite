@@ -212,6 +212,12 @@
               <div class="outline-menu-list reader-row-menu-list">
                 <button type="button" class="reader-copy-feed-url" data-feed-url="{{.FeedURL}}"
                         aria-label="Copy feed URL for {{.DisplayName}}">Feed URL</button>
+                <form method="post" action="/reader/sub/{{.ID}}/refresh">
+                  {{template "reader-ctx" $.List}}
+                  <button type="submit" class="reader-sub-refresh"
+                          hx-post="/reader/sub/{{.ID}}/refresh" hx-target="#reader-panes" hx-swap="outerHTML"
+                          aria-label="Refresh {{.DisplayName}}">Refresh feed</button>
+                </form>
                 <form method="post" action="/reader/sub/{{.ID}}/delete">
                   {{template "reader-ctx" $.List}}
                   <button type="submit" class="outline-menu-delete reader-sub-delete"
@@ -237,6 +243,12 @@
           <div class="outline-menu-list reader-row-menu-list">
             <button type="button" class="reader-copy-feed-url" data-feed-url="{{.FeedURL}}"
                     aria-label="Copy feed URL for {{.DisplayName}}">Feed URL</button>
+            <form method="post" action="/reader/sub/{{.ID}}/refresh">
+              {{template "reader-ctx" $.List}}
+              <button type="submit" class="reader-sub-refresh"
+                      hx-post="/reader/sub/{{.ID}}/refresh" hx-target="#reader-panes" hx-swap="outerHTML"
+                      aria-label="Refresh {{.DisplayName}}">Refresh feed</button>
+            </form>
             <form method="post" action="/reader/sub/{{.ID}}/delete">
               {{template "reader-ctx" $.List}}
               <button type="submit" class="outline-menu-delete reader-sub-delete"

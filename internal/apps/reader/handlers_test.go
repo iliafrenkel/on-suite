@@ -41,6 +41,7 @@ func TestEveryReaderRouteIsBehindAuth(t *testing.T) {
 		{http.MethodGet, "/reader/item/1"},
 		{http.MethodPost, "/reader/subscribe"},
 		{http.MethodPost, "/reader/sub/1/delete"},
+		{http.MethodPost, "/reader/sub/1/refresh"},
 		{http.MethodPost, "/reader/folder"},
 		{http.MethodPost, "/reader/folder/1/delete"},
 		{http.MethodPost, "/reader/refresh"},
@@ -2314,5 +2315,74 @@ func TestHideReadCookieHidesAnAllReadFeedAndItsEmptyFolder(t *testing.T) {
 	doc := s.Get(t, s.Alice, "/reader/")
 	if !strings.Contains(doc.Text(), "Blogs") {
 		t.Error("folder is gone even with the hide-read cookie absent")
+	}
+}
+
+// TestRefreshFeedControlFetchesOneFeedRegardlessOfSchedule pins the per-row
+// "Refresh feed" action: it must fetch the one feed even though it is not due
+// (a real subscription is never due again for the default 30-minute interval
+// right after its own fetch-on-add).
+func TestRefreshFeedControlFetchesOneFeedRegardlessOfSchedule(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+	a.AllowPrivateFetchesForTest()
+
+	var hits int
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, origin.URL+"/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Mark the feed as freshly fetched and not due for another hour, exactly
+	// what fetch-on-add leaves behind — "Refresh feed" must still fetch it.
+	if _, err := s.Store.DB().ExecContext(ctx,
+		`UPDATE reader_feeds SET next_fetch_at = ? WHERE id = ?`,
+		time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano), sub.FeedID); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	btn := doc.MustHave("button.reader-sub-refresh")
+	if got, _ := htmlassert.Attr(btn, "hx-post"); got != "/reader/sub/"+itoa(sub.ID)+"/refresh" {
+		t.Errorf("refresh button hx-post = %q", got)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/refresh", url.Values{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refresh returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if hits != 1 {
+		t.Fatalf("origin hit %d times, want 1", hits)
+	}
+
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("stored %d items, want 1", len(items))
+	}
+}
+
+// TestRefreshFeedIsScopedToTheOwner guards against refreshing (and disclosing
+// the existence of) somebody else's subscription id.
+func TestRefreshFeedIsScopedToTheOwner(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Bob.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/refresh", url.Values{})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("refreshing another user's subscription returned %d, want 404", rec.Code)
 	}
 }

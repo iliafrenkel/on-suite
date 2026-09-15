@@ -311,6 +311,23 @@ func (s *Store) DeleteFolder(ctx context.Context, userID, folderID int64) error 
 	return nil
 }
 
+// FeedIDForSub returns the shared feed id behind one user's subscription. The
+// user_id predicate is the same ownership check Unsubscribe uses: a
+// subscription belonging to somebody else is reported exactly as one that
+// does not exist.
+func (s *Store) FeedIDForSub(ctx context.Context, userID, subID int64) (int64, error) {
+	var feedID int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT feed_id FROM reader_subs WHERE id = ? AND user_id = ?`, subID, userID).Scan(&feedID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("reader: load subscription feed: %w", err)
+	}
+	return feedID, nil
+}
+
 // Tree returns one user's whole sidebar in two queries.
 func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 	var out Tree
