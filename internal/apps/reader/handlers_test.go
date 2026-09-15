@@ -1748,6 +1748,47 @@ func TestSubscribeAcceptsASiteURLAndFindsTheFeed(t *testing.T) {
 	}
 }
 
+// A favicon discovered from the webpage that led to this feed (a real
+// <link rel="icon">, not the generic /favicon.ico guess) must survive into
+// the tree — this is the "webpage discovery" half of favicon support; the
+// direct-feed-URL half is TestFetchOnAddDerivesAFaviconGuessForADirectFeedURL.
+func TestSubscribeViaWebpageDiscoveryUsesTheAdvertisedFavicon(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	})
+	origin := httptest.NewServer(mux)
+	defer origin.Close()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head>
+			<link rel="alternate" type="application/rss+xml" href="` + origin.URL + `/feed.xml">
+			<link rel="icon" href="/static/icon.png">
+			</head><body>hi</body></html>`))
+	})
+	a.AllowPrivateFetchesForTest()
+
+	if rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/"}}); rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 1 {
+		t.Fatalf("subscribed to %d feeds, want 1", len(tree.Root))
+	}
+	want := origin.URL + "/static/icon.png"
+	if tree.Root[0].FaviconURL != want {
+		t.Errorf("FaviconURL = %q, want the advertised icon %q", tree.Root[0].FaviconURL, want)
+	}
+}
+
 // A URL that is already a feed must not need discovery probing. Fetch-on-add
 // (this task) means the total is 2, not 1: one hit from resolveFeedURL
 // confirming the URL is already a feed, one from the synchronous FetchNow

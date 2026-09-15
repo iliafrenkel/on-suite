@@ -591,7 +591,7 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feedURL, candidates, err := a.resolveFeedURL(r.Context(), raw)
+	feedURL, faviconURL, candidates, err := a.resolveFeedURL(r.Context(), raw)
 	switch {
 	case errors.Is(err, ErrNoFeedFound):
 		a.renderIndex(w, r, userID, lc, "No feed found at that address.")
@@ -615,6 +615,11 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 		}
 		a.fail(w, r, err)
 		return
+	}
+	if faviconURL != "" {
+		if err := a.store.SetFaviconIfEmpty(r.Context(), sub.FeedID, faviconURL); err != nil {
+			a.deps.Log.Error("reader saving discovered favicon failed", "feed_id", sub.FeedID, "error", err)
+		}
 	}
 
 	// Fetch once, synchronously, so the feed already has articles by the time
@@ -656,7 +661,7 @@ var discoveryTimeout = 25 * time.Second
 // Every fetch goes through a.client, so the SSRF dialer guard, redirect cap
 // and size caps apply to discovery exactly as they do to polling — this is a
 // server fetching a URL a user typed, which is the case that guard exists for.
-func (a *App) resolveFeedURL(ctx context.Context, raw string) (string, []FeedCandidate, error) {
+func (a *App) resolveFeedURL(ctx context.Context, raw string) (feedURL, faviconURL string, candidates []FeedCandidate, err error) {
 	// One fetch plus up to five sequential probes, each able to take the
 	// client's own 30s per-request timeout, could otherwise hold this whole
 	// request open for minutes against a slow or stalling host. This is a
@@ -666,30 +671,36 @@ func (a *App) resolveFeedURL(ctx context.Context, raw string) (string, []FeedCan
 
 	res, err := a.client.Get(ctx, raw, GetOptions{MaxBytes: MaxFeedBytes})
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 
 	// Already a feed? Then we are done, and the poller will refetch it on its
-	// own schedule.
+	// own schedule. res.Body is feed content here, not a webpage, so there is
+	// no favicon to discover from it — Task 6's poll-time guess covers this
+	// case once the feed's site URL is known.
 	if _, err := ParseFeed(res.Body, res.FinalURL); err == nil {
-		return res.FinalURL, nil, nil
+		return res.FinalURL, "", nil, nil
 	}
 
-	candidates := FeedsInPage(res.Body, res.FinalURL)
+	// Not a feed: res.Body is a webpage we already paid to fetch, so favicon
+	// discovery here costs nothing extra.
+	found := DiscoverFavicon(res.Body, res.FinalURL)
+
+	candidates = FeedsInPage(res.Body, res.FinalURL)
 	if len(candidates) == 1 {
-		return candidates[0].URL, nil, nil
+		return candidates[0].URL, found, nil, nil
 	}
 	if len(candidates) > 1 {
 		// Ranked best-first, but let the person choose: a site with several
 		// feeds usually means several topics, and guessing wrong is worse than
 		// asking.
-		return "", candidates, nil
+		return "", "", candidates, nil
 	}
 
-	if found, ok := a.probeForFeed(ctx, res.FinalURL); ok {
-		return found, nil, nil
+	if probed, ok := a.probeForFeed(ctx, res.FinalURL); ok {
+		return probed, found, nil, nil
 	}
-	return "", nil, ErrNoFeedFound
+	return "", "", nil, ErrNoFeedFound
 }
 
 // probeForFeed tries the handful of conventional paths, in order, stopping at
