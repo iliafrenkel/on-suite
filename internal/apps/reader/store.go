@@ -7,8 +7,10 @@ package reader
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -1154,6 +1156,81 @@ func (s *Store) SaveImageFailure(ctx context.Context, hash, msg string, now time
 		 WHERE url_hash = ?`,
 		msg, formatTime(now), hash); err != nil {
 		return fmt.Errorf("reader: record image failure: %w", err)
+	}
+	return nil
+}
+
+// FaviconHash identifies a favicon by its source URL, the same scheme
+// ImageHash uses for article images — but computed and stored separately,
+// over reader_feed_icons rather than reader_images. A hash from one table
+// is never looked up in the other.
+func FaviconHash(srcURL string) string {
+	sum := sha256.Sum256([]byte(srcURL))
+	return hex.EncodeToString(sum[:16])
+}
+
+// FeedIcon is one cached favicon.
+type FeedIcon struct {
+	Hash        string
+	SrcURL      string
+	ContentType string
+	Bytes       []byte
+	FetchedAt   time.Time
+	ErrorCount  int
+	LastError   string
+}
+
+// Cached reports whether the bytes are in hand. A row exists from the moment
+// a feed's favicon URL is first known; the bytes arrive on first view, same
+// as Image.
+func (i FeedIcon) Cached() bool { return len(i.Bytes) > 0 }
+
+// FeedIconByHash loads one favicon record. An unknown hash is ErrNotFound,
+// which is what stops the proxy being asked to fetch a URL no feed's
+// discovery ever produced.
+func (s *Store) FeedIconByHash(ctx context.Context, hash string) (FeedIcon, error) {
+	var icon FeedIcon
+	var bytes []byte
+	var fetched sql.NullString
+	err := s.db.QueryRowContext(ctx, `
+		SELECT url_hash, src_url, content_type, bytes, fetched_at, error_count, last_error
+		  FROM reader_feed_icons WHERE url_hash = ?`, hash).
+		Scan(&icon.Hash, &icon.SrcURL, &icon.ContentType, &bytes, &fetched,
+			&icon.ErrorCount, &icon.LastError)
+	if errors.Is(err, sql.ErrNoRows) {
+		return FeedIcon{}, ErrNotFound
+	}
+	if err != nil {
+		return FeedIcon{}, fmt.Errorf("reader: load feed icon: %w", err)
+	}
+	icon.Bytes = bytes
+	if fetched.Valid {
+		icon.FetchedAt = parseTime(fetched.String)
+	}
+	return icon, nil
+}
+
+// SaveFeedIconBytes caches a fetched favicon and clears any recorded failure.
+func (s *Store) SaveFeedIconBytes(ctx context.Context, hash, contentType string, data []byte, now time.Time) error {
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE reader_feed_icons
+		   SET bytes = ?, content_type = ?, fetched_at = ?, last_error = '', error_count = 0
+		 WHERE url_hash = ?`,
+		data, contentType, formatTime(now), hash); err != nil {
+		return fmt.Errorf("reader: cache feed icon: %w", err)
+	}
+	return nil
+}
+
+// SaveFeedIconFailure records that a fetch failed, so a dead favicon is not
+// re-fetched on every page view.
+func (s *Store) SaveFeedIconFailure(ctx context.Context, hash, msg string, now time.Time) error {
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE reader_feed_icons
+		   SET last_error = ?, error_count = error_count + 1, fetched_at = ?
+		 WHERE url_hash = ?`,
+		msg, formatTime(now), hash); err != nil {
+		return fmt.Errorf("reader: record feed icon failure: %w", err)
 	}
 	return nil
 }

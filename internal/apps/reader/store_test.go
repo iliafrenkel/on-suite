@@ -433,3 +433,63 @@ func TestFavoritesMigrationAddsFaviconColumnAndTable(t *testing.T) {
 		t.Fatalf("reader_feed_icons missing or wrong shape: %v", err)
 	}
 }
+
+func TestFeedIconHashIsStableAndURLSafe(t *testing.T) {
+	a := reader.FaviconHash("https://example.com/favicon.ico")
+	b := reader.FaviconHash("https://example.com/favicon.ico")
+	c := reader.FaviconHash("https://example.com/other.ico")
+
+	if a != b {
+		t.Error("hash is not stable across calls")
+	}
+	if a == c {
+		t.Error("different URLs hashed the same")
+	}
+	if len(a) != 32 {
+		t.Errorf("hash is %d chars, want 32", len(a))
+	}
+}
+
+func TestFeedIconByHashRefusesAnUnknownHash(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	_, err := f.store.FeedIconByHash(ctx, reader.FaviconHash("https://never-seen.example/x.ico"))
+	if !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSaveFeedIconBytesCachesAndClearsFailures(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	hash := reader.FaviconHash("https://example.com/favicon.ico")
+	if _, err := f.db.ExecContext(ctx,
+		`INSERT INTO reader_feed_icons (url_hash, src_url) VALUES (?, ?)`,
+		hash, "https://example.com/favicon.ico"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SaveFeedIconFailure(ctx, hash, "boom", now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.SaveFeedIconBytes(ctx, hash, "image/x-icon", []byte{0x00, 0x01}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.FeedIconByHash(ctx, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Cached() {
+		t.Error("Cached() = false after SaveFeedIconBytes")
+	}
+	if got.ContentType != "image/x-icon" {
+		t.Errorf("ContentType = %q, want image/x-icon", got.ContentType)
+	}
+	if got.ErrorCount != 0 || got.LastError != "" {
+		t.Errorf("failure not cleared: ErrorCount=%d LastError=%q", got.ErrorCount, got.LastError)
+	}
+}
