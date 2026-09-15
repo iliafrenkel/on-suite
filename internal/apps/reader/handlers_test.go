@@ -87,6 +87,32 @@ func TestSubscribeAddsAFeedToTheTree(t *testing.T) {
 	}
 }
 
+// TestFeedMenuOffersToCopyTheFeedURL guards the markup the reader.js click
+// handler depends on: the button's data-feed-url must be the subscription's
+// actual feed address, not (for example) the display name or the site URL.
+func TestFeedMenuOffersToCopyTheFeedURL(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	feedURL := origin.URL + "/feed.xml"
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {feedURL}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	btn := doc.MustHave("button.reader-copy-feed-url")
+	if got, _ := htmlassert.Attr(btn, "data-feed-url"); got != feedURL {
+		t.Errorf("data-feed-url = %q, want %q", got, feedURL)
+	}
+}
+
 func TestSubscribeRejectsANonHTTPURL(t *testing.T) {
 	s := newServer(t)
 
