@@ -1,6 +1,7 @@
 package reader_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
@@ -63,6 +64,21 @@ func TestDiscoverFaviconFallsBackWhenNoLinkMatches(t *testing.T) {
 	got := reader.DiscoverFavicon([]byte(`<html><head><title>No icon here</title></head></html>`), "https://blog.example/")
 	if got != "https://blog.example/favicon.ico" {
 		t.Errorf("got %q, want the /favicon.ico fallback", got)
+	}
+}
+
+// The /favicon.ico fallback is built by copying the site URL and swapping
+// its path, so it must not carry over userinfo (a "user:pass@" prefix) that
+// happened to be present on the site URL — that would land credentials in
+// reader_feed_icons.src_url and potentially in logs on a later fetch
+// failure.
+func TestDiscoverFaviconFallbackStripsUserinfo(t *testing.T) {
+	got := reader.DiscoverFavicon(nil, "https://u:p@blog.example/")
+	if strings.Contains(got, "u:p@") {
+		t.Errorf("got %q, fallback favicon URL must not carry userinfo", got)
+	}
+	if got != "https://blog.example/favicon.ico" {
+		t.Errorf("got %q, want https://blog.example/favicon.ico", got)
 	}
 }
 

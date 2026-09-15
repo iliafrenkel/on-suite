@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
@@ -66,6 +67,53 @@ func TestFaviconProxyRefusesAnUnknownHash(t *testing.T) {
 	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/favicon/"+hash, nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("unknown hash returned %d, want 404", rec.Code)
+	}
+}
+
+// TestFaviconProxyUnknownHashIsABareNotFound guards against the sidebar's
+// <img> tags (one per feed, re-requested on nearly every htmx pane swap)
+// each triggering a full page-template render for what is, for a feed added
+// via a bare URL with a guessed favicon, a routine and frequent outcome —
+// not a real error worth an app-shell response.
+func TestFaviconProxyUnknownHashIsABareNotFound(t *testing.T) {
+	s := newServer(t)
+
+	hash := reader.FaviconHash("http://169.254.169.254/latest/meta-data/")
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/favicon/"+hash, nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown hash returned %d, want 404", rec.Code)
+	}
+	if body := strings.ToLower(rec.Body.String()); strings.Contains(body, "<html") {
+		t.Errorf("unknown-hash 404 body looks like the full app shell: %q", rec.Body.String())
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc == "" {
+		t.Error("unknown-hash 404 has no Cache-Control hint for the browser to avoid re-requesting it")
+	}
+}
+
+// TestFaviconProxyBackoffWindowIsABareNotFound covers the other half of the
+// same finding: a favicon still inside its retry backoff after a prior
+// failure must not re-render the full HTML error page either.
+func TestFaviconProxyBackoffWindowIsABareNotFound(t *testing.T) {
+	s := newServer(t)
+
+	hash := reader.FaviconHash("https://cdn.example/favicon.ico")
+	if _, err := s.Store.DB().ExecContext(context.Background(),
+		`INSERT INTO reader_feed_icons (url_hash, src_url, error_count, fetched_at, last_error)
+		 VALUES (?, ?, 1, ?, 'boom')`,
+		hash, "https://cdn.example/favicon.ico", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/favicon/"+hash, nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("in-backoff hash returned %d, want 404", rec.Code)
+	}
+	if body := strings.ToLower(rec.Body.String()); strings.Contains(body, "<html") {
+		t.Errorf("in-backoff 404 body looks like the full app shell: %q", rec.Body.String())
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc == "" {
+		t.Error("in-backoff 404 has no Cache-Control hint for the browser to avoid re-requesting it")
 	}
 }
 

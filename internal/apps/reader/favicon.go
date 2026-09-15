@@ -35,6 +35,7 @@ func DiscoverFavicon(pageHTML []byte, siteURL string) string {
 	}
 
 	fallback := *base
+	fallback.User = nil
 	fallback.Path = "/favicon.ico"
 	fallback.RawQuery = ""
 	fallback.Fragment = ""

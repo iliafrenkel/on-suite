@@ -683,12 +683,12 @@ func (a *App) resolveFeedURL(ctx context.Context, raw string) (feedURL, faviconU
 	}
 
 	// Not a feed: res.Body is a webpage we already paid to fetch, so favicon
-	// discovery here costs nothing extra.
-	found := DiscoverFavicon(res.Body, res.FinalURL)
-
+	// discovery here costs nothing extra — except when there are several
+	// candidate feeds and the result would just be discarded below, so it is
+	// only run in the branches that actually use it.
 	candidates = FeedsInPage(res.Body, res.FinalURL)
 	if len(candidates) == 1 {
-		return candidates[0].URL, found, nil, nil
+		return candidates[0].URL, DiscoverFavicon(res.Body, res.FinalURL), nil, nil
 	}
 	if len(candidates) > 1 {
 		// Ranked best-first, but let the person choose: a site with several
@@ -698,7 +698,7 @@ func (a *App) resolveFeedURL(ctx context.Context, raw string) (feedURL, faviconU
 	}
 
 	if probed, ok := a.probeForFeed(ctx, res.FinalURL); ok {
-		return probed, found, nil, nil
+		return probed, DiscoverFavicon(res.Body, res.FinalURL), nil, nil
 	}
 	return "", "", nil, ErrNoFeedFound
 }

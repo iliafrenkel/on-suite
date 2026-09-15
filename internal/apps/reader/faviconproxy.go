@@ -23,6 +23,20 @@ func validFaviconHash(s string) bool {
 	return true
 }
 
+// bareNotFound answers a failed-favicon request with a bare 404 rather than
+// the app's full HTML error page. An <img> tag hits this on a known-dead
+// favicon (an unknown hash, or one still in backoff after repeated
+// failures) on nearly every sidebar render — the tree is swapped via htmx
+// on almost every click — so rendering the whole page template here would
+// turn one click into dozens of full-page executions delivered as a broken
+// image. The Cache-Control hint gives browsers that honor it a shot at not
+// re-requesting a favicon we already know is dead within the hour; it
+// matches imageRetryBackoff, our own retry window for the same URL.
+func bareNotFound(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "private, max-age="+strconv.Itoa(int(imageRetryBackoff.Seconds())))
+	w.WriteHeader(http.StatusNotFound)
+}
+
 // favicon serves a proxied feed favicon. It mirrors image() in imgproxy.go —
 // same hash-not-URL security model, same cache/backoff behavior — over the
 // separate reader_feed_icons table.
@@ -32,12 +46,16 @@ func (a *App) favicon(w http.ResponseWriter, r *http.Request) {
 	}
 	hash := r.PathValue("hash")
 	if !validFaviconHash(hash) {
-		a.deps.Errors.Status(w, r, http.StatusNotFound)
+		bareNotFound(w)
 		return
 	}
 
 	icon, err := a.store.FeedIconByHash(r.Context(), hash)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			bareNotFound(w)
+			return
+		}
 		a.fail(w, r, err)
 		return
 	}
@@ -47,7 +65,7 @@ func (a *App) favicon(w http.ResponseWriter, r *http.Request) {
 	}
 	if icon.ErrorCount >= maxImageFetchAttempts ||
 		(icon.ErrorCount > 0 && time.Since(icon.FetchedAt) < imageRetryBackoff) {
-		a.deps.Errors.Status(w, r, http.StatusNotFound)
+		bareNotFound(w)
 		return
 	}
 
