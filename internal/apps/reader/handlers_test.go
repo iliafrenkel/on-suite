@@ -149,6 +149,16 @@ func TestSubscribeStillSucceedsWhenTheFetchFails(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
 	}
+	for _, msg := range []string{
+		"That is not a web address",
+		"No feed found at that address",
+		"That address could not be reached",
+		"That is not a feed address",
+	} {
+		if strings.Contains(rec.Body.String(), msg) {
+			t.Errorf("subscribe response surfaced an error to the user (%q) despite the subscription succeeding:\n%s", msg, rec.Body.String())
+		}
+	}
 
 	doc := s.Get(t, s.Alice, "/reader/")
 	if !strings.Contains(doc.Text(), origin.URL+"/feed.xml") {
