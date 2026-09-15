@@ -87,6 +87,32 @@ func TestSubscribeAddsAFeedToTheTree(t *testing.T) {
 	}
 }
 
+// TestFeedMenuOffersToCopyTheFeedURL guards the markup the reader.js click
+// handler depends on: the button's data-feed-url must be the subscription's
+// actual feed address, not (for example) the display name or the site URL.
+func TestFeedMenuOffersToCopyTheFeedURL(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	feedURL := origin.URL + "/feed.xml"
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {feedURL}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	btn := doc.MustHave("button.reader-copy-feed-url")
+	if got, _ := htmlassert.Attr(btn, "data-feed-url"); got != feedURL {
+		t.Errorf("data-feed-url = %q, want %q", got, feedURL)
+	}
+}
+
 func TestSubscribeRejectsANonHTTPURL(t *testing.T) {
 	s := newServer(t)
 
@@ -513,6 +539,36 @@ func TestArticleResponseCarriesTheOOBPaneState(t *testing.T) {
 	}
 	if !strings.Contains(body, `hx-swap-oob`) {
 		t.Errorf("pane-state input is not swapped out of band:\n%s", body)
+	}
+}
+
+// TestReadingAnArticleUpdatesItsListRowOutOfBand guards the fix for the
+// list row staying bold after the read count already changed: opening an
+// article over htmx must carry an out-of-band update for that one row,
+// with is-read now present.
+func TestReadingAnArticleUpdatesItsListRowOutOfBand(t *testing.T) {
+	s := newServer(t)
+	subID, items := seedOne(t, s, "g1")
+	itemID := items[0].ID
+
+	listReq := httptest.NewRequest(http.MethodGet, "/reader/feed/"+itoa(subID), nil)
+	listReq.Header.Set("HX-Request", "true")
+	listRec := s.Do(t, s.Alice, listReq)
+	beforeRow := htmlassert.Parse(t, listRec.Body.String()).MustHave("li#reader-row-" + itoa(itemID))
+	if got, _ := htmlassert.Attr(beforeRow, "class"); strings.Contains(got, "is-read") {
+		t.Fatalf("row already marked read before opening it: class=%q", got)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(itemID), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+
+	row := htmlassert.Parse(t, rec.Body.String()).MustHave("li#reader-row-" + itoa(itemID))
+	if got, _ := htmlassert.Attr(row, "hx-swap-oob"); got != "true" {
+		t.Errorf("row hx-swap-oob = %q, want \"true\"", got)
+	}
+	if got, _ := htmlassert.Attr(row, "class"); !strings.Contains(got, "is-read") {
+		t.Errorf("row class = %q, want it to include is-read", got)
 	}
 }
 
@@ -2098,5 +2154,83 @@ func TestStatsPageOnAnEmptyAccount(t *testing.T) {
 	// pass on the word "normal" and fail the moment the copy is reworded.
 	if doc.Query(".empty") == nil {
 		t.Errorf("no empty state on a fresh account:\n%s", doc.Text())
+	}
+}
+
+// TestPrefsTogglesTheHideReadCookie mirrors Notes'
+// TestPrefsTogglesTheCookie (internal/apps/notes/handlers_test.go).
+func TestPrefsTogglesTheHideReadCookie(t *testing.T) {
+	s := newServer(t)
+
+	rec := s.PostHX(t, s.Alice, "/reader/prefs", url.Values{"hide_read": {"1"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var got *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == reader.HideReadCookie {
+			got = c
+		}
+	}
+	if got == nil || got.Value != "1" {
+		t.Fatalf("hide-read cookie = %+v, want value 1", got)
+	}
+	if got.MaxAge <= 0 {
+		t.Errorf("hide-read cookie MaxAge = %d, want a durable positive value", got.MaxAge)
+	}
+}
+
+func TestPrefsRejectsAnUnknownHideReadValue(t *testing.T) {
+	s := newServer(t)
+	for _, v := range []string{"", "true", "2"} {
+		rec := s.Post(t, s.Alice, "/reader/prefs", url.Values{"hide_read": {v}})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("hide_read=%q gave %d, want 400", v, rec.Code)
+		}
+	}
+}
+
+// TestHideReadCookieHidesAnAllReadFeedAndItsEmptyFolder is the end-to-end
+// path view_test.go's unit tests already cover in isolation: seed a folder
+// with one feed, mark it fully read, confirm it disappears from the
+// rendered tree only once the cookie is set, and reappears when cleared.
+func TestHideReadCookieHidesAnAllReadFeedAndItsEmptyFolder(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Blogs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", &folder.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Only item",
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetRead(ctx, s.Alice.User.ID, items[0].ID, true, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/reader/", nil)
+	req.AddCookie(&http.Cookie{Name: reader.HideReadCookie, Value: "1"})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "Blogs") {
+		t.Errorf("hide_read=1 still shows the all-read folder:\n%s", rec.Body.String())
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	if !strings.Contains(doc.Text(), "Blogs") {
+		t.Error("folder is gone even with the hide-read cookie absent")
 	}
 }

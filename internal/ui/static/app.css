@@ -1801,6 +1801,10 @@ kbd {
 	white-space: nowrap;
 }
 
+.reader-hide-read-form {
+	display: contents;
+}
+
 .reader-dialog {
 	position: relative;
 	width: min(28rem, calc(100vw - var(--s-6)));
@@ -1899,6 +1903,13 @@ kbd {
 	padding: var(--s-1) var(--s-2);
 }
 
+/* Nested under its folder's <summary>, not flush with it — the folder
+   header (.reader-folder > summary, below) keeps the plain var(--s-2), so a
+   feed indents one full --s-4 past that. */
+.reader-folder .reader-sub {
+	padding-left: calc(var(--s-2) + var(--s-4));
+}
+
 .reader-node a,
 .reader-sub a {
 	flex: 1 1 auto;
@@ -1945,8 +1956,10 @@ kbd {
 .reader-node:focus-within .outline-menu-toggle,
 .reader-sub:hover .outline-menu-toggle,
 .reader-sub:focus-within .outline-menu-toggle,
-.reader-folder:hover .outline-menu-toggle,
-.reader-folder:focus-within .outline-menu-toggle,
+.reader-folder > summary:hover ~ .reader-folder-menu .outline-menu-toggle,
+.reader-folder > summary:focus-visible ~ .reader-folder-menu .outline-menu-toggle,
+.reader-folder-menu:hover .outline-menu-toggle,
+.reader-folder-menu:focus-within .outline-menu-toggle,
 .reader-folder-menu[open] .outline-menu-toggle {
 	opacity: 1;
 }

@@ -354,6 +354,35 @@
 		});
 	});
 
+	// --- Copy feed URL -----------------------------------------------------
+
+	// A plain client-side action: no server round trip, so it does not go
+	// through htmx at all. The button's own label is the confirmation —
+	// swapped to "Copied!" and back — rather than a toast, since this is a
+	// small, single-purpose menu action.
+	document.addEventListener("click", function (e) {
+		var btn = e.target.closest(".reader-copy-feed-url");
+		if (!btn) return;
+		var url = btn.getAttribute("data-feed-url");
+		if (!url) return;
+
+		var original = btn.textContent;
+		function flash(label) {
+			btn.textContent = label;
+			setTimeout(function () { btn.textContent = original; }, 1500);
+		}
+
+		if (!navigator.clipboard || !navigator.clipboard.writeText) {
+			flash("Couldn't copy");
+			return;
+		}
+		navigator.clipboard.writeText(url).then(function () {
+			flash("Copied!");
+		}, function () {
+			flash("Couldn't copy");
+		});
+	});
+
 	// --- Dialogs -----------------------------------------------------------
 
 	document.addEventListener("click", function (e) {

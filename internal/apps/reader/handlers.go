@@ -233,7 +233,7 @@ func basePathFor(scope Scope, subID int64) string {
 // tree/list/article state (selecting a feed, subscribing, unsubscribing,
 // managing a folder, or refreshing) goes through here.
 func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr string) {
-	a.renderIndexWith(w, r, userID, lc, formErr, "", nil, 0)
+	a.renderIndexWith(w, r, userID, lc, formErr, "", nil, 0, hideReadFrom(r))
 }
 
 // renderIndexWithNotice is renderIndex with a neutral message attached.
@@ -241,7 +241,7 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, 
 // It sets the field after building the view rather than widening renderIndex's
 // signature, so the eight existing call sites stay as they are.
 func (a *App) renderIndexWithNotice(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, notice string) {
-	a.renderIndexWith(w, r, userID, lc, "", notice, nil, 0)
+	a.renderIndexWith(w, r, userID, lc, "", notice, nil, 0, hideReadFrom(r))
 }
 
 // renderIndexWith is renderIndex with its full parameter set: a form error, a
@@ -249,8 +249,8 @@ func (a *App) renderIndexWithNotice(w http.ResponseWriter, r *http.Request, user
 // the user had selected before the chooser interrupted the submission — 0
 // when there is none. Every caller but renderChooser passes nil/0 for the
 // last two.
-func (a *App) renderIndexWith(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64) {
-	a.renderPanes(w, r, userID, lc, formErr, notice, candidates, selectedFolderID, articleView{})
+func (a *App) renderIndexWith(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64, hideRead bool) {
+	a.renderPanes(w, r, userID, lc, formErr, notice, candidates, selectedFolderID, articleView{}, hideRead)
 }
 
 // renderPanes is renderIndex with an optional third pane already loaded. Only
@@ -258,7 +258,7 @@ func (a *App) renderIndexWith(w http.ResponseWriter, r *http.Request, userID int
 // or marking it unread: with htmx they answer with the article fragment, and
 // without it they have to answer with a whole page or the browser lands on a
 // bare <article> with no shell.
-func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64, art articleView) {
+func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64, art articleView, hideRead bool) {
 	ctx := r.Context()
 
 	// Trimmed here rather than in the store, so the value echoed back into the
@@ -289,7 +289,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	}
 
 	view := indexView{
-		Tree:             viewTree(tree, lc.SubID, lc.Scope, counts),
+		Tree:             viewTree(tree, lc.SubID, lc.Scope, counts, hideRead),
 		Article:          art,
 		Error:            formErr,
 		Notice:           notice,
@@ -304,6 +304,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	}
 	listTitleStr := listTitle(lc.Scope, sub)
 	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID), search)
+	view.List.HideRead = hideRead
 	// The currently-open article's row is highlighted in the list, the same
 	// way the tree highlights the selected feed — real item ids start at 1,
 	// so 0 (art's zero value when nothing is open) correctly highlights
@@ -419,12 +420,12 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 	// stray out-of-band checkbox and no shell around either.
 	// An htmx request, GET or POST, still gets the one-pane fragment.
 	if !web.IsHTMX(r) {
-		a.renderPanes(w, r, userID, lc, "", "", nil, 0, viewArticle(item, page.Shell, lc, showFull))
+		a.renderPanes(w, r, userID, lc, "", "", nil, 0, viewArticle(item, page.Shell, lc, showFull), hideReadFrom(r))
 		return
 	}
 
 	view := indexView{
-		Tree:    viewTree(tree, lc.SubID, lc.Scope, counts),
+		Tree:    viewTree(tree, lc.SubID, lc.Scope, counts, hideReadFrom(r)),
 		List:    listView{Scope: lc.Scope, SubID: lc.SubID, Filter: lc.Filter, Shell: page.Shell},
 		Article: viewArticle(item, page.Shell, lc, showFull),
 		Shell:   page.Shell,
@@ -529,6 +530,41 @@ func (a *App) markAllRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.renderIndex(w, r, userID, lc, "")
+}
+
+// prefs sets the hide-read-feeds preference — a plain POST rather than a
+// client-side cookie write, for the same reason Notes' show-completed
+// toggle is: it changes what the tree query renders, and every reader
+// action already goes through a form/hx-post pair so this works with
+// JavaScript off too.
+func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	raw := r.PostFormValue("hide_read")
+	if raw != "0" && raw != "1" {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     HideReadCookie,
+		Value:    raw,
+		Path:     "/reader/",
+		HttpOnly: true,
+		Secure:   a.deps.Secure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   hideReadCookieMaxAge,
+	})
+
+	// The form carries the list it fired from, same as markAllRead, so the
+	// re-render stays on the feed/scope the toggle was clicked from.
+	lc := formContext(r, 0)
+	// The value just toggled, not hideReadFrom(r): r still carries whatever
+	// the browser sent on this request, before the SetCookie above, which
+	// the browser will only start sending back on its next one.
+	a.renderIndexWith(w, r, userID, lc, "", "", nil, 0, raw == "1")
 }
 
 // subscribe adds a feed. A rejected URL re-renders with the message on the
@@ -674,7 +710,7 @@ func (a *App) renderChooser(w http.ResponseWriter, r *http.Request, userID int64
 	if id := folderParam(r); id != nil {
 		selectedFolderID = *id
 	}
-	a.renderIndexWith(w, r, userID, lc, "", "", candidates, selectedFolderID)
+	a.renderIndexWith(w, r, userID, lc, "", "", candidates, selectedFolderID, hideReadFrom(r))
 }
 
 // folderParam reads an optional folder id from the form. Absent or unparseable
