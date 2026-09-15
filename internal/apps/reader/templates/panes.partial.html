@@ -225,6 +225,13 @@
      directly as fields of the dict rather than through the range's dot). */}}
 {{define "sub-row"}}
 <li class="reader-sub{{if eq .Sub.ID .Tree.ActiveID}} is-active{{end}}">
+  {{if .Sub.FaviconPath}}
+    <img class="reader-favicon" src="{{.Sub.FaviconPath}}" width="16" height="16" alt=""
+         onerror="var f=this.nextElementSibling; f.hidden=false; this.remove()">
+    <span class="reader-favicon" hidden>{{ticon "rss"}}</span>
+  {{else}}
+    <span class="reader-favicon">{{ticon "rss"}}</span>
+  {{end}}
   <a href="/reader/feed/{{.Sub.ID}}" hx-get="/reader/feed/{{.Sub.ID}}"
        hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.Sub.DisplayName}}</a>{{if .Sub.Failing}} <span class="reader-failing" title="{{.Sub.LastError}}">&#9888;</span>{{end}}
   {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .Sub.ID) "N" (index .Tree.Counts.BySub .Sub.ID))}}

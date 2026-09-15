@@ -67,6 +67,39 @@ func TestIndexShowsAnEmptyState(t *testing.T) {
 	}
 }
 
+func TestTreeShowsAFaviconImageWhenKnown(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetFaviconIfEmpty(ctx, sub.FeedID, "https://example.com/favicon.ico"); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	img := doc.MustHave("img.reader-favicon")
+	want := "/reader/favicon/" + reader.FaviconHash("https://example.com/favicon.ico")
+	if src, _ := htmlassert.Attr(img, "src"); src != want {
+		t.Errorf("favicon img src = %q, want %q", src, want)
+	}
+}
+
+func TestTreeShowsTheGenericIconWithNoFavicon(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	if _, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	doc.MustNotHave("img.reader-favicon")
+	doc.MustHave("span.reader-favicon")
+}
+
 func TestSubscribeAddsAFeedToTheTree(t *testing.T) {
 	s, a := newServerWithApp(t)
 
