@@ -2402,6 +2402,9 @@ func TestPrefsRejectsAnUnknownHideReadValue(t *testing.T) {
 // path view_test.go's unit tests already cover in isolation: seed a folder
 // with one feed, mark it fully read, confirm it disappears from the
 // rendered tree only once the cookie is set, and reappears when cleared.
+// The folder must still be offered in the add-feed dialog's folder picker
+// even while hidden from the tree — otherwise there is no way to file a new
+// feed into a folder whose existing feeds are all read.
 func TestHideReadCookieHidesAnAllReadFeedAndItsEmptyFolder(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
@@ -2433,8 +2436,12 @@ func TestHideReadCookieHidesAnAllReadFeedAndItsEmptyFolder(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	if strings.Contains(rec.Body.String(), "Blogs") {
-		t.Errorf("hide_read=1 still shows the all-read folder:\n%s", rec.Body.String())
+	hiddenDoc := htmlassert.Parse(t, rec.Body.String())
+	if tree := hiddenDoc.Query("#reader-tree"); tree != nil && strings.Contains(htmlassert.Text(tree), "Blogs") {
+		t.Errorf("hide_read=1 still shows the all-read folder in the sidebar tree:\n%s", rec.Body.String())
+	}
+	if picker := hiddenDoc.MustHave("#feed-folder"); !strings.Contains(htmlassert.Text(picker), "Blogs") {
+		t.Errorf("hide_read=1 hid the all-read folder from the add-feed folder picker:\n%s", rec.Body.String())
 	}
 
 	doc := s.Get(t, s.Alice, "/reader/")
