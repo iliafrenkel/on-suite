@@ -1899,6 +1899,13 @@ kbd {
 	padding: var(--s-1) var(--s-2);
 }
 
+/* Nested under its folder's <summary>, not flush with it — the folder
+   header (.reader-folder > summary, below) keeps the plain var(--s-2), so a
+   feed indents one full --s-4 past that. */
+.reader-sub {
+	padding-left: calc(var(--s-2) + var(--s-4));
+}
+
 .reader-node a,
 .reader-sub a {
 	flex: 1 1 auto;
