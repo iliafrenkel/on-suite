@@ -328,6 +328,28 @@ func (s *Store) FeedIDForSub(ctx context.Context, userID, subID int64) (int64, e
 	return feedID, nil
 }
 
+// RenameSubscription sets or clears this user's custom name for a
+// subscription. An empty title (after trimming) is a valid write, not an
+// error: it clears the override, and DisplayName falls back to the feed's
+// own title again — unlike CreateFolder, an empty name here is meaningful
+// rather than invalid.
+func (s *Store) RenameSubscription(ctx context.Context, userID, subID int64, title string) error {
+	title = strings.TrimSpace(title)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE reader_subs SET title = ? WHERE id = ? AND user_id = ?`, title, subID, userID)
+	if err != nil {
+		return fmt.Errorf("reader: rename subscription: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reader: rename subscription rows: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // Tree returns one user's whole sidebar in two queries.
 func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 	var out Tree

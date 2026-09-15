@@ -357,3 +357,55 @@ func TestFeedIDForSubIsScopedToTheOwner(t *testing.T) {
 		t.Errorf("FeedIDForSub(bob) = %v, want ErrNotFound for someone else's subscription", err)
 	}
 }
+
+func TestRenameSubscriptionSetsAndClearsTheOverride(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Before any poll, DisplayName falls back to the raw URL.
+	if got := sub.DisplayName(); got != "https://example.com/feed.xml" {
+		t.Fatalf("initial DisplayName = %q", got)
+	}
+
+	if err := f.store.RenameSubscription(ctx, f.alice.ID, sub.ID, "  My Feed  "); err != nil {
+		t.Fatalf("RenameSubscription: %v", err)
+	}
+	tree, err := f.store.Tree(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tree.Root[0].DisplayName(); got != "My Feed" {
+		t.Errorf("DisplayName after rename = %q, want trimmed %q", got, "My Feed")
+	}
+
+	// Clearing the override (empty string) falls back to the feed's own
+	// title/URL again, rather than being rejected as invalid input.
+	if err := f.store.RenameSubscription(ctx, f.alice.ID, sub.ID, ""); err != nil {
+		t.Fatalf("RenameSubscription(clear): %v", err)
+	}
+	tree, err = f.store.Tree(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tree.Root[0].DisplayName(); got != "https://example.com/feed.xml" {
+		t.Errorf("DisplayName after clearing = %q, want the raw URL fallback", got)
+	}
+}
+
+func TestRenameSubscriptionIsScopedToTheOwner(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.RenameSubscription(ctx, f.bob.ID, sub.ID, "Hijacked"); !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("RenameSubscription(bob) = %v, want ErrNotFound for someone else's subscription", err)
+	}
+}
