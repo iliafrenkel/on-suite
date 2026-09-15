@@ -1893,11 +1893,13 @@ kbd {
 
 /* A count sits at the end of its row, quiet enough to scan past when it does
  * not matter. The per-row "..." menu (an .outline-menu — see PATTERNS.md)
- * comes last and stays out of the way until hovered/focused. */
+ * comes last and stays out of the way until hovered/focused. center (not
+ * baseline) keeps the favicon, count badge and menu button's boxes lined up
+ * with the title text instead of each drifting off its own baseline. */
 .reader-node,
 .reader-sub {
 	display: flex;
-	align-items: baseline;
+	align-items: center;
 	gap: var(--s-2);
 	border-radius: 3px;
 	padding: var(--s-1) var(--s-2);
@@ -1924,13 +1926,10 @@ kbd {
 	text-decoration: none;
 }
 
-/* The favicon sits before the title link. .reader-node/.reader-sub are
-   align-items: baseline (right for text), which is wrong for a small image
-   or icon glyph — center it instead. .toolbar-icon already sizes the "rss"
-   fallback svg to 1rem (16px), matching the <img>'s own 16x16. */
+/* The favicon sits before the title link. .toolbar-icon already sizes the
+   "rss" fallback svg to 1rem (16px), matching the <img>'s own 16x16. */
 .reader-favicon {
 	flex: none;
-	align-self: center;
 	display: inline-flex;
 	border-radius: 2px;
 }
