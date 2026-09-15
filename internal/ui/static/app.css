@@ -1952,8 +1952,8 @@ kbd {
 .reader-node:focus-within .outline-menu-toggle,
 .reader-sub:hover .outline-menu-toggle,
 .reader-sub:focus-within .outline-menu-toggle,
-.reader-folder:hover .outline-menu-toggle,
-.reader-folder:focus-within .outline-menu-toggle,
+.reader-folder > summary:hover .outline-menu-toggle,
+.reader-folder > summary:focus-within .outline-menu-toggle,
 .reader-folder-menu[open] .outline-menu-toggle {
 	opacity: 1;
 }
