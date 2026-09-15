@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -192,5 +193,42 @@ func TestFetchNowReturnsErrNotFoundForAMissingFeed(t *testing.T) {
 
 	if err := poller.FetchNow(ctx, 999999); !errors.Is(err, reader.ErrNotFound) {
 		t.Errorf("FetchNow(missing) = %v, want ErrNotFound", err)
+	}
+}
+
+// TestFetchOnAddDerivesAFaviconGuessForADirectFeedURL guards the common case
+// this task exists for: pasting a feed URL directly never fetches the site's
+// homepage (see TestSubscribeToADirectFeedURLStillWorks), so the favicon
+// must come from a pure string derivation off the feed's own site URL, with
+// no extra request to the origin.
+func TestFetchOnAddDerivesAFaviconGuessForADirectFeedURL(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+
+	var hits int
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml")) // <link>https://example.com/</link>
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	if rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/feed.xml"}}); rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d", rec.Code)
+	}
+	if hits != 2 {
+		t.Fatalf("origin was fetched %d times, want 2 (discovery + fetch-on-add) — a favicon fetch would make this 3", hits)
+	}
+
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 1 {
+		t.Fatalf("subscribed to %d feeds, want 1", len(tree.Root))
+	}
+	if tree.Root[0].FaviconURL != "https://example.com/favicon.ico" {
+		t.Errorf("FaviconURL = %q, want the derived /favicon.ico guess", tree.Root[0].FaviconURL)
 	}
 }
