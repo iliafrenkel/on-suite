@@ -203,97 +203,68 @@
       </details>
       <ul>
         {{range .Subs}}
-          <li class="reader-sub{{if eq .ID $.Tree.ActiveID}} is-active{{end}}">
-            <a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
-                 hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
-            {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID))}}
-            <details class="outline-menu">
-              <summary class="outline-menu-toggle quiet" aria-label="Feed actions">{{ticon "more"}}</summary>
-              <div class="outline-menu-list reader-row-menu-list">
-                <button type="button" class="reader-copy-feed-url" data-feed-url="{{.FeedURL}}"
-                        aria-label="Copy feed URL for {{.DisplayName}}">Feed URL</button>
-                <form method="post" action="/reader/sub/{{.ID}}/refresh">
-                  {{template "reader-ctx" $.List}}
-                  <button type="submit" class="reader-sub-refresh"
-                          hx-post="/reader/sub/{{.ID}}/refresh" hx-target="#reader-panes" hx-swap="outerHTML"
-                          aria-label="Refresh {{.DisplayName}}">Refresh feed</button>
-                </form>
-                <button type="button" class="reader-sub-rename" data-open-dialog="rename-feed-dialog-{{.ID}}"
-                        aria-label="Rename {{.DisplayName}}">Rename&hellip;</button>
-                <form method="post" action="/reader/sub/{{.ID}}/delete">
-                  {{template "reader-ctx" $.List}}
-                  <button type="submit" class="outline-menu-delete reader-sub-delete"
-                          hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
-                          hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
-                          aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
-                </form>
-              </div>
-            </details>
-            <dialog id="rename-feed-dialog-{{.ID}}" class="reader-dialog">
-              <button type="button" class="reader-dialog-close" aria-label="Close">{{ticon "close"}}</button>
-              <h2>Rename feed</h2>
-              <form method="post" action="/reader/sub/{{.ID}}/rename"
-                    hx-post="/reader/sub/{{.ID}}/rename" hx-target="#reader-panes" hx-swap="outerHTML">
-                {{template "reader-ctx" $.List}}
-                <label for="rename-title-{{.ID}}">Name</label>
-                <input id="rename-title-{{.ID}}" name="title" type="text" value="{{.DisplayName}}">
-                <div class="dialog-actions">
-                  <button type="submit" class="button">Rename</button>
-                  <button type="button" class="reader-dialog-cancel">Cancel</button>
-                </div>
-              </form>
-            </dialog>
-          </li>
+          {{template "sub-row" (dict "Sub" . "Tree" $.Tree "List" $.List)}}
         {{end}}
       </ul>
     </details>
   {{end}}
   <ul>
     {{range .Tree.Root}}
-      <li class="reader-sub{{if eq .ID $.Tree.ActiveID}} is-active{{end}}">
-        <a href="/reader/feed/{{.ID}}" hx-get="/reader/feed/{{.ID}}"
-             hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.DisplayName}}</a>{{if .Failing}} <span class="reader-failing" title="{{.LastError}}">&#9888;</span>{{end}}
-        {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID))}}
-        <details class="outline-menu">
-          <summary class="outline-menu-toggle quiet" aria-label="Feed actions">{{ticon "more"}}</summary>
-          <div class="outline-menu-list reader-row-menu-list">
-            <button type="button" class="reader-copy-feed-url" data-feed-url="{{.FeedURL}}"
-                    aria-label="Copy feed URL for {{.DisplayName}}">Feed URL</button>
-            <form method="post" action="/reader/sub/{{.ID}}/refresh">
-              {{template "reader-ctx" $.List}}
-              <button type="submit" class="reader-sub-refresh"
-                      hx-post="/reader/sub/{{.ID}}/refresh" hx-target="#reader-panes" hx-swap="outerHTML"
-                      aria-label="Refresh {{.DisplayName}}">Refresh feed</button>
-            </form>
-            <button type="button" class="reader-sub-rename" data-open-dialog="rename-feed-dialog-{{.ID}}"
-                    aria-label="Rename {{.DisplayName}}">Rename&hellip;</button>
-            <form method="post" action="/reader/sub/{{.ID}}/delete">
-              {{template "reader-ctx" $.List}}
-              <button type="submit" class="outline-menu-delete reader-sub-delete"
-                      hx-post="/reader/sub/{{.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
-                      hx-confirm="Unsubscribe from &#8220;{{.DisplayName}}&#8221;?"
-                      aria-label="Unsubscribe from {{.DisplayName}}">Unsubscribe</button>
-            </form>
-          </div>
-        </details>
-        <dialog id="rename-feed-dialog-{{.ID}}" class="reader-dialog">
-          <button type="button" class="reader-dialog-close" aria-label="Close">{{ticon "close"}}</button>
-          <h2>Rename feed</h2>
-          <form method="post" action="/reader/sub/{{.ID}}/rename"
-                hx-post="/reader/sub/{{.ID}}/rename" hx-target="#reader-panes" hx-swap="outerHTML">
-            {{template "reader-ctx" $.List}}
-            <label for="rename-title-{{.ID}}">Name</label>
-            <input id="rename-title-{{.ID}}" name="title" type="text" value="{{.DisplayName}}">
-            <div class="dialog-actions">
-              <button type="submit" class="button">Rename</button>
-              <button type="button" class="reader-dialog-cancel">Cancel</button>
-            </div>
-          </form>
-        </dialog>
-      </li>
+      {{template "sub-row" (dict "Sub" . "Tree" $.Tree "List" $.List)}}
     {{end}}
   </ul>
 </nav>
+{{end}}
+
+{{/* sub-row is one feed row in the tree: its name/link, unread count, the
+     per-row "..." menu (Feed URL / Refresh feed / Rename… / Unsubscribe), and
+     the rename dialog. Shared by both loops in "tree" above — feeds nested in
+     a folder and feeds at the root render identically, so this used to be
+     duplicated verbatim in each. .Sub is the Subscription; .Tree and .List
+     are passed through unchanged (no longer reached via $, since they arrive
+     directly as fields of the dict rather than through the range's dot). */}}
+{{define "sub-row"}}
+<li class="reader-sub{{if eq .Sub.ID .Tree.ActiveID}} is-active{{end}}">
+  <a href="/reader/feed/{{.Sub.ID}}" hx-get="/reader/feed/{{.Sub.ID}}"
+       hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.Sub.DisplayName}}</a>{{if .Sub.Failing}} <span class="reader-failing" title="{{.Sub.LastError}}">&#9888;</span>{{end}}
+  {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .Sub.ID) "N" (index .Tree.Counts.BySub .Sub.ID))}}
+  <details class="outline-menu">
+    <summary class="outline-menu-toggle quiet" aria-label="Feed actions">{{ticon "more"}}</summary>
+    <div class="outline-menu-list reader-row-menu-list">
+      <button type="button" class="reader-copy-feed-url" data-feed-url="{{.Sub.FeedURL}}"
+              aria-label="Copy feed URL for {{.Sub.DisplayName}}">Feed URL</button>
+      <form method="post" action="/reader/sub/{{.Sub.ID}}/refresh">
+        {{template "reader-ctx" .List}}
+        <button type="submit" class="reader-sub-refresh"
+                hx-post="/reader/sub/{{.Sub.ID}}/refresh" hx-target="#reader-panes" hx-swap="outerHTML"
+                aria-label="Refresh {{.Sub.DisplayName}}">Refresh feed</button>
+      </form>
+      <button type="button" class="reader-sub-rename" data-open-dialog="rename-feed-dialog-{{.Sub.ID}}"
+              aria-label="Rename {{.Sub.DisplayName}}">Rename&hellip;</button>
+      <form method="post" action="/reader/sub/{{.Sub.ID}}/delete">
+        {{template "reader-ctx" .List}}
+        <button type="submit" class="outline-menu-delete reader-sub-delete"
+                hx-post="/reader/sub/{{.Sub.ID}}/delete" hx-target="#reader-panes" hx-swap="outerHTML"
+                hx-confirm="Unsubscribe from &#8220;{{.Sub.DisplayName}}&#8221;?"
+                aria-label="Unsubscribe from {{.Sub.DisplayName}}">Unsubscribe</button>
+      </form>
+    </div>
+  </details>
+  <dialog id="rename-feed-dialog-{{.Sub.ID}}" class="reader-dialog">
+    <button type="button" class="reader-dialog-close" aria-label="Close">{{ticon "close"}}</button>
+    <h2>Rename feed</h2>
+    <form method="post" action="/reader/sub/{{.Sub.ID}}/rename"
+          hx-post="/reader/sub/{{.Sub.ID}}/rename" hx-target="#reader-panes" hx-swap="outerHTML">
+      {{template "reader-ctx" .List}}
+      <label for="rename-title-{{.Sub.ID}}">Name</label>
+      <input id="rename-title-{{.Sub.ID}}" name="title" type="text" value="{{.Sub.DisplayName}}">
+      <div class="dialog-actions">
+        <button type="submit" class="button">Rename</button>
+        <button type="button" class="reader-dialog-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+</li>
 {{end}}
 
 {{/* reader-dialogs holds every native <dialog> the top toolbar's "..." menu

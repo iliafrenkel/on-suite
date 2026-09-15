@@ -27,3 +27,14 @@ func SetDiscoveryTimeoutForTest(d time.Duration) (restore func()) {
 	discoveryTimeout = d
 	return func() { discoveryTimeout = prev }
 }
+
+// SetFetchOnAddTimeoutForTest overrides the synchronous fetch-on-add deadline
+// (production default: 10s) so a test proving a slow origin degrades like a
+// failing one doesn't need a real 10-second sleep. It returns a func that
+// restores the previous value — call it (typically via defer) so one test's
+// override cannot leak into another.
+func SetFetchOnAddTimeoutForTest(d time.Duration) (restore func()) {
+	prev := fetchOnAddTimeout
+	fetchOnAddTimeout = d
+	return func() { fetchOnAddTimeout = prev }
+}

@@ -628,8 +628,9 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 
 // fetchOnAddTimeout bounds the synchronous fetch subscribe performs so a
 // slow origin cannot hold the add-feed request open indefinitely. A var, not
-// a const, for the same reason discoveryTimeout is: SetDiscoveryTimeoutForTest's
-// pattern is available if a test ever needs to shrink it.
+// a const, for the same reason discoveryTimeout is: SetFetchOnAddTimeoutForTest
+// (export_test.go) can shrink it for a test rather than sleep past the real
+// thing.
 var fetchOnAddTimeout = 10 * time.Second
 
 // discoveryTimeout bounds resolveFeedURL's entire attempt — the initial fetch

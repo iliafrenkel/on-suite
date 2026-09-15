@@ -168,6 +168,56 @@ func TestSubscribeStillSucceedsWhenTheFetchFails(t *testing.T) {
 	}
 }
 
+// TestSubscribeStillSucceedsWhenTheFetchTimesOut pins the other half of the
+// "no error surfaced to the user" requirement: a slow origin must degrade
+// exactly like a failing one, not hold the add-feed request open until the
+// production 10s deadline. It shrinks fetchOnAddTimeout via
+// SetFetchOnAddTimeoutForTest and points the origin's second hit (the
+// synchronous fetch-on-add call, after resolveFeedURL's own discovery fetch
+// on the first hit) at a sleep longer than the shrunk timeout.
+func TestSubscribeStillSucceedsWhenTheFetchTimesOut(t *testing.T) {
+	s, a := newServerWithApp(t)
+
+	restore := reader.SetFetchOnAddTimeoutForTest(50 * time.Millisecond)
+	defer restore()
+
+	var hits atomic.Int32
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) == 1 {
+			w.Header().Set("Content-Type", "application/rss+xml")
+			_, _ = w.Write(fixture(t, "rss2.xml"))
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
+		"url": {origin.URL + "/feed.xml"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, msg := range []string{
+		"That is not a web address",
+		"No feed found at that address",
+		"That address could not be reached",
+		"That is not a feed address",
+	} {
+		if strings.Contains(rec.Body.String(), msg) {
+			t.Errorf("subscribe response surfaced an error to the user (%q) despite the subscription succeeding:\n%s", msg, rec.Body.String())
+		}
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	if !strings.Contains(doc.Text(), origin.URL+"/feed.xml") {
+		t.Errorf("subscription missing after a timed-out fetch-on-add:\n%s", doc.Text())
+	}
+}
+
 // TestFeedMenuOffersToCopyTheFeedURL guards the markup the reader.js click
 // handler depends on: the button's data-feed-url must be the subscription's
 // actual feed address, not (for example) the display name or the site URL.
