@@ -149,6 +149,25 @@ func pathContext(r *http.Request, subID int64) listContext {
 	}
 }
 
+// scopeWithSub maps a scope string and subscription ID string onto a Scope and
+// SubID, defaulting to ScopeAll when no scope was sent or when a feed scope has
+// no valid subscription.
+func scopeWithSub(rawScope, rawSub string) (Scope, int64) {
+	s, ok := parseScope(rawScope)
+	if !ok {
+		return ScopeAll, 0
+	}
+	if s == ScopeFeed {
+		if id, err := strconv.ParseInt(rawSub, 10, 64); err == nil && id > 0 {
+			return ScopeFeed, id
+		}
+		// A feed scope with no subscription is not a list. Fall back rather
+		// than 404 on a form or query that lost a field.
+		return ScopeAll, 0
+	}
+	return s, 0
+}
+
 // formContext is pathContext overridden by the hidden fields a POST carries.
 //
 // A POST that redraws the panes has no query string and usually no path
@@ -158,18 +177,8 @@ func pathContext(r *http.Request, subID int64) listContext {
 // values are read: a GET has no body, so the path stays authoritative there.
 func formContext(r *http.Request, subID int64) listContext {
 	out := pathContext(r, subID)
-	if s, ok := parseScope(r.PostFormValue("scope")); ok {
-		out.Scope = s
-		out.SubID = 0
-		if s == ScopeFeed {
-			if id, err := strconv.ParseInt(r.PostFormValue("sub"), 10, 64); err == nil && id > 0 {
-				out.SubID = id
-			} else {
-				// A feed scope with no subscription is not a list. Fall back
-				// rather than 404 on a form that lost a field.
-				out.Scope = ScopeAll
-			}
-		}
+	if rawScope := r.PostFormValue("scope"); rawScope != "" {
+		out.Scope, out.SubID = scopeWithSub(rawScope, r.PostFormValue("sub"))
 	}
 	if raw := r.PostFormValue("filter"); raw != "" {
 		out.Filter = ParseFilter(raw)
@@ -185,22 +194,13 @@ func formContext(r *http.Request, subID int64) listContext {
 // counts stop going stale the moment you read something), and a tree drawn
 // without this would move the selection to All under the reader's feet.
 func articleContext(r *http.Request) listContext {
-	out := listContext{
-		Scope:  ScopeAll,
+	scope, subID := scopeWithSub(r.FormValue("scope"), r.FormValue("sub"))
+	return listContext{
+		Scope:  scope,
+		SubID:  subID,
 		Filter: ParseFilter(r.FormValue("filter")),
 		Query:  strings.TrimSpace(r.FormValue("q")),
 	}
-	if s, ok := parseScope(r.FormValue("scope")); ok {
-		out.Scope = s
-	}
-	if out.Scope == ScopeFeed {
-		if id, err := strconv.ParseInt(r.FormValue("sub"), 10, 64); err == nil && id > 0 {
-			out.SubID = id
-		} else {
-			out.Scope = ScopeAll
-		}
-	}
-	return out
 }
 
 // listTitle names the pane for a scope.
@@ -228,37 +228,37 @@ func basePathFor(scope Scope, subID int64) string {
 	}
 }
 
+// renderOptions bundles the optional parameters for rendering reader panes.
+type renderOptions struct {
+	FormError        string
+	Notice           string
+	Candidates       []FeedCandidate
+	SelectedFolderID int64
+	Article          articleView
+	HideRead         bool
+}
+
 // renderIndex draws the whole three-pane page, or — over HTMX — just the
 // panes that changed. Every handler that can land the user on a different
 // tree/list/article state (selecting a feed, subscribing, unsubscribing,
 // managing a folder, or refreshing) goes through here.
 func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr string) {
-	a.renderIndexWith(w, r, userID, lc, formErr, "", nil, 0, hideReadFrom(r))
+	a.renderPanes(w, r, userID, lc, renderOptions{
+		FormError: formErr,
+		HideRead:  hideReadFrom(r),
+	})
 }
 
 // renderIndexWithNotice is renderIndex with a neutral message attached.
-//
-// It sets the field after building the view rather than widening renderIndex's
-// signature, so the eight existing call sites stay as they are.
 func (a *App) renderIndexWithNotice(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, notice string) {
-	a.renderIndexWith(w, r, userID, lc, "", notice, nil, 0, hideReadFrom(r))
+	a.renderPanes(w, r, userID, lc, renderOptions{
+		Notice:   notice,
+		HideRead: hideReadFrom(r),
+	})
 }
 
-// renderIndexWith is renderIndex with its full parameter set: a form error, a
-// neutral notice, the discovery chooser's candidates (Task 4), and the folder
-// the user had selected before the chooser interrupted the submission — 0
-// when there is none. Every caller but renderChooser passes nil/0 for the
-// last two.
-func (a *App) renderIndexWith(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64, hideRead bool) {
-	a.renderPanes(w, r, userID, lc, formErr, notice, candidates, selectedFolderID, articleView{}, hideRead)
-}
-
-// renderPanes is renderIndex with an optional third pane already loaded. Only
-// the JavaScript-less item routes pass an article — opening one, starring it,
-// or marking it unread: with htmx they answer with the article fragment, and
-// without it they have to answer with a whole page or the browser lands on a
-// bare <article> with no shell.
-func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, formErr, notice string, candidates []FeedCandidate, selectedFolderID int64, art articleView, hideRead bool) {
+// renderPanes draws the reader panes according to the listContext and renderOptions.
+func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, opts renderOptions) {
 	ctx := r.Context()
 
 	// Trimmed here rather than in the store, so the value echoed back into the
@@ -289,12 +289,12 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	}
 
 	view := indexView{
-		Tree:             viewTree(tree, lc.SubID, lc.Scope, counts, hideRead),
-		Article:          art,
-		Error:            formErr,
-		Notice:           notice,
-		Candidates:       candidates,
-		SelectedFolderID: selectedFolderID,
+		Tree:             viewTree(tree, lc.SubID, lc.Scope, counts, opts.HideRead),
+		Article:          opts.Article,
+		Error:            opts.FormError,
+		Notice:           opts.Notice,
+		Candidates:       opts.Candidates,
+		SelectedFolderID: opts.SelectedFolderID,
 	}
 
 	items, err := a.store.ItemsForScope(ctx, userID, lc.Scope, lc.SubID, lc.Filter, search, 200)
@@ -304,12 +304,12 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	}
 	listTitleStr := listTitle(lc.Scope, sub)
 	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID), search)
-	view.List.HideRead = hideRead
+	view.List.HideRead = opts.HideRead
 	// The currently-open article's row is highlighted in the list, the same
 	// way the tree highlights the selected feed — real item ids start at 1,
 	// so 0 (art's zero value when nothing is open) correctly highlights
 	// nothing.
-	view.List.ActiveID = art.ID
+	view.List.ActiveID = opts.Article.ID
 
 	// The shell crumb and <title> follow the selected feed, not the generic
 	// "All articles" list heading — ScopeAll keeps the app's own name so the
@@ -319,8 +319,8 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	if lc.Scope != ScopeAll {
 		pageTitle = listTitleStr
 	}
-	if art.Selected {
-		pageTitle = art.Title
+	if opts.Article.Selected {
+		pageTitle = opts.Article.Title
 	}
 	page := a.deps.Page(r, pageTitle)
 	view.List.Shell = page.Shell
@@ -392,6 +392,47 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 		a.fail(w, r, err)
 		return
 	}
+
+	lc := articleContext(r)
+	page := a.deps.Page(r, item.Title)
+
+	// The full article wins by default once it exists; ?view=feed is the way
+	// back, because extraction sometimes does worse than the publisher's own
+	// summary.
+	showFull := r.URL.Query().Get("view") != "feed"
+	art := viewArticle(item, page.Shell, lc, showFull)
+
+	// Anything that did not come from htmx is a plain browser navigation and
+	// gets the whole page back: a form submission from the star or unread
+	// forms (which carry method/action for exactly that case), or a click on
+	// an item link with JavaScript off. Without the GET half of this, reading
+	// an article — the one thing this app is for — was the only action a
+	// no-JS reader could not do: the response was a bare <article> with a
+	// stray out-of-band checkbox and no shell around either.
+	// An htmx request, GET or POST, still gets the one-pane fragment.
+	if !web.IsHTMX(r) {
+		a.renderPanes(w, r, userID, lc, renderOptions{
+			Article:  art,
+			HideRead: hideReadFrom(r),
+		})
+		return
+	}
+
+	// A prefetch has no read state or counts to deliver — it deliberately
+	// doesn't mutate anything (see the article handler) — so it gets just the
+	// bare article fragment. The full "article-swap" fragment carries an
+	// out-of-band pane-state checkbox and out-of-band count spans meant for
+	// htmx's own swap machinery; reader.js's fast keyboard path installs a
+	// prefetched response with a plain outerHTML assignment, not an
+	// htmx-processed swap, so that OOB markup would land as permanent,
+	// duplicate-id sibling content instead of being specially handled.
+	if r.URL.Query().Get("prefetch") == "1" {
+		if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article", art); err != nil {
+			a.deps.Errors.Internal(w, r, err)
+		}
+		return
+	}
+
 	tree, err := a.store.Tree(ctx, userID)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
@@ -403,46 +444,11 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 		return
 	}
 
-	lc := articleContext(r)
-	page := a.deps.Page(r, item.Title)
-
-	// The full article wins by default once it exists; ?view=feed is the way
-	// back, because extraction sometimes does worse than the publisher's own
-	// summary.
-	showFull := r.URL.Query().Get("view") != "feed"
-
-	// Anything that did not come from htmx is a plain browser navigation and
-	// gets the whole page back: a form submission from the star or unread
-	// forms (which carry method/action for exactly that case), or a click on
-	// an item link with JavaScript off. Without the GET half of this, reading
-	// an article — the one thing this app is for — was the only action a
-	// no-JS reader could not do: the response was a bare <article> with a
-	// stray out-of-band checkbox and no shell around either.
-	// An htmx request, GET or POST, still gets the one-pane fragment.
-	if !web.IsHTMX(r) {
-		a.renderPanes(w, r, userID, lc, "", "", nil, 0, viewArticle(item, page.Shell, lc, showFull), hideReadFrom(r))
-		return
-	}
-
 	view := indexView{
 		Tree:    viewTree(tree, lc.SubID, lc.Scope, counts, hideReadFrom(r)),
 		List:    listView{Scope: lc.Scope, SubID: lc.SubID, Filter: lc.Filter, Shell: page.Shell},
-		Article: viewArticle(item, page.Shell, lc, showFull),
+		Article: art,
 		Shell:   page.Shell,
-	}
-	// A prefetch has no read state or counts to deliver — it deliberately
-	// doesn't mutate anything (see the article handler) — so it gets just the
-	// bare article fragment. The full "article-swap" fragment carries an
-	// out-of-band pane-state checkbox and out-of-band count spans meant for
-	// htmx's own swap machinery; reader.js's fast keyboard path installs a
-	// prefetched response with a plain outerHTML assignment, not an
-	// htmx-processed swap, so that OOB markup would land as permanent,
-	// duplicate-id sibling content instead of being specially handled.
-	if r.URL.Query().Get("prefetch") == "1" {
-		if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article", view.Article); err != nil {
-			a.deps.Errors.Internal(w, r, err)
-		}
-		return
 	}
 	if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "article-swap", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
@@ -564,7 +570,9 @@ func (a *App) prefs(w http.ResponseWriter, r *http.Request) {
 	// The value just toggled, not hideReadFrom(r): r still carries whatever
 	// the browser sent on this request, before the SetCookie above, which
 	// the browser will only start sending back on its next one.
-	a.renderIndexWith(w, r, userID, lc, "", "", nil, 0, raw == "1")
+	a.renderPanes(w, r, userID, lc, renderOptions{
+		HideRead: raw == "1",
+	})
 }
 
 // subscribe adds a feed. A rejected URL re-renders with the message on the
@@ -729,7 +737,11 @@ func (a *App) renderChooser(w http.ResponseWriter, r *http.Request, userID int64
 	if id := folderParam(r); id != nil {
 		selectedFolderID = *id
 	}
-	a.renderIndexWith(w, r, userID, lc, "", "", candidates, selectedFolderID, hideReadFrom(r))
+	a.renderPanes(w, r, userID, lc, renderOptions{
+		Candidates:       candidates,
+		SelectedFolderID: selectedFolderID,
+		HideRead:         hideReadFrom(r),
+	})
 }
 
 // folderParam reads an optional folder id from the form. Absent or unparseable

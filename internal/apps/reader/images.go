@@ -70,37 +70,12 @@ func SanitizeArticleHTML(raw, baseURL string) (string, map[string]string) {
 // the same way it does today — this is not a new fail-closed path, just an
 // earlier one.
 func absolutizeImageSources(fragment, baseURL string) (string, error) {
-	base, err := url.Parse(baseURL)
-	if err != nil {
-		base = nil
-	}
-
-	ctx := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
-	nodes, err := html.ParseFragment(strings.NewReader(fragment), ctx)
-	if err != nil {
-		return "", err
-	}
-
-	for _, n := range nodes {
-		walkAbsolutizeImages(n, base)
-	}
-
-	var buf strings.Builder
-	for _, n := range nodes {
-		if err := html.Render(&buf, n); err != nil {
-			return "", err
+	base, _ := url.Parse(baseURL)
+	return mutateHTMLFragment(fragment, func(n *html.Node) {
+		if n.Type == html.ElementNode && n.DataAtom == atom.Img {
+			absolutizeOneImageSrc(n, base)
 		}
-	}
-	return buf.String(), nil
-}
-
-func walkAbsolutizeImages(n *html.Node, base *url.URL) {
-	if n.Type == html.ElementNode && n.DataAtom == atom.Img {
-		absolutizeOneImageSrc(n, base)
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		walkAbsolutizeImages(c, base)
-	}
+	})
 }
 
 func absolutizeOneImageSrc(n *html.Node, base *url.URL) {
@@ -114,7 +89,7 @@ func absolutizeOneImageSrc(n *html.Node, base *url.URL) {
 		attrs = append(attrs, a)
 	}
 
-	abs, ok := absoluteImageURL(src, base)
+	abs, ok := resolveAbsoluteHTTPURL(src, base)
 	if !ok {
 		n.Attr = attrs
 		return
@@ -124,40 +99,17 @@ func absolutizeOneImageSrc(n *html.Node, base *url.URL) {
 
 // rewriteImages replaces every img src with a proxy path.
 func rewriteImages(fragment, baseURL string) (string, map[string]string, error) {
-	base, err := url.Parse(baseURL)
-	if err != nil {
-		base = nil
-	}
-
-	ctx := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
-	nodes, err := html.ParseFragment(strings.NewReader(fragment), ctx)
+	base, _ := url.Parse(baseURL)
+	images := map[string]string{}
+	out, err := mutateHTMLFragment(fragment, func(n *html.Node) {
+		if n.Type == html.ElementNode && n.DataAtom == atom.Img {
+			rewriteOneImage(n, base, images)
+		}
+	})
 	if err != nil {
 		return "", nil, err
 	}
-
-	images := map[string]string{}
-	for _, n := range nodes {
-		walkImages(n, base, images)
-	}
-
-	var buf strings.Builder
-	for _, n := range nodes {
-		if err := html.Render(&buf, n); err != nil {
-			return "", nil, err
-		}
-	}
-	return buf.String(), images, nil
-}
-
-// walkImages rewrites in place. An img whose source cannot be resolved to an
-// absolute http(s) URL loses its src entirely rather than keeping it.
-func walkImages(n *html.Node, base *url.URL, images map[string]string) {
-	if n.Type == html.ElementNode && n.DataAtom == atom.Img {
-		rewriteOneImage(n, base, images)
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		walkImages(c, base, images)
-	}
+	return out, images, nil
 }
 
 func rewriteOneImage(n *html.Node, base *url.URL, images map[string]string) {
@@ -171,7 +123,7 @@ func rewriteOneImage(n *html.Node, base *url.URL, images map[string]string) {
 		attrs = append(attrs, a)
 	}
 
-	abs, ok := absoluteImageURL(src, base)
+	abs, ok := resolveAbsoluteHTTPURL(src, base)
 	if !ok {
 		// No usable source. Keep the element (its alt text is still worth
 		// something) but with nothing to load.
@@ -190,22 +142,29 @@ func rewriteOneImage(n *html.Node, base *url.URL, images map[string]string) {
 	)
 }
 
-// absoluteImageURL resolves a src against the article's own URL and accepts
-// only http and https. Everything else — javascript:, data:, ftp:, empty —
-// is refused, which is what makes the fail-closed test pass.
-func absoluteImageURL(src string, base *url.URL) (string, bool) {
-	if src == "" {
-		return "", false
-	}
-	u, err := url.Parse(src)
+// mutateHTMLFragment parses an HTML fragment, runs fn on every node in its tree,
+// and renders the transformed nodes back to an HTML string.
+func mutateHTMLFragment(fragment string, fn func(n *html.Node)) (string, error) {
+	ctx := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
+	nodes, err := html.ParseFragment(strings.NewReader(fragment), ctx)
 	if err != nil {
-		return "", false
+		return "", err
 	}
-	if !u.IsAbs() && base != nil {
-		u = base.ResolveReference(u)
+	for _, n := range nodes {
+		walkNodeTree(n, fn)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" || u.Host == "" {
-		return "", false
+	var buf strings.Builder
+	for _, n := range nodes {
+		if err := html.Render(&buf, n); err != nil {
+			return "", err
+		}
 	}
-	return u.String(), true
+	return buf.String(), nil
+}
+
+func walkNodeTree(n *html.Node, fn func(*html.Node)) {
+	fn(n)
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		walkNodeTree(c, fn)
+	}
 }

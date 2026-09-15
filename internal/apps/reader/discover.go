@@ -109,25 +109,28 @@ func candidateFrom(n *html.Node, base *url.URL) (FeedCandidate, bool) {
 		return FeedCandidate{}, false
 	}
 
-	abs, ok := absoluteHTTPURL(href, base)
+	abs, ok := resolveAbsoluteHTTPURL(href, base)
 	if !ok {
 		return FeedCandidate{}, false
 	}
 	return FeedCandidate{URL: abs, Title: title}, true
 }
 
-// absoluteHTTPURL resolves href against the page and accepts http and https
-// only — a discovered href is about to be handed to a fetcher, so javascript:,
-// data: and file: are refused here rather than relied on being refused later.
-func absoluteHTTPURL(href string, base *url.URL) (string, bool) {
-	u, err := url.Parse(href)
+// resolveAbsoluteHTTPURL resolves a URL against a base URL and accepts http and
+// https only — javascript:, data:, and file: are refused so they never reach a
+// fetcher or an img src.
+func resolveAbsoluteHTTPURL(raw string, base *url.URL) (string, bool) {
+	if raw == "" {
+		return "", false
+	}
+	u, err := url.Parse(raw)
 	if err != nil {
 		return "", false
 	}
 	if !u.IsAbs() && base != nil {
 		u = base.ResolveReference(u)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" || u.Host == "" {
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return "", false
 	}
 	return u.String(), true
