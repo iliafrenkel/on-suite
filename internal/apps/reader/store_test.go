@@ -409,3 +409,172 @@ func TestRenameSubscriptionIsScopedToTheOwner(t *testing.T) {
 		t.Errorf("RenameSubscription(bob) = %v, want ErrNotFound for someone else's subscription", err)
 	}
 }
+
+func TestFavoritesMigrationAddsFaviconColumnAndTable(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	var faviconURL string
+	if err := f.db.QueryRowContext(ctx,
+		`SELECT favicon_url FROM reader_feeds WHERE url = ?`, "https://example.com/feed.xml").
+		Scan(&faviconURL); err != nil {
+		t.Fatalf("favicon_url column missing or unreadable: %v", err)
+	}
+	if faviconURL != "" {
+		t.Errorf("favicon_url = %q, want empty default", faviconURL)
+	}
+
+	if _, err := f.db.ExecContext(ctx,
+		`INSERT INTO reader_feed_icons (url_hash, src_url) VALUES ('abc', 'https://example.com/favicon.ico')`); err != nil {
+		t.Fatalf("reader_feed_icons missing or wrong shape: %v", err)
+	}
+}
+
+func TestFeedIconHashIsStableAndURLSafe(t *testing.T) {
+	a := reader.FaviconHash("https://example.com/favicon.ico")
+	b := reader.FaviconHash("https://example.com/favicon.ico")
+	c := reader.FaviconHash("https://example.com/other.ico")
+
+	if a != b {
+		t.Error("hash is not stable across calls")
+	}
+	if a == c {
+		t.Error("different URLs hashed the same")
+	}
+	if len(a) != 32 {
+		t.Errorf("hash is %d chars, want 32", len(a))
+	}
+}
+
+func TestFeedIconByHashRefusesAnUnknownHash(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	_, err := f.store.FeedIconByHash(ctx, reader.FaviconHash("https://never-seen.example/x.ico"))
+	if !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSaveFeedIconBytesCachesAndClearsFailures(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	hash := reader.FaviconHash("https://example.com/favicon.ico")
+	if _, err := f.db.ExecContext(ctx,
+		`INSERT INTO reader_feed_icons (url_hash, src_url) VALUES (?, ?)`,
+		hash, "https://example.com/favicon.ico"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SaveFeedIconFailure(ctx, hash, "boom", now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.SaveFeedIconBytes(ctx, hash, "image/x-icon", []byte{0x00, 0x01}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.FeedIconByHash(ctx, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Cached() {
+		t.Error("Cached() = false after SaveFeedIconBytes")
+	}
+	if got.ContentType != "image/x-icon" {
+		t.Errorf("ContentType = %q, want image/x-icon", got.ContentType)
+	}
+	if got.ErrorCount != 0 || got.LastError != "" {
+		t.Errorf("failure not cleared: ErrorCount=%d LastError=%q", got.ErrorCount, got.LastError)
+	}
+}
+
+func TestSetFaviconIfEmptySetsAndCachesTheURL(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, "https://example.com/favicon.ico"); err != nil {
+		t.Fatal(err)
+	}
+
+	feed, err := f.store.FeedByID(ctx, sub.FeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if feed.FaviconURL != "https://example.com/favicon.ico" {
+		t.Errorf("FaviconURL = %q, want the URL passed in", feed.FaviconURL)
+	}
+
+	hash := reader.FaviconHash("https://example.com/favicon.ico")
+	if _, err := f.store.FeedIconByHash(ctx, hash); err != nil {
+		t.Errorf("reader_feed_icons row was not created: %v", err)
+	}
+}
+
+func TestSetFaviconIfEmptyDoesNotOverwrite(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, "https://example.com/first.ico"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, "https://example.com/second.ico"); err != nil {
+		t.Fatal(err)
+	}
+
+	feed, err := f.store.FeedByID(ctx, sub.FeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if feed.FaviconURL != "https://example.com/first.ico" {
+		t.Errorf("FaviconURL = %q, a second call must not overwrite the first", feed.FaviconURL)
+	}
+}
+
+func TestSubscriptionFaviconPath(t *testing.T) {
+	withURL := reader.Subscription{FaviconURL: "https://example.com/favicon.ico"}
+	if withURL.FaviconPath() != "/reader/favicon/"+reader.FaviconHash("https://example.com/favicon.ico") {
+		t.Errorf("FaviconPath() = %q", withURL.FaviconPath())
+	}
+
+	without := reader.Subscription{}
+	if without.FaviconPath() != "" {
+		t.Errorf("FaviconPath() = %q, want empty when FaviconURL is empty", without.FaviconPath())
+	}
+}
+
+func TestTreeLoadsFaviconURL(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, "https://example.com/favicon.ico"); err != nil {
+		t.Fatal(err)
+	}
+
+	tree, err := f.store.Tree(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 1 || tree.Root[0].FaviconURL != "https://example.com/favicon.ico" {
+		t.Errorf("Tree did not load FaviconURL: %+v", tree.Root)
+	}
+}

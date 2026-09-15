@@ -7,8 +7,10 @@ package reader
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -57,6 +59,7 @@ type Feed struct {
 	ResolvedURL   string
 	Title         string
 	SiteURL       string
+	FaviconURL    string
 	ETag          string
 	LastModified  string
 	LastStatus    int
@@ -92,7 +95,10 @@ type Subscription struct {
 	// SiteURL is the feed's own site, used as OPML's htmlUrl on export. It is
 	// empty until the feed has been polled once successfully.
 	SiteURL string
-	AddedAt time.Time
+	// FaviconURL is the feed's discovered favicon source URL, empty until a
+	// discovery or poll pass has found one.
+	FaviconURL string
+	AddedAt    time.Time
 	// ErrorCount and LastError mirror the shared feed's own poller state
 	// (Feed.ErrorCount / Feed.LastError), so the sidebar can show a
 	// persistently-failing feed without a second query.
@@ -104,6 +110,15 @@ type Subscription struct {
 // failure fetching this subscription's feed. It is what the tree template
 // checks to decide whether to render the failure marker.
 func (s Subscription) Failing() bool { return s.ErrorCount > 0 }
+
+// FaviconPath is the proxy URL for this feed's favicon, or "" if none is
+// known yet — the template's cue to render the generic icon instead.
+func (s Subscription) FaviconPath() string {
+	if s.FaviconURL == "" {
+		return ""
+	}
+	return "/reader/favicon/" + FaviconHash(s.FaviconURL)
+}
 
 // DisplayName is the override when set, then the feed's own title, then the
 // URL — so a feed that has never been polled successfully is still nameable.
@@ -377,7 +392,7 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 
 	subRows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title,
-		       f.site_url, f.error_count, f.last_error
+		       f.site_url, f.favicon_url, f.error_count, f.last_error
 		  FROM reader_subs s JOIN reader_feeds f ON f.id = s.feed_id
 		 WHERE s.user_id = ?
 		 ORDER BY s.position, coalesce(nullif(s.title, ''), nullif(f.title, ''), f.url)`,
@@ -391,7 +406,8 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 		var sub Subscription
 		var added string
 		if err := subRows.Scan(&sub.ID, &sub.FeedID, &sub.FolderID, &sub.Title,
-			&added, &sub.FeedURL, &sub.FeedName, &sub.SiteURL, &sub.ErrorCount, &sub.LastError); err != nil {
+			&added, &sub.FeedURL, &sub.FeedName, &sub.SiteURL, &sub.FaviconURL,
+			&sub.ErrorCount, &sub.LastError); err != nil {
 			return Tree{}, fmt.Errorf("reader: scan subscription: %w", err)
 		}
 		sub.AddedAt = parseTime(added)
@@ -748,7 +764,7 @@ func scanItems(rows *sql.Rows) ([]Item, error) {
 // DueFeeds returns feeds whose next_fetch_at has passed, oldest first.
 func (s *Store) DueFeeds(ctx context.Context, now time.Time, limit int) ([]Feed, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, url, resolved_url, title, site_url, etag, last_modified,
+		SELECT id, url, resolved_url, title, site_url, favicon_url, etag, last_modified,
 		       last_status, last_error, error_count, next_fetch_at, fetch_interval
 		  FROM reader_feeds
 		 WHERE next_fetch_at <= ?
@@ -764,7 +780,7 @@ func (s *Store) DueFeeds(ctx context.Context, now time.Time, limit int) ([]Feed,
 		var f Feed
 		var next string
 		var interval sql.NullInt64
-		if err := rows.Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL,
+		if err := rows.Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL, &f.FaviconURL,
 			&f.ETag, &f.LastModified, &f.LastStatus, &f.LastError, &f.ErrorCount,
 			&next, &interval); err != nil {
 			return nil, fmt.Errorf("reader: scan feed: %w", err)
@@ -789,10 +805,10 @@ func (s *Store) FeedByID(ctx context.Context, feedID int64) (Feed, error) {
 	var next string
 	var interval sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, url, resolved_url, title, site_url, etag, last_modified,
+		SELECT id, url, resolved_url, title, site_url, favicon_url, etag, last_modified,
 		       last_status, last_error, error_count, next_fetch_at, fetch_interval
 		  FROM reader_feeds
-		 WHERE id = ?`, feedID).Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL,
+		 WHERE id = ?`, feedID).Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL, &f.FaviconURL,
 		&f.ETag, &f.LastModified, &f.LastStatus, &f.LastError, &f.ErrorCount,
 		&next, &interval)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -858,6 +874,47 @@ func (s *Store) SaveFetchResult(ctx context.Context, r FetchResult) error {
 		formatTime(r.NextFetchAt), r.FeedID)
 	if err != nil {
 		return fmt.Errorf("reader: save fetch result: %w", err)
+	}
+	return nil
+}
+
+// SetFaviconIfEmpty records a feed's favicon URL, but only the first time:
+// the WHERE clause on the UPDATE is a no-op once favicon_url is already set,
+// so a later call — a second poll, a second discovery attempt — can never
+// clobber it. It also seeds the reader_feed_icons row the favicon proxy
+// (faviconproxy.go) looks up by hash, in the same transaction, so the two
+// are never out of sync.
+func (s *Store) SetFaviconIfEmpty(ctx context.Context, feedID int64, faviconURL string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("reader: begin set favicon: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE reader_feeds SET favicon_url = ? WHERE id = ? AND favicon_url = ''`,
+		faviconURL, feedID)
+	if err != nil {
+		return fmt.Errorf("reader: set favicon url: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reader: set favicon rows: %w", err)
+	}
+	if n == 0 {
+		// Already set (or the feed does not exist) — nothing to do.
+		return nil
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO reader_feed_icons (url_hash, src_url) VALUES (?, ?)
+		ON CONFLICT (url_hash) DO NOTHING`,
+		FaviconHash(faviconURL), faviconURL); err != nil {
+		return fmt.Errorf("reader: insert feed icon: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("reader: commit set favicon: %w", err)
 	}
 	return nil
 }
@@ -1154,6 +1211,81 @@ func (s *Store) SaveImageFailure(ctx context.Context, hash, msg string, now time
 		 WHERE url_hash = ?`,
 		msg, formatTime(now), hash); err != nil {
 		return fmt.Errorf("reader: record image failure: %w", err)
+	}
+	return nil
+}
+
+// FaviconHash identifies a favicon by its source URL, the same scheme
+// ImageHash uses for article images — but computed and stored separately,
+// over reader_feed_icons rather than reader_images. A hash from one table
+// is never looked up in the other.
+func FaviconHash(srcURL string) string {
+	sum := sha256.Sum256([]byte(srcURL))
+	return hex.EncodeToString(sum[:16])
+}
+
+// FeedIcon is one cached favicon.
+type FeedIcon struct {
+	Hash        string
+	SrcURL      string
+	ContentType string
+	Bytes       []byte
+	FetchedAt   time.Time
+	ErrorCount  int
+	LastError   string
+}
+
+// Cached reports whether the bytes are in hand. A row exists from the moment
+// a feed's favicon URL is first known; the bytes arrive on first view, same
+// as Image.
+func (i FeedIcon) Cached() bool { return len(i.Bytes) > 0 }
+
+// FeedIconByHash loads one favicon record. An unknown hash is ErrNotFound,
+// which is what stops the proxy being asked to fetch a URL no feed's
+// discovery ever produced.
+func (s *Store) FeedIconByHash(ctx context.Context, hash string) (FeedIcon, error) {
+	var icon FeedIcon
+	var bytes []byte
+	var fetched sql.NullString
+	err := s.db.QueryRowContext(ctx, `
+		SELECT url_hash, src_url, content_type, bytes, fetched_at, error_count, last_error
+		  FROM reader_feed_icons WHERE url_hash = ?`, hash).
+		Scan(&icon.Hash, &icon.SrcURL, &icon.ContentType, &bytes, &fetched,
+			&icon.ErrorCount, &icon.LastError)
+	if errors.Is(err, sql.ErrNoRows) {
+		return FeedIcon{}, ErrNotFound
+	}
+	if err != nil {
+		return FeedIcon{}, fmt.Errorf("reader: load feed icon: %w", err)
+	}
+	icon.Bytes = bytes
+	if fetched.Valid {
+		icon.FetchedAt = parseTime(fetched.String)
+	}
+	return icon, nil
+}
+
+// SaveFeedIconBytes caches a fetched favicon and clears any recorded failure.
+func (s *Store) SaveFeedIconBytes(ctx context.Context, hash, contentType string, data []byte, now time.Time) error {
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE reader_feed_icons
+		   SET bytes = ?, content_type = ?, fetched_at = ?, last_error = '', error_count = 0
+		 WHERE url_hash = ?`,
+		data, contentType, formatTime(now), hash); err != nil {
+		return fmt.Errorf("reader: cache feed icon: %w", err)
+	}
+	return nil
+}
+
+// SaveFeedIconFailure records that a fetch failed, so a dead favicon is not
+// re-fetched on every page view.
+func (s *Store) SaveFeedIconFailure(ctx context.Context, hash, msg string, now time.Time) error {
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE reader_feed_icons
+		   SET last_error = ?, error_count = error_count + 1, fetched_at = ?
+		 WHERE url_hash = ?`,
+		msg, formatTime(now), hash); err != nil {
+		return fmt.Errorf("reader: record feed icon failure: %w", err)
 	}
 	return nil
 }

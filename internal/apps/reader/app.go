@@ -112,6 +112,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /read-all", a.markAllRead)
 	r.HandleFunc("POST /prefs", a.prefs)
 	r.HandleFunc("GET /img/{hash}", a.image)
+	r.HandleFunc("GET /favicon/{hash}", a.favicon)
 
 	r.HandleFunc("GET /opml", a.exportOPML)
 	r.HandleFunc("POST /opml", a.importOPML)

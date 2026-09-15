@@ -19,6 +19,10 @@ const (
 	MaxFeedBytes    = 5 << 20
 	MaxArticleBytes = 2 << 20
 	MaxImageBytes   = 5 << 20
+	// MaxFaviconBytes bounds a favicon fetch. Favicons are tiny; this just
+	// caps a misbehaving server, the same role MaxImageBytes plays for
+	// article images.
+	MaxFaviconBytes = 64 << 10
 )
 
 const (

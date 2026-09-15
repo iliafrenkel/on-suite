@@ -164,6 +164,7 @@ func (p *Poller) pollOne(ctx context.Context, f Feed) {
 			FetchedAt:    now,
 			NextFetchAt:  NextFetchAt(now, f.Interval(), 0),
 		})
+		p.maybeGuessFavicon(ctx, f, f.SiteURL)
 		return
 	}
 
@@ -203,6 +204,30 @@ func (p *Poller) pollOne(ctx context.Context, f Feed) {
 		FetchedAt:    now,
 		NextFetchAt:  NextFetchAt(now, f.Interval(), 0),
 	})
+	siteURL := f.SiteURL
+	if parsed.SiteURL != "" {
+		siteURL = parsed.SiteURL
+	}
+	p.maybeGuessFavicon(ctx, f, siteURL)
+}
+
+// maybeGuessFavicon fills in a feed's favicon the first time its site URL is
+// known, using only data already in hand: DiscoverFavicon with no page HTML
+// is a pure string derivation to "<origin>/favicon.ico", not a fetch. f is
+// the feed's state from before this poll, so f.FaviconURL is accurate to
+// check against; siteURL is this poll's most current value (the freshly
+// parsed one on a success, or f.SiteURL unchanged on a 304).
+func (p *Poller) maybeGuessFavicon(ctx context.Context, f Feed, siteURL string) {
+	if f.FaviconURL != "" || siteURL == "" {
+		return
+	}
+	guess := DiscoverFavicon(nil, siteURL)
+	if guess == "" {
+		return
+	}
+	if err := p.store.SetFaviconIfEmpty(ctx, f.ID, guess); err != nil {
+		p.log.Error("reader saving favicon guess failed", "feed_id", f.ID, "error", err)
+	}
 }
 
 func (p *Poller) record(ctx context.Context, r FetchResult) {

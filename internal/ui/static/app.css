@@ -1924,6 +1924,21 @@ kbd {
 	text-decoration: none;
 }
 
+/* The favicon sits before the title link. .reader-node/.reader-sub are
+   align-items: baseline (right for text), which is wrong for a small image
+   or icon glyph — center it instead. .toolbar-icon already sizes the "rss"
+   fallback svg to 1rem (16px), matching the <img>'s own 16x16. */
+.reader-favicon {
+	flex: none;
+	align-self: center;
+	display: inline-flex;
+	border-radius: 2px;
+}
+
+.reader-favicon[hidden] {
+	display: none;
+}
+
 .reader-count {
 	flex: none;
 	color: var(--c-text-dim);

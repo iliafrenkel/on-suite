@@ -247,6 +247,26 @@
 		DESKTOP_QUERY.addEventListener("change", syncPaneWidths);
 	}
 
+	// --- Favicon fallback ------------------------------------------------
+	//
+	// The sidebar tree renders <img class="reader-favicon"> with a sibling
+	// <span class="reader-favicon" hidden>{{rss glyph}}</span> fallback. This
+	// used to be an inline onerror="..." attribute, but the suite's CSP
+	// (script-src 'self', no unsafe-inline/unsafe-hashes) silently blocks
+	// inline event-handler attributes, so that fallback never ran. The DOM
+	// "error" event does not bubble, so a plain document-level listener
+	// would never see it either — capture phase (the `true` below) is what
+	// makes delegation work here. One listener, added once, correctly
+	// handles every favicon image already on the page and any added later
+	// by htmx swaps.
+	document.addEventListener("error", function (e) {
+		var img = e.target;
+		if (!img.matches || !img.matches("img.reader-favicon")) return;
+		var fallback = img.nextElementSibling;
+		if (fallback) fallback.hidden = false;
+		img.remove();
+	}, true);
+
 	document.addEventListener("DOMContentLoaded", initResizablePanes);
 	// A panes-wide swap (subscribing, refreshing, deleting, or just picking a
 	// feed or filter) replaces #reader-panes-row outerHTML-style, wiping any
