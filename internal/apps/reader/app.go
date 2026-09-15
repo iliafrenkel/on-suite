@@ -98,6 +98,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /subscribe", a.subscribe)
 	r.HandleFunc("POST /sub/{id}/delete", a.unsubscribe)
 	r.HandleFunc("POST /sub/{id}/refresh", a.refreshOne)
+	r.HandleFunc("POST /sub/{id}/rename", a.renameSub)
 	r.HandleFunc("POST /folder", a.createFolder)
 	r.HandleFunc("POST /folder/{id}/delete", a.deleteFolder)
 	r.HandleFunc("POST /refresh", a.refresh)

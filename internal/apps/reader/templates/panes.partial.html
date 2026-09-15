@@ -218,6 +218,8 @@
                           hx-post="/reader/sub/{{.ID}}/refresh" hx-target="#reader-panes" hx-swap="outerHTML"
                           aria-label="Refresh {{.DisplayName}}">Refresh feed</button>
                 </form>
+                <button type="button" class="reader-sub-rename" data-open-dialog="rename-feed-dialog-{{.ID}}"
+                        aria-label="Rename {{.DisplayName}}">Rename&hellip;</button>
                 <form method="post" action="/reader/sub/{{.ID}}/delete">
                   {{template "reader-ctx" $.List}}
                   <button type="submit" class="outline-menu-delete reader-sub-delete"
@@ -227,6 +229,20 @@
                 </form>
               </div>
             </details>
+            <dialog id="rename-feed-dialog-{{.ID}}" class="reader-dialog">
+              <button type="button" class="reader-dialog-close" aria-label="Close">{{ticon "close"}}</button>
+              <h2>Rename feed</h2>
+              <form method="post" action="/reader/sub/{{.ID}}/rename"
+                    hx-post="/reader/sub/{{.ID}}/rename" hx-target="#reader-panes" hx-swap="outerHTML">
+                {{template "reader-ctx" $.List}}
+                <label for="rename-title-{{.ID}}">Name</label>
+                <input id="rename-title-{{.ID}}" name="title" type="text" value="{{.DisplayName}}">
+                <div class="dialog-actions">
+                  <button type="submit" class="button">Rename</button>
+                  <button type="button" class="reader-dialog-cancel">Cancel</button>
+                </div>
+              </form>
+            </dialog>
           </li>
         {{end}}
       </ul>
@@ -249,6 +265,8 @@
                       hx-post="/reader/sub/{{.ID}}/refresh" hx-target="#reader-panes" hx-swap="outerHTML"
                       aria-label="Refresh {{.DisplayName}}">Refresh feed</button>
             </form>
+            <button type="button" class="reader-sub-rename" data-open-dialog="rename-feed-dialog-{{.ID}}"
+                    aria-label="Rename {{.DisplayName}}">Rename&hellip;</button>
             <form method="post" action="/reader/sub/{{.ID}}/delete">
               {{template "reader-ctx" $.List}}
               <button type="submit" class="outline-menu-delete reader-sub-delete"
@@ -258,6 +276,20 @@
             </form>
           </div>
         </details>
+        <dialog id="rename-feed-dialog-{{.ID}}" class="reader-dialog">
+          <button type="button" class="reader-dialog-close" aria-label="Close">{{ticon "close"}}</button>
+          <h2>Rename feed</h2>
+          <form method="post" action="/reader/sub/{{.ID}}/rename"
+                hx-post="/reader/sub/{{.ID}}/rename" hx-target="#reader-panes" hx-swap="outerHTML">
+            {{template "reader-ctx" $.List}}
+            <label for="rename-title-{{.ID}}">Name</label>
+            <input id="rename-title-{{.ID}}" name="title" type="text" value="{{.DisplayName}}">
+            <div class="dialog-actions">
+              <button type="submit" class="button">Rename</button>
+              <button type="button" class="reader-dialog-cancel">Cancel</button>
+            </div>
+          </form>
+        </dialog>
       </li>
     {{end}}
   </ul>

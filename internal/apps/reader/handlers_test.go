@@ -42,6 +42,7 @@ func TestEveryReaderRouteIsBehindAuth(t *testing.T) {
 		{http.MethodPost, "/reader/subscribe"},
 		{http.MethodPost, "/reader/sub/1/delete"},
 		{http.MethodPost, "/reader/sub/1/refresh"},
+		{http.MethodPost, "/reader/sub/1/rename"},
 		{http.MethodPost, "/reader/folder"},
 		{http.MethodPost, "/reader/folder/1/delete"},
 		{http.MethodPost, "/reader/refresh"},
@@ -794,7 +795,7 @@ func TestMarkAllReadStaysOnTheListItFiredFrom(t *testing.T) {
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
 
-	if got := strings.TrimSpace(htmlassert.Text(doc.MustHave("h2"))); got != "Starred" {
+	if got := strings.TrimSpace(htmlassert.Text(doc.MustHave(".reader-list-head h2"))); got != "Starred" {
 		t.Errorf("re-render shows the %q list, want Starred", got)
 	}
 	if got := strings.TrimSpace(htmlassert.Text(doc.MustHave(".reader-filters a[aria-current=page]"))); got != "All" {
@@ -2384,5 +2385,56 @@ func TestRefreshFeedIsScopedToTheOwner(t *testing.T) {
 	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/refresh", url.Values{})
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("refreshing another user's subscription returned %d, want 404", rec.Code)
+	}
+}
+
+// TestRenameFeedControlUpdatesTheDisplayName pins the rename dialog end to
+// end: it is pre-filled with the current display name, and submitting it
+// changes what the tree shows.
+func TestRenameFeedControlUpdatesTheDisplayName(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	doc.MustHave("button.reader-sub-rename")
+	input := doc.MustHave("dialog#rename-feed-dialog-" + itoa(sub.ID) + " input[name=title]")
+	if got, _ := htmlassert.Attr(input, "value"); got != "https://example.com/feed.xml" {
+		t.Errorf("rename input value = %q, want the current display name", got)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/rename", url.Values{
+		"title": {"My Favourite Blog"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("rename returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc = s.Get(t, s.Alice, "/reader/")
+	if !strings.Contains(doc.Text(), "My Favourite Blog") {
+		t.Errorf("renamed feed not in the tree:\n%s", doc.Text())
+	}
+}
+
+// TestRenameFeedIsScopedToTheOwner guards against renaming (and disclosing
+// the existence of) somebody else's subscription id.
+func TestRenameFeedIsScopedToTheOwner(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Bob.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/rename", url.Values{
+		"title": {"Hijacked"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("renaming another user's subscription returned %d, want 404", rec.Code)
 	}
 }

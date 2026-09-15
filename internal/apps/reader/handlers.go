@@ -791,6 +791,27 @@ func (a *App) refreshOne(w http.ResponseWriter, r *http.Request) {
 	a.renderIndex(w, r, userID, lc, "")
 }
 
+// renameSub sets or clears this user's custom name for a subscription. An
+// empty submitted title is not an error: it clears the override back to the
+// feed's own title, which is why this does not special-case ErrInvalid the
+// way createFolder does for an empty folder name.
+func (a *App) renameSub(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	subID, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	lc := formContext(r, 0)
+	if err := a.store.RenameSubscription(r.Context(), userID, subID, r.FormValue("title")); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.renderIndex(w, r, userID, lc, "")
+}
+
 func (a *App) createFolder(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
