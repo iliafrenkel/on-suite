@@ -54,6 +54,11 @@ type treeView struct {
 	// Empty is true when the user has no subscriptions at all, which is a
 	// different thing from a folder having none.
 	Empty bool
+	// HiddenAll is true when hideRead filtered every folder and feed out of
+	// view, even though real subscriptions exist — a different situation
+	// from Empty (no subscriptions at all), and the tree needs to say which
+	// one it is rather than just going blank.
+	HiddenAll bool
 }
 
 type listView struct {
@@ -159,6 +164,8 @@ func viewTree(t Tree, activeID int64, scope Scope, counts Counts, hideRead bool)
 		// currently read is a different situation from having no feeds, and
 		// only the latter gets the "no feeds yet" hint.
 		Empty: empty,
+		// HiddenAll: see the field comment on treeView.
+		HiddenAll: hideRead && !empty && len(folders) == 0 && len(root) == 0,
 	}
 }
 

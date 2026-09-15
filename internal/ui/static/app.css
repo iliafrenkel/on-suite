@@ -1906,7 +1906,7 @@ kbd {
 /* Nested under its folder's <summary>, not flush with it — the folder
    header (.reader-folder > summary, below) keeps the plain var(--s-2), so a
    feed indents one full --s-4 past that. */
-.reader-sub {
+.reader-folder .reader-sub {
 	padding-left: calc(var(--s-2) + var(--s-4));
 }
 
@@ -1956,8 +1956,10 @@ kbd {
 .reader-node:focus-within .outline-menu-toggle,
 .reader-sub:hover .outline-menu-toggle,
 .reader-sub:focus-within .outline-menu-toggle,
-.reader-folder > summary:hover .outline-menu-toggle,
-.reader-folder > summary:focus-within .outline-menu-toggle,
+.reader-folder > summary:hover ~ .reader-folder-menu .outline-menu-toggle,
+.reader-folder > summary:focus-visible ~ .reader-folder-menu .outline-menu-toggle,
+.reader-folder-menu:hover .outline-menu-toggle,
+.reader-folder-menu:focus-within .outline-menu-toggle,
 .reader-folder-menu[open] .outline-menu-toggle {
 	opacity: 1;
 }

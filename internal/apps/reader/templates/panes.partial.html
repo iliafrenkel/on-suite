@@ -173,6 +173,9 @@
   {{if .Tree.Empty}}
     <p class="empty">No feeds yet. Paste a feed address above to start.</p>
   {{end}}
+  {{if .Tree.HiddenAll}}
+    <p class="empty">Everything is read. Turn off &#8220;hide read&#8221; in the toolbar to see all your feeds.</p>
+  {{end}}
   {{range .Tree.Folders}}
     <details open class="reader-folder">
       <summary>{{.Name}}</summary>
