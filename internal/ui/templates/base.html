@@ -93,7 +93,7 @@
 <div class="app-shell">
 	{{if .Shell.LoggedIn}}
 	<aside class="app-sidebar" data-sidebar{{if .Shell.SidebarCollapsed}} data-collapsed{{end}}>
-		<button type="button" class="sidebar-toggle quiet button" data-sidebar-toggle aria-label="Toggle sidebar">&#8676;</button>
+		<button type="button" class="sidebar-toggle quiet button" data-sidebar-toggle aria-label="Toggle sidebar">{{ticon "sidebar-toggle"}}</button>
 		<nav class="shell-nav" aria-label="Applications">
 			{{range .Shell.Apps}}
 			{{if .ComingSoon}}
@@ -103,7 +103,14 @@
 			{{end}}
 			{{end}}
 			{{if .Shell.IsAdmin}}
-			<a class="sidebar-item sidebar-admin" href="/admin/"{{if eq "admin" $.Shell.ActiveApp}} aria-current="page"{{end}}>{{icon "admin"}}<span class="sidebar-label">Admin</span></a>
+			{{/* A dedicated line, not a border on the link itself — that shares
+			     .sidebar-item's border-radius, which clipped a border-top into a
+			     visibly curved line at both ends instead of a straight separator.
+			     margin-top: auto on the separator (not the link) absorbs the
+			     nav's leftover height, pinning Admin to the very bottom of the
+			     sidebar with the separator directly above it. */}}
+			<hr class="sidebar-separator">
+			<a class="sidebar-item" href="/admin/"{{if eq "admin" $.Shell.ActiveApp}} aria-current="page"{{end}}>{{icon "admin"}}<span class="sidebar-label">Admin</span></a>
 			{{end}}
 		</nav>
 	</aside>
