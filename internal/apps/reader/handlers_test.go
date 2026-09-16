@@ -1836,6 +1836,37 @@ func TestFetchFullArticleRetriesPastTheBackoffWindow(t *testing.T) {
 // falls back to the feed body and the fetch button, and clears the source
 // image links that were the whole reason #229 gave 'source' its own key.
 // Issue #231.
+// An item with no link at all can never extract anything — fetchFull already
+// turns item.URL == "" straight into a recorded failure — so the button that
+// would only immediately fail on click must not render at all. Issue #234.
+func TestNoFetchButtonWithoutAURL(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "No link", SummaryHTML: "<p>Body.</p>",
+		PublishedAt: time.Now().UTC().Add(-time.Hour),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/reader/item/"+itoa(items[0].ID), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("article returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "Fetch full article") {
+		t.Errorf("fetch button rendered for an item with no URL, which would only fail on click:\n%s", rec.Body.String())
+	}
+}
+
 func TestClearFullArticleFallsBackToTheFeedBody(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
@@ -1846,7 +1877,8 @@ func TestClearFullArticleFallsBackToTheFeedBody(t *testing.T) {
 	}
 	hash := reader.ImageHash("https://cdn.example/full-lead.png")
 	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
-		GUID: "g1", Title: "T", SummaryHTML: "<p>THE FEED VERSION.</p>",
+		GUID: "g1", Title: "T", URL: "https://example.com/post",
+		SummaryHTML: "<p>THE FEED VERSION.</p>",
 		PublishedAt: time.Now().UTC().Add(-time.Hour),
 	}}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
