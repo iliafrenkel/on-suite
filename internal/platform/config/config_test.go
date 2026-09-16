@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -314,6 +315,7 @@ func TestEverySettingIsDescribed(t *testing.T) {
 	want := []string{
 		"addr", "data-dir", "tls-domain", "log-level",
 		"backup-interval", "backup-keep", "tls-http-addr", "secure-cookies",
+		"disable-apps",
 	}
 	got := c.Settings()
 	if len(got) != len(want) {
@@ -334,5 +336,33 @@ func TestSettingsOnAHandBuiltConfigIsEmptyRatherThanWrong(t *testing.T) {
 	// flags. Reporting made-up settings for one would be worse than none.
 	if got := (Config{DataDir: "./data"}).Settings(); len(got) != 0 {
 		t.Errorf("Settings() on a literal Config returned %d entries, want 0", len(got))
+	}
+}
+
+func TestParseDisabledApps(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		env  map[string]string
+		want []string
+	}{
+		{"default is empty", nil, nil, nil},
+		{"single app", []string{"-disable-apps", "reader"}, nil, []string{"reader"}},
+		{"multiple apps", []string{"-disable-apps", "notes,reader"}, nil, []string{"notes", "reader"}},
+		{"whitespace and empty entries are cleaned", []string{"-disable-apps", " notes , ,reader "}, nil, []string{"notes", "reader"}},
+		{"env used when no flag", nil, map[string]string{"ONSUITE_DISABLE_APPS": "paste"}, []string{"paste"}},
+		{"flag beats env", []string{"-disable-apps", "reader"}, map[string]string{"ONSUITE_DISABLE_APPS": "paste"}, []string{"reader"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(k string) string { return tt.env[k] }
+			c, err := Parse(tt.args, getenv, io.Discard)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if !slices.Equal(c.DisabledApps, tt.want) {
+				t.Errorf("DisabledApps = %v, want %v", c.DisabledApps, tt.want)
+			}
+		})
 	}
 }
