@@ -54,11 +54,12 @@ func validImageHash(s string) bool {
 
 // image serves a proxied article image.
 //
-// The proxy takes a hash, never a URL. The only way a hash resolves is if a
-// feed this server ingested contained exactly that image URL, so there is no
-// input that makes this fetch something else — which is why it needs no
-// signing secret. Fetching still goes through Client, so the SSRF guard, the
-// redirect cap and the size cap all apply.
+// The proxy takes a hash, never a URL. The only way a hash resolves is if it
+// names an image URL this server saw — either in a feed body it ingested, or
+// on a page it extracted a full article from, which R4 widened this to. So
+// there is still no input that makes this fetch something else, which is why
+// it needs no signing secret. Fetching still goes through Client, so the SSRF
+// guard, the redirect cap and the size cap all apply.
 func (a *App) image(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.userID(w, r); !ok {
 		return

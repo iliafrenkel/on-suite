@@ -26,7 +26,14 @@ const minExtractedText = 100
 // Extracted is one article pulled out of its page, already sanitized and with
 // its images pointed at the proxy.
 type Extracted struct {
-	HTML  string
+	HTML string
+	// Title is what readability found on the page, not consumed anywhere
+	// today — SaveFullArticle keeps the feed's own title as-is rather than
+	// overwriting it. Deliberate: the feed publisher's title is what the
+	// reader subscribed to see, and a page's own <title> is often noisier
+	// (site name suffixes, ad-driven rewrites). Kept on the struct in case a
+	// future caller wants it, e.g. to flag a feed title that has drifted far
+	// from the page's own.
 	Title string
 	// Images maps proxy hash to absolute publisher URL, exactly as
 	// ParsedItem.Images does, so the store persists both the same way.
