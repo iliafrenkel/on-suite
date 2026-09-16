@@ -134,7 +134,9 @@
       <form method="post" action="/reader/refresh" class="reader-menu-item-form"
             hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">
         {{template "reader-ctx" .}}
-        <button type="submit" class="reader-menu-item reader-refresh" role="menuitem">{{ticon "refresh"}}Refresh all feeds</button>
+        <button type="submit" class="reader-menu-item reader-refresh" role="menuitem">
+          {{ticon "refresh"}}Refresh all feeds<span class="reader-refresh-wait htmx-indicator"> — refreshing…</span>
+        </button>
       </form>
       <a class="reader-menu-item" href="/reader/stats" role="menuitem">{{ticon "stats"}}Reading stats</a>
       <button type="button" class="reader-menu-item" data-open-dialog="shortcuts-dialog" role="menuitem">{{ticon "keyboard"}}Keyboard shortcuts</button>

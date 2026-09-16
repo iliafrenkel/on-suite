@@ -873,6 +873,12 @@ func (a *App) deleteFolder(w http.ResponseWriter, r *http.Request) {
 	a.renderIndex(w, r, userID, lc, "")
 }
 
+// refreshTimeout bounds a manual "refresh all feeds" click so the response
+// doesn't hang for as long as the full pollBatch/pollWorkers worst case
+// would take. PollDue treats a canceled context as a clean early stop — the
+// feeds it didn't get to remain due and are picked up next tick or click.
+const refreshTimeout = 45 * time.Second
+
 // refresh polls now. It calls the same PollDue the scheduled job calls, which
 // is the reason there is one fetch code path rather than two.
 func (a *App) refresh(w http.ResponseWriter, r *http.Request) {
@@ -881,7 +887,9 @@ func (a *App) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lc := formContext(r, 0)
-	if err := a.poller.PollDue(r.Context()); err != nil {
+	ctx, cancel := context.WithTimeout(r.Context(), refreshTimeout)
+	defer cancel()
+	if err := a.poller.PollDue(ctx); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}

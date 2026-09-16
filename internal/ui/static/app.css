@@ -1805,6 +1805,18 @@ kbd {
 	background: var(--c-bg-subtle);
 }
 
+/* htmx's own default indicator CSS is an inline <style> it injects at
+ * runtime, which this app's CSP (style-src 'self') blocks — so the
+ * show/hide rule has to live here instead of relying on htmx for it. */
+.reader-refresh-wait {
+	color: var(--c-text-dim);
+	opacity: 0;
+}
+
+.reader-refresh-wait.htmx-request {
+	opacity: 1;
+}
+
 /* Sticky so the search box and "Mark all read" stay reachable while a long
  * article list scrolls underneath. .reader-list's own padding (var(--s-3))
  * would otherwise leave a gap above the toolbar once it sticks — top and
