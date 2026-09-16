@@ -443,6 +443,16 @@ type statsView struct {
 	// copy — computed here rather than hardcoded in the template so the two
 	// never drift apart if QuietAfter changes.
 	QuietAfterDays int
+	// Days is the same daily series Fetched/Read/Backlog chart, raw — the
+	// accessible <details> table's data source. The three charts each get an
+	// SVG aria-label summary, but a summary is not the trend a sighted reader
+	// sees at a glance, so this is what actually lets a screen-reader user
+	// inspect it (issue #242).
+	Days []DayStat
+	// DaysReconstructed is true when any day in Days was backfilled rather
+	// than measured — the same condition Fetched.Reconstructed/etc. already
+	// compute off this same slice, just not tied to any one chart's caption.
+	DaysReconstructed bool
 }
 
 // buildStatsView assembles the reading-stats page from its three inputs: the
@@ -466,6 +476,13 @@ func buildStatsView(days []DayStat, feeds []FeedStat, counts Counts) statsView {
 		Backlog:        buildLine("Backlog", days, func(d DayStat) int { return d.Backlog }),
 		Feeds:          feeds,
 		QuietAfterDays: int(QuietAfter / (24 * time.Hour)),
+		Days:           days,
+	}
+	for _, d := range days {
+		if d.Reconstructed {
+			out.DaysReconstructed = true
+			break
+		}
 	}
 	for _, f := range feeds {
 		if f.Quiet() {

@@ -67,9 +67,46 @@
 		{{end}}
 	</figure>
 
+	{{/* The three charts above are each summarised by their own SVG aria-label,
+	     but a summary is not the daily trend a sighted reader sees at a
+	     glance — there is no way for a screen-reader user to inspect it. This
+	     <details> is that trend's accessible equivalent: closed by default so
+	     it does not clutter the page for sighted readers who already have the
+	     charts, but a table any reader can open. See issue #242. */}}
+	{{if .Data.Days}}
+	<details class="reader-stats-daily">
+		<summary>Daily figures (text alternative to the charts above)</summary>
+		<div class="reader-table-scroll">
+			<table class="reader-stats-table">
+				<thead>
+					<tr>
+						<th>Date</th>
+						<th>Articles arriving</th>
+						<th>Articles read</th>
+						<th>Backlog</th>
+					</tr>
+				</thead>
+				<tbody>
+					{{range .Data.Days}}
+					<tr>
+						<td>{{.Day.Format "2 Jan 2006"}}</td>
+						<td>{{.Fetched}}</td>
+						<td>{{.Read}}</td>
+						<td>{{.Backlog}}</td>
+					</tr>
+					{{end}}
+				</tbody>
+			</table>
+		</div>
+		{{if .Data.DaysReconstructed}}
+		<p class="dim">Part of this period was reconstructed from surviving articles.</p>
+		{{end}}
+	</details>
+	{{end}}
+
 	<h2>Feeds</h2>
 	{{if .Data.Feeds}}
-	<div class="table-scroll">
+	<div class="reader-table-scroll">
 		<table class="reader-stats-table">
 			<thead>
 				<tr>

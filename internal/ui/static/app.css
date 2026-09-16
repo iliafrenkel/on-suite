@@ -2329,7 +2329,7 @@ kbd {
 .reader-stat-tile .value { font-size: var(--fs-xl); }
 .reader-stat-tile .label { color: var(--c-text-dim); font-size: var(--fs-xs); }
 
-.table-scroll { overflow-x: auto; }
+.reader-table-scroll { overflow-x: auto; }
 .reader-stats-table {
 	width: 100%;
 	border-collapse: collapse;
