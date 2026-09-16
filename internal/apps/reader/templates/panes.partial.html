@@ -72,11 +72,21 @@
          panes (and now the gutters) so the CSS can reach the panes with ~,
          and the server sets them: a list shown checks the first, an open
          article the second. The back labels inside the list and article
-         panes uncheck them again. */}}
-    <input type="checkbox" id="reader-list-open" class="visually-hidden"
-           {{if .List.Selected}}checked{{end}} aria-hidden="true" tabindex="-1">
-    <input type="checkbox" id="reader-article-open" class="visually-hidden"
-           {{if .Article.Selected}}checked{{end}} aria-hidden="true" tabindex="-1">
+         panes uncheck them again.
+
+         Left in the tab order and unhidden from assistive tech (issue #221):
+         a <label> alone is not focusable, so a keyboard or switch-device user
+         had no way to trigger the pointer-only back control. aria-label
+         matches the visible back button's own text ("Feeds"/"Articles")
+         since the label element that would otherwise name it sits inside a
+         pane the CSS may be hiding with display:none, which drops it from
+         the accessibility tree along with its text. app.css hides these two
+         above the width where checking them has no visible effect, so a
+         desktop keyboard user does not tab through inert controls. */}}
+    <input type="checkbox" id="reader-list-open" class="visually-hidden reader-pane-toggle"
+           {{if .List.Selected}}checked{{end}} aria-label="Feeds">
+    <input type="checkbox" id="reader-article-open" class="visually-hidden reader-pane-toggle"
+           {{if .Article.Selected}}checked{{end}} aria-label="Articles">
     {{template "tree" .}}
     <div class="pane-gutter" data-gutter-for="tree" role="separator"
          aria-orientation="vertical" aria-label="Resize the feed list" tabindex="0"></div>
@@ -458,7 +468,7 @@
      reconciled them. Only the counts, not the whole tree: see "counts-oob". */}}
 {{define "article-swap"}}{{template "article-oob" .Article}}{{template "counts-oob" .}}{{template "row" (dict "Item" (dict "ID" .Article.ID "Title" .Article.Title "FeedName" .Article.FeedName "Published" .Article.When "Read" .Article.Read "Starred" .Article.Starred) "Scope" .Article.Scope "SubID" .Article.SubID "Filter" .Article.Filter "Query" .Article.Query "ActiveID" .Article.ID "OOB" true)}}{{end}}
 
-{{define "article-oob"}}<input type="checkbox" id="reader-article-open" class="visually-hidden" hx-swap-oob="true" checked aria-hidden="true" tabindex="-1">{{template "article" .}}{{end}}
+{{define "article-oob"}}<input type="checkbox" id="reader-article-open" class="visually-hidden reader-pane-toggle" hx-swap-oob="true" checked aria-label="Articles">{{template "article" .}}{{end}}
 
 {{define "article"}}
 <article class="reader-article" id="reader-article">
