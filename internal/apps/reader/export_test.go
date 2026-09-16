@@ -38,3 +38,12 @@ func SetFetchOnAddTimeoutForTest(d time.Duration) (restore func()) {
 	fetchOnAddTimeout = d
 	return func() { fetchOnAddTimeout = prev }
 }
+
+// MaxImageFetchAttemptsForTest and ImageRetryBackoffForTest mirror imgproxy.go's
+// unexported maxImageFetchAttempts/imageRetryBackoff, so a test can assert
+// against the real thresholds rather than a hardcoded copy that could
+// silently drift out of sync with them.
+const (
+	MaxImageFetchAttemptsForTest = maxImageFetchAttempts
+	ImageRetryBackoffForTest     = imageRetryBackoff
+)
