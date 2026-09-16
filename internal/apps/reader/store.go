@@ -270,15 +270,48 @@ func (s *Store) Unsubscribe(ctx context.Context, userID, subID int64) error {
 		return fmt.Errorf("reader: load subscription: %w", err)
 	}
 
+	// Read before the feed row might disappear below, so there is still
+	// something to look up a shared reader_feed_icons row by.
+	var faviconURL string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT favicon_url FROM reader_feeds WHERE id = ?`, feedID).Scan(&faviconURL); err != nil {
+		return fmt.Errorf("reader: load feed favicon: %w", err)
+	}
+
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM reader_subs WHERE id = ? AND user_id = ?`, subID, userID); err != nil {
 		return fmt.Errorf("reader: delete subscription: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, `
 		DELETE FROM reader_feeds
 		 WHERE id = ? AND NOT EXISTS (SELECT 1 FROM reader_subs WHERE feed_id = ?)`,
-		feedID, feedID); err != nil {
+		feedID, feedID)
+	if err != nil {
 		return fmt.Errorf("reader: delete orphaned feed: %w", err)
+	}
+
+	// Only once the feed row itself is actually gone (not just still
+	// subscribed by somebody else) is it worth asking whether the favicon
+	// cache row is now orphaned too. reader_feed_icons has no retention job
+	// of its own — see 0008_favicons.sql — so this is the only place that
+	// ever cleans it up.
+	if feedGone, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("reader: check orphaned feed delete: %w", err)
+	} else if feedGone > 0 && faviconURL != "" {
+		// Multi-feed sites can share one favicon URL across feeds, so this
+		// deletes the cache row only once no *other* feed still points at it
+		// — never unconditionally on url_hash alone.
+		var stillShared int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT count(*) FROM reader_feeds WHERE favicon_url = ?`, faviconURL).Scan(&stillShared); err != nil {
+			return fmt.Errorf("reader: check shared favicon: %w", err)
+		}
+		if stillShared == 0 {
+			if _, err := tx.ExecContext(ctx,
+				`DELETE FROM reader_feed_icons WHERE url_hash = ?`, FaviconHash(faviconURL)); err != nil {
+				return fmt.Errorf("reader: delete orphaned favicon: %w", err)
+			}
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
