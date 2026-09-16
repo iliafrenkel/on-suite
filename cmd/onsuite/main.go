@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/apps/paste"
@@ -75,4 +76,49 @@ func registeredApps() []app.App {
 		paste.New(),
 		reader.New(),
 	}
+}
+
+// filterApps returns the apps that should be part of this run's registry:
+// every registered app, minus the ones named in disabled. It is how
+// -disable-apps/ONSUITE_DISABLE_APPS takes effect — see openDatabase, the
+// only caller.
+//
+// An unknown ID is almost certainly a typo, so it is a startup error rather
+// than a silent no-op. A duplicate ID is harmless (disabled is treated as a
+// set) and not an error. Ending up with zero apps is also an error: a binary
+// with nothing registered is never an intentional configuration.
+func filterApps(all []app.App, disabled []string) ([]app.App, error) {
+	if len(disabled) == 0 {
+		return all, nil
+	}
+
+	off := make(map[string]bool, len(disabled))
+	known := make([]string, len(all))
+	for i, a := range all {
+		known[i] = a.Meta().ID
+	}
+	for _, id := range disabled {
+		found := false
+		for _, k := range known {
+			if k == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("disable-apps: unknown app %q (known apps: %s)", id, strings.Join(known, ", "))
+		}
+		off[id] = true
+	}
+
+	kept := make([]app.App, 0, len(all))
+	for _, a := range all {
+		if !off[a.Meta().ID] {
+			kept = append(kept, a)
+		}
+	}
+	if len(kept) == 0 {
+		return nil, fmt.Errorf("disable-apps: disables every registered app (%s); refusing to run with none", strings.Join(known, ", "))
+	}
+	return kept, nil
 }
