@@ -141,6 +141,76 @@ func TestUnsubscribeIsScopedToTheOwner(t *testing.T) {
 	}
 }
 
+// reader_feed_icons has no retention job of its own (0008_favicons.sql), so
+// unsubscribing from the last subscriber of a feed is the only place that
+// ever cleans up its favicon cache row. Issue #258.
+func TestUnsubscribeDropsTheOrphanedFeedsFavicon(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, "https://example.com/favicon.ico"); err != nil {
+		t.Fatal(err)
+	}
+	hash := reader.FaviconHash("https://example.com/favicon.ico")
+	if _, err := f.store.FeedIconByHash(ctx, hash); err != nil {
+		t.Fatalf("favicon row was not seeded: %v", err)
+	}
+
+	if err := f.store.Unsubscribe(ctx, f.alice.ID, sub.ID); err != nil {
+		t.Fatalf("Unsubscribe: %v", err)
+	}
+
+	if _, err := f.store.FeedIconByHash(ctx, hash); !errors.Is(err, reader.ErrNotFound) {
+		t.Error("the orphaned feed's favicon row is still fetchable")
+	}
+}
+
+// Two feeds can share one favicon URL (a multi-feed site), so dropping one
+// of them must not delete the cache row the other still points at. Issue
+// #258's own note: a naive DELETE ... WHERE url_hash = ? would get this
+// wrong.
+func TestUnsubscribeKeepsAFavoriteSharedByAnotherFeed(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	subA, err := f.store.Subscribe(ctx, f.alice.ID, "https://a.example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subB, err := f.store.Subscribe(ctx, f.alice.ID, "https://b.example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const shared = "https://example.com/shared-favicon.ico"
+	if err := f.store.SetFaviconIfEmpty(ctx, subA.FeedID, shared); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetFaviconIfEmpty(ctx, subB.FeedID, shared); err != nil {
+		t.Fatal(err)
+	}
+	hash := reader.FaviconHash(shared)
+
+	if err := f.store.Unsubscribe(ctx, f.alice.ID, subA.ID); err != nil {
+		t.Fatalf("Unsubscribe: %v", err)
+	}
+
+	if _, err := f.store.FeedIconByHash(ctx, hash); err != nil {
+		t.Errorf("shared favicon was purged while feed B still references it: %v", err)
+	}
+
+	// Now drop B too. Nothing references the favicon any more, so it must go.
+	if err := f.store.Unsubscribe(ctx, f.alice.ID, subB.ID); err != nil {
+		t.Fatalf("Unsubscribe: %v", err)
+	}
+	if _, err := f.store.FeedIconByHash(ctx, hash); !errors.Is(err, reader.ErrNotFound) {
+		t.Error("the now-orphaned shared favicon is still fetchable")
+	}
+}
+
 func TestDeleteFolderKeepsItsSubscriptions(t *testing.T) {
 	f := newStoreFixture(t)
 	ctx := context.Background()
