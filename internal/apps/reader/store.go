@@ -1292,10 +1292,13 @@ func (s *Store) SaveFeedIconFailure(ctx context.Context, hash, msg string, now t
 
 // SaveFullArticle stores an extracted article body and records its images.
 //
-// The image bookkeeping is deliberately identical to SaveItems': the same
-// reader_images rows and the same reader_item_images links, so retention frees
-// an image that only the full article used, and the proxy serves it with no
-// special case.
+// The image bookkeeping shares recordItemImages with SaveItems, but the two
+// own disjoint source partitions of reader_item_images ('full' here, 'feed'
+// there) — see recordItemImages — so each can delete-and-reinsert its own
+// links on every save without disturbing the other's, even when both
+// reference the same image URL. Retention still frees an image once no row
+// of either source references it, and the proxy serves it with no special
+// case either way.
 func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Extracted, now time.Time) error {
 	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
 		return err
@@ -1340,6 +1343,12 @@ func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Ex
 // recordItemImages deletes prior image links for an item under the specified
 // source ('feed' or 'full'), inserts any new images into reader_images, and
 // links them in reader_item_images.
+//
+// source is part of reader_item_images' primary key (item_id, url_hash,
+// source), so the delete and the insert's conflict target below only ever
+// touch this source's own row for a given image — a feed body and a full
+// article that reference the same image URL each keep their own link, and
+// one source's next save can never silently drop the other's (issue #229).
 func recordItemImages(ctx context.Context, tx *sql.Tx, itemID int64, images map[string]string, source string) error {
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM reader_item_images WHERE item_id = ? AND source = ?`, itemID, source); err != nil {
@@ -1353,7 +1362,7 @@ func recordItemImages(ctx context.Context, tx *sql.Tx, itemID int64, images map[
 		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO reader_item_images (item_id, url_hash, source) VALUES (?, ?, ?)
-			ON CONFLICT (item_id, url_hash) DO NOTHING`, itemID, hash, source); err != nil {
+			ON CONFLICT (item_id, url_hash, source) DO NOTHING`, itemID, hash, source); err != nil {
 			return fmt.Errorf("reader: link %s image: %w", source, err)
 		}
 	}

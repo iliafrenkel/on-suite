@@ -219,6 +219,90 @@ func TestPurgeOrphanImagesRespectsSharedReferences(t *testing.T) {
 	}
 }
 
+// A feed body and its own full-article extraction referencing the very same
+// image URL (a shared lead image, common enough) must not collapse onto one
+// row: reader_item_images' primary key includes source, so 'feed' and 'full'
+// each keep their own link for the pair. Issue #229 — before source joined
+// the key, the second writer's insert silently no-opped on conflict, leaving
+// only the first writer's row; that source's next re-save then deleted the
+// only row and orphaned the image out from under the other source, whose
+// content still pointed at it.
+func TestSharedImageBetweenFeedAndFullArticleSurvivesEitherSourcesResave(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Captured after Subscribe, whose own added_at otherwise lands after this
+	// save's fetched_at and gets the item filtered out as pre-subscription
+	// backlog — see ItemsForScope's fetched_at >= added_at bound.
+	now := time.Now().UTC()
+	hash := reader.ImageHash("https://cdn.example/shared-lead.png")
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Shared lead image", PublishedAt: now.Add(-time.Hour),
+		Images: map[string]string{hash: "https://cdn.example/shared-lead.png"},
+	}}, now); err != nil {
+		t.Fatal(err)
+	}
+	items, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := items[0]
+
+	// The extraction references the same image the feed body already does.
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, reader.Extracted{
+		HTML: "<p>Full body.</p>", TextLength: 500,
+		Images: map[string]string{hash: "https://cdn.example/shared-lead.png"},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	var rows int
+	if err := f.store.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM reader_item_images WHERE item_id = ? AND url_hash = ?`,
+		item.ID, hash).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 2 {
+		t.Fatalf("reader_item_images has %d rows for the shared image, want 2 (one per source)", rows)
+	}
+
+	// The publisher drops the image from the feed body on the next poll — the
+	// feed-source link goes, but the full article still uses it.
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Shared lead image", PublishedAt: now.Add(-time.Hour),
+	}}, now); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := f.store.PurgeOrphanImages(ctx); err != nil || n != 0 {
+		t.Fatalf("purged %d images while the full article still references it (err %v)", n, err)
+	}
+	if _, err := f.store.ImageByHash(ctx, hash); err != nil {
+		t.Errorf("shared image was purged after only the feed body dropped it: %v", err)
+	}
+
+	// A re-extraction that no longer includes the image drops the full-source
+	// link too. Now nothing references it, so it must finally go.
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, reader.Extracted{
+		HTML: "<p>Re-extracted, no image this time.</p>", TextLength: 500,
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	n, err := f.store.PurgeOrphanImages(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("purged %d images after both sources dropped it, want 1", n)
+	}
+	if _, err := f.store.ImageByHash(ctx, hash); !errors.Is(err, reader.ErrNotFound) {
+		t.Error("the now-orphaned shared image is still fetchable")
+	}
+}
+
 // Re-saving an item whose images changed must drop the link to the old one,
 // or a removed image is pinned in the cache forever.
 func TestResavingAnItemReplacesItsImageLinks(t *testing.T) {
