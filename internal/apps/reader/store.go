@@ -537,13 +537,24 @@ func ParseFilter(raw string) Filter {
 	}
 }
 
-// itemColumns is the shared SELECT list. Every item query returns the same
-// shape so scanItems stays one function.
+// itemColumns is the shared SELECT list for a single item — the article
+// pane, which needs the full body. Every such query returns the same shape
+// so scanItems stays one function.
 const itemColumns = `
 	i.id, i.feed_id, i.guid, i.url, i.title, i.author,
 	i.published_at, i.fetched_at, i.summary_html, i.content_html, f.title,
 	st.read_at IS NOT NULL, st.starred_at IS NOT NULL,
 	i.full_html, i.full_error, i.full_fetched_at`
+
+// itemListColumns is ItemsForScope's own SELECT list — a list row, unlike a
+// single item, never shows a body. full_html alone is unbounded (whatever a
+// page extracts to, up to 2MB), so pulling summary_html/content_html/
+// full_html through SQLite on every list render (up to 200 rows) for items
+// nobody is looking at moved tens of megabytes for nothing on a household
+// with a few hundred fetched full articles (issue #230).
+const itemListColumns = `
+	i.id, i.guid, i.title, i.url, i.published_at, f.title,
+	st.read_at IS NOT NULL, st.starred_at IS NOT NULL`
 
 // ItemsForScope is the one query path for listing items.
 //
@@ -567,7 +578,7 @@ func (s *Store) ItemsForScope(ctx context.Context, userID int64, scope Scope, su
 	// discovered by a poll that ran after is not, regardless of its stated
 	// publish date.
 	query := `
-		SELECT ` + itemColumns + `
+		SELECT ` + itemListColumns + `
 		  FROM reader_items i
 		  JOIN reader_feeds f ON f.id = i.feed_id
 		  JOIN reader_subs sub ON sub.feed_id = i.feed_id AND sub.user_id = ?
@@ -618,7 +629,7 @@ func (s *Store) ItemsForScope(ctx context.Context, userID int64, scope Scope, su
 	}
 	defer func() { _ = rows.Close() }()
 
-	return scanItems(rows)
+	return scanListItems(rows)
 }
 
 // SaveItems inserts new items and updates ones whose GUID is already known,
@@ -790,6 +801,29 @@ func scanItems(rows *sql.Rows) ([]Item, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("reader: iterate items: %w", err)
+	}
+	return out, nil
+}
+
+// scanListItems is scanItems' counterpart for itemListColumns. The returned
+// Items are only ever handed to viewList (ID, Title, FeedName, PublishedAt,
+// Read, Starred) or used to identify a row by its stable GUID rather than
+// its server-assigned ID — FeedID, Author, the body columns and the
+// full-article fields are left at their zero value, not silently wrong data.
+func scanListItems(rows *sql.Rows) ([]Item, error) {
+	var out []Item
+	for rows.Next() {
+		var it Item
+		var published string
+		if err := rows.Scan(&it.ID, &it.GUID, &it.Title, &it.URL, &published, &it.FeedName,
+			&it.Read, &it.Starred); err != nil {
+			return nil, fmt.Errorf("reader: scan list item: %w", err)
+		}
+		it.PublishedAt = parseTime(published)
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reader: iterate list items: %w", err)
 	}
 	return out, nil
 }
