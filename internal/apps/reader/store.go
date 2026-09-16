@@ -488,9 +488,9 @@ const (
 	FilterAll     Filter = "all"
 )
 
-// ParseScope and ParseFilter map a URL parameter onto the typed value,
-// defaulting rather than erroring: a hand-edited query string should show a
-// sensible list, not a 400.
+// ParseFilter maps a URL parameter onto the typed value, defaulting rather
+// than erroring: a hand-edited query string should show a sensible list, not
+// a 400.
 func ParseFilter(raw string) Filter {
 	switch Filter(raw) {
 	case FilterStarred:

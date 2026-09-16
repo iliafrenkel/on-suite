@@ -190,9 +190,9 @@ func formContext(r *http.Request, subID int64) listContext {
 //
 // The article's own path names an item, not a list, so the scope arrives in
 // the item link's query string or the star/unread form's hidden fields. It is
-// needed because the article response redraws the tree out of band (so unread
-// counts stop going stale the moment you read something), and a tree drawn
-// without this would move the selection to All under the reader's feet.
+// needed for the article's own star/unread forms, which echo it back via
+// reader-ctx so submitting one does not silently reset the list the reader
+// came from back to All.
 func articleContext(r *http.Request) listContext {
 	scope, subID := scopeWithSub(r.FormValue("scope"), r.FormValue("sub"))
 	return listContext{

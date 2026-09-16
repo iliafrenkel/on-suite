@@ -1682,7 +1682,12 @@ kbd {
 	--reader-chrome: calc(4rem + var(--s-6) * 2);
 	display: flex;
 	flex-direction: column;
+	/* dvh tracks the visual viewport, so a mobile browser's address bar
+	 * shrinking it doesn't leave overflow:hidden clipping a sliver off the
+	 * bottom pane. The 100vh line is a fallback for browsers that don't know
+	 * dvh — they discard the second declaration and keep this one. */
 	height: calc(100vh - var(--reader-chrome));
+	height: calc(100dvh - var(--reader-chrome));
 	min-height: 0;
 	overflow: hidden;
 }
