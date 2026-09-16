@@ -2176,6 +2176,26 @@ kbd {
 	margin-bottom: 0;
 }
 
+/* Above 900px nothing reacts to #reader-list-open/#reader-article-open (see
+ * the max-width:900px and max-width:640px rules below), so a sighted keyboard
+ * user tabbing through would land on two controls that visibly do nothing.
+ * Hiding them here removes that dead stop without touching their focusable,
+ * unhidden state below the breakpoint (issue #221). */
+@media (min-width: 901px) {
+	.reader-pane-toggle {
+		display: none;
+	}
+}
+
+/* The checkbox itself is off-screen (.visually-hidden), so its own focus
+ * ring would be invisible; this puts the ring on the back button its state
+ * controls instead, the same sibling-combinator shape as
+ * .reader-folder > summary:focus-visible below. */
+#reader-list-open:focus-visible ~ .reader-list .reader-back-btn,
+#reader-article-open:focus-visible ~ .reader-article .reader-back-btn {
+	outline: var(--ring);
+}
+
 .reader-actions {
 	display: flex;
 	flex-wrap: wrap;

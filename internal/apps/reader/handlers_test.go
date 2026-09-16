@@ -1086,11 +1086,26 @@ func TestNarrowViewportHasABackControlAtEachDrillDownLevel(t *testing.T) {
 	subID, items := seedOne(t, s, "a")
 
 	doc := s.Get(t, s.Alice, "/reader/")
-	doc.MustHave("input#reader-list-open")
-	doc.MustHave("input#reader-article-open")
+	listOpen := doc.MustHave("input#reader-list-open")
+	articleOpen := doc.MustHave("input#reader-article-open")
 	back := doc.MustHave(".reader-list label[for=reader-list-open]")
 	if _, ok := htmlassert.Attr(back, "class"); !ok {
 		t.Error("the back control has no class, so no media query can reveal it")
+	}
+
+	// Issue #221: a <label> is not itself focusable, so the checkbox it
+	// toggles has to stay in the tab order and visible to assistive tech, or
+	// a keyboard/switch-device user has no way back on a phone-width screen.
+	for _, cb := range []*html.Node{listOpen, articleOpen} {
+		if _, ok := htmlassert.Attr(cb, "tabindex"); ok {
+			t.Errorf("%s has a tabindex, so it is (or was) removed from the tab order", cb.Data)
+		}
+		if _, ok := htmlassert.Attr(cb, "aria-hidden"); ok {
+			t.Errorf("%s is aria-hidden, so assistive tech cannot reach it", cb.Data)
+		}
+		if _, ok := htmlassert.Attr(cb, "aria-label"); !ok {
+			t.Errorf("%s has no aria-label; its own name would otherwise depend on a label inside a pane the CSS may hide", cb.Data)
+		}
 	}
 
 	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet,
