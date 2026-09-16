@@ -18,7 +18,11 @@ import (
 // original user-add applied only the platform's schema and export applied none,
 // so exporting a fresh database failed with "no such table: paste_snippets".
 func openDatabase(ctx context.Context, cfg config.Config) (*sql.DB, *app.Registry, int, error) {
-	registry, err := app.NewRegistry(registeredApps()...)
+	apps, err := filterApps(registeredApps(), cfg.DisabledApps)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	registry, err := app.NewRegistry(apps...)
 	if err != nil {
 		return nil, nil, 0, err
 	}

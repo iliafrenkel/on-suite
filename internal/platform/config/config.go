@@ -26,6 +26,7 @@ const (
 	defaultBackupKeep     = 7
 	defaultTLSHTTPAddr    = ":80"
 	defaultSecureCookies  = false
+	defaultDisableApps    = ""
 )
 
 // Source says where a setting's live value came from.
@@ -84,6 +85,7 @@ var settingSpecs = []struct{ flag, env, def string }{
 	{"backup-keep", "ONSUITE_BACKUP_KEEP", strconv.Itoa(defaultBackupKeep)},
 	{"tls-http-addr", "ONSUITE_TLS_HTTP_ADDR", defaultTLSHTTPAddr},
 	{"secure-cookies", "ONSUITE_SECURE_COOKIES", strconv.FormatBool(defaultSecureCookies)},
+	{"disable-apps", "ONSUITE_DISABLE_APPS", defaultDisableApps},
 }
 
 // Config is the complete runtime configuration of the server.
@@ -109,6 +111,13 @@ type Config struct {
 	// front, because from this process's point of view that traffic is plain
 	// HTTP.
 	SecureCookies bool
+
+	// DisabledApps is the set of app IDs (Meta.ID) excluded from this run's
+	// app.Registry: no nav entry, no routes, no further migrations, no
+	// admin stats, no scheduled jobs — see cmd/onsuite's filterApps. Only
+	// `serve` ever sets this; export/backup/user build a Config literal
+	// directly and always see every registered app.
+	DisabledApps []string
 
 	// settings records how each value above was resolved, for the admin page.
 	// It is unexported so a hand-built Config literal reports nothing rather
@@ -159,6 +168,8 @@ func Parse(args []string, getenv func(string) string, errOut io.Writer) (Config,
 		"plain-HTTP address for ACME challenges and HTTPS redirects; empty to disable")
 	secureCookies := fs.Bool("secure-cookies", secureCookiesDefault,
 		"mark cookies Secure; implied by -tls-domain, set this behind an HTTPS proxy")
+	disableAppsRaw := fs.String("disable-apps", envOr(getenv, "ONSUITE_DISABLE_APPS", defaultDisableApps),
+		"comma-separated app IDs to disable for this run (e.g. \"notes,reader\")")
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
@@ -198,6 +209,8 @@ func Parse(args []string, getenv func(string) string, errOut io.Writer) (Config,
 	// a proxy that terminates TLS upstream.
 	c.SecureCookies = *secureCookies || c.TLSDomain != ""
 
+	c.DisabledApps = splitCleanList(*disableAppsRaw)
+
 	c.settings = collectSettings(fs, getenv, explicit, c)
 
 	return c, nil
@@ -216,6 +229,7 @@ func collectSettings(fs *flag.FlagSet, getenv func(string) string, explicit map[
 		"backup-keep":     strconv.Itoa(c.BackupKeep),
 		"tls-http-addr":   c.TLSHTTPAddr,
 		"secure-cookies":  strconv.FormatBool(c.SecureCookies),
+		"disable-apps":    strings.Join(c.DisabledApps, ","),
 	}
 
 	described := make(map[string]bool, len(settingSpecs))
@@ -301,6 +315,20 @@ func envOr(getenv func(string) string, key, def string) string {
 		return v
 	}
 	return def
+}
+
+// splitCleanList splits a comma-separated flag value into trimmed, non-empty
+// entries, in order. "" becomes nil; " notes , ,reader " becomes
+// ["notes" "reader"].
+func splitCleanList(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func parseLevel(s string) (slog.Level, error) {
