@@ -3,8 +3,13 @@ package main
 import (
 	"context"
 	"database/sql"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/iliafrenkel/on-suite/internal/apptest"
+	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
 )
 
@@ -48,6 +53,62 @@ func TestOpenDatabaseSkipsMigrationsForADisabledApp(t *testing.T) {
 	}
 	if len(ids) != 2 {
 		t.Errorf("NavItems() = %v, want exactly notes and paste", ids)
+	}
+}
+
+// TestDisabledAppIsUnreachableAndOmittedFromExportAndStats proves the two
+// user-facing halves of -disable-apps that the implementation plan's Task 3
+// never actually exercised at this layer (spec §6): a disabled app's routes
+// genuinely 404 through the real HTTP stack, and it is left out of both
+// Registry.Export and Registry.Stats.
+func TestDisabledAppIsUnreachableAndOmittedFromExportAndStats(t *testing.T) {
+	cfg := config.Config{DataDir: t.TempDir(), DisabledApps: []string{"reader"}}
+	handle, registry, _, err := openDatabase(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("openDatabase: %v", err)
+	}
+	defer func() { _ = handle.Close() }()
+
+	users := auth.NewStore(handle)
+
+	stack, err := buildStack(stackDeps{
+		DB:       handle,
+		Users:    users,
+		Registry: registry,
+		Log:      slog.New(slog.DiscardHandler),
+		Version:  "test",
+	})
+	if err != nil {
+		t.Fatalf("buildStack: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	stack.ServeHTTP(rec, httptest.NewRequest("GET", "/reader/", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /reader/ = %d, want %d (disabled app must be unreachable)", rec.Code, http.StatusNotFound)
+	}
+
+	ctx := context.Background()
+	user, err := users.CreateUser(ctx, "tester", apptest.PasswordHash, false)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	exported, err := registry.Export(ctx, handle, user.ID)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if _, ok := exported["reader"]; ok {
+		t.Error("Export includes a \"reader\" key even though reader is disabled")
+	}
+	if _, ok := exported["paste"]; !ok {
+		t.Error("Export is missing \"paste\"; Export appears broken, not just correctly filtering reader")
+	}
+
+	for _, stats := range registry.Stats(ctx, handle) {
+		if stats.ID == "reader" {
+			t.Errorf("Stats() includes disabled app %q", stats.ID)
+		}
 	}
 }
 
