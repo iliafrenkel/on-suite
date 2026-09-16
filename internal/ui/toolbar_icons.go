@@ -1,3 +1,5 @@
+package ui
+
 // Toolbar/menu/dialog icon lookup, shared by any app's toolbar buttons —
 // today only ON Reader, but the map lives here (rather than in
 // internal/apps/reader) so a later pass can point Notes/Paste's own inline
@@ -7,8 +9,6 @@
 // unlike IconFor's bare tile icons, these already carry the class that
 // app.css's shared `.toolbar-icon` rule (size, stroke, currentColor) keys
 // off, so a template just does {{ticon "plus"}} with nothing else to add.
-
-package ui
 
 import "html/template"
 
@@ -48,9 +48,20 @@ var toolbarIcons = map[string]template.HTML{
 	</svg>`,
 	// Mirrors Notes' show-completed-toggle checkmark
 	// (internal/apps/notes/templates/toolbar.partial.html) — same glyph,
-	// same meaning ("done"), kept visually identical across apps.
+	// same meaning ("done"), kept visually identical across apps. Used for
+	// "Mark read"; "check-circle" below is its "Mark unread" counterpart
+	// (issue #250), the same filled/outline-style pairing star-filled/
+	// star-outline use, just as two line glyphs rather than a fill toggle —
+	// a checkmark's fill has nothing to invert the way a star's does.
 	"check": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<path d="M4 12l5 5L20 6"/>
+	</svg>`,
+	// "Mark unread": a checkmark circled, reading as "already confirmed
+	// done — click to undo" rather than repeating the bare "Mark read" glyph
+	// for the opposite action.
+	"check-circle": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<circle cx="12" cy="12" r="9"/>
+		<path d="M8 12l3 3 5-6"/>
 	</svg>`,
 	"star-filled": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<path d="M12 4l2.4 5.8L20.6 10l-4.6 4 1.4 6.2L12 17l-5.4 3.2L8 14l-4.6-4 6.2-.2z" fill="currentColor" stroke="none"/>
@@ -61,9 +72,18 @@ var toolbarIcons = map[string]template.HTML{
 	"external": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<path d="M9 6h9v9M18 6L7 17"/>
 	</svg>`,
+	// "Fetch full article" (the initial action, before either version of the
+	// toggle below exists). "Show full article" uses "expand" and "Show feed
+	// version" uses "rss" instead of reusing this — issue #250: all three
+	// used to share "doc", making them indistinguishable in the same bar.
 	"doc": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<path d="M7 3h7l4 4v14H7z"/>
 		<path d="M14 3v4h4"/>
+	</svg>`,
+	// "Show full article": four corner brackets, the conventional
+	// "expand/view full content" glyph.
+	"expand": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M9 3H3v6M15 3h6v6M9 21H3v-6M15 21h6v-6"/>
 	</svg>`,
 	"inbox": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<path d="M4 12h4l2 3h4l2-3h4"/>
@@ -74,6 +94,8 @@ var toolbarIcons = map[string]template.HTML{
 		<path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6 0 9.5 5.5 9.9 7a11.6 11.6 0 0 1-3.1 4.3M6.5 6.6C3.9 8.2 2.4 11 2.1 12c.3 1 1.5 3.1 3.5 4.8A10.4 10.4 0 0 0 12 19c1 0 1.9-.1 2.8-.4"/>
 		<path d="M9.9 10a3 3 0 0 0 4.2 4.2"/>
 	</svg>`,
+	// Also doubles as the article pane's "Show feed version" action — going
+	// back to the feed's own content reads naturally as the feed glyph.
 	"rss": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none"/>
 		<path d="M4 11a9 9 0 0 1 9 9"/>
