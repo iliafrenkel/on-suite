@@ -352,6 +352,54 @@ func TestItemsForSubscriptionIsScopedToTheOwner(t *testing.T) {
 	}
 }
 
+// ItemsForScope draws every list render (up to 200 rows), and viewList never
+// touches a body field — but Store.Item (the article pane) does, so it is
+// easy for a future change to accidentally widen ItemsForScope's SELECT back
+// out to itemColumns and silently start moving full_html (unbounded, up to
+// 2MB per article) through SQLite again on every list render. This pins the
+// omission directly against a real row, not just an empty-fixture coincidence.
+// Issue #230.
+func TestItemsForScopeOmitsBodyColumns(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "T", PublishedAt: time.Now().UTC(),
+		SummaryHTML: "<p>summary</p>", ContentHTML: "<p>content</p>",
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, items[0].ID, reader.Extracted{
+		HTML: "<p>full body</p>", TextLength: 500,
+	}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-fetch through the list query now that the row genuinely has all
+	// three body fields populated.
+	items, err = f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := items[0]
+	if got.SummaryHTML != "" || got.ContentHTML != "" || got.FullHTML != "" {
+		t.Errorf("ItemsForScope returned body fields it must not select: SummaryHTML=%q ContentHTML=%q FullHTML=%q",
+			got.SummaryHTML, got.ContentHTML, got.FullHTML)
+	}
+	// The fields the list actually renders must still be right.
+	if got.Title != "T" || got.GUID != "g1" {
+		t.Errorf("list item lost fields it does need: Title=%q GUID=%q", got.Title, got.GUID)
+	}
+}
+
 func TestItemRequiresASubscription(t *testing.T) {
 	f := newStoreFixture(t)
 	ctx := context.Background()
