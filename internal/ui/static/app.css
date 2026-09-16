@@ -1801,6 +1801,7 @@ kbd {
 	padding: calc(var(--s-3) + var(--s-2)) var(--s-3) var(--s-2);
 	background: var(--c-bg);
 	border-bottom: 1px solid var(--c-border);
+	box-shadow: 0 10px 10px -10px rgba(100, 100, 100, 0.2);
 }
 
 .reader-mark-all {
@@ -1895,6 +1896,7 @@ kbd {
 	padding: calc(var(--s-3) + var(--s-2)) 0 var(--s-2);
 	background: var(--c-bg);
 	border-bottom: 1px solid var(--c-border);
+	box-shadow: 0 10px 10px -10px rgba(100, 100, 100, 0.2);
 }
 
 /* Folder header row: position: relative anchors .reader-folder-menu
