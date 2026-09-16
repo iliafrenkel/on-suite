@@ -160,10 +160,10 @@ func TestListAccountsReturnsEveryUserOldestFirstWithSessionCounts(t *testing.T) 
 	store, _ := newStore(t)
 	ctx := context.Background()
 
-	hash, err := HashPassword("a-sufficiently-long-password")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Never verified in this test, so a real Argon2id hash buys nothing —
+	// same placeholder TestCreateUserRejectsInvalidInput and TestCountUsers
+	// use above.
+	const hash = "$argon2id$fake"
 	root, err := store.CreateUser(ctx, "root", hash, true)
 	if err != nil {
 		t.Fatal(err)
@@ -206,10 +206,8 @@ func TestSessionCountsSeparatesLiveFromExpired(t *testing.T) {
 	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
 	store.SetClock(func() time.Time { return now })
 
-	hash, err := HashPassword("a-sufficiently-long-password")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Never verified in this test; see TestListAccountsReturnsEveryUserOldestFirstWithSessionCounts.
+	const hash = "$argon2id$fake"
 	u, err := store.CreateUser(ctx, "ilia", hash, false)
 	if err != nil {
 		t.Fatal(err)
