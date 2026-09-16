@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -32,6 +33,10 @@ type Poller struct {
 	store  *Store
 	client *Client
 	log    *slog.Logger
+	// polling guards PollDue against overlapping runs: the scheduled tick and
+	// a manual "refresh all feeds" click can land at the same time, and
+	// without this both would poll every due feed at once.
+	polling atomic.Bool
 }
 
 func NewPoller(store *Store, client *Client, log *slog.Logger) *Poller {
@@ -76,7 +81,17 @@ func NextFetchAt(now time.Time, interval time.Duration, errorCount int) time.Tim
 // one dead publisher must not stop the other thirty-nine feeds from updating.
 // The error return is reserved for the run itself failing, which is what the
 // admin page's job status should show red for.
+//
+// A run already in progress makes this a no-op rather than a second overlapping
+// poll: the caller (scheduled tick or manual refresh) just missed the in-flight
+// run's results, which is fine since DueFeeds re-evaluates next time.
 func (p *Poller) PollDue(ctx context.Context) error {
+	if !p.polling.CompareAndSwap(false, true) {
+		p.log.Info("reader poll skipped: already in progress")
+		return nil
+	}
+	defer p.polling.Store(false)
+
 	now := time.Now().UTC()
 	feeds, err := p.store.DueFeeds(ctx, now, pollBatch)
 	if err != nil {

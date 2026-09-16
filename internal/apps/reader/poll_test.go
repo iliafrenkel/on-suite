@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -105,6 +106,45 @@ func TestPollDueSkipsAFeedThatIsNotDue(t *testing.T) {
 	}
 	if hits != 1 {
 		t.Errorf("feed fetched %d times; the second poll must find it not due", hits)
+	}
+}
+
+func TestPollDueSkipsAnOverlappingRun(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		close(started)
+		<-release
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer srv.Close()
+
+	if _, err := f.store.Subscribe(ctx, f.alice.ID, srv.URL+"/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+	client := reader.NewClient("test")
+	client.DenyAddr = func(string) error { return nil }
+	poller := reader.NewPoller(f.store, client, quietLogger())
+
+	done := make(chan error, 1)
+	go func() { done <- poller.PollDue(ctx) }()
+	<-started // the first run is now mid-fetch, holding the guard
+
+	if err := poller.PollDue(ctx); err != nil {
+		t.Fatalf("overlapping PollDue returned %v; it must be a no-op, not an error", err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("first PollDue: %v", err)
+	}
+
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("feed fetched %d times; the overlapping run must not have polled again", got)
 	}
 }
 
