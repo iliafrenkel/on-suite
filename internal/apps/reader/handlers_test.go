@@ -2396,6 +2396,37 @@ func TestStatsPageRenders(t *testing.T) {
 	}
 }
 
+// The charts' SVG aria-label is a summary ("peak 12"), not the daily trend a
+// sighted reader sees at a glance — a screen-reader user needs the actual
+// figures, not just a label. Issue #242.
+func TestStatsPageHasADailyFiguresTableForScreenReaders(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://a.example/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "A", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.RecordDailyStats(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/stats")
+	doc.MustHave("details.reader-stats-daily")
+	if doc.Query("details.reader-stats-daily table") == nil {
+		t.Errorf("no table inside the daily-figures details block:\n%s", doc.Text())
+	}
+	if len(doc.QueryAll("details.reader-stats-daily tbody tr")) == 0 {
+		t.Error("daily-figures table has no rows")
+	}
+}
+
 func TestStatsPageIsPerUser(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
