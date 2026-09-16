@@ -49,12 +49,11 @@
 {{/* counts-oob is the sidebar's numbers and nothing else, for the article
      response. Reading or starring changes an unread count, but it changes
      nothing else in the tree, and swapping the whole <nav> to deliver three
-     numbers threw away everything the tree was holding: whatever was half
-     typed into #feed-url or #folder-name, which <details> folders the reader
-     had collapsed, and the pane's scroll position — on opening an article,
-     the single most frequent action in the app. So only the spans move.
-     It reads the same Counts "tree" does, so there is still one source for
-     every number. */}}
+     numbers threw away everything the tree was holding: which <details>
+     folders the reader had collapsed, and the pane's scroll position — on
+     opening an article, the single most frequent action in the app. So only
+     the spans move. It reads the same Counts "tree" does, so there is still
+     one source for every number. */}}
 {{define "counts-oob"}}{{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total "OOB" true "Class" "toolbar-due-badge")}}{{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred "OOB" true "Class" "toolbar-due-badge")}}{{range .Tree.Folders}}{{range .Subs}}{{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID) "OOB" true)}}{{end}}{{end}}{{range .Tree.Root}}{{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .ID) "N" (index $.Tree.Counts.BySub .ID) "OOB" true)}}{{end}}{{end}}
 
 {{define "panes"}}
@@ -132,19 +131,28 @@
     </form>
   </nav>
   <div class="reader-menu">
-    <button type="button" class="toolbar-btn reader-menu-toggle" aria-haspopup="true"
+    {{/* No role="menu"/"menuitem" here (issue #247): this is a plain
+         disclosure toggle over a list of buttons/links, the same shape as
+         .outline-menu's <details>/<summary> row menus elsewhere in this
+         file — not a full ARIA menu widget, which would also need arrow-key
+         navigation this one has never implemented (reader.js's click/Escape
+         handling is all a plain div gets). role="menu" promised assistive
+         tech behavior this never delivered; aria-expanded/aria-controls
+         alone describe what is actually here: a toggle and the panel it
+         shows or hides. */}}
+    <button type="button" class="toolbar-btn reader-menu-toggle"
             aria-expanded="false" aria-controls="reader-menu-list">
       {{ticon "more"}}<span class="visually-hidden">More actions</span>
     </button>
-    <div class="reader-menu-list" id="reader-menu-list" role="menu" hidden>
-      <button type="button" class="reader-menu-item" data-open-dialog="add-feed-dialog" role="menuitem">{{ticon "plus"}}Add feed…</button>
-      <button type="button" class="reader-menu-item" data-open-dialog="import-opml-dialog" role="menuitem">{{ticon "import"}}Import OPML…</button>
-      <a class="reader-menu-item" href="/reader/opml" download role="menuitem">{{ticon "export"}}Export OPML</a>
-      <button type="button" class="reader-menu-item" data-open-dialog="new-folder-dialog" role="menuitem">{{ticon "folder"}}New folder…</button>
+    <div class="reader-menu-list" id="reader-menu-list" hidden>
+      <button type="button" class="reader-menu-item" data-open-dialog="add-feed-dialog">{{ticon "plus"}}Add feed…</button>
+      <button type="button" class="reader-menu-item" data-open-dialog="import-opml-dialog">{{ticon "import"}}Import OPML…</button>
+      <a class="reader-menu-item" href="/reader/opml" download>{{ticon "export"}}Export OPML</a>
+      <button type="button" class="reader-menu-item" data-open-dialog="new-folder-dialog">{{ticon "folder"}}New folder…</button>
       <form method="post" action="/reader/refresh" class="reader-menu-item-form"
             hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">
         {{template "reader-ctx" .}}
-        <button type="submit" class="reader-menu-item reader-refresh" role="menuitem">
+        <button type="submit" class="reader-menu-item reader-refresh">
           {{ticon "refresh"}}
           <span class="reader-refresh-text">
             <span>Refresh all feeds</span>
@@ -152,8 +160,8 @@
           </span>
         </button>
       </form>
-      <a class="reader-menu-item" href="/reader/stats" role="menuitem">{{ticon "stats"}}Reading stats</a>
-      <button type="button" class="reader-menu-item" data-open-dialog="shortcuts-dialog" role="menuitem">{{ticon "keyboard"}}Keyboard shortcuts</button>
+      <a class="reader-menu-item" href="/reader/stats">{{ticon "stats"}}Reading stats</a>
+      <button type="button" class="reader-menu-item" data-open-dialog="shortcuts-dialog">{{ticon "keyboard"}}Keyboard shortcuts</button>
     </div>
   </div>
 </div>
