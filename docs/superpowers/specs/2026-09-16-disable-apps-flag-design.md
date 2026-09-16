@@ -20,7 +20,7 @@ supported way to do it at deploy time, no rebuild required.
 | 1 | When it can change | Startup only — a flag/env var, read once at process start. No runtime/admin-UI toggle. |
 | 2 | How apps are named | Deny-list: `-disable-apps` lists the apps to turn *off*. Everything not named stays on, so a newly added app is on by default. |
 | 3 | What happens to a disabled app's schema/data | Nothing is dropped. Its tables keep whatever data they already had; its migrations simply stop running while it's disabled. Re-enabling it lets normal migration catch-up bring it up to date. |
-| 4 | Visibility while disabled | Fully invisible: no nav entry, no routes (404, same as any unknown app path), no admin stats, no `onsuite export` output, no scheduled jobs. Only the untouched DB tables remain, in case it's re-enabled later. |
+| 4 | Visibility while disabled | Fully invisible **while serving**: no nav entry, no routes (404, same as any unknown app path), no admin stats, no scheduled jobs. `onsuite export` is unaffected — it always includes every registered app's data regardless of `-disable-apps` (see §4). Only the untouched DB tables remain for a disabled app, in case it's re-enabled later. |
 
 ## 3. Config
 
@@ -77,6 +77,25 @@ Validation:
 - If filtering would leave `apps` empty, that's an error too — it always
   means a misconfigured `-disable-apps`, never an intentional "run with no
   apps" mode.
+
+**Revision note (2026-09-16, during planning):** the original §2 decision #4
+said a disabled app is excluded from `onsuite export` too. Tracing the actual
+call sites showed that `export`, `backup`, and `user add`
+([export.go](../../../cmd/onsuite/export.go),
+[backup.go](../../../cmd/onsuite/backup.go),
+[user.go](../../../cmd/onsuite/user.go)) each build their own minimal
+`config.Config{DataDir: *dataDir}` literal rather than calling
+`config.Parse` — none of them ever reads `-disable-apps`/
+`ONSUITE_DISABLE_APPS` at all. Only `serve` ([serve.go](../../../cmd/onsuite/serve.go))
+calls `config.Parse`. Piping the flag into those three commands as well would
+mean more plumbing for a worse default: someone pulling a full export of
+their own data, or running a routine `backup`/`user add`, should never
+silently lose or skip an app's data because it happens to be turned off for
+serving right now. So `export`/`backup`/`user add` are simply left as they
+are — their hand-built `config.Config` has an empty `DisabledApps`, so
+`filterApps` (§4) is a no-op for them and they keep seeing every registered
+app, exactly as before this feature existed. Only `serve`'s registry is ever
+filtered.
 
 No other code changes anywhere: `app.Registry` (nav, routes, migrations,
 `Export`, `Stats`, `RegisterJobs`) already derives everything purely from the
