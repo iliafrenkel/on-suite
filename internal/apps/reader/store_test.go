@@ -528,7 +528,7 @@ func TestRenameSubscriptionIsScopedToTheOwner(t *testing.T) {
 	}
 }
 
-func TestFavoritesMigrationAddsFaviconColumnAndTable(t *testing.T) {
+func TestFaviconMigrationAddsFaviconColumnAndTable(t *testing.T) {
 	f := newStoreFixture(t)
 	ctx := context.Background()
 

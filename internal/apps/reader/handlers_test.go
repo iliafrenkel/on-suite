@@ -28,6 +28,12 @@ func newServer(t *testing.T) *apptest.Server[*reader.Store] {
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
+// The list below is meant to be every route app.go registers (none of them
+// public — reader has no r.Public/r.PublicFunc routes at all), kept in the
+// same order as app.go so a new route is easy to notice missing here. A few
+// (img, favicon, stats) also have their own dedicated ...IsBehindAuth test
+// elsewhere; that is deliberate redundancy, not a substitute for listing them
+// here too, since this test's name promises "every route" (issue #259).
 func TestEveryReaderRouteIsBehindAuth(t *testing.T) {
 	s := newServer(t)
 	anon := s.Anonymous(t)
@@ -37,8 +43,12 @@ func TestEveryReaderRouteIsBehindAuth(t *testing.T) {
 		path   string
 	}{
 		{http.MethodGet, "/reader/"},
+		{http.MethodGet, "/reader/reader.js"},
+		{http.MethodGet, "/reader/stats"},
 		{http.MethodGet, "/reader/feed/1"},
 		{http.MethodGet, "/reader/item/1"},
+		{http.MethodPost, "/reader/item/1/full"},
+		{http.MethodPost, "/reader/item/1/full/clear"},
 		{http.MethodPost, "/reader/subscribe"},
 		{http.MethodPost, "/reader/sub/1/delete"},
 		{http.MethodPost, "/reader/sub/1/refresh"},
@@ -46,6 +56,16 @@ func TestEveryReaderRouteIsBehindAuth(t *testing.T) {
 		{http.MethodPost, "/reader/folder"},
 		{http.MethodPost, "/reader/folder/1/delete"},
 		{http.MethodPost, "/reader/refresh"},
+		{http.MethodGet, "/reader/starred"},
+		{http.MethodPost, "/reader/item/1/read"},
+		{http.MethodPost, "/reader/item/1/unread"},
+		{http.MethodPost, "/reader/item/1/star"},
+		{http.MethodPost, "/reader/read-all"},
+		{http.MethodPost, "/reader/prefs"},
+		{http.MethodGet, "/reader/img/1"},
+		{http.MethodGet, "/reader/favicon/1"},
+		{http.MethodGet, "/reader/opml"},
+		{http.MethodPost, "/reader/opml"},
 	}
 
 	for _, tt := range tests {
@@ -248,6 +268,13 @@ func TestSubscribeStillSucceedsWhenTheFetchTimesOut(t *testing.T) {
 	doc := s.Get(t, s.Alice, "/reader/")
 	if !strings.Contains(doc.Text(), origin.URL+"/feed.xml") {
 		t.Errorf("subscription missing after a timed-out fetch-on-add:\n%s", doc.Text())
+	}
+	// The fixture's own article title must not appear: every assertion above
+	// would also hold if the fetch had simply succeeded instead of timing
+	// out, since a successful fetch surfaces no error either. Only an
+	// actually-cut-off fetch leaves the feed with zero stored articles.
+	if strings.Contains(doc.Text(), "First post") {
+		t.Errorf("the fetch was not actually cut off by the timeout — its article was stored:\n%s", doc.Text())
 	}
 }
 
