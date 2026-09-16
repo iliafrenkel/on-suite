@@ -108,6 +108,12 @@ type listContext struct {
 	// it and reload the unfiltered list. Only articleContext populates it —
 	// renderPanes reads the query string's own "q" directly for the list pane.
 	Query string
+	// View is "feed" to show the feed body over an existing full-article
+	// extraction, or "" for the default (full wins once it exists). Only
+	// articleContext populates it, the same way as Query — carried through
+	// star/unread's hidden fields so those actions don't silently flip a
+	// reader looking at the feed version back to the full one (issue #232).
+	View string
 }
 
 // parseScope maps a form or query value onto a Scope, reporting whether it was
@@ -193,6 +199,10 @@ func formContext(r *http.Request, subID int64) listContext {
 // needed for the article's own star/unread forms, which echo it back via
 // reader-ctx so submitting one does not silently reset the list the reader
 // came from back to All.
+//
+// r.FormValue reads the query string on a GET (an item link's ?view=feed) and
+// the posted hidden field on a POST (star/unread), so View is correct either
+// way without the caller needing to know which one this request was.
 func articleContext(r *http.Request) listContext {
 	scope, subID := scopeWithSub(r.FormValue("scope"), r.FormValue("sub"))
 	return listContext{
@@ -200,6 +210,7 @@ func articleContext(r *http.Request) listContext {
 		SubID:  subID,
 		Filter: ParseFilter(r.FormValue("filter")),
 		Query:  strings.TrimSpace(r.FormValue("q")),
+		View:   r.FormValue("view"),
 	}
 }
 
@@ -399,8 +410,10 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 
 	// The full article wins by default once it exists; ?view=feed is the way
 	// back, because extraction sometimes does worse than the publisher's own
-	// summary.
-	showFull := r.URL.Query().Get("view") != "feed"
+	// summary. Read from lc (articleContext), not the URL query directly:
+	// star and mark-unread POST here too, and only lc's hidden "view" field
+	// survives that round trip — the query string does not (issue #232).
+	showFull := lc.View != "feed"
 	art := viewArticle(item, page.Shell, lc, showFull)
 
 	// Anything that did not come from htmx is a plain browser navigation and

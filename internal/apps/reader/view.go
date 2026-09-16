@@ -83,6 +83,10 @@ type listView struct {
 	// Query is the live search filter, echoed back into the search box so it
 	// does not clear itself on every keystroke's response.
 	Query string
+	// View always stays "" here — reader-ctx reads it uniformly off both
+	// listView and articleView, but which feed/full body is showing is only
+	// ever meaningful for an article, never a list.
+	View string
 	// HideRead mirrors the cookie the toolbar's toggle button reflects, so
 	// the button's pressed state matches whatever was actually applied to
 	// this render.
@@ -129,6 +133,11 @@ type articleView struct {
 	// full-article forms' hidden fields (via reader-ctx) so submitting one
 	// does not drop the search the article was opened from.
 	Query string
+	// View mirrors listContext.View: "feed" while the reader is looking at
+	// the feed body over an existing full-article extraction, "" otherwise.
+	// Echoed back the same way Query is, so star/unread does not silently
+	// flip the pane back to the full article (issue #232).
+	View string
 	// HasFull reports that an extracted body is stored, which is what decides
 	// whether the toggle renders at all.
 	HasFull bool
@@ -235,6 +244,7 @@ func viewArticle(it Item, shell render.Shell, lc listContext, showFull bool) art
 		SubID:    lc.SubID,
 		Filter:   lc.Filter,
 		Query:    lc.Query,
+		View:     lc.View,
 		ID:       it.ID,
 		Selected: true,
 		Title:    firstNonEmpty(it.Title, "(untitled)"),

@@ -1614,6 +1614,55 @@ func TestFullArticleTogglesBackToTheFeedBody(t *testing.T) {
 	}
 }
 
+// Star and mark-unread POST to their own paths, neither of which carries
+// ?view=feed in the URL — only reader-ctx's hidden "view" field says which
+// body the reader was looking at. Before issue #232 was fixed, renderArticle
+// read the URL query directly, so either action silently flipped the pane
+// back to the full article the moment the reader had switched to the feed
+// version.
+func TestStarringAnArticleKeepsTheFeedViewShowing(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "T", SummaryHTML: "<p>THE FEED VERSION.</p>",
+		PublishedAt: time.Now().UTC().Add(-time.Hour),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SaveFullArticle(ctx, s.Alice.User.ID, items[0].ID, reader.Extracted{
+		HTML: "<p>THE FULL VERSION.</p>", TextLength: 500,
+	}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	path := "/reader/item/" + itoa(items[0].ID)
+
+	// Switch to the feed version first, same as TestFullArticleTogglesBackToTheFeedBody.
+	feed := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, path+"?view=feed", nil))
+	if !strings.Contains(feed.Body.String(), "THE FEED VERSION") {
+		t.Fatalf("?view=feed did not show the feed body:\n%s", feed.Body.String())
+	}
+
+	rec := s.PostHX(t, s.Alice, path+"/star", url.Values{"view": {"feed"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("star returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "THE FEED VERSION") {
+		t.Errorf("starring flipped the pane away from the feed version:\n%s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "THE FULL VERSION") {
+		t.Error("starring showed the full article after the reader had switched to the feed version")
+	}
+}
+
 func TestFetchFullArticleReportsAFailureInThePane(t *testing.T) {
 	s, a := newServerWithApp(t)
 	ctx := context.Background()
