@@ -1805,16 +1805,23 @@ kbd {
 	background: var(--c-bg-subtle);
 }
 
-/* htmx's own default indicator CSS is an inline <style> it injects at
- * runtime, which this app's CSP (style-src 'self') blocks — so the
- * show/hide rule has to live here instead of relying on htmx for it. */
+/* The label and its "Refreshing…" status stack instead of running the menu
+ * row wide enough to wrap. htmx's own default indicator CSS is an inline
+ * <style> it injects at runtime, which this app's CSP (style-src 'self')
+ * blocks — so the show/hide rule has to live here instead of relying on it. */
+.reader-refresh-text {
+	display: flex;
+	flex-direction: column;
+}
+
 .reader-refresh-wait {
+	display: none;
+	font-size: var(--fs-xs);
 	color: var(--c-text-dim);
-	opacity: 0;
 }
 
 .reader-refresh-wait.htmx-request {
-	opacity: 1;
+	display: block;
 }
 
 /* Sticky so the search box and "Mark all read" stay reachable while a long

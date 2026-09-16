@@ -135,7 +135,11 @@
             hx-post="/reader/refresh" hx-target="#reader-panes" hx-swap="outerHTML">
         {{template "reader-ctx" .}}
         <button type="submit" class="reader-menu-item reader-refresh" role="menuitem">
-          {{ticon "refresh"}}Refresh all feeds<span class="reader-refresh-wait htmx-indicator"> — refreshing…</span>
+          {{ticon "refresh"}}
+          <span class="reader-refresh-text">
+            <span>Refresh all feeds</span>
+            <span class="reader-refresh-wait htmx-indicator">Refreshing…</span>
+          </span>
         </button>
       </form>
       <a class="reader-menu-item" href="/reader/stats" role="menuitem">{{ticon "stats"}}Reading stats</a>
