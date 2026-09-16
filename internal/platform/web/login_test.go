@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
@@ -19,7 +20,10 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/ui"
 )
 
-const testPassword = "a-sufficiently-long-password"
+// testPassword must match apptest.Password: the fixture below stores
+// apptest.PasswordHash rather than calling auth.HashPassword, and a PHC hash
+// only verifies against the one plaintext it was generated from.
+const testPassword = apptest.Password
 
 // authFixture builds the real stack over a real database with one account.
 type authFixture struct {
@@ -48,10 +52,7 @@ func newAuthFixture(t *testing.T) *authFixture {
 	}
 
 	users := auth.NewStore(handle)
-	hash, err := auth.HashPassword(testPassword)
-	if err != nil {
-		t.Fatal(err)
-	}
+	hash := apptest.PasswordHash
 	user, err := users.CreateUser(context.Background(), "ilia", hash, true)
 	if err != nil {
 		t.Fatal(err)

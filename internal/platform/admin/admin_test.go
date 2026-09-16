@@ -15,6 +15,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 	"github.com/iliafrenkel/on-suite/internal/platform/admin"
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
@@ -27,7 +28,10 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/ui"
 )
 
-const testPassword = "a-sufficiently-long-password"
+// testPassword must match apptest.Password: the fixture below stores
+// apptest.PasswordHash rather than calling auth.HashPassword, and a PHC hash
+// only verifies against the one plaintext it was generated from.
+const testPassword = apptest.Password
 
 // statApp is a stub app that implements Stater, so the apps section has
 // something to render.
@@ -152,10 +156,7 @@ func newServerWith(t *testing.T, reg *jobs.Registry) *server {
 
 	s := &server{handler: web.Stack(mux, log, errs, csrf, authn), cfg: cfg, rend: rend, errs: errs}
 
-	hash, err := auth.HashPassword(testPassword)
-	if err != nil {
-		t.Fatal(err)
-	}
+	hash := apptest.PasswordHash
 	root, err := users.CreateUser(ctx, "root", hash, true)
 	if err != nil {
 		t.Fatal(err)
