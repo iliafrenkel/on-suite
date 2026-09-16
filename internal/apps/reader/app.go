@@ -95,6 +95,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /feed/{id}", a.index)
 	r.HandleFunc("GET /item/{id}", a.article)
 	r.HandleFunc("POST /item/{id}/full", a.fetchFull)
+	r.HandleFunc("POST /item/{id}/full/clear", a.clearFull)
 	r.HandleFunc("POST /subscribe", a.subscribe)
 	r.HandleFunc("POST /sub/{id}/delete", a.unsubscribe)
 	r.HandleFunc("POST /sub/{id}/refresh", a.refreshOne)

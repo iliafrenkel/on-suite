@@ -47,3 +47,7 @@ const (
 	MaxImageFetchAttemptsForTest = maxImageFetchAttempts
 	ImageRetryBackoffForTest     = imageRetryBackoff
 )
+
+// FullArticleRetryBackoffForTest mirrors handlers.go's unexported
+// fullArticleRetryBackoff, for the same reason as the two constants above.
+const FullArticleRetryBackoffForTest = fullArticleRetryBackoff

@@ -510,6 +510,17 @@
              hx-get="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
              hx-target="#reader-article" hx-swap="outerHTML">{{ticon "doc"}}Show full article</a>
         {{end}}
+        {{/* A low-enough minExtractedText (100 chars) lets a teaser or
+             consent-wall page succeed and get stored as worse than the
+             feed's own summary — this is the "forget it and try again"
+             affordance for exactly that, since otherwise only RetentionAge
+             (60 days) ever clears it, and that throws away read state and
+             starring too. Issue #231. */}}
+        <form method="post" action="/reader/item/{{.ID}}/full/clear"
+              hx-post="/reader/item/{{.ID}}/full/clear" hx-target="#reader-article" hx-swap="outerHTML">
+          {{template "reader-ctx" .}}
+          <button type="submit" class="toolbar-btn">{{ticon "close"}}Discard extraction</button>
+        </form>
       {{else}}
         <form method="post" action="/reader/item/{{.ID}}/full"
               hx-post="/reader/item/{{.ID}}/full" hx-target="#reader-article" hx-swap="outerHTML">
