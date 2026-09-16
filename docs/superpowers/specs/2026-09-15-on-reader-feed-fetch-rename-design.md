@@ -32,7 +32,18 @@ articles until the poller's next 5-minute tick (`poll.go:19`) picks it up.
   failure or timeout is logged and otherwise ignored by the handler. The feed
   just shows zero articles until the poller's normal backoff/retry picks it up
   shortly after (same as today's behavior, just usually preempted by the
-  synchronous fetch). No error is surfaced to the user for this case.
+  synchronous fetch). No error is surfaced to the user for this case. Amended
+  2026-09-16 (issue #254): "no error is surfaced" means the response —
+  `a.subscribe` returns the same success page it always does, with no banner
+  text. It does not mean the tree stays silent: `FetchNow` calls the same
+  `pollOne` the scheduled poller does, which records the failure the normal
+  way, so the tree's ⚠ "Failing" marker can appear on the new feed right away.
+  That is the existing, general mechanism working as designed — a feed with
+  `error_count > 0` shows the marker regardless of which code path caused the
+  failure — not a gap in this feature's own error handling, and not
+  suppressed for a feed's first fetch: an honest immediate signal that
+  something is wrong beats a fresh feed that silently shows nothing and
+  nothing to explain why.
 - `a.subscribe` continues to render the index exactly as it does today
   (`handlers.go:613`), now showing the freshly fetched articles instead of an
   empty feed.
