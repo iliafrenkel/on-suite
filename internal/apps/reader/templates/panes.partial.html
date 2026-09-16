@@ -498,17 +498,17 @@
             hx-post="/reader/item/{{.ID}}/{{if .Read}}unread{{else}}read{{end}}"
             hx-target="#reader-article" hx-swap="outerHTML">
         {{template "reader-ctx" .}}
-        <button type="submit" class="toolbar-btn reader-article-read-toggle">{{ticon "check"}}{{if .Read}}Mark unread{{else}}Mark read{{end}}</button>
+        <button type="submit" class="toolbar-btn reader-article-read-toggle">{{if .Read}}{{ticon "check-circle"}}Mark unread{{else}}{{ticon "check"}}Mark read{{end}}</button>
       </form>
       {{if .HasFull}}
         {{if .ShowingFull}}
           <a class="toolbar-btn" href="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
              hx-get="/reader/item/{{.ID}}?view=feed&scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
-             hx-target="#reader-article" hx-swap="outerHTML">{{ticon "doc"}}Show feed version</a>
+             hx-target="#reader-article" hx-swap="outerHTML">{{ticon "rss"}}Show feed version</a>
         {{else}}
           <a class="toolbar-btn" href="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
              hx-get="/reader/item/{{.ID}}?scope={{.Scope}}&sub={{.SubID}}&filter={{.Filter}}{{if .Query}}&q={{.Query}}{{end}}"
-             hx-target="#reader-article" hx-swap="outerHTML">{{ticon "doc"}}Show full article</a>
+             hx-target="#reader-article" hx-swap="outerHTML">{{ticon "expand"}}Show full article</a>
         {{end}}
         {{/* A low-enough minExtractedText (100 chars) lets a teaser or
              consent-wall page succeed and get stored as worse than the

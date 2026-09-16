@@ -1,4 +1,3 @@
-// internal/ui/toolbar_icons_test.go
 package ui_test
 
 import (
@@ -14,8 +13,8 @@ import (
 func TestToolbarIconForKnownNames(t *testing.T) {
 	names := []string{
 		"more", "plus", "refresh", "import", "export", "folder",
-		"keyboard", "stats", "close", "check", "star-filled",
-		"star-outline", "external", "doc", "inbox",
+		"keyboard", "stats", "close", "check", "check-circle", "star-filled",
+		"star-outline", "external", "doc", "expand", "inbox",
 	}
 	seen := map[string]bool{}
 	for _, name := range names {

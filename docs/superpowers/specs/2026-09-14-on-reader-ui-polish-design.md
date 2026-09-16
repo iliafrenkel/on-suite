@@ -122,6 +122,15 @@ inline-error, stays-open state. Validation errors and notices instead surface
 as a page-level `.reader-banner` (`.Error` / `.Notice` set on the view model
 and rendered above the panes), the same banner used for non-dialog actions.
 
+One carve-out to "closes unconditionally": the add-feed dialog, when a pasted
+site turns out to offer several feeds, re-renders with `data-reopen` set and
+its discovery chooser inside — `reader.js`'s `htmx:afterSwap` listener sees
+that attribute and calls `showModal()` again, so to the user the dialog
+appears to have stayed open through the extra step rather than closed and
+reopened. This is not the stays-open-on-error state the paragraph above rules
+out; the swap still happened, the dialog still closed, reader.js just
+reopened it immediately for this one flow.
+
 ## 6. Icons
 
 A new shared toolbar-icon source — extending `internal/ui/icons.go` or a new
