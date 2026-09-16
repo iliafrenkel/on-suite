@@ -1882,7 +1882,9 @@ kbd {
  * .toolbar-btn/.toolbar-btn-active/.toolbar-due-badge already do the rest. */
 /* Sticky so All/Starred stay reachable while a long folder/feed tree scrolls
  * underneath — same top/margin-top cancellation as .reader-list-toolbar
- * above, to offset .reader-tree's own padding-top once this sticks. */
+ * above, to offset .reader-tree's own padding-top once this sticks. Top
+ * padding matches .reader-list-toolbar's (var(--s-3) + var(--s-2)) so both
+ * toolbars come out the same height. */
 .reader-tree-nav {
 	display: flex;
 	gap: var(--s-1);
@@ -1890,7 +1892,7 @@ kbd {
 	top: calc(-1 * var(--s-3));
 	z-index: 1;
 	margin: calc(-1 * var(--s-3)) 0 var(--s-2);
-	padding: calc(var(--s-3) + var(--s-1)) 0 var(--s-2);
+	padding: calc(var(--s-3) + var(--s-2)) 0 var(--s-2);
 	background: var(--c-bg);
 	border-bottom: 1px solid var(--c-border);
 }
@@ -2067,6 +2069,10 @@ kbd {
 .reader-search input {
 	font: inherit;
 	font-size: var(--fs-sm);
+	/* Matches .toolbar-btn's line-height (1.4) so the search box and the
+	   "Mark all read" button next to it come out the same height — inputs
+	   don't inherit the UA default line-height the way buttons/links do. */
+	line-height: 1.4;
 	color: var(--c-text);
 	background: var(--c-bg-subtle);
 	border: solid 1px var(--c-border);
