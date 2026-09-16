@@ -79,6 +79,15 @@ var toolbarIcons = map[string]template.HTML{
 		<path d="M4 11a9 9 0 0 1 9 9"/>
 		<path d="M4 4a16 16 0 0 1 16 16"/>
 	</svg>`,
+	// A panel with its left third split off, mirroring the sidebar it
+	// toggles — the vertical divider is what reads as "sidebar" rather than
+	// a generic square. .sidebar-toggle's own rotate(180deg) when collapsed
+	// (app.css) flips the divider to the right side, so the same glyph shows
+	// which way the next click will go instead of staying static.
+	"sidebar-toggle": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<rect x="3" y="4" width="18" height="16" rx="2"/>
+		<path d="M9 4v16"/>
+	</svg>`,
 }
 
 // ToolbarIconFor returns the markup for a known toolbar/menu/dialog icon

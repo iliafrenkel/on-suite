@@ -304,6 +304,8 @@ kbd {
 }
 
 .app-sidebar {
+	display: flex;
+	flex-direction: column;
 	flex-shrink: 0;
 	width: 12rem;
 	padding: var(--s-4) var(--s-2);
@@ -314,8 +316,9 @@ kbd {
 .app-sidebar[data-collapsed] { width: 3.5rem; }
 
 .sidebar-toggle {
+	display: flex;
 	width: 100%;
-	text-align: left;
+	justify-content: flex-start;
 	margin-bottom: var(--s-3);
 	transition: transform 0.15s ease;
 }
@@ -327,7 +330,17 @@ kbd {
 	transform: rotate(180deg);
 }
 
-.shell-nav { display: flex; flex-direction: column; gap: var(--s-1); }
+/* flex: 1 1 auto (not the default 0 1 auto) lets this stretch to fill
+ * .app-sidebar's full height below the toggle button — the same flex column
+ * it now is — so .sidebar-separator's margin-top: auto below has leftover
+ * height to absorb and pins Admin to the sidebar's bottom edge. */
+.shell-nav {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	gap: var(--s-1);
+}
 
 .sidebar-item {
 	display: flex;
@@ -756,11 +769,18 @@ button.danger:hover { background: var(--c-danger-bg); }
 .admin-tag-environment,
 .admin-tag-derived { background: var(--c-bg-inset); color: var(--c-text-dim); }
 
-/* The admin entry is not an app, so it is separated from the app list rather
- * than sitting in it. */
-.sidebar-admin {
-	margin-top: var(--s-3);
-	padding-top: var(--s-3);
+/* The admin entry is not an app, so it sits below a separator at the very
+ * bottom of the sidebar rather than in the app list. A plain <hr> rather than
+ * a border on .sidebar-admin itself: that link shares .sidebar-item's
+ * border-radius, which clipped a border-top into a visibly curved line at
+ * both ends instead of a straight rule. margin-top: auto does the pinning —
+ * it consumes .shell-nav's leftover height (see .shell-nav's flex: 1 1 auto
+ * above), pushing the separator and the Admin link below it down to the
+ * bottom edge together. */
+.sidebar-separator {
+	height: 0;
+	margin: auto 0 var(--s-2);
+	border: none;
 	border-top: var(--border);
 }
 
