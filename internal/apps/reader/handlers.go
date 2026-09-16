@@ -997,6 +997,14 @@ func importMessage(res ImportResult) string {
 	return strings.Join(parts, ", ") + "."
 }
 
+// fullArticleRetryBackoff is how long to wait after a failed full-article
+// fetch before trying again, mirroring imgproxy.go's maxImageFetchAttempts/
+// imageRetryBackoff rationale: this is user-initiated rather than automatic,
+// so there is no attempt cap to give up permanently — just enough of a
+// window that a reader repeatedly clicking "Fetch full article" against a
+// 403-returning origin does not hammer it once per click, indefinitely.
+const fullArticleRetryBackoff = 1 * time.Hour
+
 // fetchFull retrieves an article's own page and extracts its body.
 //
 // A page that will not extract — a paywall, a listing, a JavaScript-rendered
@@ -1022,10 +1030,35 @@ func (a *App) fetchFull(w http.ResponseWriter, r *http.Request) {
 		a.renderArticle(w, r, userID, itemID)
 		return
 	}
+	// A recent failure is re-shown, not retried — see fullArticleRetryBackoff.
+	if item.FullError != "" && time.Since(item.FullFetchedAt) < fullArticleRetryBackoff {
+		a.renderArticle(w, r, userID, itemID)
+		return
+	}
 
 	if err := a.extractInto(r, userID, item); err != nil {
 		a.deps.Log.Info("reader full-article fetch failed", "url", item.URL, "error", err)
 		a.recordFullFailure(r, userID, itemID, fullFailureMessage(err))
+	}
+	a.renderArticle(w, r, userID, itemID)
+}
+
+// clearFull discards a stored extraction, so a teaser or consent-wall page
+// that succeeded at minExtractedText's low bar (100 chars) does not sit
+// there, worse than the feed's own summary, until RetentionAge eventually
+// ages the whole item out (issue #231).
+func (a *App) clearFull(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	itemID, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	if err := a.store.ClearFullArticle(r.Context(), userID, itemID); err != nil {
+		a.fail(w, r, err)
+		return
 	}
 	a.renderArticle(w, r, userID, itemID)
 }

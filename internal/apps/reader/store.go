@@ -1373,6 +1373,56 @@ func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Ex
 	return nil
 }
 
+// ClearFullArticle discards a stored extraction, falling back to the feed
+// body and the fetch button. minExtractedText (100 chars) is low enough that
+// a teaser or consent-wall page can succeed and get stored as worse than the
+// feed's own summary — this is the "forget it and try again" affordance for
+// exactly that (issue #231): without it, only RetentionAge (60 days) ever
+// clears a bad extraction, which throws away read state and starring with it.
+//
+// full_fetched_at goes back to NULL, not just full_error to ”: after a
+// deliberate discard nothing has been "tried" in the sense that field means,
+// and the fetchFull backoff check (FullError != "" && recent) must not fire
+// on the very next click just because a fetch happened at some point.
+func (s *Store) ClearFullArticle(ctx context.Context, userID, itemID int64) error {
+	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
+		return err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("reader: begin clear full article: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Same search-text recompute SaveFullArticle does, with the full body
+	// dropped back out of the union.
+	var itemTitle, contentHTML, summaryHTML string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT title, content_html, summary_html FROM reader_items WHERE id = ?`,
+		itemID).Scan(&itemTitle, &contentHTML, &summaryHTML); err != nil {
+		return fmt.Errorf("reader: load item fields: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE reader_items
+		   SET full_html = '', full_fetched_at = NULL, full_error = '',
+		       search_text = ?
+		 WHERE id = ?`,
+		itemSearchText(itemTitle, "", contentHTML, summaryHTML), itemID); err != nil {
+		return fmt.Errorf("reader: clear full article: %w", err)
+	}
+
+	if err := recordItemImages(ctx, tx, itemID, nil, "full"); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("reader: commit clear full article: %w", err)
+	}
+	return nil
+}
+
 // recordItemImages deletes prior image links for an item under the specified
 // source ('feed' or 'full'), inserts any new images into reader_images, and
 // links them in reader_item_images.

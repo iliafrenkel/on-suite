@@ -1703,6 +1703,171 @@ func TestFetchFullArticleReportsAFailureInThePane(t *testing.T) {
 	}
 }
 
+// A recent failure must not be retried on every click — see imgproxy.go's
+// analogous imageRetryBackoff. Issue #233.
+func TestFetchFullArticleRefusesDuringTheBackoffWindow(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+
+	var hits int32
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		http.Error(w, "nope", http.StatusPaymentRequired)
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "T", URL: origin.URL + "/post",
+		SummaryHTML: "<p>Teaser.</p>", PublishedAt: time.Now().UTC().Add(-time.Hour),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "/reader/item/" + itoa(items[0].ID) + "/full"
+
+	first := s.PostHX(t, s.Alice, path, url.Values{})
+	if first.Code != http.StatusOK {
+		t.Fatalf("first fetch returned %d: %s", first.Code, first.Body.String())
+	}
+	if hits != 1 {
+		t.Fatalf("origin was hit %d times on the first click, want 1", hits)
+	}
+
+	second := s.PostHX(t, s.Alice, path, url.Values{})
+	if second.Code != http.StatusOK {
+		t.Fatalf("second fetch returned %d: %s", second.Code, second.Body.String())
+	}
+	if hits != 1 {
+		t.Errorf("origin was hit %d times after two clicks inside the backoff window, want 1", hits)
+	}
+	if !strings.Contains(strings.ToLower(second.Body.String()), "could not") {
+		t.Errorf("no failure message shown on the second click:\n%s", second.Body.String())
+	}
+}
+
+// A failure old enough that the backoff window has elapsed must fall through
+// to a real retry, the same way the image proxy's does.
+func TestFetchFullArticleRetriesPastTheBackoffWindow(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+
+	var hits int32
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		http.Error(w, "nope", http.StatusPaymentRequired)
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "T", URL: origin.URL + "/post",
+		SummaryHTML: "<p>Teaser.</p>", PublishedAt: time.Now().UTC().Add(-time.Hour),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "/reader/item/" + itoa(items[0].ID) + "/full"
+
+	if rec := s.PostHX(t, s.Alice, path, url.Values{}); rec.Code != http.StatusOK {
+		t.Fatalf("first fetch returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if hits != 1 {
+		t.Fatalf("origin was hit %d times on the first click, want 1", hits)
+	}
+
+	old := time.Now().UTC().Add(-reader.FullArticleRetryBackoffForTest - time.Minute)
+	if _, err := s.Store.DB().ExecContext(ctx,
+		`UPDATE reader_items SET full_fetched_at = ? WHERE id = ?`,
+		old.Format(time.RFC3339Nano), items[0].ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if rec := s.PostHX(t, s.Alice, path, url.Values{}); rec.Code != http.StatusOK {
+		t.Fatalf("retry returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if hits != 2 {
+		t.Errorf("origin was hit %d times, want 2 — a failure past the backoff window must retry", hits)
+	}
+}
+
+// The "forget it and try again" affordance: discarding a stored extraction
+// falls back to the feed body and the fetch button, and clears the source
+// image links that were the whole reason #229 gave 'source' its own key.
+// Issue #231.
+func TestClearFullArticleFallsBackToTheFeedBody(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := reader.ImageHash("https://cdn.example/full-lead.png")
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "T", SummaryHTML: "<p>THE FEED VERSION.</p>",
+		PublishedAt: time.Now().UTC().Add(-time.Hour),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SaveFullArticle(ctx, s.Alice.User.ID, items[0].ID, reader.Extracted{
+		HTML: "<p>A TEASER, NOT A REAL ARTICLE.</p>", TextLength: 120,
+		Images: map[string]string{hash: "https://cdn.example/full-lead.png"},
+	}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/item/"+itoa(items[0].ID)+"/full/clear", url.Values{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clear returned %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "TEASER") {
+		t.Errorf("discarded extraction is still shown:\n%s", body)
+	}
+	if !strings.Contains(body, "THE FEED VERSION") {
+		t.Errorf("feed body did not come back after discarding the extraction:\n%s", body)
+	}
+	if !strings.Contains(body, "Fetch full article") {
+		t.Errorf("no fetch button after discarding; the toggle must not still think a full article exists:\n%s", body)
+	}
+
+	item, err := s.Store.Item(ctx, s.Alice.User.ID, items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.HasFull() {
+		t.Error("HasFull is still true after clearing")
+	}
+	var imageLinks int
+	if err := s.Store.DB().QueryRowContext(ctx,
+		`SELECT count(*) FROM reader_item_images WHERE item_id = ? AND source = 'full'`,
+		items[0].ID).Scan(&imageLinks); err != nil {
+		t.Fatal(err)
+	}
+	if imageLinks != 0 {
+		t.Errorf("%d 'full' image links survived the clear, want 0", imageLinks)
+	}
+}
+
 func TestFetchFullArticleRefusesAnotherUsersItem(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
