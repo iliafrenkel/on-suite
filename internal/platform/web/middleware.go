@@ -4,11 +4,79 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"sync"
 	"time"
 )
 
 // Middleware wraps a handler.
 type Middleware func(http.Handler) http.Handler
+
+// bodyLimitOverrides holds per-route exceptions to DefaultMaxBodyBytes,
+// keyed by the exact registered ServeMux pattern (e.g.
+// "POST /flash/{deckID}/cards/{cardID}/media", including the method).
+//
+// This exists because Stack's LimitBody(DefaultMaxBodyBytes) runs ahead of
+// the mux — outside any single app's registration — so by the time a route
+// like ON Flash's media upload gets a chance to wrap its own handler in a
+// bigger LimitBody (the pattern DefaultMaxBodyBytes's own doc comment
+// recommends), r.Body has already been wrapped in a smaller
+// http.MaxBytesReader. Nesting a larger http.MaxBytesReader inside a
+// smaller one cannot loosen it — the inner (first-applied, smaller) reader
+// still errors once its own byte count is exceeded, regardless of what any
+// later wrap claims — so an app's own per-route override is silently
+// ineffective without this. RegisterBodyLimit lets an app's Mount record
+// the exception once, at startup, so LimitBodyForMux can look it up per
+// request before CSRF or the app handler ever sees the body.
+var (
+	bodyLimitMu        sync.RWMutex
+	bodyLimitByPattern = map[string]int64{}
+)
+
+// RegisterBodyLimit raises the platform's default body-size cap for one
+// exact route, identified by its full registered pattern including method
+// (e.g. "POST /flash/{deckID}/cards/{cardID}/media", the same string
+// app.Router.Handle/HandleFunc register on the mux). Call it from an app's
+// Mount, once, for any route whose legitimate uploads exceed
+// DefaultMaxBodyBytes — see that constant's doc comment for why this needs
+// to exist at all rather than just raising the default globally.
+func RegisterBodyLimit(pattern string, max int64) {
+	bodyLimitMu.Lock()
+	defer bodyLimitMu.Unlock()
+	bodyLimitByPattern[pattern] = max
+}
+
+func bodyLimitFor(pattern string, def int64) int64 {
+	bodyLimitMu.RLock()
+	defer bodyLimitMu.RUnlock()
+	if max, ok := bodyLimitByPattern[pattern]; ok {
+		return max
+	}
+	return def
+}
+
+// limitBodyForStack is what Stack actually installs in place of a flat
+// LimitBody(DefaultMaxBodyBytes): when h is the real *http.ServeMux (true
+// for both the production server and apptest's test harness), it consults
+// the pattern the request is about to match — via ServeMux's own Handler
+// method, which resolves routing without invoking it — and applies that
+// route's registered override if there is one. Anything that is not a
+// *http.ServeMux (a handful of narrow platform unit tests construct Stack's
+// chain directly around something else) falls back to the flat default
+// exactly as before.
+func limitBodyForStack(h http.Handler) Middleware {
+	mux, ok := h.(*http.ServeMux)
+	if !ok {
+		return LimitBody(DefaultMaxBodyBytes)
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, pattern := mux.Handler(r)
+			max := bodyLimitFor(pattern, DefaultMaxBodyBytes)
+			r.Body = http.MaxBytesReader(w, r.Body, max)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 // Chain applies middleware so that the first listed is the outermost, which is
 // the order they read in.
@@ -29,7 +97,7 @@ func Stack(h http.Handler, log *slog.Logger, errs *Errors, csrf *CSRF, authn *Au
 		Recover(log, errs),
 		RequestLog(log),
 		SecurityHeaders(),
-		LimitBody(DefaultMaxBodyBytes),
+		limitBodyForStack(h),
 		csrf.Middleware,
 		authn.LoadUser,
 	)

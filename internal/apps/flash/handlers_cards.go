@@ -69,6 +69,24 @@ type cardDetailView struct {
 	NotesValue    string
 	TagsValue     string
 	Error         string
+
+	// ImageMediaURL/AudioMediaURL are the card's serving-route paths
+	// ("/flash/media/{hash}"), or "" if no such media is attached. Computed
+	// here rather than in the template because Card.ImageHash/AudioHash are
+	// *string: printing a pointer directly would show its address, not the
+	// hash.
+	ImageMediaURL string
+	AudioMediaURL string
+	MediaError    string
+}
+
+// mediaURL is the serving-route path for a card's image/audio hash, or ""
+// if hash is nil (no such media attached).
+func mediaURL(hash *string) string {
+	if hash == nil {
+		return ""
+	}
+	return "/flash/media/" + *hash
 }
 
 // tagChip is a tag as rendered in a card's tag-chip list: its filter link is
@@ -117,7 +135,19 @@ func (a *App) viewCardDetail(r *http.Request, userID int64, d Deck, c Card) card
 	// card was just created/updated under this same user), not something
 	// worth failing the whole render over, so the view just shows no chips.
 	tags, _ := a.store.TagsForCard(r.Context(), userID, c.ID)
-	return cardDetailView{Mode: cardModeView, Deck: d, Card: c, Tags: tagChips(tags), CSRFToken: web.CSRFToken(r.Context())}
+	return cardDetailView{
+		Mode: cardModeView, Deck: d, Card: c, Tags: tagChips(tags), CSRFToken: web.CSRFToken(r.Context()),
+		ImageMediaURL: mediaURL(c.ImageHash), AudioMediaURL: mediaURL(c.AudioHash),
+	}
+}
+
+// viewCardDetailWithMediaError is viewCardDetail plus an error message from
+// a failed media upload, so the card page can show both the card and why
+// the attachment attempt just failed.
+func (a *App) viewCardDetailWithMediaError(r *http.Request, userID int64, d Deck, c Card, errMsg string) cardDetailView {
+	v := a.viewCardDetail(r, userID, d, c)
+	v.MediaError = errMsg
+	return v
 }
 
 func (a *App) newCardDetail(r *http.Request, d Deck, errMsg, cardType, front, back, notes, tags string) cardDetailView {

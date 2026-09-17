@@ -46,6 +46,14 @@ type reviewCardView struct {
 	Card  Card
 	Deck  Deck
 	IsNew bool
+
+	// ImageMediaURL/AudioMediaURL are the card's serving-route paths
+	// ("/flash/media/{hash}"), or "" if no such media is attached. Computed
+	// here rather than in the template because Card.ImageHash/AudioHash are
+	// *string: printing a pointer directly would show its address, not the
+	// hash. Mirrors handlers_cards.go's cardDetailView.ImageMediaURL/AudioMediaURL.
+	ImageMediaURL string
+	AudioMediaURL string
 }
 
 // reviewView is what templates/review.html's "review-body" block renders,
@@ -107,7 +115,10 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 		CSRFToken:        web.CSRFToken(r.Context()),
 	}
 	if len(queue) > 0 {
-		view.Current = &reviewCardView{Card: queue[0].Card, Deck: queue[0].Deck, IsNew: queue[0].IsNew}
+		view.Current = &reviewCardView{
+			Card: queue[0].Card, Deck: queue[0].Deck, IsNew: queue[0].IsNew,
+			ImageMediaURL: mediaURL(queue[0].Card.ImageHash), AudioMediaURL: mediaURL(queue[0].Card.AudioHash),
+		}
 	}
 
 	if web.IsHTMX(r) {

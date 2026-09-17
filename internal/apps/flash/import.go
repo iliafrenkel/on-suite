@@ -4,19 +4,25 @@ package flash
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 )
 
 // parsedCard is one card extracted from an import payload, already validated
 // against the same rules ValidateCard/ValidateTagNames apply to hand-created
-// cards.
+// cards. ImageURL/AudioURL are "" when the card has no media attached; when
+// set, they are validated for shape only (see validateMediaURL) — the URL is
+// not fetched at parse time. See media.go/import_store.go for what happens
+// to them next.
 type parsedCard struct {
 	CardType string
 	Front    string
 	Back     string
 	Notes    string
 	Tags     []string
+	ImageURL string
+	AudioURL string
 }
 
 // parsedDeck is a whole import payload, parsed and validated.
@@ -41,6 +47,8 @@ type importJSON struct {
 		Back  string   `json:"back"`
 		Notes string   `json:"notes"`
 		Tags  []string `json:"tags"`
+		Image string   `json:"image"`
+		Audio string   `json:"audio"`
 	} `json:"cards"`
 }
 
@@ -79,7 +87,7 @@ func stripErrInvalid(err error) string {
 	return msg
 }
 
-func validateParsedCard(cardType, front, back, notes string, tags []string, cardNum int) error {
+func validateParsedCard(cardType, front, back, notes string, tags []string, imageURL, audioURL string, cardNum int) error {
 	if err := ValidateCard(cardType, front, back); err != nil {
 		return fmt.Errorf("%w: card %d: %s", ErrInvalid, cardNum, stripErrInvalid(err))
 	}
@@ -88,6 +96,26 @@ func validateParsedCard(cardType, front, back, notes string, tags []string, card
 	}
 	if err := ValidateTagNames(tags); err != nil {
 		return fmt.Errorf("%w: card %d: %s", ErrInvalid, cardNum, stripErrInvalid(err))
+	}
+	if err := validateMediaURL(imageURL); err != nil {
+		return fmt.Errorf("%w: card %d: image: %s", ErrInvalid, cardNum, stripErrInvalid(err))
+	}
+	if err := validateMediaURL(audioURL); err != nil {
+		return fmt.Errorf("%w: card %d: audio: %s", ErrInvalid, cardNum, stripErrInvalid(err))
+	}
+	return nil
+}
+
+// validateMediaURL checks a card's image/audio URL for shape only — it must
+// be an absolute http/https URL. An empty string (no media attached) is
+// valid. The URL is never fetched here; see FetchAndCacheMedia.
+func validateMediaURL(rawURL string) error {
+	if rawURL == "" {
+		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("%w: %q is not a valid http(s) URL", ErrInvalid, rawURL)
 	}
 	return nil
 }
@@ -114,11 +142,12 @@ func parseImportJSON(payload string) (parsedDeck, error) {
 		if cardType == "" {
 			cardType = CardTypeBasic
 		}
-		if err := validateParsedCard(cardType, c.Front, c.Back, c.Notes, c.Tags, i+1); err != nil {
+		if err := validateParsedCard(cardType, c.Front, c.Back, c.Notes, c.Tags, c.Image, c.Audio, i+1); err != nil {
 			return parsedDeck{}, err
 		}
 		deck.Cards = append(deck.Cards, parsedCard{
 			CardType: cardType, Front: c.Front, Back: c.Back, Notes: c.Notes, Tags: c.Tags,
+			ImageURL: c.Image, AudioURL: c.Audio,
 		})
 	}
 	return deck, nil
@@ -143,7 +172,7 @@ func parseCardBlock(lines []string) map[string]string {
 		if m := markdownKeyLine.FindStringSubmatch(line); m != nil {
 			key := strings.ToLower(m[1])
 			switch key {
-			case "type", "front", "back", "tags", "notes":
+			case "type", "front", "back", "tags", "notes", "image", "audio":
 				currentKey = key
 				fields[key] = m[2]
 			default:
@@ -216,11 +245,15 @@ func parseImportMarkdown(payload string) (parsedDeck, error) {
 		}
 		front, back, notes := fields["front"], fields["back"], fields["notes"]
 		tags := splitMarkdownTags(fields["tags"])
+		imageURL, audioURL := strings.TrimSpace(fields["image"]), strings.TrimSpace(fields["audio"])
 
-		if err := validateParsedCard(cardType, front, back, notes, tags, cardNum); err != nil {
+		if err := validateParsedCard(cardType, front, back, notes, tags, imageURL, audioURL, cardNum); err != nil {
 			return parsedDeck{}, err
 		}
-		deck.Cards = append(deck.Cards, parsedCard{CardType: cardType, Front: front, Back: back, Notes: notes, Tags: tags})
+		deck.Cards = append(deck.Cards, parsedCard{
+			CardType: cardType, Front: front, Back: back, Notes: notes, Tags: tags,
+			ImageURL: imageURL, AudioURL: audioURL,
+		})
 	}
 
 	if len(deck.Cards) == 0 {
