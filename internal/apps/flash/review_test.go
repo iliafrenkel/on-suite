@@ -211,7 +211,7 @@ func TestGradeCardTracksDailyCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	newCount, reviewCount, err := f.store.DailyCountsForTest(ctx, f.alice.ID, deck.ID, now)
+	newCount, reviewCount, err := f.store.DailyCounts(ctx, f.alice.ID, deck.ID, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,12 +243,55 @@ func TestUndoLastGradeDecrementsTheRightDailyCounter(t *testing.T) {
 		t.Fatalf("UndoLastGrade: undone=%v, err=%v", undone, err)
 	}
 
-	newCount, reviewCount, err := f.store.DailyCountsForTest(ctx, f.alice.ID, deck.ID, now)
+	newCount, reviewCount, err := f.store.DailyCounts(ctx, f.alice.ID, deck.ID, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if newCount != 0 || reviewCount != 0 {
 		t.Errorf("counts after undoing the only grade = new=%d review=%d, want 0/0", newCount, reviewCount)
+	}
+}
+
+// TestUndoLastGradeDecrementsTheGradeDaysCounterAcrossMidnight guards against
+// a bug where UndoLastGrade decremented the daily counter for the day the
+// undo happened, rather than the day the original grade happened. A grade
+// just before UTC midnight, undone just after, must zero out the grade day's
+// counter and must not leave a negative count on the undo day.
+func TestUndoLastGradeDecrementsTheGradeDaysCounterAcrossMidnight(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 17, 23, 0, 0, 0, time.UTC)
+	laterAcrossMidnight := now.Add(2 * time.Hour)
+
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, card.ID, flash.RatingGood, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, undone, err := f.store.UndoLastGrade(ctx, f.alice.ID, card.ID, laterAcrossMidnight); err != nil || !undone {
+		t.Fatalf("UndoLastGrade: undone=%v, err=%v", undone, err)
+	}
+
+	gradeDayNew, gradeDayReview, err := f.store.DailyCounts(ctx, f.alice.ID, deck.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gradeDayNew != 0 || gradeDayReview != 0 {
+		t.Errorf("grade day counts after undo = new=%d review=%d, want 0/0", gradeDayNew, gradeDayReview)
+	}
+
+	undoDayNew, undoDayReview, err := f.store.DailyCounts(ctx, f.alice.ID, deck.ID, laterAcrossMidnight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if undoDayNew != 0 || undoDayReview != 0 {
+		t.Errorf("undo day counts after undo = new=%d review=%d, want 0/0 (no negative or stray counter)", undoDayNew, undoDayReview)
 	}
 }
 

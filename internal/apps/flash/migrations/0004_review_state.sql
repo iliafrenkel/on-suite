@@ -52,5 +52,6 @@ CREATE TABLE flash_review_counts (
     day          TEXT    NOT NULL,
     new_count    INTEGER NOT NULL DEFAULT 0,
     review_count INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (user_id, deck_id, day)
+    PRIMARY KEY (user_id, deck_id, day),
+    CHECK (new_count >= 0 AND review_count >= 0)
 ) STRICT, WITHOUT ROWID;

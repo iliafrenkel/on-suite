@@ -192,7 +192,7 @@ func (st *Store) UndoLastGrade(ctx context.Context, userID, cardID int64, now ti
 	if wasNew {
 		newDec, reviewDec = -1, 0
 	}
-	if err := st.bumpDailyCounts(ctx, tx, userID, deckID, now, newDec, reviewDec); err != nil {
+	if err := st.bumpDailyCounts(ctx, tx, userID, deckID, log.Review, newDec, reviewDec); err != nil {
 		return cardSchedule{}, false, err
 	}
 
@@ -253,22 +253,41 @@ func (st *Store) scanCardStateWithLog(ctx context.Context, userID, cardID int64)
 // UndoLastGrade) to userID's counters for deckID on now's calendar day,
 // creating the row if this is the first count of the day.
 func (st *Store) bumpDailyCounts(ctx context.Context, tx *sql.Tx, userID, deckID int64, now time.Time, newDelta, reviewDelta int) error {
-	_, err := tx.ExecContext(ctx, `
+	day := formatDay(now)
+	// Ensure the row exists before applying the delta. This can't be a
+	// single INSERT ... ON CONFLICT DO UPDATE that adds newDelta/reviewDelta
+	// directly: SQLite evaluates flash_review_counts' CHECK constraint
+	// against the row that WOULD be inserted before it even considers the
+	// conflict, so a negative delta (UndoLastGrade decrementing a counter)
+	// fails the check even though the actual write is an UPDATE against an
+	// existing, non-negative row. Inserting zeros first, then updating with
+	// the real delta in a second statement, sidesteps that: the insert
+	// candidate is always non-negative, and the UPDATE's CHECK is evaluated
+	// against the real post-update row.
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO flash_review_counts (user_id, deck_id, day, new_count, review_count)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT (user_id, deck_id, day) DO UPDATE SET
-			new_count = new_count + excluded.new_count,
-			review_count = review_count + excluded.review_count`,
-		userID, deckID, formatDay(now), newDelta, reviewDelta)
-	if err != nil {
+		VALUES (?, ?, ?, 0, 0)
+		ON CONFLICT (user_id, deck_id, day) DO NOTHING`,
+		userID, deckID, day,
+	); err != nil {
+		return fmt.Errorf("flash: update daily counts: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE flash_review_counts SET
+			new_count = new_count + ?,
+			review_count = review_count + ?
+		WHERE user_id = ? AND deck_id = ? AND day = ?`,
+		newDelta, reviewDelta, userID, deckID, day,
+	); err != nil {
 		return fmt.Errorf("flash: update daily counts: %w", err)
 	}
 	return nil
 }
 
-// DailyCountsForTest exposes flash_review_counts to tests outside this
-// package, for asserting GradeCard/UndoLastGrade updated the right counter.
-func (st *Store) DailyCountsForTest(ctx context.Context, userID, deckID int64, now time.Time) (newCount, reviewCount int, err error) {
+// dailyCounts reads flash_review_counts for userID/deckID on now's calendar
+// day. It backs both DueQueue's production budget check and DailyCounts,
+// the exported test accessor below, so there is exactly one query.
+func (st *Store) dailyCounts(ctx context.Context, userID, deckID int64, now time.Time) (newCount, reviewCount int, err error) {
 	err = st.db.QueryRowContext(ctx, `
 		SELECT new_count, review_count FROM flash_review_counts
 		WHERE user_id = ? AND deck_id = ? AND day = ?`, userID, deckID, formatDay(now),
@@ -277,9 +296,15 @@ func (st *Store) DailyCountsForTest(ctx context.Context, userID, deckID int64, n
 		return 0, 0, nil
 	}
 	if err != nil {
-		return 0, 0, fmt.Errorf("flash: daily counts for test: %w", err)
+		return 0, 0, fmt.Errorf("flash: daily counts: %w", err)
 	}
 	return newCount, reviewCount, nil
+}
+
+// DailyCounts exposes flash_review_counts to tests outside this package, for
+// asserting GradeCard/UndoLastGrade updated the right counter.
+func (st *Store) DailyCounts(ctx context.Context, userID, deckID int64, now time.Time) (newCount, reviewCount int, err error) {
+	return st.dailyCounts(ctx, userID, deckID, now)
 }
 
 // QueueCard is one card ready for review, with enough context to render it
@@ -302,7 +327,7 @@ func (st *Store) DueQueue(ctx context.Context, userID int64, deckID *int64, now 
 
 	var reviews, fresh []QueueCard
 	for _, d := range decks {
-		newCount, reviewCount, err := st.DailyCountsForTest(ctx, userID, d.ID, now)
+		newCount, reviewCount, err := st.dailyCounts(ctx, userID, d.ID, now)
 		if err != nil {
 			return nil, err
 		}
