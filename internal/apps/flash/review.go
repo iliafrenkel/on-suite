@@ -281,3 +281,139 @@ func (st *Store) DailyCountsForTest(ctx context.Context, userID, deckID int64, n
 	}
 	return newCount, reviewCount, nil
 }
+
+// QueueCard is one card ready for review, with enough context to render it
+// and to know which of a deck's two daily budgets grading it will spend.
+type QueueCard struct {
+	Card  Card
+	Deck  Deck
+	IsNew bool
+}
+
+// DueQueue returns cards eligible for review right now, in review-then-new
+// order. If deckID is non-nil, only that deck is considered — and only if
+// it is not currently snoozed, the same rule applied to every deck when
+// deckID is nil (every non-snoozed deck belonging to userID).
+func (st *Store) DueQueue(ctx context.Context, userID int64, deckID *int64, now time.Time) ([]QueueCard, error) {
+	decks, err := st.dueQueueDecks(ctx, userID, deckID, now)
+	if err != nil {
+		return nil, err
+	}
+
+	var reviews, fresh []QueueCard
+	for _, d := range decks {
+		newCount, reviewCount, err := st.DailyCountsForTest(ctx, userID, d.ID, now)
+		if err != nil {
+			return nil, err
+		}
+
+		reviewsRemaining := -1 // sentinel: unlimited
+		if d.ReviewsPerDay != nil {
+			reviewsRemaining = *d.ReviewsPerDay - reviewCount
+			if reviewsRemaining < 0 {
+				reviewsRemaining = 0
+			}
+		}
+		due, err := st.dueReviewCards(ctx, userID, d, now, reviewsRemaining)
+		if err != nil {
+			return nil, err
+		}
+		reviews = append(reviews, due...)
+
+		newRemaining := d.NewCardsPerDay - newCount
+		if newRemaining < 0 {
+			newRemaining = 0
+		}
+		newCards, err := st.newQueueCards(ctx, userID, d, newRemaining)
+		if err != nil {
+			return nil, err
+		}
+		fresh = append(fresh, newCards...)
+	}
+	return append(reviews, fresh...), nil
+}
+
+// dueQueueDecks resolves which decks DueQueue should consider: the one
+// named by deckID (if it is not snoozed), or every one of userID's decks
+// that are not currently snoozed.
+func (st *Store) dueQueueDecks(ctx context.Context, userID int64, deckID *int64, now time.Time) ([]Deck, error) {
+	if deckID != nil {
+		d, err := st.DeckByID(ctx, userID, *deckID)
+		if err != nil {
+			return nil, err
+		}
+		if d.IsSnoozed(now) {
+			return nil, nil
+		}
+		return []Deck{d}, nil
+	}
+
+	all, err := st.ListDecks(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Deck, 0, len(all))
+	for _, d := range all {
+		if !d.IsSnoozed(now) {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+// dueReviewCards returns d's cards that are due at or before now, oldest
+// due date first, up to limit (a negative limit means unlimited).
+func (st *Store) dueReviewCards(ctx context.Context, userID int64, d Deck, now time.Time, limit int) ([]QueueCard, error) {
+	if limit == 0 {
+		return nil, nil
+	}
+	query := `
+		SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at
+		FROM flash_cards c
+		JOIN flash_card_state s ON s.card_id = c.id AND s.user_id = c.user_id
+		WHERE c.deck_id = ? AND c.user_id = ? AND s.due_at <= ?
+		ORDER BY s.due_at ASC`
+	args := []any{d.ID, userID, formatTime(now)}
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	return st.queryQueueCards(ctx, query, args, d, false)
+}
+
+// newQueueCards returns up to limit of d's cards that have never been
+// reviewed, oldest-created first.
+func (st *Store) newQueueCards(ctx context.Context, userID int64, d Deck, limit int) ([]QueueCard, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	query := `
+		SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at
+		FROM flash_cards c
+		LEFT JOIN flash_card_state s ON s.card_id = c.id AND s.user_id = c.user_id
+		WHERE c.deck_id = ? AND c.user_id = ? AND s.card_id IS NULL
+		ORDER BY c.created_at ASC
+		LIMIT ?`
+	return st.queryQueueCards(ctx, query, []any{d.ID, userID, limit}, d, true)
+}
+
+func (st *Store) queryQueueCards(ctx context.Context, query string, args []any, d Deck, isNew bool) ([]QueueCard, error) {
+	rows, err := st.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("flash: due queue: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []QueueCard
+	for rows.Next() {
+		c, err := scanCardRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, QueueCard{Card: c, Deck: d, IsNew: isNew})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("flash: due queue: %w", err)
+	}
+	return out, nil
+}

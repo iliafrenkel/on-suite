@@ -251,3 +251,213 @@ func TestUndoLastGradeDecrementsTheRightDailyCounter(t *testing.T) {
 		t.Errorf("counts after undoing the only grade = new=%d review=%d, want 0/0", newCount, reviewCount)
 	}
 }
+
+func TestDueQueueReturnsReviewsBeforeNewCards(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dueCard, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "due", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newCard, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "new", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	past := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, dueCard.ID, flash.RatingAgain, past); err != nil {
+		t.Fatal(err)
+	}
+
+	queue, err := f.store.DueQueue(ctx, f.alice.ID, nil, now)
+	if err != nil {
+		t.Fatalf("DueQueue: %v", err)
+	}
+	if len(queue) != 2 {
+		t.Fatalf("DueQueue returned %d cards, want 2", len(queue))
+	}
+	if queue[0].Card.ID != dueCard.ID || queue[0].IsNew {
+		t.Errorf("queue[0] = %+v, want the due review card marked IsNew=false", queue[0])
+	}
+	if queue[1].Card.ID != newCard.ID || !queue[1].IsNew {
+		t.Errorf("queue[1] = %+v, want the new card marked IsNew=true", queue[1])
+	}
+}
+
+func TestDueQueueExcludesNotYetDueCards(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	// Easy on a brand-new card schedules it well into the future.
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, card.ID, flash.RatingEasy, now); err != nil {
+		t.Fatal(err)
+	}
+
+	queue, err := f.store.DueQueue(ctx, f.alice.ID, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, qc := range queue {
+		if qc.Card.ID == card.ID {
+			t.Errorf("DueQueue returned a card scheduled into the future: %+v", qc)
+		}
+	}
+}
+
+func TestDueQueueRespectsNewCardsPerDay(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, deck.ID, 1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "b", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+
+	queue, err := f.store.DueQueue(ctx, f.alice.ID, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queue) != 1 {
+		t.Fatalf("DueQueue with new_cards_per_day=1 returned %d cards, want 1", len(queue))
+	}
+}
+
+func TestDueQueueRespectsReviewsPerDay(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := 1
+	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, deck.ID, 0, &limit); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	cardA, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cardB, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "b", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, cardA.ID, flash.RatingAgain, past); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, cardB.ID, flash.RatingAgain, past); err != nil {
+		t.Fatal(err)
+	}
+
+	queue, err := f.store.DueQueue(ctx, f.alice.ID, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queue) != 1 {
+		t.Fatalf("DueQueue with reviews_per_day=1 (both cards due) returned %d cards, want 1", len(queue))
+	}
+}
+
+func TestDueQueueExcludesSnoozedDecks(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	if _, err := f.store.SnoozeDeck(ctx, f.alice.ID, deck.ID, now.AddDate(0, 0, 7)); err != nil {
+		t.Fatal(err)
+	}
+
+	queue, err := f.store.DueQueue(ctx, f.alice.ID, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queue) != 0 {
+		t.Errorf("DueQueue for an account with only a snoozed deck = %d cards, want 0", len(queue))
+	}
+
+	// Requesting that specific deck's review page directly is also empty,
+	// per the design doc: snoozing affects queue construction the same way
+	// whether it is cross-deck or scoped to one deck.
+	scoped, err := f.store.DueQueue(ctx, f.alice.ID, &deck.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scoped) != 0 {
+		t.Errorf("DueQueue(deckID) for a snoozed deck = %d cards, want 0", len(scoped))
+	}
+}
+
+func TestDueQueueScopedToOneDeckIgnoresOtherDecks(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deckA, err := f.store.CreateDeck(ctx, f.alice.ID, "A", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deckB, err := f.store.CreateDeck(ctx, f.alice.ID, "B", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, deckA.ID, flash.CardTypeBasic, "a", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, deckB.ID, flash.CardTypeBasic, "b", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	queue, err := f.store.DueQueue(ctx, f.alice.ID, &deckA.ID, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queue) != 1 || queue[0].Deck.ID != deckA.ID {
+		t.Errorf("DueQueue(deckA) = %+v, want exactly one card from deckA", queue)
+	}
+}
+
+func TestDueQueueIsOwnerScoped(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+	queue, err := f.store.DueQueue(ctx, f.bob.ID, nil, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queue) != 0 {
+		t.Errorf("bob's DueQueue sees alice's cards: %+v", queue)
+	}
+}
