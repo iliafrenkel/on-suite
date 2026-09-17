@@ -131,6 +131,101 @@ func TestCardOwnerScoping(t *testing.T) {
 	}
 }
 
+func TestUpdateCard(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "test", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a card
+	created, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "original q", "original a", "original note")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalCreatedAt := created.CreatedAt
+
+	// Update the card
+	updated, err := f.store.UpdateCard(ctx, f.alice.ID, deck.ID, created.ID, flash.CardTypeBasic, "new q", "new a", "new note")
+	if err != nil {
+		t.Fatalf("UpdateCard: %v", err)
+	}
+	if updated.Front != "new q" || updated.Back != "new a" || updated.Notes != "new note" {
+		t.Errorf("UpdateCard = %+v, fields not updated", updated)
+	}
+	if !updated.CreatedAt.Equal(originalCreatedAt) {
+		t.Errorf("CreatedAt changed: got %v, want %v", updated.CreatedAt, originalCreatedAt)
+	}
+
+	// Verify fresh fetch also has new values
+	fetched, err := f.store.CardByID(ctx, f.alice.ID, deck.ID, created.ID)
+	if err != nil {
+		t.Fatalf("CardByID: %v", err)
+	}
+	if fetched.Front != "new q" || fetched.Back != "new a" || fetched.Notes != "new note" {
+		t.Errorf("CardByID after update = %+v, fields not persisted", fetched)
+	}
+}
+
+func TestUpdateCardRejectsSomeoneElsesDeck(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// Create deck and card as alice
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "original", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Try to update as bob
+	if _, err := f.store.UpdateCard(ctx, f.bob.ID, deck.ID, created.ID, flash.CardTypeBasic, "hijacked", "y", ""); !errors.Is(err, flash.ErrNotFound) {
+		t.Errorf("UpdateCard as another user = %v, want ErrNotFound", err)
+	}
+
+	// Verify alice's card is unchanged
+	fetched, err := f.store.CardByID(ctx, f.alice.ID, deck.ID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetched.Front != "original" || fetched.Back != "x" {
+		t.Errorf("card was modified: %+v", fetched)
+	}
+}
+
+func TestUpdateCardRejectsInvalidInput(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "test", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "original q", "original a", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Try to update with empty back for basic card type (invalid)
+	if _, err := f.store.UpdateCard(ctx, f.alice.ID, deck.ID, created.ID, flash.CardTypeBasic, "q", "", ""); !errors.Is(err, flash.ErrInvalid) {
+		t.Errorf("UpdateCard with invalid input = %v, want ErrInvalid", err)
+	}
+
+	// Verify card is unchanged
+	fetched, err := f.store.CardByID(ctx, f.alice.ID, deck.ID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetched.Front != "original q" || fetched.Back != "original a" {
+		t.Errorf("card was modified: %+v", fetched)
+	}
+}
+
 func TestDeletingADeckRemovesItsCards(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
