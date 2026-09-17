@@ -258,3 +258,60 @@ func TestParseImportMarkdownClozeWithoutMarkerFails(t *testing.T) {
 		t.Fatalf("err = %v, want ErrInvalid", err)
 	}
 }
+
+func TestParseImportJSONWithImageAndAudioURLs(t *testing.T) {
+	payload := `{"deck": {"name": "D"}, "cards": [
+		{"front": "Q", "back": "A", "image": "https://example.com/cat.jpg", "audio": "https://example.com/meow.mp3"}
+	]}`
+	d, err := ParseImport(payload, "json")
+	if err != nil {
+		t.Fatalf("ParseImport: %v", err)
+	}
+	if d.Cards[0].ImageURL != "https://example.com/cat.jpg" {
+		t.Errorf("ImageURL = %q", d.Cards[0].ImageURL)
+	}
+	if d.Cards[0].AudioURL != "https://example.com/meow.mp3" {
+		t.Errorf("AudioURL = %q", d.Cards[0].AudioURL)
+	}
+}
+
+func TestParseImportJSONRejectsBadMediaURL(t *testing.T) {
+	payload := `{"deck": {"name": "D"}, "cards": [{"front": "Q", "back": "A", "image": "not-a-url"}]}`
+	_, err := ParseImport(payload, "json")
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("err = %v, want ErrInvalid", err)
+	}
+}
+
+func TestParseImportMarkdownWithImageAndAudioURLs(t *testing.T) {
+	payload := "# D\n\n## Card\nFront: Q\nBack: A\nImage: https://example.com/cat.jpg\nAudio: https://example.com/meow.mp3\n"
+	d, err := ParseImport(payload, "markdown")
+	if err != nil {
+		t.Fatalf("ParseImport: %v", err)
+	}
+	if d.Cards[0].ImageURL != "https://example.com/cat.jpg" {
+		t.Errorf("ImageURL = %q", d.Cards[0].ImageURL)
+	}
+	if d.Cards[0].AudioURL != "https://example.com/meow.mp3" {
+		t.Errorf("AudioURL = %q", d.Cards[0].AudioURL)
+	}
+}
+
+func TestParseImportMarkdownRejectsBadMediaURL(t *testing.T) {
+	payload := "# D\n\n## Card\nFront: Q\nBack: A\nImage: not-a-url\n"
+	_, err := ParseImport(payload, "markdown")
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("err = %v, want ErrInvalid", err)
+	}
+}
+
+func TestParseImportWithoutMediaURLsLeavesThemEmpty(t *testing.T) {
+	payload := `{"deck": {"name": "D"}, "cards": [{"front": "Q", "back": "A"}]}`
+	d, err := ParseImport(payload, "json")
+	if err != nil {
+		t.Fatalf("ParseImport: %v", err)
+	}
+	if d.Cards[0].ImageURL != "" || d.Cards[0].AudioURL != "" {
+		t.Errorf("card = %+v, want no media URLs", d.Cards[0])
+	}
+}
