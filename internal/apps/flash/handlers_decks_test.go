@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
@@ -79,6 +80,83 @@ func TestDeleteDeckRequiresCSRFAndPOST(t *testing.T) {
 	rec := s.Do(t, s.Alice, req)
 	if rec.Code != 403 {
 		t.Errorf("delete without CSRF = %d, want 403", rec.Code)
+	}
+}
+
+func TestUpdateDeckSettingsOverHTTP(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID), url.Values{
+		"name": {"Spanish"}, "description": {""},
+		"new_cards_per_day": {"5"}, "reviews_per_day": {"30"},
+	}, "/flash/"+itoa(deck.ID))
+
+	updated, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.NewCardsPerDay != 5 {
+		t.Errorf("NewCardsPerDay = %d, want 5", updated.NewCardsPerDay)
+	}
+	if updated.ReviewsPerDay == nil || *updated.ReviewsPerDay != 30 {
+		t.Errorf("ReviewsPerDay = %v, want 30", updated.ReviewsPerDay)
+	}
+}
+
+func TestUpdateDeckSettingsRejectsNegativeOverHTTP(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := s.Post(t, s.Alice, "/flash/"+itoa(deck.ID), url.Values{
+		"name": {"Spanish"}, "description": {""},
+		"new_cards_per_day": {"-1"}, "reviews_per_day": {""},
+	})
+	if rec.Code != 400 {
+		t.Errorf("negative new_cards_per_day = %d, want 400", rec.Code)
+	}
+}
+
+func TestSnoozeAndUnsnoozeDeckOverHTTP(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID)+"/snooze", url.Values{"days": {"7"}}, "/flash/"+itoa(deck.ID))
+
+	snoozed, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !snoozed.IsSnoozed(time.Now()) {
+		t.Error("deck is not snoozed after posting /snooze")
+	}
+
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID)+"/unsnooze", url.Values{}, "/flash/"+itoa(deck.ID))
+	unsnoozed, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unsnoozed.IsSnoozed(time.Now()) {
+		t.Error("deck is still snoozed after posting /unsnooze")
+	}
+}
+
+func TestSnoozeDeckRequiresCSRF(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httpPost(t, "/flash/"+itoa(deck.ID)+"/snooze", url.Values{"days": {"7"}})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != 403 {
+		t.Errorf("snooze without CSRF = %d, want 403", rec.Code)
 	}
 }
 

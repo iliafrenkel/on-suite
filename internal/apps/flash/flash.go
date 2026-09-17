@@ -59,6 +59,12 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /{deckID}", a.updateDeck)
 	r.HandleFunc("POST /{deckID}/delete", a.deleteDeck)
 
+	// Two more literal-suffix POST routes on a deck, same non-ambiguity shape
+	// as /{deckID}/delete above: a wildcard followed by a distinct literal
+	// word, so none of the three can be confused with each other.
+	r.HandleFunc("POST /{deckID}/snooze", a.snoozeDeck)
+	r.HandleFunc("POST /{deckID}/unsnooze", a.unsnoozeDeck)
+
 	// Card routes, nested under a deck. Same non-ambiguity reasoning as the
 	// deck routes above: "new" and "edit/{cardID}" are literal at the
 	// position where a same-shape pattern below has a wildcard, so they

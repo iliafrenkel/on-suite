@@ -16,6 +16,14 @@ const (
 	MaxDeckNameRunes = 120
 	// MaxDeckDescriptionRunes bounds the optional description.
 	MaxDeckDescriptionRunes = 500
+	// DefaultNewCardsPerDay must match migrations/0005_deck_pace_snooze.sql's
+	// "new_cards_per_day INTEGER NOT NULL DEFAULT 20" — CreateDeck (below)
+	// sets it explicitly on the Deck value it returns, rather than relying
+	// on the DB default to also show up there: CreateDeck never re-fetches
+	// the row after inserting it, so without this the returned Deck's
+	// NewCardsPerDay would be Go's zero value (0) instead of 20 until the
+	// next DeckByID/ListDecks call. Found by plan validation.
+	DefaultNewCardsPerDay = 20
 )
 
 // Deck is one flash-card deck.
@@ -25,6 +33,15 @@ type Deck struct {
 	Name        string
 	Description string
 	CreatedAt   time.Time
+
+	NewCardsPerDay int
+	ReviewsPerDay  *int       // nil = unlimited
+	SnoozedUntil   *time.Time // nil = not snoozed
+}
+
+// IsSnoozed reports whether the deck is hidden from the review queue at now.
+func (d Deck) IsSnoozed(now time.Time) bool {
+	return d.SnoozedUntil != nil && d.SnoozedUntil.After(now)
 }
 
 // ValidateDeck checks a deck's user-supplied fields. Exported because the
@@ -56,7 +73,7 @@ func (st *Store) CreateDeck(ctx context.Context, userID int64, name, description
 		return Deck{}, err
 	}
 
-	d := Deck{UserID: userID, Name: name, Description: description, CreatedAt: st.now()}
+	d := Deck{UserID: userID, Name: name, Description: description, CreatedAt: st.now(), NewCardsPerDay: DefaultNewCardsPerDay}
 	err := st.db.QueryRowContext(ctx,
 		`INSERT INTO flash_decks (user_id, name, description, created_at)
 		 VALUES (?, ?, ?, ?)
@@ -101,14 +118,14 @@ func (st *Store) UpdateDeck(ctx context.Context, userID, id int64, name, descrip
 // DeckByID fetches one of userID's own decks.
 func (st *Store) DeckByID(ctx context.Context, userID, id int64) (Deck, error) {
 	return scanDeck(st.db.QueryRowContext(ctx,
-		`SELECT id, user_id, name, description, created_at
+		`SELECT id, user_id, name, description, created_at, new_cards_per_day, reviews_per_day, snoozed_until
 		 FROM flash_decks WHERE id = ? AND user_id = ?`, id, userID))
 }
 
 // ListDecks returns userID's decks, newest first.
 func (st *Store) ListDecks(ctx context.Context, userID int64) ([]Deck, error) {
 	rows, err := st.db.QueryContext(ctx,
-		`SELECT id, user_id, name, description, created_at
+		`SELECT id, user_id, name, description, created_at, new_cards_per_day, reviews_per_day, snoozed_until
 		 FROM flash_decks WHERE user_id = ?
 		 ORDER BY created_at DESC, id DESC`, userID)
 	if err != nil {
@@ -158,10 +175,13 @@ func scanDeck(row *sql.Row) (Deck, error) {
 
 func scanDeckRow(row rowScanner) (Deck, error) {
 	var (
-		d         Deck
-		createdAt string
+		d             Deck
+		createdAt     string
+		reviewsPerDay sql.NullInt64
+		snoozedUntil  sql.NullString
 	)
-	err := row.Scan(&d.ID, &d.UserID, &d.Name, &d.Description, &createdAt)
+	err := row.Scan(&d.ID, &d.UserID, &d.Name, &d.Description, &createdAt,
+		&d.NewCardsPerDay, &reviewsPerDay, &snoozedUntil)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Deck{}, sql.ErrNoRows // translated by scanDeck
@@ -171,5 +191,89 @@ func scanDeckRow(row rowScanner) (Deck, error) {
 	if d.CreatedAt, err = parseTime(createdAt); err != nil {
 		return Deck{}, err
 	}
+	if reviewsPerDay.Valid {
+		n := int(reviewsPerDay.Int64)
+		d.ReviewsPerDay = &n
+	}
+	if snoozedUntil.Valid {
+		t, err := parseTime(snoozedUntil.String)
+		if err != nil {
+			return Deck{}, err
+		}
+		d.SnoozedUntil = &t
+	}
 	return d, nil
+}
+
+// ValidateDeckSettings checks a deck's pace fields.
+func ValidateDeckSettings(newCardsPerDay int, reviewsPerDay *int) error {
+	if newCardsPerDay < 0 {
+		return fmt.Errorf("%w: new cards per day cannot be negative", ErrInvalid)
+	}
+	if reviewsPerDay != nil && *reviewsPerDay < 0 {
+		return fmt.Errorf("%w: reviews per day cannot be negative", ErrInvalid)
+	}
+	return nil
+}
+
+// UpdateDeckSettings overwrites userID's own deck's pace. reviewsPerDay of
+// nil means unlimited.
+func (st *Store) UpdateDeckSettings(ctx context.Context, userID, id int64, newCardsPerDay int, reviewsPerDay *int) (Deck, error) {
+	if err := ValidateDeckSettings(newCardsPerDay, reviewsPerDay); err != nil {
+		return Deck{}, err
+	}
+	var reviewsArg any
+	if reviewsPerDay != nil {
+		reviewsArg = *reviewsPerDay
+	}
+	res, err := st.db.ExecContext(ctx,
+		`UPDATE flash_decks SET new_cards_per_day = ?, reviews_per_day = ? WHERE id = ? AND user_id = ?`,
+		newCardsPerDay, reviewsArg, id, userID)
+	if err != nil {
+		return Deck{}, fmt.Errorf("flash: update deck settings: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return Deck{}, fmt.Errorf("flash: update deck settings: %w", err)
+	}
+	if n == 0 {
+		return Deck{}, ErrNotFound
+	}
+	return st.DeckByID(ctx, userID, id)
+}
+
+// SnoozeDeck hides userID's own deck from the review queue until until.
+func (st *Store) SnoozeDeck(ctx context.Context, userID, id int64, until time.Time) (Deck, error) {
+	res, err := st.db.ExecContext(ctx,
+		`UPDATE flash_decks SET snoozed_until = ? WHERE id = ? AND user_id = ?`,
+		formatTime(until), id, userID)
+	if err != nil {
+		return Deck{}, fmt.Errorf("flash: snooze deck: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return Deck{}, fmt.Errorf("flash: snooze deck: %w", err)
+	}
+	if n == 0 {
+		return Deck{}, ErrNotFound
+	}
+	return st.DeckByID(ctx, userID, id)
+}
+
+// UnsnoozeDeck clears userID's own deck's snooze immediately.
+func (st *Store) UnsnoozeDeck(ctx context.Context, userID, id int64) (Deck, error) {
+	res, err := st.db.ExecContext(ctx,
+		`UPDATE flash_decks SET snoozed_until = NULL WHERE id = ? AND user_id = ?`,
+		id, userID)
+	if err != nil {
+		return Deck{}, fmt.Errorf("flash: unsnooze deck: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return Deck{}, fmt.Errorf("flash: unsnooze deck: %w", err)
+	}
+	if n == 0 {
+		return Deck{}, ErrNotFound
+	}
+	return st.DeckByID(ctx, userID, id)
 }
