@@ -2,6 +2,7 @@
 {{if eq .Mode "view"}}{{template "deck-detail-view" .}}
 {{else if eq .Mode "edit"}}{{template "deck-detail-edit" .}}
 {{else if eq .Mode "new"}}{{template "deck-detail-new" .}}
+{{else if eq .Mode "import"}}{{template "deck-detail-import" .}}
 {{else}}{{template "deck-detail-empty" .}}
 {{end}}
 {{end}}
@@ -123,6 +124,7 @@
 	<div class="row list-head">
 		<h2>Decks</h2>
 		<a class="toolbar-btn" href="/flash/new" hx-get="/flash/new" hx-target="#deck-detail" hx-push-url="true">New deck</a>
+		<a class="toolbar-btn" href="/flash/import" hx-get="/flash/import" hx-target="#deck-detail" hx-push-url="true">Import</a>
 		<a class="toolbar-btn" href="/flash/review">Review</a>
 	</div>
 	{{template "deck-list-items" .Data.List}}

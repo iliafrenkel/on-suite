@@ -1,0 +1,23 @@
+{{define "deck-detail-import"}}
+<form class="stack" id="deck-detail-import" method="post" action="/flash/import" hx-post="/flash/import" hx-target="#deck-detail" hx-swap="innerHTML">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<h1>Import</h1>
+	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+	<div class="field">
+		<label for="import-format">Format</label>
+		<select id="import-format" name="format">
+			<option value="auto"{{if eq .FormatValue "auto"}} selected{{end}}>Auto-detect</option>
+			<option value="markdown"{{if eq .FormatValue "markdown"}} selected{{end}}>Markdown</option>
+			<option value="json"{{if eq .FormatValue "json"}} selected{{end}}>JSON</option>
+		</select>
+	</div>
+	<div class="field">
+		<label for="import-payload">Paste your deck</label>
+		<textarea id="import-payload" name="payload" rows="16" autofocus required>{{.PayloadValue}}</textarea>
+	</div>
+	<div class="row">
+		<button type="submit" class="toolbar-btn toolbar-btn-active">Import</button>
+		<a class="toolbar-btn" href="/flash/" hx-get="/flash/" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
+	</div>
+</form>
+{{end}}
