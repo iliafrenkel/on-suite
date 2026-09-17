@@ -4,6 +4,7 @@ package flash_test
 import (
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
@@ -156,6 +157,77 @@ func TestUndoingTwiceIsRejected(t *testing.T) {
 	if rec.Code != 400 {
 		t.Errorf("second undo = %d, want 400", rec.Code)
 	}
+}
+
+func TestGradingScopedToSomeoneElsesDeckIs404(t *testing.T) {
+	s := newServer(t)
+	// Bob's deck: valid, but not Alice's to scope a review against.
+	bobDeck, err := s.Store.CreateDeck(t.Context(), s.Bob.User.ID, "bob's", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Alice's own card, which she is otherwise allowed to grade.
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "alice's", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The card grades fine (it's Alice's own), but re-rendering the queue
+	// scoped to ?deck=<bob's deck> must 404, not 500, since that deck isn't
+	// Alice's.
+	rec := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(bobDeck.ID),
+		url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
+	if rec.Code != 404 {
+		t.Errorf("grade scoped to someone else's deck = %d, want 404", rec.Code)
+	}
+}
+
+func TestReviewPageScopedToSomeoneElsesDeckIs404(t *testing.T) {
+	s := newServer(t)
+	bobDeck, err := s.Store.CreateDeck(t.Context(), s.Bob.User.ID, "bob's", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := s.Do(t, s.Alice, httpGet(t, "/flash/review?deck="+itoa(bobDeck.ID)))
+	if rec.Code != 404 {
+		t.Errorf("GET /flash/review?deck=<someone else's> = %d, want 404", rec.Code)
+	}
+}
+
+func TestReviewRespectsTheDailyNewCardLimit(t *testing.T) {
+	s := newServer(t)
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	s.Store.SetClock(func() time.Time { return now })
+
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.UpdateDeckSettings(t.Context(), s.Alice.User.ID, deck.ID, 1, nil); err != nil {
+		t.Fatal(err)
+	}
+	cardA, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "c", "d", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/flash/review/grade", url.Values{"card_id": {itoa(cardA.ID)}, "rating": {"3"}})
+	if rec.Code != 200 {
+		t.Fatalf("grade = %d, want 200", rec.Code)
+	}
+
+	// The deck's new_cards_per_day is 1 and one card was just graded "new",
+	// so the second (never-reviewed) card must not show up today, even
+	// though it's otherwise due.
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	doc.MustNotHave(".flash-review-front")
 }
 
 func TestReviewScriptIsServed(t *testing.T) {

@@ -4,7 +4,6 @@ package flash
 import (
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -97,9 +96,9 @@ func (a *App) deckReview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64, deckID *int64, status int, lastGradedCardID int64) {
-	queue, err := a.store.DueQueue(r.Context(), userID, deckID, time.Now())
+	queue, err := a.store.DueQueue(r.Context(), userID, deckID, a.store.now())
 	if err != nil {
-		a.deps.Errors.Internal(w, r, err)
+		a.fail(w, r, err)
 		return
 	}
 	view := reviewView{
@@ -141,7 +140,7 @@ func (a *App) gradeCardHandler(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Status(w, r, http.StatusBadRequest)
 		return
 	}
-	if _, err := a.store.GradeCard(r.Context(), userID, cardID, rating, time.Now()); err != nil {
+	if _, err := a.store.GradeCard(r.Context(), userID, cardID, rating, a.store.now()); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -162,7 +161,7 @@ func (a *App) undoGradeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, undone, err := a.store.UndoLastGrade(r.Context(), userID, cardID, time.Now())
+	_, undone, err := a.store.UndoLastGrade(r.Context(), userID, cardID, a.store.now())
 	if err != nil {
 		a.fail(w, r, err)
 		return
