@@ -20,7 +20,7 @@
 	{{with .Card.Notes}}<p class="dim">{{.}}</p>{{end}}
 	{{with .Tags}}
 	<ul class="tag-list">
-		{{range .}}<li><a href="/flash/tags/{{.Name}}">{{.Name}}</a></li>{{end}}
+		{{range .}}<li><a href="{{.Href}}">{{.Name}}</a></li>{{end}}
 	</ul>
 	{{end}}
 	<div class="row">

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -59,7 +60,7 @@ type cardDetailView struct {
 	Mode      string
 	Deck      Deck
 	Card      Card
-	Tags      []Tag
+	Tags      []tagChip
 	CSRFToken string
 
 	CardTypeValue string
@@ -68,6 +69,29 @@ type cardDetailView struct {
 	NotesValue    string
 	TagsValue     string
 	Error         string
+}
+
+// tagChip is a tag as rendered in a card's tag-chip list: its filter link is
+// precomputed here, in Go, rather than built inline in the template, so the
+// name is properly path-escaped (html/template's auto-escaping guards
+// against attribute breakout but does not escape "/", which would otherwise
+// let a tag like "a/b" produce a broken link to the wrong path).
+type tagChip struct {
+	Name string
+	Href string
+}
+
+// tagFilterURL is the cross-deck filter link for a tag named name.
+func tagFilterURL(name string) string {
+	return "/flash/tags/" + url.PathEscape(name)
+}
+
+func tagChips(tags []Tag) []tagChip {
+	chips := make([]tagChip, len(tags))
+	for i, tg := range tags {
+		chips[i] = tagChip{Name: tg.Name, Href: tagFilterURL(tg.Name)}
+	}
+	return chips
 }
 
 type cardListItem struct {
@@ -93,7 +117,7 @@ func (a *App) viewCardDetail(r *http.Request, userID int64, d Deck, c Card) card
 	// card was just created/updated under this same user), not something
 	// worth failing the whole render over, so the view just shows no chips.
 	tags, _ := a.store.TagsForCard(r.Context(), userID, c.ID)
-	return cardDetailView{Mode: cardModeView, Deck: d, Card: c, Tags: tags, CSRFToken: web.CSRFToken(r.Context())}
+	return cardDetailView{Mode: cardModeView, Deck: d, Card: c, Tags: tagChips(tags), CSRFToken: web.CSRFToken(r.Context())}
 }
 
 func (a *App) newCardDetail(r *http.Request, d Deck, errMsg, cardType, front, back, notes, tags string) cardDetailView {
