@@ -331,7 +331,7 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := a.store.UpdateDeck(r.Context(), userID, id, name, description)
+	_, err = a.store.UpdateDeck(r.Context(), userID, id, name, description)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
 			a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
@@ -341,7 +341,7 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	updated, err = a.store.UpdateDeckSettings(r.Context(), userID, id, newCardsPerDay, reviewsPerDay)
+	updated, err := a.store.UpdateDeckSettings(r.Context(), userID, id, newCardsPerDay, reviewsPerDay)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
 			a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
