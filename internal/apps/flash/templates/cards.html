@@ -18,6 +18,11 @@
 	<h1>{{.Card.Front}}</h1>
 	{{if eq .Card.CardType "basic"}}<p>{{.Card.Back}}</p>{{end}}
 	{{with .Card.Notes}}<p class="dim">{{.}}</p>{{end}}
+	{{with .Tags}}
+	<ul class="tag-list">
+		{{range .}}<li><a href="/flash/tags/{{.Name}}">{{.Name}}</a></li>{{end}}
+	</ul>
+	{{end}}
 	<div class="row">
 		<a class="toolbar-btn" href="{{$.Deck.ID}}/cards/edit/{{.Card.ID}}" hx-get="/flash/{{$.Deck.ID}}/cards/edit/{{.Card.ID}}" hx-target="#card-detail" hx-push-url="true">Edit</a>
 		<form method="post" action="/flash/{{$.Deck.ID}}/cards/{{.Card.ID}}/delete" hx-post="/flash/{{$.Deck.ID}}/cards/{{.Card.ID}}/delete" hx-target="#card-detail" hx-swap="innerHTML"
@@ -49,6 +54,10 @@
 	<label for="card-notes-{{.IDSuffix}}">Notes (shown after the answer)</label>
 	<textarea id="card-notes-{{.IDSuffix}}" name="notes" rows="3">{{.NotesValue}}</textarea>
 </div>
+<div class="field">
+	<label for="card-tags-{{.IDSuffix}}">Tags (comma-separated)</label>
+	<input id="card-tags-{{.IDSuffix}}" type="text" name="tags" value="{{.TagsValue}}">
+</div>
 {{end}}
 
 {{define "card-detail-new"}}
@@ -56,7 +65,7 @@
 	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 	<h1>New card</h1>
 	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
-	{{template "card-form-fields" (dict "IDSuffix" "new" "CardTypeValue" .CardTypeValue "FrontValue" .FrontValue "BackValue" .BackValue "NotesValue" .NotesValue)}}
+	{{template "card-form-fields" (dict "IDSuffix" "new" "CardTypeValue" .CardTypeValue "FrontValue" .FrontValue "BackValue" .BackValue "NotesValue" .NotesValue "TagsValue" .TagsValue)}}
 	<div class="row">
 		<button type="submit" class="toolbar-btn toolbar-btn-active">Save</button>
 		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/" hx-get="/flash/{{.Deck.ID}}/cards/" hx-target="#card-detail" hx-push-url="true">Cancel</a>
@@ -69,7 +78,7 @@
 	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 	<h1>Edit card</h1>
 	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
-	{{template "card-form-fields" (dict "IDSuffix" .Card.ID "CardTypeValue" .CardTypeValue "FrontValue" .FrontValue "BackValue" .BackValue "NotesValue" .NotesValue)}}
+	{{template "card-form-fields" (dict "IDSuffix" .Card.ID "CardTypeValue" .CardTypeValue "FrontValue" .FrontValue "BackValue" .BackValue "NotesValue" .NotesValue "TagsValue" .TagsValue)}}
 	<div class="row">
 		<button type="submit" class="toolbar-btn toolbar-btn-active">Save</button>
 		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}" hx-get="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}" hx-target="#card-detail" hx-push-url="true">Cancel</a>

@@ -74,4 +74,9 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /{deckID}/cards/edit/{cardID}", a.editCardForm)
 	r.HandleFunc("POST /{deckID}/cards/{cardID}", a.updateCard)
 	r.HandleFunc("POST /{deckID}/cards/{cardID}/delete", a.deleteCard)
+
+	// GET /tags/{tagName} is 2 segments (literal "tags", wildcard), a different
+	// shape from GET /{deckID} (1 segment) and GET /edit/{deckID} (literal
+	// "edit", wildcard) — no ambiguity with either.
+	r.HandleFunc("GET /tags/{tagName}", a.tagFilter)
 }

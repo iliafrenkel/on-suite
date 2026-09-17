@@ -6,10 +6,23 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
+
+// parseTagList splits a comma-separated "tags" form field into trimmed,
+// non-empty names, in the order the user typed them.
+func parseTagList(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if name := strings.TrimSpace(part); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
 
 func (a *App) cardIDFromPath(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("cardID"), 10, 64)
@@ -46,12 +59,14 @@ type cardDetailView struct {
 	Mode      string
 	Deck      Deck
 	Card      Card
+	Tags      []Tag
 	CSRFToken string
 
 	CardTypeValue string
 	FrontValue    string
 	BackValue     string
 	NotesValue    string
+	TagsValue     string
 	Error         string
 }
 
@@ -73,21 +88,25 @@ type cardIndexView struct {
 	Shell  render.Shell
 }
 
-func (a *App) viewCardDetail(r *http.Request, d Deck, c Card) cardDetailView {
-	return cardDetailView{Mode: cardModeView, Deck: d, Card: c, CSRFToken: web.CSRFToken(r.Context())}
+func (a *App) viewCardDetail(r *http.Request, userID int64, d Deck, c Card) cardDetailView {
+	// Best-effort: a tag-lookup failure here is a genuine database error (the
+	// card was just created/updated under this same user), not something
+	// worth failing the whole render over, so the view just shows no chips.
+	tags, _ := a.store.TagsForCard(r.Context(), userID, c.ID)
+	return cardDetailView{Mode: cardModeView, Deck: d, Card: c, Tags: tags, CSRFToken: web.CSRFToken(r.Context())}
 }
 
-func (a *App) newCardDetail(r *http.Request, d Deck, errMsg, cardType, front, back, notes string) cardDetailView {
+func (a *App) newCardDetail(r *http.Request, d Deck, errMsg, cardType, front, back, notes, tags string) cardDetailView {
 	return cardDetailView{
 		Mode: cardModeNew, Deck: d, CardTypeValue: cardType, FrontValue: front, BackValue: back, NotesValue: notes,
-		Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
+		TagsValue: tags, Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
 	}
 }
 
-func (a *App) editCardDetail(r *http.Request, d Deck, c Card, errMsg, cardType, front, back, notes string) cardDetailView {
+func (a *App) editCardDetail(r *http.Request, d Deck, c Card, errMsg, cardType, front, back, notes, tags string) cardDetailView {
 	return cardDetailView{
 		Mode: cardModeEdit, Deck: d, Card: c, CardTypeValue: cardType, FrontValue: front, BackValue: back, NotesValue: notes,
-		Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
+		TagsValue: tags, Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
 	}
 }
 
@@ -135,7 +154,7 @@ func (a *App) cardIndex(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, r, err)
 			return
 		}
-		detail = a.viewCardDetail(r, deck, c)
+		detail = a.viewCardDetail(r, userID, deck, c)
 	}
 	a.renderCardIndex(w, r, userID, deck, http.StatusOK, detail)
 }
@@ -188,7 +207,7 @@ func (a *App) newCardForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.renderCardIndex(w, r, userID, deck, http.StatusOK, a.newCardDetail(r, deck, "", CardTypeBasic, "", "", ""))
+	a.renderCardIndex(w, r, userID, deck, http.StatusOK, a.newCardDetail(r, deck, "", CardTypeBasic, "", "", "", ""))
 }
 
 func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
@@ -204,17 +223,22 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 	front := r.PostFormValue("front")
 	back := r.PostFormValue("back")
 	notes := r.PostFormValue("notes")
+	tags := r.PostFormValue("tags")
 
 	if err := ValidateCard(cardType, front, back); err != nil {
-		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, userMessage(err), cardType, front, back, notes))
+		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, userMessage(err), cardType, front, back, notes, tags))
 		return
 	}
 	c, err := a.store.CreateCard(r.Context(), userID, deck.ID, cardType, front, back, notes)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
-			a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, userMessage(err), cardType, front, back, notes))
+			a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, userMessage(err), cardType, front, back, notes, tags))
 			return
 		}
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.store.SetCardTags(r.Context(), userID, c.ID, parseTagList(tags)); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -224,7 +248,7 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+strconv.FormatInt(c.ID, 10))
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, a.viewCardDetail(r, deck, c))
+	a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, a.viewCardDetail(r, userID, deck, c))
 }
 
 func (a *App) editCardForm(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +269,23 @@ func (a *App) editCardForm(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderCardIndex(w, r, userID, deck, http.StatusOK, a.editCardDetail(r, deck, c, "", c.CardType, c.Front, c.Back, c.Notes))
+	tags, err := a.store.TagsForCard(r.Context(), userID, c.ID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.renderCardIndex(w, r, userID, deck, http.StatusOK, a.editCardDetail(r, deck, c, "", c.CardType, c.Front, c.Back, c.Notes, joinTagNames(tags)))
+}
+
+// joinTagNames renders a card's tags back into the same comma-separated
+// shape the form field accepts, so editing a card starts from its current
+// tags rather than an empty field.
+func joinTagNames(tags []Tag) string {
+	names := make([]string, len(tags))
+	for i, tg := range tags {
+		names[i] = tg.Name
+	}
+	return strings.Join(names, ", ")
 }
 
 func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
@@ -270,17 +310,22 @@ func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
 	front := r.PostFormValue("front")
 	back := r.PostFormValue("back")
 	notes := r.PostFormValue("notes")
+	tags := r.PostFormValue("tags")
 
 	if err := ValidateCard(cardType, front, back); err != nil {
-		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes))
+		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags))
 		return
 	}
 	updated, err := a.store.UpdateCard(r.Context(), userID, deck.ID, id, cardType, front, back, notes)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
-			a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes))
+			a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags))
 			return
 		}
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.store.SetCardTags(r.Context(), userID, updated.ID, parseTagList(tags)); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -290,7 +335,7 @@ func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+strconv.FormatInt(id, 10))
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, deck, updated))
+	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, userID, deck, updated))
 }
 
 func (a *App) deleteCard(w http.ResponseWriter, r *http.Request) {
