@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
+	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
 //go:embed templates/*.html
@@ -168,6 +169,30 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	// position makes overlap impossible regardless of how the remaining
 	// positions compare (see the review-route comment above for the fuller
 	// version of this reasoning).
+	//
+	// The upload route overrides the platform's global 1MB body cap
+	// (web.DefaultMaxBodyBytes, applied to every route by the shared
+	// middleware stack) with a budget big enough for one image and one
+	// audio file in the same multipart request — the same
+	// MaxImageFetchBytes+MaxAudioFetchBytes budget uploadCardMedia's own
+	// http.MaxBytesReader wrap already uses internally, so the two caps
+	// agree. Per csrf.go's own doc comment on DefaultMaxBodyBytes, wrapping
+	// one route like this is exactly how an app is meant to need more.
+	//
+	// Wrapping the handler alone is not enough to actually raise the cap:
+	// Stack's own LimitBody(DefaultMaxBodyBytes) runs ahead of the mux, so
+	// it has already wrapped r.Body in a 1MB http.MaxBytesReader before
+	// this route (or CSRF's own body parsing, upstream of every handler)
+	// ever runs — and nesting a bigger MaxBytesReader inside a smaller one
+	// cannot loosen it; the first, smaller one still errors once its own
+	// count is exceeded. web.RegisterBodyLimit records the same exception
+	// against the exact pattern this route registers below, so Stack's mux-
+	// aware LimitBody can apply it before CSRF or this handler ever see the
+	// body. See app.Router.RegisterBodyLimit's doc comment for the full
+	// mechanism.
+	r.RegisterBodyLimit("POST /{deckID}/cards/{cardID}/media", MaxImageFetchBytes+MaxAudioFetchBytes)
+
 	r.HandleFunc("GET /media/{hash}", a.media)
-	r.HandleFunc("POST /{deckID}/cards/{cardID}/media", a.uploadCardMedia)
+	r.Handle("POST /{deckID}/cards/{cardID}/media",
+		web.LimitBody(MaxImageFetchBytes+MaxAudioFetchBytes)(http.HandlerFunc(a.uploadCardMedia)))
 }

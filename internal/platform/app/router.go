@@ -60,6 +60,29 @@ func (r *Router) PublicFunc(pattern string, h http.HandlerFunc) {
 	r.register(pattern, h, true)
 }
 
+// RegisterBodyLimit raises the platform's default request-body cap
+// (web.DefaultMaxBodyBytes) to max for one route already registered with
+// Handle/HandleFunc, identified the same way Handle/HandleFunc's own
+// pattern is — relative to this app, e.g. "POST /{deckID}/cards/{id}/media".
+//
+// Wrapping a route's own handler in web.LimitBody (the pattern
+// DefaultMaxBodyBytes's doc comment recommends) is not sufficient on its
+// own: the platform's shared middleware stack (web.Stack) already wraps
+// every request's body in a DefaultMaxBodyBytes-sized reader before the
+// mux — and therefore before CSRF's own body parsing and before any app
+// handler — ever sees it, and nesting a larger reader inside a smaller one
+// cannot loosen the smaller one. This records the same exception against
+// the exact pattern the mux will match, so Stack's own body-limit
+// middleware can apply it before anything downstream reads the body. See
+// web.RegisterBodyLimit for the mechanism.
+func (r *Router) RegisterBodyLimit(pattern string, max int64) {
+	full, err := joinPattern(r.prefix, pattern)
+	if err != nil {
+		panic(fmt.Sprintf("app %s: %v", r.appID, err))
+	}
+	web.RegisterBodyLimit(full, max)
+}
+
 // Routes lists what was registered, in registration order.
 func (r *Router) Routes() []Route {
 	out := make([]Route, len(r.routes))
