@@ -18,6 +18,8 @@
 	<h1>{{.Card.Front}}</h1>
 	{{if eq .Card.CardType "basic"}}<p>{{.Card.Back}}</p>{{end}}
 	{{with .Card.Notes}}<p class="dim">{{.}}</p>{{end}}
+	{{with .ImageMediaURL}}<img class="card-media-image" src="{{.}}" alt="">{{end}}
+	{{with .AudioMediaURL}}<audio controls src="{{.}}"></audio>{{end}}
 	{{with .Tags}}
 	<ul class="tag-list">
 		{{range .}}<li><a href="{{.Href}}">{{.Name}}</a></li>{{end}}
@@ -31,6 +33,21 @@
 			<button type="submit" class="toolbar-btn danger">Delete</button>
 		</form>
 	</div>
+	{{with .MediaError}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+	<form class="stack" id="card-media-form" method="post" action="/flash/{{$.Deck.ID}}/cards/{{.Card.ID}}/media" hx-post="/flash/{{$.Deck.ID}}/cards/{{.Card.ID}}/media" hx-target="#card-detail" hx-swap="innerHTML" enctype="multipart/form-data">
+		<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+		<div class="field">
+			<label for="card-image-{{.Card.ID}}">Image</label>
+			<input id="card-image-{{.Card.ID}}" type="file" name="image" accept="image/*">
+			{{if .ImageMediaURL}}<label><input type="checkbox" name="remove_image" value="1"> Remove image</label>{{end}}
+		</div>
+		<div class="field">
+			<label for="card-audio-{{.Card.ID}}">Audio</label>
+			<input id="card-audio-{{.Card.ID}}" type="file" name="audio" accept="audio/*">
+			{{if .AudioMediaURL}}<label><input type="checkbox" name="remove_audio" value="1"> Remove audio</label>{{end}}
+		</div>
+		<button type="submit" class="toolbar-btn">Update media</button>
+	</form>
 </div>
 {{end}}
 

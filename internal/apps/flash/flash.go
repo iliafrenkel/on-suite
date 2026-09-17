@@ -15,11 +15,19 @@ var templateFiles embed.FS
 //go:embed static/flash-review.js
 var scriptFiles embed.FS
 
+// mediaFetchConcurrency bounds outbound media fetches across all requests,
+// the same role internal/apps/reader's imageFetchConcurrency plays for
+// article images — without a bound, a deck full of cards with images could
+// open many simultaneous connections to one host on first review.
+const mediaFetchConcurrency = 4
+
 // App is ON Flash. It is constructed before the platform exists, in the
 // registration slice in main, and receives everything it needs in Mount.
 type App struct {
-	store *Store
-	deps  app.Deps
+	store       *Store
+	deps        app.Deps
+	mediaClient *MediaClient
+	mediaSem    chan struct{}
 }
 
 // New returns the app for registration.
@@ -60,6 +68,8 @@ func (a *App) script(w http.ResponseWriter, r *http.Request) {
 func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.deps = deps
 	a.store = NewStore(deps.DB)
+	a.mediaClient = NewMediaClient(deps.Version)
+	a.mediaSem = make(chan struct{}, mediaFetchConcurrency)
 
 	// Same pattern as internal/apps/paste's Mount: a literal segment (new,
 	// edit/{id}) always wins over a same-position wildcard ({id}), so these
@@ -147,4 +157,17 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /review/grade", a.gradeCardHandler)
 	r.HandleFunc("POST /review/undo", a.undoGradeHandler)
 	r.HandleFunc("GET /flash-review.js", a.script)
+
+	// "media" is a literal single segment, the same non-ambiguity shape as
+	// "new"/"review"/"import" alongside the wildcard single-segment routes
+	// above. The upload route is 4 segments (wildcard, literal, wildcard,
+	// literal) — the same shape as the existing
+	// POST /{deckID}/cards/{cardID}/delete, differing only in its final
+	// literal ("media" vs "delete"), which is what actually guarantees no
+	// ambiguity between the two: a literal-vs-literal mismatch at any one
+	// position makes overlap impossible regardless of how the remaining
+	// positions compare (see the review-route comment above for the fuller
+	// version of this reasoning).
+	r.HandleFunc("GET /media/{hash}", a.media)
+	r.HandleFunc("POST /{deckID}/cards/{cardID}/media", a.uploadCardMedia)
 }
