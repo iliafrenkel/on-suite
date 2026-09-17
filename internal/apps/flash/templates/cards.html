@@ -92,7 +92,7 @@
 	{{range .Items}}
 	{{$c := .Card}}
 	<li>
-		<a class="card-row{{if eq $c.ID $.ActiveID}} card-row-active{{end}}" href="{{$c.ID}}" hx-get="/flash/{{$c.DeckID}}/cards/{{$c.ID}}" hx-target="#card-detail" hx-push-url="true">
+		<a class="card-row{{if eq $c.ID $.ActiveID}} card-row-active{{end}}" href="/flash/{{$c.DeckID}}/cards/{{$c.ID}}" hx-get="/flash/{{$c.DeckID}}/cards/{{$c.ID}}" hx-target="#card-detail" hx-push-url="true">
 			{{$c.Front}}
 		</a>
 	</li>
