@@ -16,6 +16,9 @@ out in the plan/spec that follows.
 - Scheduling should be automatic by default, adjustable when life gets busy,
   and should avoid the inconsistent-difficulty and heavy-gamification
   problems seen in some existing apps.
+- Keyboard-first interaction, matching the rest of the suite (ON Notes, ON
+  Reader) — reviewing and grading a card should never require reaching for
+  the mouse.
 
 ## Feature list
 
@@ -24,7 +27,13 @@ out in the plan/spec that follows.
 - Card types: Basic (front/back) and Cloze deletion. Typed-input recall is a
   noted future addition, not v1.
 - Media per card: images and audio. Attachable two ways — by URL at import
-  time, or by manual upload/attach afterward for polishing.
+  time, or by manual upload/attach afterward for polishing. Media referenced
+  by URL is fetched once and stored/served locally (not hotlinked), the same
+  approach ON Reader uses for article images — avoids CORS/CSP issues and
+  keeps cards working if the source URL later disappears.
+- Optional notes/explanation field per card, shown only after the answer is
+  revealed — extra context to reinforce learning without cluttering the
+  question/answer flow.
 - Personal decks (private to one account) and shared decks (see Sharing).
 
 **Import / authoring**
@@ -46,6 +55,9 @@ out in the plan/spec that follows.
 - Manual overrides: snooze or pause a deck, adjust its pace.
 - Per-deck configurable daily limits (max new cards/day, max reviews/day) so
   a freshly imported large deck doesn't overwhelm day one.
+- Undo last rating — one step back to correct an accidental click, double
+  tap, or immediate regret on a grade, restoring the card's prior scheduling
+  state.
 
 **Sharing**
 - Direct account-to-account sharing within the household — no link step.
@@ -53,6 +65,13 @@ out in the plan/spec that follows.
 - Once adopted, review/scoring/scheduling is entirely private to each
   account, with no visibility into another account's progress on a shared
   deck (including for the original sharer).
+- Adoption creates an independent copy of the deck's cards, not a live link
+  to the original — the creator editing or deleting cards afterward doesn't
+  touch an adopter's copy or their progress.
+- Re-sharing (creator adds cards, shares again) lets an adopter merge only
+  the new cards into their existing copy, without disturbing progress on
+  cards already adopted. This requires tracking each adopted card's origin
+  card so the merge can tell new from already-adopted.
 
 **Progress & motivation**
 - Visible, data-forward stats: streaks, retention rate, cards due/mastered,
