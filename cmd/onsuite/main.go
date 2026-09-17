@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/apps/paste"
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
@@ -72,6 +73,7 @@ Run "onsuite serve -h" for serve flags.
 // this build contains.
 func registeredApps() []app.App {
 	return []app.App{
+		flash.New(),
 		notes.New(),
 		paste.New(),
 		reader.New(),

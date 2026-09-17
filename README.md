@@ -14,7 +14,7 @@ bet, optimised for "one binary, one data directory, nothing else to run."
   <img src="docs/images/paste-snippet.png" alt="An ON Paste snippet with syntax highlighting" width="49%">
 </p>
 
-Of the four apps the "ON" prefix is reserved for, three are built and
+Of the four apps the "ON" prefix is reserved for, all four are built and
 registered today. **ON Paste** holds snippets of code or text, with syntax
 highlighting and shareable links. **ON Notes** is a hierarchical outliner —
 one infinite tree per account, with zoom, collapse, every structural
@@ -24,9 +24,10 @@ due-date view, full-text search with ancestor breadcrumbs, archiving,
 Markdown/JSON export and import, and public read-only share links. **ON
 Reader** is a feed reader — subscriptions and folders, full-article
 extraction, search and keyboard navigation, OPML import/export and feed
-discovery, and a reading-stats page with daily trend charts. ON Flash is
-future work: the platform and app framework are ready for it, but no code
-exists yet.
+discovery, and a reading-stats page with daily trend charts. **ON Flash**
+is a flash-card app, still being built out — deck and card CRUD with
+per-card tags and a cross-deck tag filter so far, with review/scheduling
+still to come.
 
 ## Is this for you?
 

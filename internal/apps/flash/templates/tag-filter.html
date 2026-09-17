@@ -1,0 +1,17 @@
+{{define "content"}}
+<div class="stack">
+	<h1>Tag: {{.Data.TagName}}</h1>
+	<ul class="tag-filter-list">
+		{{if .Data.Items}}
+		{{range .Data.Items}}
+		<li class="tag-filter-item">
+			<a href="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}">{{.Card.Front}}</a>
+			<span class="faint">in {{.Deck.Name}}</span>
+		</li>
+		{{end}}
+		{{else}}
+		<li class="dim">No cards carry this tag.</li>
+		{{end}}
+	</ul>
+</div>
+{{end}}
