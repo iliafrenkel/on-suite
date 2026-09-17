@@ -21,6 +21,7 @@
 	<div class="row">
 		<a class="toolbar-btn" href="/flash/edit/{{.Deck.ID}}" hx-get="/flash/edit/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">Edit</a>
 		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/">View cards</a>
+		<a class="toolbar-btn" href="/flash/review/{{.Deck.ID}}">Review</a>
 		<form method="post" action="/flash/{{.Deck.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
 		      data-confirm="Delete “{{.Deck.Name}}”? This also deletes every card in it.">
 			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
@@ -122,6 +123,7 @@
 	<div class="row list-head">
 		<h2>Decks</h2>
 		<a class="toolbar-btn" href="/flash/new" hx-get="/flash/new" hx-target="#deck-detail" hx-push-url="true">New deck</a>
+		<a class="toolbar-btn" href="/flash/review">Review</a>
 	</div>
 	{{template "deck-list-items" .Data.List}}
 	<div id="deck-detail">
