@@ -330,6 +330,11 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 			a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
 		return
 	}
+	if err := ValidateDeckSettings(newCardsPerDay, reviewsPerDay); err != nil {
+		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
+			a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
+		return
+	}
 
 	_, err = a.store.UpdateDeck(r.Context(), userID, id, name, description)
 	if err != nil {
@@ -345,7 +350,7 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
 			a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-				a.editDeckDetail(r, updated, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
+				a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
 			return
 		}
 		a.fail(w, r, err)

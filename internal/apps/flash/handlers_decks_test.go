@@ -121,6 +121,35 @@ func TestUpdateDeckSettingsRejectsNegativeOverHTTP(t *testing.T) {
 	}
 }
 
+func TestUpdateDeckSettingsRejectsNegativeWithoutPartiallyWriting(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := s.Post(t, s.Alice, "/flash/"+itoa(deck.ID), url.Values{
+		"name": {"Renamed"}, "description": {"new description"},
+		"new_cards_per_day": {"-1"}, "reviews_per_day": {""},
+	})
+	if rec.Code != 400 {
+		t.Fatalf("negative new_cards_per_day = %d, want 400", rec.Code)
+	}
+
+	// The rejected pace settings must not leave the name/description change
+	// committed: validation happens before either store write now, so a
+	// rejected request writes nothing at all.
+	unchanged, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Name != "Spanish" {
+		t.Errorf("Name = %q after rejected settings update, want unchanged %q", unchanged.Name, "Spanish")
+	}
+	if unchanged.Description != "" {
+		t.Errorf("Description = %q after rejected settings update, want unchanged empty", unchanged.Description)
+	}
+}
+
 func TestSnoozeAndUnsnoozeDeckOverHTTP(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
