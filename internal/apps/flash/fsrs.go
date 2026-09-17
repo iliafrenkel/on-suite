@@ -1,4 +1,3 @@
-//
 // This is the only file in the codebase that imports go-fsrs. Every other
 // file in this package works with cardSchedule and reviewLog, this file's
 // own plain-Go types — internal/arch/arch_test.go's TestFSRSIsContained
