@@ -21,12 +21,35 @@
 	<div class="row">
 		<a class="toolbar-btn" href="/flash/edit/{{.Deck.ID}}" hx-get="/flash/edit/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">Edit</a>
 		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/">View cards</a>
+		<a class="toolbar-btn" href="/flash/review/{{.Deck.ID}}">Review</a>
 		<form method="post" action="/flash/{{.Deck.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
 		      data-confirm="Delete “{{.Deck.Name}}”? This also deletes every card in it.">
 			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 			<button type="submit" class="toolbar-btn danger">Delete</button>
 		</form>
 	</div>
+	{{if .Deck.SnoozedUntil}}
+	<div class="notice row">
+		<span>Snoozed until {{.Deck.SnoozedUntil.Format "2 Jan 2006"}}.</span>
+		<form method="post" action="/flash/{{.Deck.ID}}/unsnooze" hx-post="/flash/{{.Deck.ID}}/unsnooze" hx-target="#deck-detail" hx-swap="innerHTML">
+			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+			<button type="submit" class="button">Unsnooze</button>
+		</form>
+	</div>
+	{{else}}
+	<div class="row">
+		<form method="post" action="/flash/{{.Deck.ID}}/snooze" hx-post="/flash/{{.Deck.ID}}/snooze" hx-target="#deck-detail" hx-swap="innerHTML">
+			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+			<input type="hidden" name="days" value="7">
+			<button type="submit" class="toolbar-btn">Snooze 1 week</button>
+		</form>
+		<form method="post" action="/flash/{{.Deck.ID}}/snooze" hx-post="/flash/{{.Deck.ID}}/snooze" hx-target="#deck-detail" hx-swap="innerHTML">
+			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+			<input type="hidden" name="days" value="30">
+			<button type="submit" class="toolbar-btn">Snooze 1 month</button>
+		</form>
+	</div>
+	{{end}}
 </div>
 {{end}}
 
@@ -63,6 +86,14 @@
 		<label for="deck-description-{{.Deck.ID}}">Description</label>
 		<textarea id="deck-description-{{.Deck.ID}}" name="description" rows="3">{{.DescriptionValue}}</textarea>
 	</div>
+	<div class="field">
+		<label for="deck-new-per-day-{{.Deck.ID}}">New cards per day</label>
+		<input id="deck-new-per-day-{{.Deck.ID}}" type="number" min="0" name="new_cards_per_day" value="{{.NewCardsPerDayValue}}" required>
+	</div>
+	<div class="field">
+		<label for="deck-reviews-per-day-{{.Deck.ID}}">Reviews per day (blank for unlimited)</label>
+		<input id="deck-reviews-per-day-{{.Deck.ID}}" type="number" min="0" name="reviews_per_day" value="{{.ReviewsPerDayValue}}">
+	</div>
 	<div class="row">
 		<button type="submit" class="toolbar-btn toolbar-btn-active">Save</button>
 		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}" hx-get="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
@@ -92,6 +123,7 @@
 	<div class="row list-head">
 		<h2>Decks</h2>
 		<a class="toolbar-btn" href="/flash/new" hx-get="/flash/new" hx-target="#deck-detail" hx-push-url="true">New deck</a>
+		<a class="toolbar-btn" href="/flash/review">Review</a>
 	</div>
 	{{template "deck-list-items" .Data.List}}
 	<div id="deck-detail">

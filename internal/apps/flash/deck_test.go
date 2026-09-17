@@ -203,6 +203,112 @@ func TestDeleteDeck(t *testing.T) {
 	}
 }
 
+func TestUpdateDeckSettings(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.NewCardsPerDay != 20 {
+		t.Errorf("default NewCardsPerDay = %d, want 20", created.NewCardsPerDay)
+	}
+	if created.ReviewsPerDay != nil {
+		t.Errorf("default ReviewsPerDay = %v, want nil (unlimited)", created.ReviewsPerDay)
+	}
+
+	reviewCap := 50
+	updated, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, created.ID, 10, &reviewCap)
+	if err != nil {
+		t.Fatalf("UpdateDeckSettings: %v", err)
+	}
+	if updated.NewCardsPerDay != 10 {
+		t.Errorf("NewCardsPerDay = %d, want 10", updated.NewCardsPerDay)
+	}
+	if updated.ReviewsPerDay == nil || *updated.ReviewsPerDay != 50 {
+		t.Errorf("ReviewsPerDay = %v, want 50", updated.ReviewsPerDay)
+	}
+
+	// Setting it back to nil restores "unlimited."
+	unlimited, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, created.ID, 10, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unlimited.ReviewsPerDay != nil {
+		t.Errorf("ReviewsPerDay after clearing = %v, want nil", unlimited.ReviewsPerDay)
+	}
+}
+
+func TestUpdateDeckSettingsRejectsNegativeValues(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, created.ID, -1, nil); !errors.Is(err, flash.ErrInvalid) {
+		t.Errorf("UpdateDeckSettings(new=-1) = %v, want ErrInvalid", err)
+	}
+	neg := -5
+	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, created.ID, 10, &neg); !errors.Is(err, flash.ErrInvalid) {
+		t.Errorf("UpdateDeckSettings(reviews=-5) = %v, want ErrInvalid", err)
+	}
+}
+
+func TestUpdateDeckSettingsRejectsSomeoneElsesDeck(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.UpdateDeckSettings(ctx, f.bob.ID, created.ID, 10, nil); !errors.Is(err, flash.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSnoozeAndUnsnoozeDeck(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	until := now.AddDate(0, 0, 7)
+
+	snoozed, err := f.store.SnoozeDeck(ctx, f.alice.ID, created.ID, until)
+	if err != nil {
+		t.Fatalf("SnoozeDeck: %v", err)
+	}
+	if !snoozed.IsSnoozed(now) {
+		t.Error("IsSnoozed(now) = false right after snoozing until a week from now")
+	}
+	if snoozed.IsSnoozed(until.AddDate(0, 0, 1)) {
+		t.Error("IsSnoozed should be false once the snooze period has passed")
+	}
+
+	unsnoozed, err := f.store.UnsnoozeDeck(ctx, f.alice.ID, created.ID)
+	if err != nil {
+		t.Fatalf("UnsnoozeDeck: %v", err)
+	}
+	if unsnoozed.IsSnoozed(now) {
+		t.Error("IsSnoozed(now) = true after unsnoozing")
+	}
+}
+
+func TestSnoozeDeckRejectsSomeoneElsesDeck(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SnoozeDeck(ctx, f.bob.ID, created.ID, time.Now()); !errors.Is(err, flash.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestValidateDeck(t *testing.T) {
 	tests := []struct {
 		name    string

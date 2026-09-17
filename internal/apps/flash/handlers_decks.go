@@ -4,8 +4,10 @@ package flash
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -93,6 +95,9 @@ type deckDetailView struct {
 	NameValue        string
 	DescriptionValue string
 	Error            string
+
+	NewCardsPerDayValue string
+	ReviewsPerDayValue  string
 }
 
 // deckListItem is one row on the deck list page.
@@ -124,9 +129,10 @@ func (a *App) newDeckDetail(r *http.Request, errMsg, name, description string) d
 	}
 }
 
-func (a *App) editDeckDetail(r *http.Request, d Deck, errMsg, name, description string) deckDetailView {
+func (a *App) editDeckDetail(r *http.Request, d Deck, errMsg, name, description, newCardsPerDay, reviewsPerDay string) deckDetailView {
 	return deckDetailView{
 		Mode: "edit", Deck: d, NameValue: name, DescriptionValue: description,
+		NewCardsPerDayValue: newCardsPerDay, ReviewsPerDayValue: reviewsPerDay,
 		Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
 	}
 }
@@ -268,7 +274,30 @@ func (a *App) editDeckForm(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderDeckIndex(w, r, userID, http.StatusOK, a.editDeckDetail(r, d, "", d.Name, d.Description))
+	reviewsStr := ""
+	if d.ReviewsPerDay != nil {
+		reviewsStr = strconv.Itoa(*d.ReviewsPerDay)
+	}
+	a.renderDeckIndex(w, r, userID, http.StatusOK,
+		a.editDeckDetail(r, d, "", d.Name, d.Description, strconv.Itoa(d.NewCardsPerDay), reviewsStr))
+}
+
+// parseDeckSettings turns the edit form's two pace fields into
+// UpdateDeckSettings' arguments. An empty reviewsPerDayStr means unlimited.
+func parseDeckSettings(newCardsPerDayStr, reviewsPerDayStr string) (int, *int, error) {
+	newCardsPerDay, err := strconv.Atoi(strings.TrimSpace(newCardsPerDayStr))
+	if err != nil {
+		return 0, nil, fmt.Errorf("%w: new cards per day must be a whole number", ErrInvalid)
+	}
+	var reviewsPerDay *int
+	if s := strings.TrimSpace(reviewsPerDayStr); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, nil, fmt.Errorf("%w: reviews per day must be a whole number, or blank for unlimited", ErrInvalid)
+		}
+		reviewsPerDay = &n
+	}
+	return newCardsPerDay, reviewsPerDay, nil
 }
 
 func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
@@ -287,15 +316,41 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PostFormValue("name")
 	description := r.PostFormValue("description")
+	newCardsPerDayStr := r.PostFormValue("new_cards_per_day")
+	reviewsPerDayStr := r.PostFormValue("reviews_per_day")
 
 	if err := ValidateDeck(name, description); err != nil {
-		a.renderDeckIndex(w, r, userID, http.StatusBadRequest, a.editDeckDetail(r, d, userMessage(err), name, description))
+		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
+			a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
 		return
 	}
-	updated, err := a.store.UpdateDeck(r.Context(), userID, id, name, description)
+	newCardsPerDay, reviewsPerDay, err := parseDeckSettings(newCardsPerDayStr, reviewsPerDayStr)
+	if err != nil {
+		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
+			a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
+		return
+	}
+	if err := ValidateDeckSettings(newCardsPerDay, reviewsPerDay); err != nil {
+		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
+			a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
+		return
+	}
+
+	_, err = a.store.UpdateDeck(r.Context(), userID, id, name, description)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
-			a.renderDeckIndex(w, r, userID, http.StatusBadRequest, a.editDeckDetail(r, d, userMessage(err), name, description))
+			a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
+				a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
+			return
+		}
+		a.fail(w, r, err)
+		return
+	}
+	updated, err := a.store.UpdateDeckSettings(r.Context(), userID, id, newCardsPerDay, reviewsPerDay)
+	if err != nil {
+		if errors.Is(err, ErrInvalid) {
+			a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
+				a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
 			return
 		}
 		a.fail(w, r, err)
@@ -331,4 +386,58 @@ func (a *App) deleteDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("HX-Push-Url", "/flash/")
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, deckDetailView{})
+}
+
+func (a *App) snoozeDeck(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.deckIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	days, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("days")))
+	if err != nil || days <= 0 {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	until := a.store.now().AddDate(0, 0, days)
+	updated, err := a.store.SnoozeDeck(r.Context(), userID, id, until)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.deps.Log.Info("deck snoozed", "app", ID, "user_id", userID, "deck_id", id, "days", days)
+
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/flash/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
+	}
+	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(id, 10))
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, updated))
+}
+
+func (a *App) unsnoozeDeck(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.deckIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	updated, err := a.store.UnsnoozeDeck(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.deps.Log.Info("deck unsnoozed", "app", ID, "user_id", userID, "deck_id", id)
+
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/flash/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
+	}
+	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(id, 10))
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, updated))
 }

@@ -1,0 +1,51 @@
+{{define "head"}}
+<script src="/flash/flash-review.js" defer></script>
+{{end}}
+
+{{define "review-body"}}
+{{if .Current}}
+<div class="stack flash-review-card" id="review-card">
+	<p class="faint">{{.Current.Deck.Name}} · {{if .Current.IsNew}}new{{else}}review{{end}}</p>
+	<div class="flash-review-front">{{.Current.Card.Front}}</div>
+	<button type="button" class="toolbar-btn flash-reveal-btn">Reveal (Space)</button>
+	<div class="flash-review-answer" hidden>
+		{{if eq .Current.Card.CardType "basic"}}<div class="flash-review-back">{{.Current.Card.Back}}</div>{{end}}
+		{{with .Current.Card.Notes}}<p class="dim">{{.}}</p>{{end}}
+		<form method="post"
+		      action="/flash/review/grade{{if .DeckScope}}?deck={{.DeckScope}}{{end}}"
+		      hx-post="/flash/review/grade{{if .DeckScope}}?deck={{.DeckScope}}{{end}}"
+		      hx-target="#review-body" hx-swap="innerHTML" class="row">
+			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+			<input type="hidden" name="card_id" value="{{.Current.Card.ID}}">
+			<button type="submit" name="rating" value="1" class="toolbar-btn flash-grade-again">Again (1)</button>
+			<button type="submit" name="rating" value="2" class="toolbar-btn flash-grade-hard">Hard (2)</button>
+			<button type="submit" name="rating" value="3" class="toolbar-btn flash-grade-good">Good (3)</button>
+			<button type="submit" name="rating" value="4" class="toolbar-btn flash-grade-easy">Easy (4)</button>
+		</form>
+	</div>
+</div>
+{{else}}
+<p class="dim">All done for now.</p>
+{{end}}
+{{if .LastGradedCardID}}
+<form method="post"
+      action="/flash/review/undo{{if .DeckScope}}?deck={{.DeckScope}}{{end}}"
+      hx-post="/flash/review/undo{{if .DeckScope}}?deck={{.DeckScope}}{{end}}"
+      hx-target="#review-body" hx-swap="innerHTML">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<input type="hidden" name="card_id" value="{{.LastGradedCardID}}">
+	<button type="submit" class="toolbar-btn flash-undo-btn">Undo (U)</button>
+</form>
+{{end}}
+{{end}}
+
+{{define "content"}}
+<div class="stack">
+	<div class="row list-head">
+		<h1>Review</h1>
+	</div>
+	<div id="review-body">
+		{{template "review-body" .Data}}
+	</div>
+</div>
+{{end}}

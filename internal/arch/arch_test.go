@@ -302,3 +302,57 @@ func TestReadabilityIsContained(t *testing.T) {
 		t.Errorf("go-readability is imported by %v, want only %v", importers, want)
 	}
 }
+
+// TestFSRSIsContained: go-fsrs is ON Flash's scheduling engine, and F2's
+// design accepted it only on the condition that it stays behind one file —
+// see fsrs.go's own doc comment. A second importer makes it load-bearing
+// elsewhere too, which is a different decision and should be made
+// deliberately, the same rule TestReadabilityIsContained enforces for
+// go-readability.
+func TestFSRSIsContained(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const lib = "github.com/open-spaced-repetition/go-fsrs/v4"
+
+	var importers []string
+	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "docs", "dist", "testdata":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") {
+			return nil
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return nil
+		}
+		for _, spec := range f.Imports {
+			imported, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				return err
+			}
+			if imported == lib {
+				rel, _ := filepath.Rel(root, path)
+				importers = append(importers, filepath.ToSlash(rel))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"internal/apps/flash/fsrs.go"}
+	if !slices.Equal(importers, want) {
+		t.Errorf("go-fsrs is imported by %v, want only %v", importers, want)
+	}
+}
