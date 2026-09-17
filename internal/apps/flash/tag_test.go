@@ -3,11 +3,40 @@ package flash_test
 
 import (
 	"context"
+	"errors"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 )
+
+func TestValidateTagNames(t *testing.T) {
+	tooLong := strings.Repeat("a", flash.MaxTagNameRunes+1)
+	tests := []struct {
+		name    string
+		tags    []string
+		wantErr bool
+	}{
+		{"empty list", nil, false},
+		{"ordinary tags", []string{"hard", "beginner"}, false},
+		{"blank entries are ignored", []string{"", "  ", "hard"}, false},
+		{"name at the limit", []string{strings.Repeat("a", flash.MaxTagNameRunes)}, false},
+		{"name over the limit", []string{tooLong}, true},
+		{"one bad name among good ones", []string{"hard", tooLong}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := flash.ValidateTagNames(tt.tags)
+			if tt.wantErr && !errors.Is(err, flash.ErrInvalid) {
+				t.Errorf("ValidateTagNames(%v) = %v, want ErrInvalid", tt.tags, err)
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("ValidateTagNames(%v) rejected valid tags: %v", tt.tags, err)
+			}
+		})
+	}
+}
 
 func tagNames(tags []flash.Tag) []string {
 	names := make([]string, len(tags))

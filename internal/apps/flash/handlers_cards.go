@@ -249,7 +249,12 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 	notes := r.PostFormValue("notes")
 	tags := r.PostFormValue("tags")
 
+	tagList := parseTagList(tags)
 	if err := ValidateCard(cardType, front, back); err != nil {
+		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, userMessage(err), cardType, front, back, notes, tags))
+		return
+	}
+	if err := ValidateTagNames(tagList); err != nil {
 		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, userMessage(err), cardType, front, back, notes, tags))
 		return
 	}
@@ -262,7 +267,7 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	if err := a.store.SetCardTags(r.Context(), userID, c.ID, parseTagList(tags)); err != nil {
+	if err := a.store.SetCardTags(r.Context(), userID, c.ID, tagList); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -336,7 +341,12 @@ func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
 	notes := r.PostFormValue("notes")
 	tags := r.PostFormValue("tags")
 
+	tagList := parseTagList(tags)
 	if err := ValidateCard(cardType, front, back); err != nil {
+		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags))
+		return
+	}
+	if err := ValidateTagNames(tagList); err != nil {
 		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags))
 		return
 	}
@@ -349,7 +359,7 @@ func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	if err := a.store.SetCardTags(r.Context(), userID, updated.ID, parseTagList(tags)); err != nil {
+	if err := a.store.SetCardTags(r.Context(), userID, updated.ID, tagList); err != nil {
 		a.fail(w, r, err)
 		return
 	}

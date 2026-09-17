@@ -24,12 +24,32 @@ func normalizeTagName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
 
+// ValidateTagNames checks a set of user-supplied tag names before anything
+// is persisted. Exported so handlers can validate tags up front, alongside
+// ValidateCard, instead of discovering a bad tag name only after the card
+// row has already been written.
+func ValidateTagNames(names []string) error {
+	for _, raw := range names {
+		name := normalizeTagName(raw)
+		if name == "" {
+			continue
+		}
+		if len([]rune(name)) > MaxTagNameRunes {
+			return fmt.Errorf("%w: tag %q is longer than %d characters", ErrInvalid, name, MaxTagNameRunes)
+		}
+	}
+	return nil
+}
+
 // SetCardTags replaces cardID's whole tag set with names, creating any tag
 // that does not exist yet for userID. It fails with ErrNotFound if the card
 // is not userID's own, via the same DeckByID-style ownership check as
 // CreateCard: cardOwnerCheck below.
 func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []string) error {
 	if _, err := st.cardOwnerCheck(ctx, userID, cardID); err != nil {
+		return err
+	}
+	if err := ValidateTagNames(names); err != nil {
 		return err
 	}
 
@@ -50,9 +70,6 @@ func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []
 			continue
 		}
 		seen[name] = true
-		if len([]rune(name)) > MaxTagNameRunes {
-			return fmt.Errorf("%w: tag %q is longer than %d characters", ErrInvalid, name, MaxTagNameRunes)
-		}
 
 		var tagID int64
 		err := tx.QueryRowContext(ctx, `SELECT id FROM flash_tags WHERE user_id = ? AND name = ?`, userID, name).Scan(&tagID)
