@@ -78,3 +78,40 @@ func TestImportMalformedWritesNothing(t *testing.T) {
 		t.Errorf("a deck named %q should not exist after a rejected import", "Bad")
 	}
 }
+
+// TestImportDuplicateNameOverHTTPWritesNothingAndPreservesInput exercises
+// ImportDeck's actual transaction rollback: unlike
+// TestImportMalformedWritesNothing (which is rejected by ParseImport before
+// any database access), this payload passes parsing and only fails once
+// ImportDeck tries to INSERT a duplicate deck name, hitting
+// handlers_import.go's post-ImportDeck errors.Is(err, ErrInvalid) branch.
+func TestImportDuplicateNameOverHTTPWritesNothingAndPreservesInput(t *testing.T) {
+	s := newServer(t)
+	if _, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Existing", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := `{"deck": {"name": "Existing"}, "cards": [{"front": "Q", "back": "A"}]}`
+	rec := s.Post(t, s.Alice, "/flash/import", url.Values{"payload": {payload}, "format": {"json"}})
+	if rec.Code != 400 {
+		t.Fatalf("POST /flash/import with a duplicate deck name = %d, want 400", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave(".notice-error")
+
+	// The textarea re-renders PayloadValue through html/template's text-node
+	// escaper, which turns each `"` into `&#34;` but leaves `{`/`}` alone.
+	body := rec.Body.String()
+	escapedPayload := strings.ReplaceAll(payload, `"`, "&#34;")
+	if !strings.Contains(body, escapedPayload) {
+		t.Errorf("the pasted payload was not preserved in the re-rendered form")
+	}
+
+	decks, err := s.Store.ListDecks(t.Context(), s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decks) != 1 {
+		t.Errorf("len(decks) = %d, want 1 (only the original 'Existing' deck, nothing partially imported)", len(decks))
+	}
+}

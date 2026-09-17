@@ -3,7 +3,6 @@ package flash
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 )
 
@@ -43,7 +42,15 @@ func (st *Store) ImportDeck(ctx context.Context, userID int64, name, description
 		if err != nil {
 			return Deck{}, fmt.Errorf("flash: import deck: %w", err)
 		}
-		if err := importCardTags(ctx, tx, userID, cardID, c.Tags); err != nil {
+		// upsertCardTags (tag.go) is SetCardTags' insert logic, run against
+		// the transaction ImportDeck already holds. SetCardTags cannot be
+		// called directly here: it opens (and commits) its own transaction
+		// via st.db, and flash's SQLite handle is opened with a single
+		// connection (internal/platform/db.Open sets MaxOpenConns(1)), so a
+		// second BeginTx from inside an already-open transaction would
+		// deadlock waiting for a connection the first transaction is still
+		// holding.
+		if err := upsertCardTags(ctx, tx, userID, cardID, c.Tags); err != nil {
 			return Deck{}, err
 		}
 	}
@@ -52,37 +59,4 @@ func (st *Store) ImportDeck(ctx context.Context, userID int64, name, description
 		return Deck{}, fmt.Errorf("flash: import deck: %w", err)
 	}
 	return d, nil
-}
-
-// importCardTags is SetCardTags' insert logic (tag.go), run against the
-// transaction ImportDeck already holds. SetCardTags cannot be called
-// directly here: it opens (and commits) its own transaction via st.db, and
-// flash's SQLite handle is opened with a single connection
-// (internal/platform/db.Open sets MaxOpenConns(1)), so a second BeginTx
-// from inside an already-open transaction would deadlock waiting for a
-// connection the first transaction is still holding.
-func importCardTags(ctx context.Context, tx *sql.Tx, userID, cardID int64, names []string) error {
-	seen := make(map[string]bool)
-	for _, raw := range names {
-		name := normalizeTagName(raw)
-		if name == "" || seen[name] {
-			continue
-		}
-		seen[name] = true
-
-		var tagID int64
-		err := tx.QueryRowContext(ctx, `SELECT id FROM flash_tags WHERE user_id = ? AND name = ?`, userID, name).Scan(&tagID)
-		if err != nil {
-			if err := tx.QueryRowContext(ctx,
-				`INSERT INTO flash_tags (user_id, name) VALUES (?, ?) RETURNING id`, userID, name,
-			).Scan(&tagID); err != nil {
-				return fmt.Errorf("flash: import deck: create tag %q: %w", name, err)
-			}
-		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO flash_card_tags (card_id, tag_id) VALUES (?, ?)`, cardID, tagID); err != nil {
-			return fmt.Errorf("flash: import deck: link tag %q: %w", name, err)
-		}
-	}
-	return nil
 }

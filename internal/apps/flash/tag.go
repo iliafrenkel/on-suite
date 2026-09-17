@@ -3,6 +3,8 @@ package flash
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -63,6 +65,21 @@ func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []
 		return fmt.Errorf("flash: set card tags: %w", err)
 	}
 
+	if err := upsertCardTags(ctx, tx, userID, cardID, names); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("flash: set card tags: %w", err)
+	}
+	return nil
+}
+
+// upsertCardTags finds-or-creates each of userID's tags by name and links
+// cardID to them, using tx directly rather than opening its own transaction
+// — so it can run either as SetCardTags' own transaction or inside a caller's
+// existing one (e.g. ImportDeck's).
+func upsertCardTags(ctx context.Context, tx *sql.Tx, userID, cardID int64, names []string) error {
 	seen := make(map[string]bool)
 	for _, raw := range names {
 		name := normalizeTagName(raw)
@@ -73,21 +90,20 @@ func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []
 
 		var tagID int64
 		err := tx.QueryRowContext(ctx, `SELECT id FROM flash_tags WHERE user_id = ? AND name = ?`, userID, name).Scan(&tagID)
-		if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
 			if err := tx.QueryRowContext(ctx,
 				`INSERT INTO flash_tags (user_id, name) VALUES (?, ?) RETURNING id`, userID, name,
 			).Scan(&tagID); err != nil {
-				return fmt.Errorf("flash: set card tags: create tag %q: %w", name, err)
+				return fmt.Errorf("flash: upsert tag %q: %w", name, err)
 			}
+		case err != nil:
+			return fmt.Errorf("flash: upsert tag %q: %w", name, err)
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO flash_card_tags (card_id, tag_id) VALUES (?, ?)`, cardID, tagID); err != nil {
-			return fmt.Errorf("flash: set card tags: link tag %q: %w", name, err)
+			return fmt.Errorf("flash: link tag %q: %w", name, err)
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("flash: set card tags: %w", err)
 	}
 	return nil
 }
