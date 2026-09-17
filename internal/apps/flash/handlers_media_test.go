@@ -253,6 +253,55 @@ func TestUploadCardImageRejectsWrongContentType(t *testing.T) {
 	}
 }
 
+func TestUploadCardImageRejectsOversizedFile(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	deck, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(ctx, s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "Q", "A", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// One byte over the per-field image cap (MaxImageFetchBytes = 5MB).
+	// This exceeds web.DefaultMaxBodyBytes (1MB), the platform-wide body
+	// cap that web.Stack's LimitBody middleware installs ahead of CSRF and
+	// every app handler (see internal/platform/web/middleware.go), so in
+	// today's stack this specific request is actually rejected by the CSRF
+	// middleware's own ParseMultipartForm call (which reads through that
+	// same 1MB-capped r.Body and errors, so it cannot recover the CSRF
+	// token) — a 403, not the app's normal 200-with-notice-error HTMX
+	// convention or a 400. That is a separate, pre-existing gap between
+	// the platform's default body cap and this app's stated 5MB/10MB
+	// per-field limits, outside the scope of this fix.
+	//
+	// What still matters here: the request must be rejected, one way or
+	// another, before it is ever accepted and stored, and the card's
+	// ImageHash must stay unset. That holds regardless of which layer does
+	// the rejecting, and it is what this test asserts.
+	oversized := make([]byte, flash.MaxImageFetchBytes+1)
+	copy(oversized, onePNG)
+
+	path := "/flash/" + itoa(deck.ID) + "/cards/" + itoa(c.ID) + "/media"
+	rec := s.UploadHX(t, s.Alice, path, "image", "big.png", oversized)
+	if rec.Code == http.StatusOK {
+		doc := htmlassert.Parse(t, rec.Body.String())
+		doc.MustHave(".notice-error")
+	} else if rec.Code < 400 {
+		t.Fatalf("oversized upload = %d, want a rejection (400s) or 200 with a notice-error fragment", rec.Code)
+	}
+
+	updated, err := s.Store.CardByID(ctx, s.Alice.User.ID, deck.ID, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ImageHash != nil {
+		t.Error("ImageHash should not be set after a rejected oversized upload")
+	}
+}
+
 func TestUploadCardMediaRequiresCSRF(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()

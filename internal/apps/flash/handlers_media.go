@@ -148,6 +148,16 @@ func (a *App) uploadCardMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ParseMultipartForm's argument is only a maxMemory hint, not a hard
+	// cap on bytes read: without an outer limit it will read the entire
+	// body (spilling oversized parts to a temp file) before any
+	// application-level size check below ever runs. Wrapping r.Body in
+	// MaxBytesReader first makes the read itself abort partway through an
+	// oversized body. The budget covers one image part plus one audio
+	// part arriving in the same request, plus overhead for multipart
+	// boundaries/headers — not just the larger of the two alone.
+	r.Body = http.MaxBytesReader(w, r.Body, MaxImageFetchBytes+MaxAudioFetchBytes)
+
 	// A remove-only request (no file attached) may arrive as a plain
 	// form-urlencoded POST rather than multipart/form-data — ErrNotMultipart
 	// is expected there, not a failure: ParseMultipartForm still populates
