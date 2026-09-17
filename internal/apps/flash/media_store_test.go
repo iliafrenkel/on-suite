@@ -51,6 +51,38 @@ func TestEnsureMediaURLIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestEnsureMediaURLDoesNotCollideAcrossKinds(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	imageHash, err := f.store.EnsureMediaURL(ctx, flash.MediaKindImage, "https://example.com/shared.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	audioHash, err := f.store.EnsureMediaURL(ctx, flash.MediaKindAudio, "https://example.com/shared.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imageHash == audioHash {
+		t.Fatal("the same URL used as image and audio produced the same hash — they will share one flash_media row")
+	}
+
+	img, err := f.store.MediaByHash(ctx, imageHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img.Kind != flash.MediaKindImage {
+		t.Errorf("Kind = %q, want image", img.Kind)
+	}
+	aud, err := f.store.MediaByHash(ctx, audioHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aud.Kind != flash.MediaKindAudio {
+		t.Errorf("Kind = %q, want audio", aud.Kind)
+	}
+}
+
 func TestMediaByHashUnknownIsNotFound(t *testing.T) {
 	f := newFixture(t)
 	_, err := f.store.MediaByHash(context.Background(), strings.Repeat("0", 64))

@@ -3,9 +3,9 @@ package flash
 import "testing"
 
 func TestURLHashIsStableAndDistinct(t *testing.T) {
-	a := urlHash("https://example.com/cat.jpg")
-	b := urlHash("https://example.com/cat.jpg")
-	c := urlHash("https://example.com/dog.jpg")
+	a := urlHash(MediaKindImage, "https://example.com/cat.jpg")
+	b := urlHash(MediaKindImage, "https://example.com/cat.jpg")
+	c := urlHash(MediaKindImage, "https://example.com/dog.jpg")
 	if a != b {
 		t.Errorf("urlHash is not stable: %q != %q", a, b)
 	}
@@ -14,6 +14,14 @@ func TestURLHashIsStableAndDistinct(t *testing.T) {
 	}
 	if !validMediaHash(a) {
 		t.Errorf("urlHash produced an invalid-shaped hash: %q", a)
+	}
+}
+
+func TestURLHashDistinguishesKind(t *testing.T) {
+	img := urlHash(MediaKindImage, "https://example.com/shared.bin")
+	aud := urlHash(MediaKindAudio, "https://example.com/shared.bin")
+	if img == aud {
+		t.Errorf("urlHash collided across kinds for the same URL")
 	}
 }
 
@@ -38,10 +46,10 @@ func TestValidMediaHash(t *testing.T) {
 		hash string
 		want bool
 	}{
-		{"real hash", urlHash("https://example.com/x"), true},
+		{"real hash", urlHash(MediaKindImage, "https://example.com/x"), true},
 		{"too short", "abc", false},
-		{"uppercase", "A" + urlHash("x")[1:], false},
-		{"non-hex", "g" + urlHash("x")[1:], false},
+		{"uppercase", "A" + urlHash(MediaKindImage, "x")[1:], false},
+		{"non-hex", "g" + urlHash(MediaKindImage, "x")[1:], false},
 		{"empty", "", false},
 	}
 	for _, tt := range tests {

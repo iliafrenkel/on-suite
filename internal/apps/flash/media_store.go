@@ -79,7 +79,7 @@ func (st *Store) EnsureMediaURL(ctx context.Context, kind, sourceURL string) (st
 }
 
 func ensureMediaURL(ctx context.Context, exec dbExecutor, kind, sourceURL string) (string, error) {
-	hash := urlHash(sourceURL)
+	hash := urlHash(kind, sourceURL)
 	if _, err := exec.ExecContext(ctx,
 		`INSERT OR IGNORE INTO flash_media (hash, kind, source_url) VALUES (?, ?, ?)`,
 		hash, kind, sourceURL); err != nil {

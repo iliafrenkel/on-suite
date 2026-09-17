@@ -8,10 +8,13 @@ import (
 )
 
 // urlHash identifies a URL-attached media row: the same source URL always
-// hashes to the same row, so an image or clip reused across cards (or
-// imports) is fetched and stored once.
-func urlHash(rawURL string) string {
-	sum := sha256.Sum256([]byte(rawURL))
+// hashes to the same row for a given kind, so an image or clip reused
+// across cards (or imports) is fetched and stored once — but the kind is
+// folded into the digest so the same URL used as an image on one card and
+// as audio on another never collides into one row (which would let
+// whichever kind won creation apply its content-type/size rules to both).
+func urlHash(kind, rawURL string) string {
+	sum := sha256.Sum256([]byte(kind + "\n" + rawURL))
 	return hex.EncodeToString(sum[:])
 }
 

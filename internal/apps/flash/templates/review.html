@@ -7,6 +7,8 @@
 <div class="stack flash-review-card" id="review-card">
 	<p class="faint">{{.Current.Deck.Name}} · {{if .Current.IsNew}}new{{else}}review{{end}}</p>
 	<div class="flash-review-front">{{.Current.Card.Front}}</div>
+	{{with .Current.ImageMediaURL}}<img class="card-media-image flash-review-image" src="{{.}}" alt="">{{end}}
+	{{with .Current.AudioMediaURL}}<audio controls src="{{.}}"></audio>{{end}}
 	<button type="button" class="toolbar-btn flash-reveal-btn">Reveal (Space)</button>
 	<div class="flash-review-answer" hidden>
 		{{if eq .Current.Card.CardType "basic"}}<div class="flash-review-back">{{.Current.Card.Back}}</div>{{end}}
