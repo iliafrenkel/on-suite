@@ -33,6 +33,11 @@ type Card struct {
 	Back      string
 	Notes     string
 	CreatedAt time.Time
+
+	// ImageHash and AudioHash name a row in flash_media, or nil if the card
+	// has no image/audio attached. See media.go/media_store.go.
+	ImageHash *string
+	AudioHash *string
 }
 
 func isKnownCardType(t string) bool {
@@ -133,14 +138,14 @@ func (st *Store) UpdateCard(ctx context.Context, userID, deckID, id int64, cardT
 // CardByID fetches one of userID's own cards, scoped to its deck.
 func (st *Store) CardByID(ctx context.Context, userID, deckID, id int64) (Card, error) {
 	return scanCard(st.db.QueryRowContext(ctx,
-		`SELECT id, deck_id, user_id, card_type, front, back, notes, created_at
+		`SELECT id, deck_id, user_id, card_type, front, back, notes, created_at, image_hash, audio_hash
 		 FROM flash_cards WHERE id = ? AND deck_id = ? AND user_id = ?`, id, deckID, userID))
 }
 
 // ListCards returns userID's cards in one deck, newest first.
 func (st *Store) ListCards(ctx context.Context, userID, deckID int64) ([]Card, error) {
 	rows, err := st.db.QueryContext(ctx,
-		`SELECT id, deck_id, user_id, card_type, front, back, notes, created_at
+		`SELECT id, deck_id, user_id, card_type, front, back, notes, created_at, image_hash, audio_hash
 		 FROM flash_cards WHERE deck_id = ? AND user_id = ?
 		 ORDER BY created_at DESC, id DESC`, deckID, userID)
 	if err != nil {
@@ -160,6 +165,43 @@ func (st *Store) ListCards(ctx context.Context, userID, deckID int64) ([]Card, e
 		return nil, fmt.Errorf("flash: list cards: %w", err)
 	}
 	return out, nil
+}
+
+// MediaKindImage and MediaKindAudio select which of a card's two media
+// columns SetCardMedia writes.
+const (
+	MediaKindImage = "image"
+	MediaKindAudio = "audio"
+)
+
+// SetCardMedia sets or clears one of userID's own card's media hashes. hash
+// of nil clears the attachment (e.g. a "remove image" request). It does not
+// validate that hash names a real flash_media row — callers (ImportDeck, the
+// upload handler) create that row first.
+func (st *Store) SetCardMedia(ctx context.Context, userID, deckID, cardID int64, kind string, hash *string) error {
+	var column string
+	switch kind {
+	case MediaKindImage:
+		column = "image_hash"
+	case MediaKindAudio:
+		column = "audio_hash"
+	default:
+		return fmt.Errorf("%w: %q is not a media kind I know", ErrInvalid, kind)
+	}
+	res, err := st.db.ExecContext(ctx,
+		`UPDATE flash_cards SET `+column+` = ? WHERE id = ? AND deck_id = ? AND user_id = ?`,
+		hash, cardID, deckID, userID)
+	if err != nil {
+		return fmt.Errorf("flash: set card media: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("flash: set card media: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // DeleteCard removes one of userID's own cards.
@@ -191,8 +233,11 @@ func scanCardRow(row rowScanner) (Card, error) {
 	var (
 		c         Card
 		createdAt string
+		imageHash sql.NullString
+		audioHash sql.NullString
 	)
-	err := row.Scan(&c.ID, &c.DeckID, &c.UserID, &c.CardType, &c.Front, &c.Back, &c.Notes, &createdAt)
+	err := row.Scan(&c.ID, &c.DeckID, &c.UserID, &c.CardType, &c.Front, &c.Back, &c.Notes, &createdAt,
+		&imageHash, &audioHash)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Card{}, sql.ErrNoRows // translated by scanCard
@@ -201,6 +246,12 @@ func scanCardRow(row rowScanner) (Card, error) {
 	}
 	if c.CreatedAt, err = parseTime(createdAt); err != nil {
 		return Card{}, err
+	}
+	if imageHash.Valid {
+		c.ImageHash = &imageHash.String
+	}
+	if audioHash.Valid {
+		c.AudioHash = &audioHash.String
 	}
 	return c, nil
 }

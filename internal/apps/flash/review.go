@@ -393,7 +393,7 @@ func (st *Store) dueReviewCards(ctx context.Context, userID int64, d Deck, now t
 		return nil, nil
 	}
 	query := `
-		SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at
+		SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at, c.image_hash, c.audio_hash
 		FROM flash_cards c
 		JOIN flash_card_state s ON s.card_id = c.id AND s.user_id = c.user_id
 		WHERE c.deck_id = ? AND c.user_id = ? AND s.due_at <= ?
@@ -413,7 +413,7 @@ func (st *Store) newQueueCards(ctx context.Context, userID int64, d Deck, limit 
 		return nil, nil
 	}
 	query := `
-		SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at
+		SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at, c.image_hash, c.audio_hash
 		FROM flash_cards c
 		LEFT JOIN flash_card_state s ON s.card_id = c.id AND s.user_id = c.user_id
 		WHERE c.deck_id = ? AND c.user_id = ? AND s.card_id IS NULL

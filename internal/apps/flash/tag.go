@@ -152,7 +152,7 @@ func (st *Store) TagsForCard(ctx context.Context, userID, cardID int64) ([]Tag, 
 func (st *Store) CardsByTag(ctx context.Context, userID int64, tagName string) ([]Card, error) {
 	name := normalizeTagName(tagName)
 	rows, err := st.db.QueryContext(ctx,
-		`SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at
+		`SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at, c.image_hash, c.audio_hash
 		 FROM flash_cards c
 		 JOIN flash_card_tags ct ON ct.card_id = c.id
 		 JOIN flash_tags t ON t.id = ct.tag_id
