@@ -1,0 +1,101 @@
+{{define "deck-detail-body"}}
+{{if eq .Mode "view"}}{{template "deck-detail-view" .}}
+{{else if eq .Mode "edit"}}{{template "deck-detail-edit" .}}
+{{else if eq .Mode "new"}}{{template "deck-detail-new" .}}
+{{else}}{{template "deck-detail-empty" .}}
+{{end}}
+{{end}}
+
+{{define "deck-detail-with-list"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "deck-detail-body" .Detail}}{{template "deck-list-items" .List}}{{end}}
+
+{{define "deck-detail-empty"}}
+<p class="dim">Select a deck to view it.</p>
+{{end}}
+
+{{define "deck-detail-view"}}
+<div class="stack" id="deck-detail-view">
+	<div class="row">
+		<h1>{{.Deck.Name}}</h1>
+	</div>
+	{{with .Deck.Description}}<p>{{.}}</p>{{end}}
+	<div class="row">
+		<a class="toolbar-btn" href="/flash/edit/{{.Deck.ID}}" hx-get="/flash/edit/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">Edit</a>
+		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/" hx-get="/flash/{{.Deck.ID}}/cards/" hx-push-url="true">View cards</a>
+		<form method="post" action="/flash/{{.Deck.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
+		      data-confirm="Delete “{{.Deck.Name}}”? This also deletes every card in it.">
+			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+			<button type="submit" class="toolbar-btn danger">Delete</button>
+		</form>
+	</div>
+</div>
+{{end}}
+
+{{define "deck-detail-new"}}
+<form class="stack" id="deck-detail-new" method="post" action="/flash/new" hx-post="/flash/new" hx-target="#deck-detail" hx-swap="innerHTML">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<h1>New deck</h1>
+	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+	<div class="field">
+		<label for="deck-name">Name</label>
+		<input id="deck-name" type="text" name="name" value="{{.NameValue}}" autofocus required>
+	</div>
+	<div class="field">
+		<label for="deck-description">Description</label>
+		<textarea id="deck-description" name="description" rows="3">{{.DescriptionValue}}</textarea>
+	</div>
+	<div class="row">
+		<button type="submit" class="toolbar-btn toolbar-btn-active">Save</button>
+		<a class="toolbar-btn" href="/flash/" hx-get="/flash/" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
+	</div>
+</form>
+{{end}}
+
+{{define "deck-detail-edit"}}
+<form class="stack" id="deck-detail-edit" method="post" action="/flash/{{.Deck.ID}}" hx-post="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-swap="innerHTML">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<h1>Edit deck</h1>
+	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+	<div class="field">
+		<label for="deck-name-{{.Deck.ID}}">Name</label>
+		<input id="deck-name-{{.Deck.ID}}" type="text" name="name" value="{{.NameValue}}" autofocus required>
+	</div>
+	<div class="field">
+		<label for="deck-description-{{.Deck.ID}}">Description</label>
+		<textarea id="deck-description-{{.Deck.ID}}" name="description" rows="3">{{.DescriptionValue}}</textarea>
+	</div>
+	<div class="row">
+		<button type="submit" class="toolbar-btn toolbar-btn-active">Save</button>
+		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}" hx-get="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
+	</div>
+</form>
+{{end}}
+
+{{define "deck-list-items"}}
+<ul class="deck-list" id="deck-list"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	{{if .Items}}
+	{{range .Items}}
+	{{$d := .Deck}}
+	<li>
+		<a class="deck-row{{if eq $d.ID $.ActiveID}} deck-row-active{{end}}" href="/flash/{{$d.ID}}" hx-get="/flash/{{$d.ID}}" hx-target="#deck-detail" hx-push-url="true">
+			{{$d.Name}}
+		</a>
+	</li>
+	{{end}}
+	{{else}}
+	<li class="dim">No decks yet.</li>
+	{{end}}
+</ul>
+{{end}}
+
+{{define "content"}}
+<div class="stack">
+	<div class="row list-head">
+		<h2>Decks</h2>
+		<a class="toolbar-btn" href="/flash/new" hx-get="/flash/new" hx-target="#deck-detail" hx-push-url="true">New deck</a>
+	</div>
+	{{template "deck-list-items" .Data.List}}
+	<div id="deck-detail">
+		{{template "deck-detail-body" .Data.Detail}}
+	</div>
+</div>
+{{end}}
