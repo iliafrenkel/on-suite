@@ -24,7 +24,7 @@
 	</ul>
 	{{end}}
 	<div class="row">
-		<a class="toolbar-btn" href="{{$.Deck.ID}}/cards/edit/{{.Card.ID}}" hx-get="/flash/{{$.Deck.ID}}/cards/edit/{{.Card.ID}}" hx-target="#card-detail" hx-push-url="true">Edit</a>
+		<a class="toolbar-btn" href="/flash/{{$.Deck.ID}}/cards/edit/{{.Card.ID}}" hx-get="/flash/{{$.Deck.ID}}/cards/edit/{{.Card.ID}}" hx-target="#card-detail" hx-push-url="true">Edit</a>
 		<form method="post" action="/flash/{{$.Deck.ID}}/cards/{{.Card.ID}}/delete" hx-post="/flash/{{$.Deck.ID}}/cards/{{.Card.ID}}/delete" hx-target="#card-detail" hx-swap="innerHTML"
 		      data-confirm="Delete this card? This cannot be undone.">
 			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
@@ -107,7 +107,7 @@
 <div class="stack">
 	<div class="row list-head">
 		<h2>{{.Data.Deck.Name}}</h2>
-		<a class="toolbar-btn" href="/flash/{{.Data.Deck.ID}}" hx-get="/flash/{{.Data.Deck.ID}}" hx-push-url="true">Back to deck</a>
+		<a class="toolbar-btn" href="/flash/{{.Data.Deck.ID}}">Back to deck</a>
 		<a class="toolbar-btn" href="/flash/{{.Data.Deck.ID}}/cards/new" hx-get="/flash/{{.Data.Deck.ID}}/cards/new" hx-target="#card-detail" hx-push-url="true">New card</a>
 	</div>
 	{{template "card-list-items" .Data.List}}

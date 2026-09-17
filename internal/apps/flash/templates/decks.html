@@ -20,7 +20,7 @@
 	{{with .Deck.Description}}<p>{{.}}</p>{{end}}
 	<div class="row">
 		<a class="toolbar-btn" href="/flash/edit/{{.Deck.ID}}" hx-get="/flash/edit/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">Edit</a>
-		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/" hx-get="/flash/{{.Deck.ID}}/cards/" hx-push-url="true">View cards</a>
+		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/">View cards</a>
 		<form method="post" action="/flash/{{.Deck.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
 		      data-confirm="Delete “{{.Deck.Name}}”? This also deletes every card in it.">
 			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
