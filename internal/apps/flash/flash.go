@@ -58,4 +58,20 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /edit/{deckID}", a.editDeckForm)
 	r.HandleFunc("POST /{deckID}", a.updateDeck)
 	r.HandleFunc("POST /{deckID}/delete", a.deleteDeck)
+
+	// Card routes, nested under a deck. Same non-ambiguity reasoning as the
+	// deck routes above: "new" and "edit/{cardID}" are literal at the
+	// position where a same-shape pattern below has a wildcard, so they
+	// resolve deterministically; "cards/{cardID}" and
+	// "cards/{cardID}/delete" differ in segment count, and
+	// "edit/{cardID}" (GET) vs "{cardID}/delete" (POST) differ in method,
+	// so neither pair can collide the way paste.go's own comment warns
+	// about.
+	r.HandleFunc("GET /{deckID}/cards/{$}", a.cardIndex)
+	r.HandleFunc("GET /{deckID}/cards/new", a.newCardForm)
+	r.HandleFunc("POST /{deckID}/cards/new", a.createCard)
+	r.HandleFunc("GET /{deckID}/cards/{cardID}", a.cardIndex)
+	r.HandleFunc("GET /{deckID}/cards/edit/{cardID}", a.editCardForm)
+	r.HandleFunc("POST /{deckID}/cards/{cardID}", a.updateCard)
+	r.HandleFunc("POST /{deckID}/cards/{cardID}/delete", a.deleteCard)
 }

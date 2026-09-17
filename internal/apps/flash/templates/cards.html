@@ -1,0 +1,109 @@
+{{define "card-detail-body"}}
+{{if eq .Mode "view"}}{{template "card-detail-view" .}}
+{{else if eq .Mode "edit"}}{{template "card-detail-edit" .}}
+{{else if eq .Mode "new"}}{{template "card-detail-new" .}}
+{{else}}{{template "card-detail-empty" .}}
+{{end}}
+{{end}}
+
+{{define "card-detail-with-list"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "card-detail-body" .Detail}}{{template "card-list-items" .List}}{{end}}
+
+{{define "card-detail-empty"}}
+<p class="dim">Select a card to view it.</p>
+{{end}}
+
+{{define "card-detail-view"}}
+<div class="stack" id="card-detail-view">
+	<p class="faint">{{.Card.CardType}}</p>
+	<h1>{{.Card.Front}}</h1>
+	{{if eq .Card.CardType "basic"}}<p>{{.Card.Back}}</p>{{end}}
+	{{with .Card.Notes}}<p class="dim">{{.}}</p>{{end}}
+	<div class="row">
+		<a class="toolbar-btn" href="{{$.Deck.ID}}/cards/edit/{{.Card.ID}}" hx-get="/flash/{{$.Deck.ID}}/cards/edit/{{.Card.ID}}" hx-target="#card-detail" hx-push-url="true">Edit</a>
+		<form method="post" action="/flash/{{$.Deck.ID}}/cards/{{.Card.ID}}/delete" hx-post="/flash/{{$.Deck.ID}}/cards/{{.Card.ID}}/delete" hx-target="#card-detail" hx-swap="innerHTML"
+		      data-confirm="Delete this card? This cannot be undone.">
+			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+			<button type="submit" class="toolbar-btn danger">Delete</button>
+		</form>
+	</div>
+</div>
+{{end}}
+
+{{define "card-form-fields"}}
+<div class="field">
+	<label for="card-type-{{.IDSuffix}}">Type</label>
+	<select id="card-type-{{.IDSuffix}}" name="card_type">
+		<option value="basic"{{if eq .CardTypeValue "basic"}} selected{{end}}>Basic</option>
+		<option value="cloze"{{if eq .CardTypeValue "cloze"}} selected{{end}}>Cloze</option>
+	</select>
+</div>
+<div class="field">
+	<label for="card-front-{{.IDSuffix}}">Front</label>
+	<textarea id="card-front-{{.IDSuffix}}" name="front" rows="3" required>{{.FrontValue}}</textarea>
+</div>
+<div class="field">
+	<label for="card-back-{{.IDSuffix}}">Back (leave empty for a cloze card)</label>
+	<textarea id="card-back-{{.IDSuffix}}" name="back" rows="3">{{.BackValue}}</textarea>
+</div>
+<div class="field">
+	<label for="card-notes-{{.IDSuffix}}">Notes (shown after the answer)</label>
+	<textarea id="card-notes-{{.IDSuffix}}" name="notes" rows="3">{{.NotesValue}}</textarea>
+</div>
+{{end}}
+
+{{define "card-detail-new"}}
+<form class="stack" id="card-detail-new" method="post" action="/flash/{{.Deck.ID}}/cards/new" hx-post="/flash/{{.Deck.ID}}/cards/new" hx-target="#card-detail" hx-swap="innerHTML">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<h1>New card</h1>
+	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+	{{template "card-form-fields" (dict "IDSuffix" "new" "CardTypeValue" .CardTypeValue "FrontValue" .FrontValue "BackValue" .BackValue "NotesValue" .NotesValue)}}
+	<div class="row">
+		<button type="submit" class="toolbar-btn toolbar-btn-active">Save</button>
+		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/" hx-get="/flash/{{.Deck.ID}}/cards/" hx-target="#card-detail" hx-push-url="true">Cancel</a>
+	</div>
+</form>
+{{end}}
+
+{{define "card-detail-edit"}}
+<form class="stack" id="card-detail-edit" method="post" action="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}" hx-post="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}" hx-target="#card-detail" hx-swap="innerHTML">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<h1>Edit card</h1>
+	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+	{{template "card-form-fields" (dict "IDSuffix" .Card.ID "CardTypeValue" .CardTypeValue "FrontValue" .FrontValue "BackValue" .BackValue "NotesValue" .NotesValue)}}
+	<div class="row">
+		<button type="submit" class="toolbar-btn toolbar-btn-active">Save</button>
+		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}" hx-get="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}" hx-target="#card-detail" hx-push-url="true">Cancel</a>
+	</div>
+</form>
+{{end}}
+
+{{define "card-list-items"}}
+<ul class="card-list" id="card-list"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	{{if .Items}}
+	{{range .Items}}
+	{{$c := .Card}}
+	<li>
+		<a class="card-row{{if eq $c.ID $.ActiveID}} card-row-active{{end}}" href="{{$c.ID}}" hx-get="/flash/{{$c.DeckID}}/cards/{{$c.ID}}" hx-target="#card-detail" hx-push-url="true">
+			{{$c.Front}}
+		</a>
+	</li>
+	{{end}}
+	{{else}}
+	<li class="dim">No cards yet.</li>
+	{{end}}
+</ul>
+{{end}}
+
+{{define "content"}}
+<div class="stack">
+	<div class="row list-head">
+		<h2>{{.Data.Deck.Name}}</h2>
+		<a class="toolbar-btn" href="/flash/{{.Data.Deck.ID}}" hx-get="/flash/{{.Data.Deck.ID}}" hx-push-url="true">Back to deck</a>
+		<a class="toolbar-btn" href="/flash/{{.Data.Deck.ID}}/cards/new" hx-get="/flash/{{.Data.Deck.ID}}/cards/new" hx-target="#card-detail" hx-push-url="true">New card</a>
+	</div>
+	{{template "card-list-items" .Data.List}}
+	<div id="card-detail">
+		{{template "card-detail-body" .Data.Detail}}
+	</div>
+</div>
+{{end}}
