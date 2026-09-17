@@ -82,8 +82,9 @@ func upperFirst(s string) string {
 // below sets Mode to the literal "edit" directly, matching deckPageTitle's
 // and the template's own "edit" checks.
 const (
-	deckModeView = "view"
-	deckModeNew  = "new"
+	deckModeView   = "view"
+	deckModeNew    = "new"
+	deckModeImport = "import"
 )
 
 // deckDetailView is what the deck detail pane renders, in any mode.
@@ -98,6 +99,9 @@ type deckDetailView struct {
 
 	NewCardsPerDayValue string
 	ReviewsPerDayValue  string
+
+	PayloadValue string
+	FormatValue  string
 }
 
 // deckListItem is one row on the deck list page.
@@ -157,6 +161,8 @@ func deckPageTitle(d deckDetailView) string {
 		return "Edit " + d.Deck.Name
 	case deckModeNew:
 		return "New deck"
+	case deckModeImport:
+		return "Import"
 	default:
 		return "Decks"
 	}

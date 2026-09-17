@@ -68,6 +68,13 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /{$}", a.deckIndex)
 	r.HandleFunc("GET /new", a.newDeckForm)
 	r.HandleFunc("POST /new", a.createDeck)
+
+	// "import" is a literal single segment, the same non-ambiguity shape as
+	// "new" and "review" alongside the existing wildcard single-segment
+	// routes (/{deckID}) below — literals never conflict with each other or
+	// with a same-position wildcard.
+	r.HandleFunc("GET /import", a.importForm)
+	r.HandleFunc("POST /import", a.importDeck)
 	r.HandleFunc("GET /{deckID}", a.deckIndex)
 	r.HandleFunc("GET /edit/{deckID}", a.editDeckForm)
 	r.HandleFunc("POST /{deckID}", a.updateDeck)
