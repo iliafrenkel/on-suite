@@ -8,10 +8,11 @@ ON Suite is a self-hosted suite of small web apps for one household: one
 account system, one shell, one SQLite file, one Go binary. It's deliberately
 not built for SaaS scale — no multi-tenancy, no CGO, no Node/npm/JS build
 step. **ON Paste** (snippets with syntax highlighting and shareable links),
-**ON Notes** (a hierarchical outliner, still being built out), and **ON
+**ON Notes** (a hierarchical outliner, still being built out), **ON
 Reader** (a feed reader, with search, OPML import/export, full-article
-extraction, and reading-stats) are registered today; ON Flash is a reserved
-name with no code yet.
+extraction, and reading-stats), and **ON Flash** (a flash-card app, still
+being built out — deck and card CRUD with tags so far, no review/scheduling
+yet) are all registered today.
 
 Full rationale for every design choice below lives in
 [docs/superpowers/specs/2026-08-18-on-suite-platform-design.md](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md).
