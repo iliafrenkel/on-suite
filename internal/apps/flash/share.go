@@ -383,3 +383,126 @@ func priorAdoptedDeck(ctx context.Context, tx *sql.Tx, deckID, fromUserID, toUse
 	v := id.Int64
 	return &v, nil
 }
+
+// SharesForDeck lists every share offer (any status) fromUserID has made
+// for one of their own decks, newest first — the creator's "Shared with"
+// list.
+func (st *Store) SharesForDeck(ctx context.Context, fromUserID, deckID int64) ([]Share, error) {
+	if _, err := st.DeckByID(ctx, fromUserID, deckID); err != nil {
+		return nil, err
+	}
+	rows, err := st.db.QueryContext(ctx,
+		`SELECT id, deck_id, from_user_id, to_user_id, status, adopted_deck_id, created_at, responded_at
+		 FROM flash_shares
+		 WHERE deck_id = ? AND from_user_id = ?
+		 ORDER BY created_at DESC, id DESC`, deckID, fromUserID)
+	if err != nil {
+		return nil, fmt.Errorf("flash: shares for deck: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Share
+	for rows.Next() {
+		sh, err := scanShare(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sh)
+	}
+	return out, rows.Err()
+}
+
+// ShareOffer is one pending share addressed to a recipient, enriched with
+// what the "shared with me" list needs to display: the source deck's name,
+// and — if a merge offer — how many source cards the recipient doesn't have
+// yet.
+type ShareOffer struct {
+	Share
+	DeckName string
+	// PriorAdoptedDeckID is nil for a first-time offer ("New deck") and
+	// non-nil for a merge offer (an earlier offer for the same triple was
+	// already adopted into that deck).
+	PriorAdoptedDeckID *int64
+	// NewCardCount is meaningful only when PriorAdoptedDeckID is non-nil.
+	NewCardCount int
+}
+
+// SharesForRecipient lists every pending offer addressed to toUserID,
+// newest first — the recipient's "shared with me" list.
+func (st *Store) SharesForRecipient(ctx context.Context, toUserID int64) ([]ShareOffer, error) {
+	rows, err := st.db.QueryContext(ctx,
+		`SELECT s.id, s.deck_id, s.from_user_id, s.to_user_id, s.status, s.adopted_deck_id, s.created_at, s.responded_at,
+		        d.name,
+		        (SELECT ad.adopted_deck_id FROM flash_shares ad
+		          WHERE ad.deck_id = s.deck_id AND ad.from_user_id = s.from_user_id AND ad.to_user_id = s.to_user_id
+		            AND ad.status = ?
+		          ORDER BY ad.id DESC LIMIT 1)
+		   FROM flash_shares s
+		   JOIN flash_decks d ON d.id = s.deck_id
+		  WHERE s.to_user_id = ? AND s.status = ?
+		  ORDER BY s.created_at DESC, s.id DESC`,
+		ShareStatusAdopted, toUserID, ShareStatusPending)
+	if err != nil {
+		return nil, fmt.Errorf("flash: shares for recipient: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []ShareOffer
+	for rows.Next() {
+		var (
+			o                  ShareOffer
+			createdAt          string
+			adoptedDeckID      sql.NullInt64
+			respondedAt        sql.NullString
+			priorAdoptedDeckID sql.NullInt64
+		)
+		err := rows.Scan(&o.ID, &o.DeckID, &o.FromUserID, &o.ToUserID, &o.Status, &adoptedDeckID, &createdAt, &respondedAt,
+			&o.DeckName, &priorAdoptedDeckID)
+		if err != nil {
+			return nil, fmt.Errorf("flash: shares for recipient: %w", err)
+		}
+		if o.CreatedAt, err = parseTime(createdAt); err != nil {
+			return nil, err
+		}
+		if adoptedDeckID.Valid {
+			id := adoptedDeckID.Int64
+			o.AdoptedDeckID = &id
+		}
+		if respondedAt.Valid {
+			t, err := parseTime(respondedAt.String)
+			if err != nil {
+				return nil, err
+			}
+			o.RespondedAt = &t
+		}
+		if priorAdoptedDeckID.Valid {
+			id := priorAdoptedDeckID.Int64
+			o.PriorAdoptedDeckID = &id
+			n, err := st.newCardCount(ctx, o.DeckID, id)
+			if err != nil {
+				return nil, err
+			}
+			o.NewCardCount = n
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// newCardCount counts source deck cards not yet represented (by
+// origin_card_id) in targetDeckID — computed fresh each time rather than
+// stored, so it's always accurate even as more cards are adopted or deleted
+// between offers.
+func (st *Store) newCardCount(ctx context.Context, sourceDeckID, targetDeckID int64) (int, error) {
+	var n int
+	err := st.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM flash_cards sc
+		 WHERE sc.deck_id = ?
+		   AND NOT EXISTS (
+		     SELECT 1 FROM flash_cards tc WHERE tc.deck_id = ? AND tc.origin_card_id = sc.id
+		   )`, sourceDeckID, targetDeckID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("flash: new card count: %w", err)
+	}
+	return n, nil
+}

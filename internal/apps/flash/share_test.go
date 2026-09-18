@@ -354,3 +354,79 @@ func TestAdoptShareRejectsWrongRecipientAndDoubleAdopt(t *testing.T) {
 		t.Errorf("double adopt: err = %v, want ErrInvalid", err)
 	}
 }
+
+func TestSharesForDeckListsAllOffersNewestFirst(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	shares, err := f.store.SharesForDeck(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shares) != 1 || shares[0].ID != sh.ID {
+		t.Fatalf("shares = %+v, want [%+v]", shares, sh)
+	}
+
+	if _, err := f.store.SharesForDeck(ctx, f.bob.ID, d.ID); !errors.Is(err, flash.ErrNotFound) {
+		t.Errorf("SharesForDeck by non-owner: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSharesForRecipientDistinguishesFirstOfferFromMerge(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	sh1, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	offers, err := f.store.SharesForRecipient(ctx, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(offers) != 1 || offers[0].PriorAdoptedDeckID != nil {
+		t.Fatalf("first offer = %+v, want one offer with no prior adopted deck", offers)
+	}
+	if offers[0].DeckName != "Spanish" {
+		t.Errorf("DeckName = %q, want %q", offers[0].DeckName, "Spanish")
+	}
+
+	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "adios", "goodbye", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	offers, err = f.store.SharesForRecipient(ctx, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(offers) != 1 {
+		t.Fatalf("offers after adopt+reshare = %+v, want exactly the new pending merge offer", offers)
+	}
+	if offers[0].PriorAdoptedDeckID == nil {
+		t.Fatal("merge offer should report a prior adopted deck")
+	}
+	if offers[0].NewCardCount != 1 {
+		t.Errorf("NewCardCount = %d, want 1 (only the newly added card)", offers[0].NewCardCount)
+	}
+}
