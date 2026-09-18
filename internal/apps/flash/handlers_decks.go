@@ -124,7 +124,7 @@ type deckIndexView struct {
 	Detail       deckDetailView
 	Title        string
 	Shell        render.Shell
-	SharedWithMe []ShareOffer // pending offers addressed to the viewer
+	SharedWithMe []shareOfferWithUsername // pending offers addressed to the viewer
 }
 
 // shareWithUsername is one row of the creator's "Shared with" list: a
@@ -135,19 +135,45 @@ type shareWithUsername struct {
 	ToUsername string
 }
 
-// shareContext loads everything the deck detail view's Share section
-// needs: every other account on the instance (for the dropdown) and this
-// deck's own share offers, each paired with its recipient's username (for
-// the "Shared with" list).
-func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Account, []shareWithUsername, error) {
+// shareOfferWithUsername is one row of the recipient's "Shared with me"
+// list: a ShareOffer plus the creator's username, resolved the same way
+// shareWithUsername resolves the recipient's — the design spec's UI section
+// calls for showing who shared a deck, not just its name, since with more
+// than one other account on the instance that would otherwise be
+// ambiguous.
+type shareOfferWithUsername struct {
+	ShareOffer
+	FromUsername string
+}
+
+// usernamesByID loads every account on the instance and returns it two
+// ways: the full list, and a lookup from account id to username. Both
+// shareContext (the creator's "Shared with" list) and
+// sharedWithMeForViewer (the recipient's "Shared with me" list) need this
+// same lookup — one keyed by ToUserID, the other by FromUserID.
+func (a *App) usernamesByID(ctx context.Context) ([]auth.Account, map[int64]string, error) {
 	accounts, err := a.deps.Users.ListAccounts(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 	byID := make(map[int64]string, len(accounts))
-	others := make([]auth.Account, 0, len(accounts))
 	for _, acc := range accounts {
 		byID[acc.ID] = acc.Username
+	}
+	return accounts, byID, nil
+}
+
+// shareContext loads everything the deck detail view's Share section
+// needs: every other account on the instance (for the dropdown) and this
+// deck's own share offers, each paired with its recipient's username (for
+// the "Shared with" list).
+func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Account, []shareWithUsername, error) {
+	accounts, byID, err := a.usernamesByID(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	others := make([]auth.Account, 0, len(accounts))
+	for _, acc := range accounts {
 		if acc.ID != userID {
 			others = append(others, acc)
 		}
@@ -161,6 +187,24 @@ func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Ac
 		withNames[i] = shareWithUsername{Share: sh, ToUsername: byID[sh.ToUserID]}
 	}
 	return others, withNames, nil
+}
+
+// sharedWithMeForViewer loads userID's pending offers, each paired with the
+// sharer's username (for the "Shared with me" list).
+func (a *App) sharedWithMeForViewer(ctx context.Context, userID int64) ([]shareOfferWithUsername, error) {
+	offers, err := a.store.SharesForRecipient(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	_, byID, err := a.usernamesByID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]shareOfferWithUsername, len(offers))
+	for i, o := range offers {
+		out[i] = shareOfferWithUsername{ShareOffer: o, FromUsername: byID[o.FromUserID]}
+	}
+	return out, nil
 }
 
 func (a *App) viewDeckDetail(r *http.Request, userID int64, d Deck, recipients []auth.Account, sharedWith []shareWithUsername) deckDetailView {
@@ -248,7 +292,7 @@ func (a *App) renderDeckIndex(w http.ResponseWriter, r *http.Request, userID int
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	offers, err := a.store.SharesForRecipient(r.Context(), userID)
+	offers, err := a.sharedWithMeForViewer(r.Context(), userID)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -274,7 +318,7 @@ func (a *App) renderDeckDetailWithList(w http.ResponseWriter, r *http.Request, u
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	offers, err := a.store.SharesForRecipient(r.Context(), userID)
+	offers, err := a.sharedWithMeForViewer(r.Context(), userID)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return

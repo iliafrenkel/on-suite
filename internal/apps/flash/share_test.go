@@ -3,6 +3,7 @@ package flash_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -352,6 +353,53 @@ func TestAdoptShareRejectsWrongRecipientAndDoubleAdopt(t *testing.T) {
 	}
 	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID); !errors.Is(err, flash.ErrInvalid) {
 		t.Errorf("double adopt: err = %v, want ErrInvalid", err)
+	}
+}
+
+func TestDeleteAdoptedDeckClearsShareBackReferenceButKeepsShare(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newDeck, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Bob deletes his own adopted copy — this must succeed rather than
+	// tripping the adopted_deck_id -> flash_decks foreign key (migration
+	// 0008 fixed the FK to ON DELETE SET NULL).
+	if err := f.store.DeleteDeck(ctx, f.bob.ID, newDeck.ID); err != nil {
+		t.Fatalf("DeleteDeck on adopted copy: %v", err)
+	}
+
+	// The source deck is untouched.
+	if _, err := f.store.DeckByID(ctx, f.alice.ID, d.ID); err != nil {
+		t.Fatalf("source deck should still exist: %v", err)
+	}
+
+	// The original share row survives with status still "adopted", but its
+	// adopted_deck_id back-reference is now NULL.
+	var status string
+	var adoptedDeckID sql.NullInt64
+	err = f.db.QueryRowContext(ctx,
+		`SELECT status, adopted_deck_id FROM flash_shares WHERE id = ?`, sh.ID,
+	).Scan(&status, &adoptedDeckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != flash.ShareStatusAdopted {
+		t.Errorf("status = %q, want %q", status, flash.ShareStatusAdopted)
+	}
+	if adoptedDeckID.Valid {
+		t.Errorf("adopted_deck_id = %v, want NULL after deleting the adopted copy", adoptedDeckID.Int64)
 	}
 }
 

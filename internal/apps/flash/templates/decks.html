@@ -7,7 +7,7 @@
 {{end}}
 {{end}}
 
-{{define "deck-detail-with-list"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "deck-detail-body" .Detail}}{{template "deck-list-items" .List}}{{end}}
+{{define "deck-detail-with-list"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "deck-detail-body" .Detail}}{{template "deck-list-items" .List}}<div id="shared-with-me" class="stack" hx-swap-oob="true">{{template "shared-with-me" (dict "Offers" .SharedWithMe "CSRFToken" .Shell.CSRFToken)}}</div>{{end}}
 
 {{define "deck-detail-empty"}}
 <p class="dim">Select a deck to view it.</p>
@@ -148,6 +148,43 @@
 </ul>
 {{end}}
 
+{{/* shared-with-me is the recipient's "shared with me" list. It is defined
+     on its own, without its own id wrapper, because it is used from two
+     places that need different wrappers around the same markup: "content"
+     renders it plain (a normal part of the full page), and
+     "deck-detail-with-list" re-renders it wrapped in an
+     hx-swap-oob="true" div with the same id, so every share/revoke/
+     adopt/decline HTMX response keeps this list in sync too — the same
+     pattern base.html and this file already use for #shell-crumb-tail.
+     Both callers pass a dict with Offers ([]ShareOffer, enriched with
+     FromUsername — see shareOfferWithUsername) and CSRFToken (always the
+     page-level Shell's token, which is populated regardless of which deck,
+     if any, is selected — unlike deckDetailView.CSRFToken, which is empty
+     both on a plain GET /flash/ with no deck selected and after a
+     decline). */}}
+{{define "shared-with-me"}}
+{{if .Offers}}
+<h3>Shared with me</h3>
+<ul class="tag-list">
+	{{range .Offers}}
+	<li>
+		{{.FromUsername}} — {{.DeckName}} — {{if .PriorAdoptedDeckID}}{{.NewCardCount}} new card{{if ne .NewCardCount 1}}s{{end}} to merge{{else}}new deck{{end}}
+		<form method="post" action="/flash/shared/adopt" hx-post="/flash/shared/adopt" hx-target="#deck-detail" hx-swap="innerHTML" style="display:inline">
+			<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
+			<input type="hidden" name="share_id" value="{{.ID}}">
+			<button type="submit" class="toolbar-btn toolbar-btn-active">{{if .PriorAdoptedDeckID}}Merge{{else}}Adopt{{end}}</button>
+		</form>
+		<form method="post" action="/flash/shared/decline" hx-post="/flash/shared/decline" hx-target="#deck-detail" hx-swap="innerHTML" style="display:inline">
+			<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
+			<input type="hidden" name="share_id" value="{{.ID}}">
+			<button type="submit" class="toolbar-btn">Dismiss</button>
+		</form>
+	</li>
+	{{end}}
+</ul>
+{{end}}
+{{end}}
+
 {{define "content"}}
 <div class="stack">
 	<div class="row list-head">
@@ -156,28 +193,7 @@
 		<a class="toolbar-btn" href="/flash/import" hx-get="/flash/import" hx-target="#deck-detail" hx-push-url="true">Import</a>
 		<a class="toolbar-btn" href="/flash/review">Review</a>
 	</div>
-	{{if .Data.SharedWithMe}}
-	<div class="stack">
-		<h3>Shared with me</h3>
-		<ul class="tag-list">
-			{{range .Data.SharedWithMe}}
-			<li>
-				{{.DeckName}} — {{if .PriorAdoptedDeckID}}{{.NewCardCount}} new card{{if ne .NewCardCount 1}}s{{end}} to merge{{else}}new deck{{end}}
-				<form method="post" action="/flash/shared/adopt" hx-post="/flash/shared/adopt" hx-target="#deck-detail" hx-swap="innerHTML" style="display:inline">
-					<input type="hidden" name="{{csrfField}}" value="{{$.Data.Detail.CSRFToken}}">
-					<input type="hidden" name="share_id" value="{{.ID}}">
-					<button type="submit" class="toolbar-btn toolbar-btn-active">{{if .PriorAdoptedDeckID}}Merge{{else}}Adopt{{end}}</button>
-				</form>
-				<form method="post" action="/flash/shared/decline" hx-post="/flash/shared/decline" hx-target="#deck-detail" hx-swap="innerHTML" style="display:inline">
-					<input type="hidden" name="{{csrfField}}" value="{{$.Data.Detail.CSRFToken}}">
-					<input type="hidden" name="share_id" value="{{.ID}}">
-					<button type="submit" class="toolbar-btn">Dismiss</button>
-				</form>
-			</li>
-			{{end}}
-		</ul>
-	</div>
-	{{end}}
+	<div id="shared-with-me" class="stack">{{template "shared-with-me" (dict "Offers" .Data.SharedWithMe "CSRFToken" .Shell.CSRFToken)}}</div>
 	{{template "deck-list-items" .Data.List}}
 	<div id="deck-detail">
 		{{template "deck-detail-body" .Data.Detail}}

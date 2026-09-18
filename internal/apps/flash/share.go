@@ -374,10 +374,13 @@ func priorAdoptedDeck(ctx context.Context, tx *sql.Tx, deckID, fromUserID, toUse
 	case err != nil:
 		return nil, fmt.Errorf("flash: prior adopted deck: %w", err)
 	case !id.Valid:
-		// Not reachable given how rows are written (adopted_deck_id is
-		// always set in the same statement that sets status=adopted), but
-		// treated as "no prior adoption" rather than panicking on a nil
-		// deref if it ever were.
+		// Reachable since migration 0008: adopted_deck_id is
+		// ON DELETE SET NULL, so a recipient who deletes their own adopted
+		// copy leaves this row's status at "adopted" with adopted_deck_id
+		// now NULL. Treating that the same as "no prior adoption" is
+		// exactly right — a later re-share of the same triple should
+		// behave as a fresh first-time adoption, not a merge into a deck
+		// that no longer exists.
 		return nil, nil
 	}
 	v := id.Int64
