@@ -192,6 +192,7 @@
 		<a class="toolbar-btn" href="/flash/new" hx-get="/flash/new" hx-target="#deck-detail" hx-push-url="true">New deck</a>
 		<a class="toolbar-btn" href="/flash/import" hx-get="/flash/import" hx-target="#deck-detail" hx-push-url="true">Import</a>
 		<a class="toolbar-btn" href="/flash/review">Review</a>
+		<a class="toolbar-btn" href="/flash/stats">Stats</a>
 	</div>
 	<div id="shared-with-me" class="stack">{{template "shared-with-me" (dict "Offers" .Data.SharedWithMe "CSRFToken" .Shell.CSRFToken)}}</div>
 	{{template "deck-list-items" .Data.List}}

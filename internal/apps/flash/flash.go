@@ -185,6 +185,13 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /review/undo", a.undoGradeHandler)
 	r.HandleFunc("GET /flash-review.js", a.script)
 
+	// "stats" is a literal single segment, the same non-ambiguity shape as
+	// "new"/"review"/"import"/"tags" alongside the existing wildcard
+	// single-segment routes (/{deckID}) above — literals never conflict with
+	// each other or with a same-position wildcard, per the precedent already
+	// established by those routes.
+	r.HandleFunc("GET /stats", a.stats)
+
 	// "media" is a literal single segment, the same non-ambiguity shape as
 	// "new"/"review"/"import" alongside the wildcard single-segment routes
 	// above. The upload route is 4 segments (wildcard, literal, wildcard,

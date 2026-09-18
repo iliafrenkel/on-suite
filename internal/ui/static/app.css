@@ -2349,3 +2349,46 @@ kbd {
 .reader-ratio { width: 4rem; height: 4px; vertical-align: middle; }
 .reader-ratio .track { fill: var(--c-bg-inset); }
 .reader-ratio .fill { fill: var(--c-accent); }
+
+/* Flash stats page — same layout as the reading stats page above, under its
+ * own prefix since apps don't share CSS classes any more than they share
+ * Go code. */
+.flash-chart { margin: 0 0 var(--s-5); }
+.flash-chart figcaption {
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+	margin-bottom: var(--s-2);
+}
+.flash-chart svg {
+	width: 100%;
+	height: 120px;
+	display: block;
+	overflow: visible;
+}
+.flash-chart rect { fill: var(--c-accent); }
+.flash-chart rect:hover { fill: var(--c-text); }
+
+.flash-stat-tiles {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+	gap: var(--s-3);
+	margin-bottom: var(--s-5);
+}
+.flash-stat-tile { background: var(--c-bg-subtle); border-radius: 4px; padding: var(--s-3); }
+.flash-stat-tile .value { font-size: var(--fs-xl); }
+.flash-stat-tile .label { color: var(--c-text-dim); font-size: var(--fs-xs); }
+
+.flash-table-scroll { overflow-x: auto; }
+.flash-stats-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--fs-sm);
+}
+.flash-stats-table th,
+.flash-stats-table td {
+	text-align: left;
+	padding: var(--s-2) var(--s-3);
+	border-bottom: 1px solid var(--c-border);
+	white-space: nowrap;
+}
+.flash-snoozed-marker { color: var(--c-text-dim); font-size: var(--fs-xs); }

@@ -1,0 +1,71 @@
+{{/* internal/apps/flash/templates/stats.html */}}
+{{define "content"}}
+<div class="stack">
+	<div class="row list-head">
+		<h2>Stats</h2>
+		<a class="toolbar-btn" href="/flash/">Back to decks</a>
+	</div>
+
+	<div class="flash-stat-tiles">
+		{{range .Data.Tiles}}
+		<div class="flash-stat-tile">
+			<div class="value">{{.Value}}</div>
+			<div class="label">{{.Label}}</div>
+		</div>
+		{{end}}
+	</div>
+
+	<figure class="flash-chart">
+		<figcaption>{{.Data.Chart.Title}}</figcaption>
+		{{if .Data.Chart.Empty}}
+		<p class="empty">Nothing yet.</p>
+		{{else}}
+		<svg viewBox="0 0 {{.Data.Chart.Width}} {{.Data.Chart.Height}}" role="img"
+		     aria-label="{{.Data.Chart.Title}}, daily, peak {{.Data.Chart.Max}}" preserveAspectRatio="none">
+			{{range .Data.Chart.Bars}}
+			<rect x="{{.X}}" y="{{.Y}}" width="{{.Width}}" height="{{.Height}}" rx="1">
+				<title>{{.Label}}</title>
+			</rect>
+			{{end}}
+		</svg>
+		{{end}}
+	</figure>
+
+	{{if .Data.Days}}
+	<details class="flash-stats-daily">
+		<summary>Daily figures (text alternative to the chart above)</summary>
+		<div class="flash-table-scroll">
+			<table class="flash-stats-table">
+				<thead><tr><th>Date</th><th>Reviews</th></tr></thead>
+				<tbody>
+					{{range .Data.Days}}
+					<tr><td>{{.Day.Format "2 Jan 2006"}}</td><td>{{.Count}}</td></tr>
+					{{end}}
+				</tbody>
+			</table>
+		</div>
+	</details>
+	{{end}}
+
+	<h3>Per deck</h3>
+	{{if .Data.PerDeck}}
+	<div class="flash-table-scroll">
+		<table class="flash-stats-table flash-per-deck-table">
+			<thead><tr><th>Deck</th><th>Mastered</th><th>Due</th><th>Reviews (30 days)</th></tr></thead>
+			<tbody>
+				{{range .Data.PerDeck}}
+				<tr>
+					<td>{{.Deck.Name}}{{if .Snoozed}} <span class="flash-snoozed-marker">(snoozed)</span>{{end}}</td>
+					<td>{{.Mastered}}</td>
+					<td>{{.Due}}</td>
+					<td>{{.ReviewsLast30Days}}</td>
+				</tr>
+				{{end}}
+			</tbody>
+		</table>
+	</div>
+	{{else}}
+	<p class="empty">No decks yet.</p>
+	{{end}}
+</div>
+{{end}}
