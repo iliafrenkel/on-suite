@@ -29,6 +29,35 @@
 			<button type="submit" class="toolbar-btn danger">Delete</button>
 		</form>
 	</div>
+	{{if .ShareRecipients}}
+	<div class="stack">
+		<form method="post" action="/flash/{{.Deck.ID}}/share" hx-post="/flash/{{.Deck.ID}}/share" hx-target="#deck-detail" hx-swap="innerHTML">
+			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+			<div class="field">
+				<label for="share-recipient-{{.Deck.ID}}">Share with</label>
+				<select id="share-recipient-{{.Deck.ID}}" name="to_user_id">
+					{{range .ShareRecipients}}<option value="{{.ID}}">{{.Username}}</option>{{end}}
+				</select>
+				<button type="submit" class="toolbar-btn">Share</button>
+			</div>
+		</form>
+		{{if .SharedWith}}
+		<ul class="tag-list">
+			{{range .SharedWith}}
+			<li>
+				{{.ToUsername}} — {{.Status}}
+				{{if eq .Status "pending"}}
+				<form method="post" action="/flash/{{$.Deck.ID}}/share/{{.ID}}/revoke" hx-post="/flash/{{$.Deck.ID}}/share/{{.ID}}/revoke" hx-target="#deck-detail" hx-swap="innerHTML" style="display:inline">
+					<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
+					<button type="submit" class="toolbar-btn">Revoke</button>
+				</form>
+				{{end}}
+			</li>
+			{{end}}
+		</ul>
+		{{end}}
+	</div>
+	{{end}}
 	{{if .Deck.SnoozedUntil}}
 	<div class="notice row">
 		<span>Snoozed until {{.Deck.SnoozedUntil.Format "2 Jan 2006"}}.</span>
@@ -127,6 +156,28 @@
 		<a class="toolbar-btn" href="/flash/import" hx-get="/flash/import" hx-target="#deck-detail" hx-push-url="true">Import</a>
 		<a class="toolbar-btn" href="/flash/review">Review</a>
 	</div>
+	{{if .Data.SharedWithMe}}
+	<div class="stack">
+		<h3>Shared with me</h3>
+		<ul class="tag-list">
+			{{range .Data.SharedWithMe}}
+			<li>
+				{{.DeckName}} — {{if .PriorAdoptedDeckID}}{{.NewCardCount}} new card{{if ne .NewCardCount 1}}s{{end}} to merge{{else}}new deck{{end}}
+				<form method="post" action="/flash/shared/adopt" hx-post="/flash/shared/adopt" hx-target="#deck-detail" hx-swap="innerHTML" style="display:inline">
+					<input type="hidden" name="{{csrfField}}" value="{{$.Data.Detail.CSRFToken}}">
+					<input type="hidden" name="share_id" value="{{.ID}}">
+					<button type="submit" class="toolbar-btn toolbar-btn-active">{{if .PriorAdoptedDeckID}}Merge{{else}}Adopt{{end}}</button>
+				</form>
+				<form method="post" action="/flash/shared/decline" hx-post="/flash/shared/decline" hx-target="#deck-detail" hx-swap="innerHTML" style="display:inline">
+					<input type="hidden" name="{{csrfField}}" value="{{$.Data.Detail.CSRFToken}}">
+					<input type="hidden" name="share_id" value="{{.ID}}">
+					<button type="submit" class="toolbar-btn">Dismiss</button>
+				</form>
+			</li>
+			{{end}}
+		</ul>
+	</div>
+	{{end}}
 	{{template "deck-list-items" .Data.List}}
 	<div id="deck-detail">
 		{{template "deck-detail-body" .Data.Detail}}

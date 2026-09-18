@@ -113,6 +113,32 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /{deckID}/cards/{cardID}", a.updateCard)
 	r.HandleFunc("POST /{deckID}/cards/{cardID}/delete", a.deleteCard)
 
+	// Sharing routes. POST /{deckID}/share is the same wildcard-then-literal
+	// shape as /{deckID}/snooze and /{deckID}/unsnooze above and differs from
+	// each in its final literal, so it can't collide with them.
+	// POST /{deckID}/share/{shareID}/revoke is 4 segments
+	// (wildcard-literal-wildcard-literal) — the same shape as
+	// /{deckID}/cards/{cardID}/delete and /{deckID}/cards/{cardID}/media
+	// below, differing only in its second literal ("share" vs "cards"),
+	// which is what actually guarantees no ambiguity between same-shape
+	// patterns (see the review-route comment above for the fuller version
+	// of this reasoning).
+	//
+	// The recipient's two actions take the share id from the POST body
+	// (share_id), not the URL path, for the same reason review's grade/undo
+	// do: a literal-wildcard-literal shape like /shared/{shareID}/adopt
+	// would conflict with the existing wildcard-literal-wildcard
+	// /{deckID}/cards/{cardID} above — Go's mux flags any (L,W,L) vs (W,L,W)
+	// pair of the same length as ambiguous regardless of which words the
+	// literals are, confirmed by a startup panic during validation. Making
+	// these 2-segment literal-literal routes (POST /shared/adopt, POST
+	// /shared/decline) sidesteps the shape entirely, just like
+	// /review/grade and /review/undo do.
+	r.HandleFunc("POST /{deckID}/share", a.shareDeck)
+	r.HandleFunc("POST /{deckID}/share/{shareID}/revoke", a.revokeShareHandler)
+	r.HandleFunc("POST /shared/adopt", a.adoptShareHandler)
+	r.HandleFunc("POST /shared/decline", a.declineShareHandler)
+
 	// GET /tags/{tagName} is 2 segments (literal "tags", wildcard), a different
 	// shape from GET /{deckID} (1 segment) and GET /edit/{deckID} (literal
 	// "edit", wildcard) — no ambiguity with either.

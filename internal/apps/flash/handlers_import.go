@@ -55,5 +55,10 @@ func (a *App) importDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	a.renderDeckDetailWithList(w, r, userID, http.StatusCreated, a.viewDeckDetail(r, d))
+	recipients, shares, err := a.shareContext(r.Context(), userID, d.ID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	a.renderDeckDetailWithList(w, r, userID, http.StatusCreated, a.viewDeckDetail(r, userID, d, recipients, shares))
 }

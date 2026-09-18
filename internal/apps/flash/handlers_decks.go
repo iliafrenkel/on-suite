@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -93,6 +94,9 @@ type deckDetailView struct {
 	Deck      Deck
 	CSRFToken string
 
+	ShareRecipients []auth.Account      // every other account, for the Share dropdown
+	SharedWith      []shareWithUsername // this deck's own share offers, for the creator's list
+
 	NameValue        string
 	DescriptionValue string
 	Error            string
@@ -116,14 +120,54 @@ type deckListFragment struct {
 }
 
 type deckIndexView struct {
-	List   deckListFragment
-	Detail deckDetailView
-	Title  string
-	Shell  render.Shell
+	List         deckListFragment
+	Detail       deckDetailView
+	Title        string
+	Shell        render.Shell
+	SharedWithMe []ShareOffer // pending offers addressed to the viewer
 }
 
-func (a *App) viewDeckDetail(r *http.Request, d Deck) deckDetailView {
-	return deckDetailView{Mode: deckModeView, Deck: d, CSRFToken: web.CSRFToken(r.Context())}
+// shareWithUsername is one row of the creator's "Shared with" list: a
+// Share plus the recipient's username, resolved via a.deps.Users since
+// Share itself only carries a bare user ID.
+type shareWithUsername struct {
+	Share
+	ToUsername string
+}
+
+// shareContext loads everything the deck detail view's Share section
+// needs: every other account on the instance (for the dropdown) and this
+// deck's own share offers, each paired with its recipient's username (for
+// the "Shared with" list).
+func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Account, []shareWithUsername, error) {
+	accounts, err := a.deps.Users.ListAccounts(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	byID := make(map[int64]string, len(accounts))
+	others := make([]auth.Account, 0, len(accounts))
+	for _, acc := range accounts {
+		byID[acc.ID] = acc.Username
+		if acc.ID != userID {
+			others = append(others, acc)
+		}
+	}
+	shares, err := a.store.SharesForDeck(ctx, userID, deckID)
+	if err != nil {
+		return nil, nil, err
+	}
+	withNames := make([]shareWithUsername, len(shares))
+	for i, sh := range shares {
+		withNames[i] = shareWithUsername{Share: sh, ToUsername: byID[sh.ToUserID]}
+	}
+	return others, withNames, nil
+}
+
+func (a *App) viewDeckDetail(r *http.Request, userID int64, d Deck, recipients []auth.Account, sharedWith []shareWithUsername) deckDetailView {
+	return deckDetailView{
+		Mode: deckModeView, Deck: d, CSRFToken: web.CSRFToken(r.Context()),
+		ShareRecipients: recipients, SharedWith: sharedWith,
+	}
 }
 
 func (a *App) newDeckDetail(r *http.Request, errMsg, name, description string) deckDetailView {
@@ -188,7 +232,12 @@ func (a *App) deckIndex(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, r, err)
 			return
 		}
-		detail = a.viewDeckDetail(r, d)
+		recipients, shares, err := a.shareContext(r.Context(), userID, d.ID)
+		if err != nil {
+			a.deps.Errors.Internal(w, r, err)
+			return
+		}
+		detail = a.viewDeckDetail(r, userID, d, recipients, shares)
 	}
 	a.renderDeckIndex(w, r, userID, http.StatusOK, detail)
 }
@@ -199,8 +248,13 @@ func (a *App) renderDeckIndex(w http.ResponseWriter, r *http.Request, userID int
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
+	offers, err := a.store.SharesForRecipient(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
-		view := deckIndexView{List: deckListFragment{Items: items, ActiveID: detail.Deck.ID, OOB: true}, Detail: detail}
+		view := deckIndexView{List: deckListFragment{Items: items, ActiveID: detail.Deck.ID, OOB: true}, Detail: detail, SharedWithMe: offers}
 		page := a.deps.Page(r, deckPageTitle(detail))
 		view.Title, view.Shell = page.Title, page.Shell
 		if err := a.deps.Render.Fragment(w, http.StatusOK, "flash/decks", "deck-detail-with-list", view); err != nil {
@@ -208,7 +262,7 @@ func (a *App) renderDeckIndex(w http.ResponseWriter, r *http.Request, userID int
 		}
 		return
 	}
-	view := deckIndexView{List: deckListFragment{Items: items, ActiveID: detail.Deck.ID}, Detail: detail}
+	view := deckIndexView{List: deckListFragment{Items: items, ActiveID: detail.Deck.ID}, Detail: detail, SharedWithMe: offers}
 	page := a.deps.Page(r, deckPageTitle(detail))
 	page.Data = view
 	a.render(w, r, status, "flash/decks", page)
@@ -220,7 +274,12 @@ func (a *App) renderDeckDetailWithList(w http.ResponseWriter, r *http.Request, u
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	view := deckIndexView{List: deckListFragment{Items: items, ActiveID: detail.Deck.ID, OOB: true}, Detail: detail}
+	offers, err := a.store.SharesForRecipient(r.Context(), userID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	view := deckIndexView{List: deckListFragment{Items: items, ActiveID: detail.Deck.ID, OOB: true}, Detail: detail, SharedWithMe: offers}
 	page := a.deps.Page(r, deckPageTitle(detail))
 	view.Title, view.Shell = page.Title, page.Shell
 	if err := a.deps.Render.Fragment(w, status, "flash/decks", "deck-detail-with-list", view); err != nil {
@@ -263,7 +322,12 @@ func (a *App) createDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	a.renderDeckDetailWithList(w, r, userID, http.StatusCreated, a.viewDeckDetail(r, d))
+	recipients, shares, err := a.shareContext(r.Context(), userID, d.ID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	a.renderDeckDetailWithList(w, r, userID, http.StatusCreated, a.viewDeckDetail(r, userID, d, recipients, shares))
 }
 
 func (a *App) editDeckForm(w http.ResponseWriter, r *http.Request) {
@@ -368,7 +432,12 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(id, 10))
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, updated))
+	recipients, shares, err := a.shareContext(r.Context(), userID, updated.ID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, updated, recipients, shares))
 }
 
 func (a *App) deleteDeck(w http.ResponseWriter, r *http.Request) {
@@ -421,7 +490,12 @@ func (a *App) snoozeDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(id, 10))
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, updated))
+	recipients, shares, err := a.shareContext(r.Context(), userID, updated.ID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, updated, recipients, shares))
 }
 
 func (a *App) unsnoozeDeck(w http.ResponseWriter, r *http.Request) {
@@ -445,5 +519,10 @@ func (a *App) unsnoozeDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(id, 10))
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, updated))
+	recipients, shares, err := a.shareContext(r.Context(), userID, updated.ID)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, updated, recipients, shares))
 }
