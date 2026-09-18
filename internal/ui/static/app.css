@@ -2391,3 +2391,4 @@ kbd {
 	border-bottom: 1px solid var(--c-border);
 	white-space: nowrap;
 }
+.flash-snoozed-marker { color: var(--c-text-dim); font-size: var(--fs-xs); }
