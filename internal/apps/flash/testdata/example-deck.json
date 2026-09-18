@@ -1,0 +1,65 @@
+{
+  "deck": {
+    "name": "Spanish Basics",
+    "description": "A small starter deck for manually testing ON Flash: card types, tags, notes, and one image attachment."
+  },
+  "cards": [
+    {
+      "type": "basic",
+      "front": "hola",
+      "back": "hello",
+      "notes": "The most common greeting; used at any time of day.",
+      "tags": ["greetings", "vocabulary"],
+      "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Flag_of_Spain.svg/320px-Flag_of_Spain.svg.png"
+    },
+    {
+      "type": "basic",
+      "front": "adiós",
+      "back": "goodbye",
+      "notes": "",
+      "tags": ["greetings", "vocabulary"]
+    },
+    {
+      "type": "basic",
+      "front": "gracias",
+      "back": "thank you",
+      "notes": "Respond with \"de nada\" (you're welcome).",
+      "tags": ["greetings", "vocabulary"]
+    },
+    {
+      "type": "cloze",
+      "front": "El gato está {{c1::debajo}} de la mesa.",
+      "back": "",
+      "notes": "\"Debajo de\" means \"under\" or \"beneath\".",
+      "tags": ["grammar", "prepositions"]
+    },
+    {
+      "type": "cloze",
+      "front": "Ella {{c1::habla}} tres idiomas.",
+      "back": "",
+      "notes": "\"Hablar\" (to speak) — third person singular present tense.",
+      "tags": ["grammar", "verbs"]
+    },
+    {
+      "type": "basic",
+      "front": "el perro",
+      "back": "the dog",
+      "notes": "\"El\" marks a masculine noun.",
+      "tags": ["vocabulary", "animals"]
+    },
+    {
+      "type": "basic",
+      "front": "la casa",
+      "back": "the house",
+      "notes": "\"La\" marks a feminine noun.",
+      "tags": ["vocabulary"]
+    },
+    {
+      "type": "basic",
+      "front": "¿Cómo estás?",
+      "back": "How are you?",
+      "notes": "Informal register; use \"¿Cómo está usted?\" formally.",
+      "tags": ["greetings", "questions"]
+    }
+  ]
+}
