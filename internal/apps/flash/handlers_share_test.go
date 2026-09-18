@@ -260,7 +260,6 @@ func TestFullShareCycleThroughHTTP(t *testing.T) {
 		t.Fatalf("bob's decks = %+v, err = %v", bobDecks, err)
 	}
 	bobDeckID := bobDecks[0].ID
-	bobDeckIDStr := strconv.FormatInt(bobDeckID, 10)
 	bobCards, err := s.Store.ListCards(t.Context(), s.Bob.User.ID, bobDeckID)
 	if err != nil || len(bobCards) != 1 {
 		t.Fatalf("bob's cards after adopt = %+v, err = %v", bobCards, err)
@@ -301,5 +300,4 @@ func TestFullShareCycleThroughHTTP(t *testing.T) {
 	if len(bobCards) != 2 {
 		t.Fatalf("bob's cards after merge = %+v, want 2", bobCards)
 	}
-	_ = bobDeckIDStr
 }
