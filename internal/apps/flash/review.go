@@ -123,7 +123,7 @@ func (st *Store) GradeCard(ctx context.Context, userID, cardID int64, rating int
 	if !hadState {
 		newInc, reviewInc = 1, 0
 	}
-	if err := st.bumpDailyCounts(ctx, tx, userID, deckID, now, newInc, reviewInc); err != nil {
+	if err := st.bumpDailyCounts(ctx, tx, userID, deckID, now, newInc, reviewInc, rating, 1); err != nil {
 		return cardSchedule{}, err
 	}
 
@@ -192,7 +192,7 @@ func (st *Store) UndoLastGrade(ctx context.Context, userID, cardID int64, now ti
 	if wasNew {
 		newDec, reviewDec = -1, 0
 	}
-	if err := st.bumpDailyCounts(ctx, tx, userID, deckID, log.Review, newDec, reviewDec); err != nil {
+	if err := st.bumpDailyCounts(ctx, tx, userID, deckID, log.Review, newDec, reviewDec, log.Rating, -1); err != nil {
 		return cardSchedule{}, false, err
 	}
 
@@ -251,37 +251,67 @@ func (st *Store) scanCardStateWithLog(ctx context.Context, userID, cardID int64)
 
 // bumpDailyCounts adds newDelta/reviewDelta (either can be negative, for
 // UndoLastGrade) to userID's counters for deckID on now's calendar day,
-// creating the row if this is the first count of the day.
-func (st *Store) bumpDailyCounts(ctx context.Context, tx *sql.Tx, userID, deckID int64, now time.Time, newDelta, reviewDelta int) error {
+// creating the row if this is the first count of the day. ratingDelta
+// (+1 for a grade, -1 for undoing one) is added to whichever of the four
+// per-rating columns rating names, so retention rate can be computed later
+// without a separate per-review event log.
+func (st *Store) bumpDailyCounts(ctx context.Context, tx *sql.Tx, userID, deckID int64, now time.Time, newDelta, reviewDelta, rating, ratingDelta int) error {
+	column, err := ratingCountColumn(rating)
+	if err != nil {
+		return err
+	}
 	day := formatDay(now)
 	// Ensure the row exists before applying the delta. This can't be a
-	// single INSERT ... ON CONFLICT DO UPDATE that adds newDelta/reviewDelta
-	// directly: SQLite evaluates flash_review_counts' CHECK constraint
-	// against the row that WOULD be inserted before it even considers the
-	// conflict, so a negative delta (UndoLastGrade decrementing a counter)
-	// fails the check even though the actual write is an UPDATE against an
-	// existing, non-negative row. Inserting zeros first, then updating with
-	// the real delta in a second statement, sidesteps that: the insert
-	// candidate is always non-negative, and the UPDATE's CHECK is evaluated
-	// against the real post-update row.
+	// single INSERT ... ON CONFLICT DO UPDATE that adds the deltas directly:
+	// SQLite evaluates flash_review_counts' CHECK constraint against the row
+	// that WOULD be inserted before it even considers the conflict, so a
+	// negative delta (UndoLastGrade decrementing a counter) fails the check
+	// even though the actual write is an UPDATE against an existing,
+	// non-negative row. Inserting zeros first, then updating with the real
+	// delta in a second statement, sidesteps that: the insert candidate is
+	// always non-negative, and the UPDATE's CHECK is evaluated against the
+	// real post-update row.
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO flash_review_counts (user_id, deck_id, day, new_count, review_count)
-		VALUES (?, ?, ?, 0, 0)
-		ON CONFLICT (user_id, deck_id, day) DO NOTHING`,
+        INSERT INTO flash_review_counts (user_id, deck_id, day, new_count, review_count)
+        VALUES (?, ?, ?, 0, 0)
+        ON CONFLICT (user_id, deck_id, day) DO NOTHING`,
 		userID, deckID, day,
 	); err != nil {
 		return fmt.Errorf("flash: update daily counts: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE flash_review_counts SET
-			new_count = new_count + ?,
-			review_count = review_count + ?
-		WHERE user_id = ? AND deck_id = ? AND day = ?`,
-		newDelta, reviewDelta, userID, deckID, day,
+        UPDATE flash_review_counts SET
+            new_count = new_count + ?,
+            review_count = review_count + ?,
+            `+column+` = `+column+` + ?
+        WHERE user_id = ? AND deck_id = ? AND day = ?`,
+		newDelta, reviewDelta, ratingDelta, userID, deckID, day,
 	); err != nil {
 		return fmt.Errorf("flash: update daily counts: %w", err)
 	}
 	return nil
+}
+
+// ratingCountColumn maps a rating constant to its flash_review_counts
+// column. rating is always one of the four fixed RatingX constants from
+// this package's own callers (GradeCard passes the rating it just
+// validated; UndoLastGrade passes a rating it previously wrote itself), so
+// this is not user-input-driven string building — it's a closed, four-way
+// switch, the same shape share.go's resolveShare already uses for a column
+// name selected from a fixed internal set.
+func ratingCountColumn(rating int) (string, error) {
+	switch rating {
+	case RatingAgain:
+		return "again_count", nil
+	case RatingHard:
+		return "hard_count", nil
+	case RatingGood:
+		return "good_count", nil
+	case RatingEasy:
+		return "easy_count", nil
+	default:
+		return "", fmt.Errorf("%w: %d is not a rating I know", ErrInvalid, rating)
+	}
 }
 
 // dailyCounts reads flash_review_counts for userID/deckID on now's calendar

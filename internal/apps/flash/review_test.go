@@ -504,3 +504,66 @@ func TestDueQueueIsOwnerScoped(t *testing.T) {
 		t.Errorf("bob's DueQueue sees alice's cards: %+v", queue)
 	}
 }
+
+func ratingCount(t *testing.T, f *fixture, userID, deckID int64, day time.Time, column string) int {
+	t.Helper()
+	var n int
+	err := f.db.QueryRowContext(context.Background(),
+		`SELECT `+column+` FROM flash_review_counts WHERE user_id = ? AND deck_id = ? AND day = ?`,
+		userID, deckID, day.UTC().Format("2006-01-02")).Scan(&n)
+	if err != nil {
+		t.Fatalf("read %s: %v", column, err)
+	}
+	return n
+}
+
+func TestGradeCardBumpsTheMatchingRatingCounter(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, card.ID, flash.RatingAgain, now); err != nil {
+		t.Fatal(err)
+	}
+	if got := ratingCount(t, f, f.alice.ID, deck.ID, now, "again_count"); got != 1 {
+		t.Errorf("again_count = %d, want 1", got)
+	}
+	for _, col := range []string{"hard_count", "good_count", "easy_count"} {
+		if got := ratingCount(t, f, f.alice.ID, deck.ID, now, col); got != 0 {
+			t.Errorf("%s = %d, want 0", col, got)
+		}
+	}
+}
+
+func TestUndoLastGradeDecrementsTheMatchingRatingCounter(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	later := now.Add(time.Hour)
+
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, card.ID, flash.RatingEasy, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, undone, err := f.store.UndoLastGrade(ctx, f.alice.ID, card.ID, later); err != nil || !undone {
+		t.Fatalf("UndoLastGrade: undone=%v, err=%v", undone, err)
+	}
+	if got := ratingCount(t, f, f.alice.ID, deck.ID, now, "easy_count"); got != 0 {
+		t.Errorf("easy_count after undo = %d, want 0", got)
+	}
+}
