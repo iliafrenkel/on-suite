@@ -478,15 +478,28 @@ func (st *Store) SharesForRecipient(ctx context.Context, toUserID int64) ([]Shar
 		if priorAdoptedDeckID.Valid {
 			id := priorAdoptedDeckID.Int64
 			o.PriorAdoptedDeckID = &id
-			n, err := st.newCardCount(ctx, o.DeckID, id)
-			if err != nil {
-				return nil, err
-			}
-			o.NewCardCount = n
 		}
 		out = append(out, o)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	for i := range out {
+		if out[i].PriorAdoptedDeckID == nil {
+			continue
+		}
+		n, err := st.newCardCount(ctx, out[i].DeckID, *out[i].PriorAdoptedDeckID)
+		if err != nil {
+			return nil, err
+		}
+		out[i].NewCardCount = n
+	}
+
+	return out, nil
 }
 
 // newCardCount counts source deck cards not yet represented (by
