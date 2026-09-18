@@ -176,10 +176,12 @@ func TestCardsMasteredCountsOnlyReviewStateForThatUser(t *testing.T) {
 		t.Errorf("bob's mastered = %d, want 0", bobMastered)
 	}
 
-	// Grade it through DefaultLearningSteps ({1, 10} minutes): the first
-	// Good grade above already used up "new"; a second and third Good
-	// grade, spaced out enough to each satisfy the step's own delay, walk
-	// it through the remaining learning step and into "review".
+	// go-fsrs transitions a card from "new" to "learning" on its first Good
+	// grade (already applied above) and from "learning" to "review" on the
+	// next Good grade, independent of elapsed time — no learning-step delay
+	// to satisfy. The grade after that (Review + Good) simply stays in
+	// "review", so grading twice more here is a belt-and-suspenders check,
+	// not a requirement for reaching "review".
 	if _, err := f.store.GradeCard(ctx, f.alice.ID, card.ID, flash.RatingGood, now.Add(20*time.Minute)); err != nil {
 		t.Fatal(err)
 	}

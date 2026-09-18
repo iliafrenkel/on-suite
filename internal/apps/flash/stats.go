@@ -209,6 +209,6 @@ func (st *Store) PerDeckLoad(ctx context.Context, userID int64, now time.Time) (
 
 		out = append(out, load)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Deck.Name < out[j].Deck.Name })
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Deck.Name < out[j].Deck.Name })
 	return out, nil
 }
