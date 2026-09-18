@@ -4,6 +4,7 @@ package flash
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -159,10 +160,15 @@ type DeckLoad struct {
 	Mastered          int
 	Due               int
 	ReviewsLast30Days int
+	// Snoozed is precomputed from Deck.IsSnoozed(now) at PerDeckLoad time,
+	// since html/template cannot call a method with an argument like now
+	// on an arbitrary struct value.
+	Snoozed bool
 }
 
-// PerDeckLoad returns one DeckLoad per deck userID owns, in the same order
-// ListDecks does (newest first).
+// PerDeckLoad returns one DeckLoad per deck userID owns, sorted by deck
+// name — the design spec calls for the per-deck table to be "sorted by
+// name," unlike ListDecks' own newest-first order.
 func (st *Store) PerDeckLoad(ctx context.Context, userID int64, now time.Time) ([]DeckLoad, error) {
 	decks, err := st.ListDecks(ctx, userID)
 	if err != nil {
@@ -172,7 +178,7 @@ func (st *Store) PerDeckLoad(ctx context.Context, userID int64, now time.Time) (
 
 	out := make([]DeckLoad, 0, len(decks))
 	for _, d := range decks {
-		load := DeckLoad{Deck: d}
+		load := DeckLoad{Deck: d, Snoozed: d.IsSnoozed(now)}
 
 		if err := st.db.QueryRowContext(ctx, `
             SELECT count(*) FROM flash_card_state cs
@@ -203,5 +209,6 @@ func (st *Store) PerDeckLoad(ctx context.Context, userID int64, now time.Time) (
 
 		out = append(out, load)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Deck.Name < out[j].Deck.Name })
 	return out, nil
 }

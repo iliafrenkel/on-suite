@@ -50,12 +50,12 @@
 	<h3>Per deck</h3>
 	{{if .Data.PerDeck}}
 	<div class="flash-table-scroll">
-		<table class="flash-stats-table">
+		<table class="flash-stats-table flash-per-deck-table">
 			<thead><tr><th>Deck</th><th>Mastered</th><th>Due</th><th>Reviews (30 days)</th></tr></thead>
 			<tbody>
 				{{range .Data.PerDeck}}
 				<tr>
-					<td>{{.Deck.Name}}</td>
+					<td>{{.Deck.Name}}{{if .Snoozed}} <span class="flash-snoozed-marker">(snoozed)</span>{{end}}</td>
 					<td>{{.Mastered}}</td>
 					<td>{{.Due}}</td>
 					<td>{{.ReviewsLast30Days}}</td>

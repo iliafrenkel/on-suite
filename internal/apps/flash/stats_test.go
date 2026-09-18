@@ -175,6 +175,33 @@ func TestCardsMasteredCountsOnlyReviewStateForThatUser(t *testing.T) {
 	if bobMastered != 0 {
 		t.Errorf("bob's mastered = %d, want 0", bobMastered)
 	}
+
+	// Grade it through DefaultLearningSteps ({1, 10} minutes): the first
+	// Good grade above already used up "new"; a second and third Good
+	// grade, spaced out enough to each satisfy the step's own delay, walk
+	// it through the remaining learning step and into "review".
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, card.ID, flash.RatingGood, now.Add(20*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, card.ID, flash.RatingGood, now.Add(40*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	mastered, err = f.store.CardsMastered(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mastered != 1 {
+		t.Errorf("mastered after graduating = %d, want 1", mastered)
+	}
+
+	// Bob still has nothing, even though Alice now has a mastered card.
+	bobMastered, err = f.store.CardsMastered(ctx, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bobMastered != 0 {
+		t.Errorf("bob's mastered = %d, want 0 (unaffected by alice's card)", bobMastered)
+	}
 }
 
 func TestDailyReviewCountsZeroFillsEveryDay(t *testing.T) {
@@ -253,5 +280,193 @@ func TestPerDeckLoadAggregatesAcrossDecks(t *testing.T) {
 	}
 	if french.ReviewsLast30Days != 0 {
 		t.Errorf("french.ReviewsLast30Days = %d, want 0", french.ReviewsLast30Days)
+	}
+	// cardA has been graded once and is still in "learning" (a single Good
+	// grade doesn't graduate it), and its due_at is in the future, so
+	// neither Mastered nor Due should count it yet.
+	if spanish.Mastered != 0 {
+		t.Errorf("spanish.Mastered = %d, want 0", spanish.Mastered)
+	}
+	if spanish.Due != 0 {
+		t.Errorf("spanish.Due = %d, want 0", spanish.Due)
+	}
+	if french.Mastered != 0 {
+		t.Errorf("french.Mastered = %d, want 0", french.Mastered)
+	}
+	if french.Due != 0 {
+		t.Errorf("french.Due = %d, want 0", french.Due)
+	}
+}
+
+func TestPerDeckLoadSortsByName(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	// Create decks in an order that is neither alphabetical nor its own
+	// reverse, so a bug that returns creation order (ListDecks' own,
+	// newest-first order) or reverses it would both be caught.
+	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Zebra", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Apple", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Mango", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	loads, err := f.store.PerDeckLoad(ctx, f.alice.ID, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loads) != 3 {
+		t.Fatalf("len(loads) = %d, want 3", len(loads))
+	}
+	var names []string
+	for _, l := range loads {
+		names = append(names, l.Deck.Name)
+	}
+	want := []string{"Apple", "Mango", "Zebra"}
+	for i, n := range want {
+		if names[i] != n {
+			t.Errorf("names = %v, want %v", names, want)
+			break
+		}
+	}
+}
+
+func TestPerDeckLoadMarksSnoozedDecks(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	active, err := f.store.CreateDeck(ctx, f.alice.ID, "Active", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snoozed, err := f.store.CreateDeck(ctx, f.alice.ID, "Snoozed", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	if _, err := f.store.SnoozeDeck(ctx, f.alice.ID, snoozed.ID, now.AddDate(0, 0, 1)); err != nil {
+		t.Fatal(err)
+	}
+
+	loads, err := f.store.PerDeckLoad(ctx, f.alice.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotActive, gotSnoozed flash.DeckLoad
+	for _, l := range loads {
+		if l.Deck.ID == active.ID {
+			gotActive = l
+		}
+		if l.Deck.ID == snoozed.ID {
+			gotSnoozed = l
+		}
+	}
+	if gotActive.Snoozed {
+		t.Error("active deck reported as Snoozed")
+	}
+	if !gotSnoozed.Snoozed {
+		t.Error("snoozed deck not reported as Snoozed")
+	}
+}
+
+func TestCardsDueTodayExcludesSnoozedDecksAndNeverReviewedCards(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+
+	// (a) A never-graded card has no flash_card_state row at all — must not
+	// count as due.
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "never", "graded", ""); err != nil {
+		t.Fatal(err)
+	}
+	due, err := f.store.CardsDueToday(ctx, f.alice.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if due != 0 {
+		t.Errorf("due (never-graded only) = %d, want 0", due)
+	}
+
+	// (b) A graded card whose due_at has passed counts, once its deck is
+	// not snoozed.
+	graded, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, graded.ID, flash.RatingGood, now); err != nil {
+		t.Fatal(err)
+	}
+	later := now.Add(24 * time.Hour)
+	due, err = f.store.CardsDueToday(ctx, f.alice.ID, later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if due != 1 {
+		t.Errorf("due (graded card past due) = %d, want 1", due)
+	}
+
+	// (c) The same card, but now its deck is snoozed — must not count.
+	if _, err := f.store.SnoozeDeck(ctx, f.alice.ID, deck.ID, later.AddDate(0, 0, 1)); err != nil {
+		t.Fatal(err)
+	}
+	due, err = f.store.CardsDueToday(ctx, f.alice.ID, later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if due != 0 {
+		t.Errorf("due (deck snoozed) = %d, want 0", due)
+	}
+}
+
+func TestCardsDueTodayIsUncappedUnlikeDueQueue(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := 1
+	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, deck.ID, deck.NewCardsPerDay, &limit); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	var cardIDs []int64
+	for i := 0; i < 3; i++ {
+		c, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cardIDs = append(cardIDs, c.ID)
+	}
+	// Grade all three on an earlier day so today's daily budget hasn't
+	// been spent yet, then let them all age past due.
+	for _, id := range cardIDs {
+		if _, err := f.store.GradeCard(ctx, f.alice.ID, id, flash.RatingGood, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	later := now.Add(48 * time.Hour)
+
+	queue, err := f.store.DueQueue(ctx, f.alice.ID, nil, later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queue) != 1 {
+		t.Errorf("len(DueQueue) = %d, want 1 (capped by ReviewsPerDay)", len(queue))
+	}
+
+	due, err := f.store.CardsDueToday(ctx, f.alice.ID, later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if due != 3 {
+		t.Errorf("CardsDueToday = %d, want 3 (uncapped)", due)
 	}
 }

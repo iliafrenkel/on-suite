@@ -283,7 +283,7 @@ func (st *Store) bumpDailyCounts(ctx context.Context, tx *sql.Tx, userID, deckID
         UPDATE flash_review_counts SET
             new_count = new_count + ?,
             review_count = review_count + ?,
-            `+column+` = `+column+` + ?
+            `+column+` = max(0, `+column+` + ?)
         WHERE user_id = ? AND deck_id = ? AND day = ?`,
 		newDelta, reviewDelta, ratingDelta, userID, deckID, day,
 	); err != nil {

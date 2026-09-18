@@ -567,3 +567,51 @@ func TestUndoLastGradeDecrementsTheMatchingRatingCounter(t *testing.T) {
 		t.Errorf("easy_count after undo = %d, want 0", got)
 	}
 }
+
+// TestBumpDailyCountsFloorsRatingColumnAtZero proves bumpDailyCounts' UPDATE
+// clamps a rating column at 0 rather than letting it go negative. A card
+// graded just before migration 0009 shipped, whose flash_review_counts row
+// predates the new columns, can leave a rating column at 0 for a day that
+// still has an undo-able grade logged against it; undoing that grade must
+// not drive the column negative, since RetentionRate sums these columns
+// directly and a negative summand can push its ratio over 100%.
+func TestBumpDailyCountsFloorsRatingColumnAtZero(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, card.ID, flash.RatingAgain, now); err != nil {
+		t.Fatal(err)
+	}
+	if got := ratingCount(t, f, f.alice.ID, deck.ID, now, "again_count"); got != 1 {
+		t.Fatalf("again_count after grade = %d, want 1", got)
+	}
+
+	// Simulate the pre-existing-row edge case: force again_count back to 0
+	// (as if this row predated migration 0009, or was otherwise out of
+	// sync with the still-undo-able grade log) while leaving the grade
+	// itself undone.
+	if _, err := f.db.ExecContext(ctx,
+		`UPDATE flash_review_counts SET again_count = 0 WHERE user_id = ? AND deck_id = ? AND day = ?`,
+		f.alice.ID, deck.ID, now.UTC().Format("2006-01-02"),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Undoing the Again grade now tries to decrement again_count from 0,
+	// which must floor at 0 instead of going to -1.
+	if _, undone, err := f.store.UndoLastGrade(ctx, f.alice.ID, card.ID, now.Add(time.Hour)); err != nil || !undone {
+		t.Fatalf("UndoLastGrade: undone=%v, err=%v", undone, err)
+	}
+	if got := ratingCount(t, f, f.alice.ID, deck.ID, now, "again_count"); got != 0 {
+		t.Errorf("again_count after undo of an already-zeroed column = %d, want 0 (floored, not negative)", got)
+	}
+}

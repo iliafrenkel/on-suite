@@ -89,7 +89,7 @@ func (a *App) stats(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	rate, err := a.store.RetentionRate(ctx, userID, now.AddDate(0, 0, -30))
+	rate, err := a.store.RetentionRate(ctx, userID, now.AddDate(0, 0, -29))
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
