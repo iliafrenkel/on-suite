@@ -432,7 +432,7 @@ func TestDeckFragmentCarriesOutOfBandListAndToolbar(t *testing.T) {
 		t.Fatalf("create over HTMX = %d, want 201; body: %s", rec.Code, rec.Body.String())
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
-	for _, id := range []string{"#deck-list", "#flash-review-all", "#flash-detail-open", "#shared-with-me"} {
+	for _, id := range []string{"#deck-list", "#flash-review-all", "#flash-detail-open"} {
 		n := doc.MustHave(id)
 		if _, ok := htmlassert.Attr(n, "hx-swap-oob"); !ok {
 			t.Errorf("%s in the fragment is not marked hx-swap-oob", id)

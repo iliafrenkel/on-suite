@@ -17,6 +17,7 @@
 {{else if eq .Mode "card"}}{{template "deck-detail-card" .}}
 {{else if eq .Mode "card-new"}}{{template "deck-detail-card-new" .}}
 {{else if eq .Mode "card-edit"}}{{template "deck-detail-card-edit" .}}
+{{else if eq .Mode "gift"}}{{template "deck-detail-gift" .}}
 {{else}}{{template "deck-detail-empty" .}}
 {{end}}
 {{end}}
@@ -27,7 +28,7 @@
      count, the gift/shared list, and the narrow-screen checkbox (checked
      whenever the pane has something to show, so a phone or portrait tablet
      flips to the pane). */}}
-{{define "deck-detail-with-list"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "deck-detail-body" .Detail}}{{template "deck-list-items" .List}}{{template "flash-review-all" (dict "TotalDue" .TotalDue "OOB" true)}}<div id="shared-with-me" class="flash-shared-with-me" hx-swap-oob="true">{{template "shared-with-me" (dict "Offers" .SharedWithMe "CSRFToken" .Shell.CSRFToken)}}</div><input type="checkbox" id="flash-detail-open" class="visually-hidden" hx-swap-oob="true"{{if .Detail.Mode}} checked{{end}} aria-hidden="true" tabindex="-1">{{end}}
+{{define "deck-detail-with-list"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "deck-detail-body" .Detail}}{{template "deck-list-items" .List}}{{template "flash-review-all" (dict "TotalDue" .TotalDue "OOB" true)}}<input type="checkbox" id="flash-detail-open" class="visually-hidden" hx-swap-oob="true"{{if .Detail.Mode}} checked{{end}} aria-hidden="true" tabindex="-1">{{end}}
 
 {{/* flash-review-all is the toolbar's Review-all button. It shows the
      total due count, and is re-sent out of band with every pane change. */}}
@@ -63,6 +64,7 @@
 {{define "deck-detail-view"}}
 <div class="flash-deck-view deck-c-{{.Deck.Color}}" id="deck-detail-view">
 	{{template "deck-toolbar" (dict "Deck" .Deck "Active" "" "CSRFToken" .CSRFToken)}}
+	{{with .Notice}}<div class="notice flash-notice" role="status">{{.}}</div>{{end}}
 
 	<div class="flash-deck-hero">
 		{{template "flash-stack" (dict "Size" "lg")}}
@@ -225,6 +227,18 @@
 
 {{define "deck-list-items"}}
 <ul class="deck-list" id="deck-list"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	{{range .Gifts}}
+	<li>
+		<a class="deck-row deck-row-gift deck-c-{{.DeckColor}}{{if eq .ShareID $.ActiveGiftID}} deck-row-active{{end}}" href="/flash/shared/{{.ShareID}}" hx-get="/flash/shared/{{.ShareID}}" hx-target="#deck-detail" hx-push-url="true">
+			{{template "flash-stack" (dict "Size" "sm")}}
+			<span class="deck-row-text">
+				<span class="deck-row-name">{{.DeckName}}</span>
+				<span class="deck-row-status">From {{.FromUsername}}</span>
+			</span>
+			<span class="flash-gift-badge">{{if .IsMerge}}+{{.NewCardCount}}{{else}}new{{end}}</span>
+		</a>
+	</li>
+	{{end}}
 	{{range .Items}}
 	{{$d := .Deck}}
 	<li>
@@ -241,42 +255,6 @@
 </ul>
 {{end}}
 
-{{/* shared-with-me is the recipient's "shared with me" list. It is defined
-     on its own, without its own id wrapper, because it is used from two
-     places that need different wrappers around the same markup: "content"
-     renders it plain (a normal part of the full page), and
-     "deck-detail-with-list" re-renders it wrapped in an
-     hx-swap-oob="true" div with the same id, so every share/revoke/
-     adopt/decline HTMX response keeps this list in sync too. Both callers
-     pass a dict with Offers ([]ShareOffer, enriched with FromUsername —
-     see shareOfferWithUsername) and CSRFToken (always the page-level
-     Shell's token, populated regardless of which deck, if any, is
-     selected). U5 replaces this list with gift rows. */}}
-{{define "shared-with-me"}}
-{{if .Offers}}
-<h2 class="flash-list-title">Shared with you</h2>
-<ul class="flash-share-list">
-	{{range .Offers}}
-	<li>
-		<span>{{.FromUsername}} — {{.DeckName}} — {{if .PriorAdoptedDeckID}}{{.NewCardCount}} new card{{if ne .NewCardCount 1}}s{{end}} to merge{{else}}new deck{{end}}</span>
-		<span class="row">
-			<form method="post" action="/flash/shared/adopt" hx-post="/flash/shared/adopt" hx-target="#deck-detail" hx-swap="innerHTML">
-				<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
-				<input type="hidden" name="share_id" value="{{.ID}}">
-				<button type="submit" class="toolbar-btn toolbar-btn-active">{{if .PriorAdoptedDeckID}}Merge{{else}}Adopt{{end}}</button>
-			</form>
-			<form method="post" action="/flash/shared/decline" hx-post="/flash/shared/decline" hx-target="#deck-detail" hx-swap="innerHTML">
-				<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
-				<input type="hidden" name="share_id" value="{{.ID}}">
-				<button type="submit" class="toolbar-btn">Dismiss</button>
-			</form>
-		</span>
-	</li>
-	{{end}}
-</ul>
-{{end}}
-{{end}}
-
 {{define "content"}}
 <div class="flash-home">
 	{{template "flash-home-toolbar" .Data}}
@@ -287,7 +265,6 @@
 		<input type="checkbox" id="flash-detail-open" class="visually-hidden"{{if .Data.Detail.Mode}} checked{{end}} aria-hidden="true" tabindex="-1">
 		<div class="flash-list-pane">
 			<h2 class="flash-list-title">Your decks</h2>
-			<div id="shared-with-me" class="flash-shared-with-me">{{template "shared-with-me" (dict "Offers" .Data.SharedWithMe "CSRFToken" .Shell.CSRFToken)}}</div>
 			{{template "deck-list-items" .Data.List}}
 		</div>
 		<div id="deck-detail" class="flash-detail-pane">
