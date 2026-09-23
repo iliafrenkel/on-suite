@@ -129,6 +129,7 @@ func (a *App) writeMedia(w http.ResponseWriter, r *http.Request, m Media) {
 // failure (oversized file, wrong content type) re-renders the card at 400
 // with the error shown, the same pattern every other flash form uses —
 // not a generic error page, since the user is watching this happen.
+// The same form fields are accepted by the card create/update routes (UI overhaul U3), which is why the checking lives in readCardUploads.
 func (a *App) uploadCardMedia(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -148,46 +149,15 @@ func (a *App) uploadCardMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ParseMultipartForm's argument is only a maxMemory hint, not a hard
-	// cap on bytes read: without an outer limit it will read the entire
-	// body (spilling oversized parts to a temp file) before any
-	// application-level size check below ever runs. Wrapping r.Body in
-	// MaxBytesReader first makes the read itself abort partway through an
-	// oversized body. The budget covers one image part plus one audio
-	// part arriving in the same request, plus overhead for multipart
-	// boundaries/headers — not just the larger of the two alone.
-	r.Body = http.MaxBytesReader(w, r.Body, MaxImageFetchBytes+MaxAudioFetchBytes)
-
-	// A remove-only request (no file attached) may arrive as a plain
-	// form-urlencoded POST rather than multipart/form-data — ErrNotMultipart
-	// is expected there, not a failure: ParseMultipartForm still populates
-	// r.Form/r.PostForm via its own internal ParseForm call before returning
-	// it, so PostFormValue below works either way.
-	if err := r.ParseMultipartForm(MaxAudioFetchBytes); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+	uploads, errMsg := readCardUploads(w, r)
+	if errMsg != "" {
 		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest,
-			a.viewCardDetailWithMediaError(r, userID, deck, c, "That upload could not be read."))
+			a.viewCardDetailWithMediaError(r, userID, deck, c, errMsg))
 		return
 	}
-
-	for _, spec := range []struct {
-		kind, field, remove string
-		maxBytes            int64
-	}{
-		{MediaKindImage, "image", "remove_image", MaxImageFetchBytes},
-		{MediaKindAudio, "audio", "remove_audio", MaxAudioFetchBytes},
-	} {
-		if r.PostFormValue(spec.remove) != "" {
-			if err := a.store.SetCardMedia(r.Context(), userID, deck.ID, cardID, spec.kind, nil); err != nil {
-				a.fail(w, r, err)
-				return
-			}
-			continue
-		}
-		if errMsg := a.attachUpload(w, r, userID, deck, cardID, spec.kind, spec.field, spec.maxBytes); errMsg != "" {
-			a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest,
-				a.viewCardDetailWithMediaError(r, userID, deck, c, errMsg))
-			return
-		}
+	if err := a.saveCardUploads(r.Context(), userID, deck.ID, cardID, uploads); err != nil {
+		a.fail(w, r, err)
+		return
 	}
 
 	updated, err := a.store.CardByID(r.Context(), userID, deck.ID, cardID)
@@ -204,38 +174,110 @@ func (a *App) uploadCardMedia(w http.ResponseWriter, r *http.Request) {
 	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, deck, updated))
 }
 
-// attachUpload reads one optional file part named field ("image" or
-// "audio"), and if present, stores it and attaches it to the card. It
-// returns a non-empty user-facing message if the part is present but
-// invalid (oversized, wrong content type, or a store failure); no part
-// present is not an error — the request may only be touching the other
-// media kind, or removing one — so it returns "".
-func (a *App) attachUpload(w http.ResponseWriter, r *http.Request, userID int64, deck Deck, cardID int64, kind, field string, maxBytes int64) string {
+// pendingUpload is one checked, not-yet-saved media file from a card form.
+type pendingUpload struct {
+	Kind        string // MediaKindImage or MediaKindAudio
+	ContentType string // sniffed, never the client's claim
+	Data        []byte
+}
+
+// cardUploads is a card form's whole media part. It is read and checked
+// before anything is written, so a bad file can never leave a
+// half-updated card behind (UI overhaul spec §4).
+type cardUploads struct {
+	Image, Audio             *pendingUpload // nil = no new file for that kind
+	RemoveImage, RemoveAudio bool
+}
+
+// readCardUploads parses a card form — multipart/form-data when it carries
+// files, a plain urlencoded POST when it doesn't — and checks its optional
+// "image"/"audio" parts and "remove_image"/"remove_audio" flags. It must be
+// the first thing a handler does with the body. A non-empty string is a
+// message for the person who submitted the form.
+func readCardUploads(w http.ResponseWriter, r *http.Request) (cardUploads, string) {
+	// ParseMultipartForm's argument is only a maxMemory hint, not a hard cap
+	// on bytes read: without an outer limit it would read the entire body
+	// (spilling to a temp file) before any size check below runs. The
+	// budget covers one image plus one audio part in the same request.
+	r.Body = http.MaxBytesReader(w, r.Body, MaxImageFetchBytes+MaxAudioFetchBytes)
+	// A text-only or remove-only form may arrive urlencoded; ErrNotMultipart
+	// is expected then — ParseMultipartForm still fills r.PostForm.
+	if err := r.ParseMultipartForm(MaxAudioFetchBytes); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+		return cardUploads{}, "That upload could not be read."
+	}
+
+	u := cardUploads{
+		RemoveImage: r.PostFormValue("remove_image") != "",
+		RemoveAudio: r.PostFormValue("remove_audio") != "",
+	}
+	var msg string
+	if !u.RemoveImage {
+		if u.Image, msg = readUpload(w, r, MediaKindImage, "image", MaxImageFetchBytes); msg != "" {
+			return cardUploads{}, msg
+		}
+	}
+	if !u.RemoveAudio {
+		if u.Audio, msg = readUpload(w, r, MediaKindAudio, "audio", MaxAudioFetchBytes); msg != "" {
+			return cardUploads{}, msg
+		}
+	}
+	return u, ""
+}
+
+// readUpload reads and checks one optional file part. No part at all (or
+// an empty one — a file input left blank) is not an error: it returns nil
+// and "".
+func readUpload(w http.ResponseWriter, r *http.Request, kind, field string, maxBytes int64) (*pendingUpload, string) {
 	file, header, err := r.FormFile(field)
 	if err != nil {
-		return ""
+		return nil, ""
 	}
 	defer func() { _ = file.Close() }()
+	if header.Size == 0 {
+		return nil, ""
+	}
 
+	tooBig := "That file is larger than the " + strconv.FormatInt(maxBytes>>20, 10) + "MB limit."
 	if header.Size > maxBytes {
-		return "That file is larger than the " + strconv.FormatInt(maxBytes>>20, 10) + "MB limit."
+		return nil, tooBig
 	}
 	data, err := io.ReadAll(http.MaxBytesReader(w, file, maxBytes))
 	if err != nil {
-		return "That file is larger than the " + strconv.FormatInt(maxBytes>>20, 10) + "MB limit."
+		return nil, tooBig
 	}
-
 	ct := http.DetectContentType(data)
 	if !contentTypeMatchesKind(ct, kind) {
-		return "That file does not look like " + kind + " content."
+		return nil, "That file does not look like " + kind + " content."
 	}
+	return &pendingUpload{Kind: kind, ContentType: ct, Data: data}, ""
+}
 
-	hash, err := a.store.SaveMediaUpload(r.Context(), kind, ct, data, a.store.now())
-	if err != nil {
-		return userMessage(err)
+// saveCardUploads applies checked uploads to a card that now exists:
+// removals first win over a new file of the same kind (the form offers
+// either, not both).
+func (a *App) saveCardUploads(ctx context.Context, userID, deckID, cardID int64, u cardUploads) error {
+	for _, m := range []struct {
+		kind   string
+		remove bool
+		up     *pendingUpload
+	}{
+		{MediaKindImage, u.RemoveImage, u.Image},
+		{MediaKindAudio, u.RemoveAudio, u.Audio},
+	} {
+		switch {
+		case m.remove:
+			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, nil); err != nil {
+				return err
+			}
+		case m.up != nil:
+			hash, err := a.store.SaveMediaUpload(ctx, m.up.Kind, m.up.ContentType, m.up.Data, a.store.now())
+			if err != nil {
+				return err
+			}
+			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, &hash); err != nil {
+				return err
+			}
+		}
 	}
-	if err := a.store.SetCardMedia(r.Context(), userID, deck.ID, cardID, kind, &hash); err != nil {
-		return userMessage(err)
-	}
-	return ""
+	return nil
 }

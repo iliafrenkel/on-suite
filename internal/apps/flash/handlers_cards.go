@@ -69,6 +69,12 @@ type cardDetailView struct {
 	TagsValue     string
 	Error         string
 	MediaError    string
+	Notice        string // a success message above the form ("Card saved…")
+
+	// ImageMediaURL/AudioMediaURL are the card's current media, shown by
+	// the edit form so the editor can display what is already attached.
+	ImageMediaURL string
+	AudioMediaURL string
 }
 
 // mediaURL is the serving-route path for a card's image/audio hash, or ""
@@ -121,6 +127,7 @@ func (a *App) editCardDetail(r *http.Request, d Deck, c Card, errMsg, cardType, 
 	return cardDetailView{
 		Mode: cardModeEdit, Deck: d, Card: c, CardTypeValue: cardType, FrontValue: front, BackValue: back, NotesValue: notes,
 		TagsValue: tags, Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
+		ImageMediaURL: mediaURL(c.ImageHash), AudioMediaURL: mediaURL(c.AudioHash),
 	}
 }
 
@@ -331,6 +338,21 @@ func cardBasePath(deckID int64) string {
 	return "/flash/" + strconv.FormatInt(deckID, 10) + "/cards/"
 }
 
+// cardSavedNotice is shown above the empty form after "Save and add
+// another".
+const cardSavedNotice = "Card saved. Add the next one."
+
+// newCardFormURL is the new-card form pre-filled for the next card after
+// "Save and add another" without JavaScript: same type, same tags, and the
+// saved notice.
+func newCardFormURL(deckID int64, cardType, tags string) string {
+	v := url.Values{"saved": {"1"}, "type": {cardType}}
+	if tags != "" {
+		v.Set("tags", tags)
+	}
+	return cardBasePath(deckID) + "new?" + v.Encode()
+}
+
 func (a *App) newCardForm(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -340,7 +362,16 @@ func (a *App) newCardForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.renderCardIndex(w, r, userID, deck, http.StatusOK, a.newCardDetail(r, deck, "", CardTypeBasic, "", "", "", ""))
+	q := r.URL.Query()
+	cardType := q.Get("type")
+	if !isKnownCardType(cardType) {
+		cardType = CardTypeBasic
+	}
+	detail := a.newCardDetail(r, deck, "", cardType, "", "", "", q.Get("tags"))
+	if q.Get("saved") != "" {
+		detail.Notice = cardSavedNotice
+	}
+	a.renderCardIndex(w, r, userID, deck, http.StatusOK, detail)
 }
 
 func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
@@ -352,25 +383,40 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// First: parses the (possibly multipart) form and checks any files.
+	uploads, uploadErr := readCardUploads(w, r)
+
 	cardType := r.PostFormValue("card_type")
 	front := r.PostFormValue("front")
 	back := r.PostFormValue("back")
 	notes := r.PostFormValue("notes")
 	tags := r.PostFormValue("tags")
+	if cardType == CardTypeCloze {
+		// The editor hides Back for fill-in-the-blank; anything typed there
+		// before switching type is not part of the card.
+		back = ""
+	}
+	reject := func(msg string) {
+		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, msg, cardType, front, back, notes, tags))
+	}
 
+	if uploadErr != "" {
+		reject(uploadErr)
+		return
+	}
 	tagList := parseTagList(tags)
 	if err := ValidateCard(cardType, front, back); err != nil {
-		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, userMessage(err), cardType, front, back, notes, tags))
+		reject(userMessage(err))
 		return
 	}
 	if err := ValidateTagNames(tagList); err != nil {
-		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, userMessage(err), cardType, front, back, notes, tags))
+		reject(userMessage(err))
 		return
 	}
 	c, err := a.store.CreateCard(r.Context(), userID, deck.ID, cardType, front, back, notes)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
-			a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, userMessage(err), cardType, front, back, notes, tags))
+			reject(userMessage(err))
 			return
 		}
 		a.fail(w, r, err)
@@ -380,13 +426,34 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	if err := a.saveCardUploads(r.Context(), userID, deck.ID, c.ID, uploads); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+
+	if r.PostFormValue("next") == "new" {
+		if !web.IsHTMX(r) {
+			http.Redirect(w, r, newCardFormURL(deck.ID, cardType, tags), http.StatusSeeOther)
+			return
+		}
+		w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+"new")
+		next := a.newCardDetail(r, deck, "", cardType, "", "", "", tags)
+		next.Notice = cardSavedNotice
+		a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, next)
+		return
+	}
 
 	if !web.IsHTMX(r) {
 		http.Redirect(w, r, cardBasePath(deck.ID)+strconv.FormatInt(c.ID, 10), http.StatusSeeOther)
 		return
 	}
 	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+strconv.FormatInt(c.ID, 10))
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, a.viewCardDetail(r, deck, c))
+	saved, err := a.store.CardByID(r.Context(), userID, deck.ID, c.ID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, a.viewCardDetail(r, deck, saved))
 }
 
 func (a *App) editCardForm(w http.ResponseWriter, r *http.Request) {
@@ -444,12 +511,24 @@ func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	// First: parses the (possibly multipart) form and checks any files.
+	uploads, uploadErr := readCardUploads(w, r)
+
 	cardType := r.PostFormValue("card_type")
 	front := r.PostFormValue("front")
 	back := r.PostFormValue("back")
 	notes := r.PostFormValue("notes")
 	tags := r.PostFormValue("tags")
+	if cardType == CardTypeCloze {
+		// The editor hides Back for fill-in-the-blank; anything typed there
+		// before switching type is not part of the card.
+		back = ""
+	}
 
+	if uploadErr != "" {
+		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, uploadErr, cardType, front, back, notes, tags))
+		return
+	}
 	tagList := parseTagList(tags)
 	if err := ValidateCard(cardType, front, back); err != nil {
 		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags))
@@ -469,6 +548,15 @@ func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.store.SetCardTags(r.Context(), userID, updated.ID, tagList); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.saveCardUploads(r.Context(), userID, deck.ID, id, uploads); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	updated, err = a.store.CardByID(r.Context(), userID, deck.ID, id)
+	if err != nil {
 		a.fail(w, r, err)
 		return
 	}

@@ -1,0 +1,116 @@
+{{/* internal/apps/flash/templates/editor.partial.html — the card editor
+     (UI overhaul spec §4). One multipart form carries the text, the tags
+     and any media. The type toggle is CSS-only (:has on the checked
+     radio); flash.js adds Make blank, the tag-pill editor and
+     drag-and-drop, and everything works without it. */}}
+
+{{/* card-editor draws the form. Pass a dict:
+       Form           — the cardDetailView (values, Error, Notice, media URLs)
+       FormID         — "card-detail-new" or "card-detail-edit"
+       Action         — the POST URL
+       Heading        — "New card" / "Edit card"
+       IDSuffix       — keeps element ids unique
+       CancelURL, CancelLabel — where Cancel and the back button go
+       ShowAddAnother — show "Save and add another" (new cards only) */}}
+{{define "card-editor"}}
+<form class="flash-editor deck-c-{{.Form.Deck.Color}}" id="{{.FormID}}" method="post" action="{{.Action}}" enctype="multipart/form-data"
+      hx-post="{{.Action}}" hx-encoding="multipart/form-data" hx-target="#deck-detail" hx-swap="innerHTML">
+	<input type="hidden" name="{{csrfField}}" value="{{.Form.CSRFToken}}">
+	<div class="notes-toolbar flash-deck-toolbar">
+		<a class="toolbar-btn" href="{{.CancelURL}}" hx-get="{{.CancelURL}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "arrow-left"}}{{.CancelLabel}}</a>
+	</div>
+	<h1>{{.Heading}}</h1>
+	{{with .Form.Notice}}<div class="notice flash-editor-saved" role="status">{{.}}</div>{{end}}
+	{{with .Form.Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+
+	<fieldset class="flash-type-toggle">
+		<legend class="visually-hidden">Card type</legend>
+		<input type="radio" class="visually-hidden" name="card_type" value="basic" id="card-type-{{.IDSuffix}}-basic"{{if ne .Form.CardTypeValue "cloze"}} checked{{end}}>
+		<label for="card-type-{{.IDSuffix}}-basic">Question and answer</label>
+		<input type="radio" class="visually-hidden" name="card_type" value="cloze" id="card-type-{{.IDSuffix}}-cloze"{{if eq .Form.CardTypeValue "cloze"}} checked{{end}}>
+		<label for="card-type-{{.IDSuffix}}-cloze">Fill in the blank</label>
+	</fieldset>
+
+	<div class="flash-editor-faces">
+		<div class="flash-editor-face flash-editor-front">
+			<label for="card-front-{{.IDSuffix}}">
+				<span class="flash-when-basic">Front: the question</span>
+				<span class="flash-when-cloze">The sentence, with a blank</span>
+			</label>
+			<textarea id="card-front-{{.IDSuffix}}" name="front" rows="4" required>{{.Form.FrontValue}}</textarea>
+			<button type="button" class="toolbar-btn flash-make-blank" data-target="card-front-{{.IDSuffix}}" hidden>Make blank</button>
+		</div>
+		<div class="flash-editor-face flash-editor-back">
+			<label for="card-back-{{.IDSuffix}}">Back: the answer</label>
+			<textarea id="card-back-{{.IDSuffix}}" name="back" rows="4">{{.Form.BackValue}}</textarea>
+		</div>
+	</div>
+	<p class="faint flash-when-cloze">Select a word and press Make blank — or type it like {{"{{"}}c1::Paris}}.</p>
+
+	<div class="field">
+		<label for="card-notes-{{.IDSuffix}}">Extra note (shown after the answer)</label>
+		<textarea id="card-notes-{{.IDSuffix}}" name="notes" rows="2">{{.Form.NotesValue}}</textarea>
+	</div>
+	<div class="field">
+		<label for="card-tags-{{.IDSuffix}}">Tags</label>
+		<input id="card-tags-{{.IDSuffix}}" type="text" name="tags" value="{{.Form.TagsValue}}" placeholder="food, places" data-tag-input>
+	</div>
+
+	<div class="flash-drops">
+		{{template "card-drop" (dict "Kind" "image" "ID" (printf "card-image-%v" .IDSuffix) "Accept" "image/*" "Prompt" "Drop a picture here, or click to choose one" "Current" .Form.ImageMediaURL "RemoveLabel" "Remove the picture")}}
+		{{template "card-drop" (dict "Kind" "audio" "ID" (printf "card-audio-%v" .IDSuffix) "Accept" "audio/*" "Prompt" "Drop a sound here, or click to choose one" "Current" .Form.AudioMediaURL "RemoveLabel" "Remove the sound")}}
+	</div>
+
+	<div class="row flash-editor-actions">
+		<button type="submit" class="primary">Save card</button>
+		{{if .ShowAddAnother}}<button type="submit" class="button" name="next" value="new">Save and add another</button>{{end}}
+		<a class="toolbar-btn" href="{{.CancelURL}}" hx-get="{{.CancelURL}}" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
+	</div>
+</form>
+{{end}}
+
+{{/* card-drop is one media drop zone: a <label> around a visually hidden
+     file input, so clicking anywhere on it opens the file picker, and
+     flash.js makes it accept a dropped file too. Pass a dict: Kind
+     ("image"/"audio", also the field name), ID, Accept, Prompt, Current
+     (the attached file's URL, or ""), RemoveLabel. The audio player and the
+     remove checkbox sit outside the label: controls inside a label would
+     also open the picker. */}}
+{{define "card-drop"}}
+<div class="flash-drop-field">
+	<label class="flash-drop" for="{{.ID}}" data-drop>
+		<input type="file" class="visually-hidden" id="{{.ID}}" name="{{.Kind}}" accept="{{.Accept}}">
+		{{if and .Current (eq .Kind "image")}}<img class="flash-drop-preview" src="{{.Current}}" alt="Current picture">{{end}}
+		<span class="flash-drop-text">{{.Prompt}}</span>
+		<span class="flash-drop-file" aria-live="polite"></span>
+	</label>
+	{{if .Current}}
+	{{if eq .Kind "audio"}}<audio controls src="{{.Current}}"></audio>{{end}}
+	<label class="flash-drop-remove"><input type="checkbox" name="remove_{{.Kind}}" value="1"> {{.RemoveLabel}}</label>
+	{{end}}
+</div>
+{{end}}
+
+{{define "deck-detail-card-new"}}
+{{template "card-editor" (dict
+	"Form" .CardForm
+	"FormID" "card-detail-new"
+	"Action" (printf "/flash/%d/cards/new" .Deck.ID)
+	"Heading" "New card"
+	"IDSuffix" "new"
+	"CancelURL" (printf "/flash/%d/cards/" .Deck.ID)
+	"CancelLabel" "All cards"
+	"ShowAddAnother" true)}}
+{{end}}
+
+{{define "deck-detail-card-edit"}}
+{{template "card-editor" (dict
+	"Form" .CardForm
+	"FormID" "card-detail-edit"
+	"Action" (printf "/flash/%d/cards/%d" .Deck.ID .CardForm.Card.ID)
+	"Heading" "Edit card"
+	"IDSuffix" .CardForm.Card.ID
+	"CancelURL" (printf "/flash/%d/cards/%d" .Deck.ID .CardForm.Card.ID)
+	"CancelLabel" "Back to the card"
+	"ShowAddAnother" false)}}
+{{end}}
