@@ -51,7 +51,7 @@ type reviewCardView struct {
 	// ("/flash/media/{hash}"), or "" if no such media is attached. Computed
 	// here rather than in the template because Card.ImageHash/AudioHash are
 	// *string: printing a pointer directly would show its address, not the
-	// hash. Mirrors handlers_cards.go's cardDetailView.ImageMediaURL/AudioMediaURL.
+	// hash.
 	ImageMediaURL string
 	AudioMediaURL string
 }

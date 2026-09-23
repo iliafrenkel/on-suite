@@ -3,18 +3,14 @@ package flash
 
 import "net/http"
 
-type tagFilterItem struct {
-	Card Card
-	Deck Deck
-}
-
+// tagFilterView is the cross-deck tag page: every card carrying one tag, as
+// mini cards striped in their own deck's colour.
 type tagFilterView struct {
 	TagName string
-	Items   []tagFilterItem
+	Items   []cardGridItem
 }
 
-// tagFilter is Flash's cross-deck view: every card tagged tagName, regardless
-// of which deck it lives in.
+// tagFilter renders the cross-deck filter page for one tag.
 func (a *App) tagFilter(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -27,14 +23,22 @@ func (a *App) tagFilter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]tagFilterItem, 0, len(cards))
+	decks := map[int64]Deck{}
+	items := make([]cardGridItem, 0, len(cards))
 	for _, c := range cards {
-		d, err := a.store.DeckByID(r.Context(), userID, c.DeckID)
-		if err != nil {
-			a.deps.Errors.Internal(w, r, err)
-			return
+		d, ok := decks[c.DeckID]
+		if !ok {
+			if d, err = a.store.DeckByID(r.Context(), userID, c.DeckID); err != nil {
+				a.deps.Errors.Internal(w, r, err)
+				return
+			}
+			decks[c.DeckID] = d
 		}
-		items = append(items, tagFilterItem{Card: c, Deck: d})
+		items = append(items, cardGridItem{
+			Face:     newCardFace(c, d, nil),
+			Href:     cardURL(d.ID, c.ID, "", ""),
+			DeckName: d.Name,
+		})
 	}
 
 	page := a.deps.Page(r, "Tag: "+tagName)

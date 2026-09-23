@@ -1,17 +1,19 @@
+{{define "head"}}
+<script src="/flash/flash.js" defer></script>
+{{end}}
+
 {{define "content"}}
 <div class="stack">
-	<h1>Tag: {{.Data.TagName}}</h1>
-	<ul class="tag-filter-list">
-		{{if .Data.Items}}
-		{{range .Data.Items}}
-		<li class="tag-filter-item">
-			<a href="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}">{{.Card.Front}}</a>
-			<span class="faint">in {{.Deck.Name}}</span>
-		</li>
-		{{end}}
-		{{else}}
-		<li class="dim">No cards carry this tag.</li>
-		{{end}}
+	<div class="notes-toolbar flash-deck-toolbar">
+		<a class="toolbar-btn" href="/flash/">{{ticon "arrow-left"}}Decks</a>
+	</div>
+	<h1>Cards tagged <span class="flash-pill flash-pill-active">{{.Data.TagName}}</span></h1>
+	{{if .Data.Items}}
+	<ul class="flash-card-grid tag-filter-list">
+		{{range .Data.Items}}<li class="tag-filter-item">{{template "flash-mini-card" .}}</li>{{end}}
 	</ul>
+	{{else}}
+	<p class="dim">No cards carry this tag.</p>
+	{{end}}
 </div>
 {{end}}

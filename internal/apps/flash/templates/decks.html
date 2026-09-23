@@ -13,6 +13,10 @@
 {{else if eq .Mode "edit"}}{{template "deck-detail-edit" .}}
 {{else if eq .Mode "new"}}{{template "deck-detail-new" .}}
 {{else if eq .Mode "import"}}{{template "deck-detail-import" .}}
+{{else if eq .Mode "cards"}}{{template "deck-detail-cards" .}}
+{{else if eq .Mode "card"}}{{template "deck-detail-card" .}}
+{{else if eq .Mode "card-new"}}{{template "deck-detail-card-new" .}}
+{{else if eq .Mode "card-edit"}}{{template "deck-detail-card-edit" .}}
 {{else}}{{template "deck-detail-empty" .}}
 {{end}}
 {{end}}
@@ -58,18 +62,7 @@
 
 {{define "deck-detail-view"}}
 <div class="flash-deck-view deck-c-{{.Deck.Color}}" id="deck-detail-view">
-	<div class="notes-toolbar flash-deck-toolbar">
-		{{template "flash-pane-back"}}
-		<div class="notes-toolbar-actions">
-			<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/">{{ticon "cards"}}Cards</a>
-			<a class="toolbar-btn" href="/flash/edit/{{.Deck.ID}}" hx-get="/flash/edit/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "edit"}}Edit</a>
-			<form method="post" action="/flash/{{.Deck.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
-			      data-confirm="Delete “{{.Deck.Name}}” and all its cards? This can't be undone.">
-				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-				<button type="submit" class="toolbar-btn danger">{{ticon "trash"}}Delete</button>
-			</form>
-		</div>
-	</div>
+	{{template "deck-toolbar" (dict "Deck" .Deck "Active" "" "CSRFToken" .CSRFToken)}}
 
 	<div class="flash-deck-hero">
 		{{template "flash-stack" (dict "Size" "lg")}}

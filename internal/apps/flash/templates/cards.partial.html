@@ -1,0 +1,159 @@
+{{/* internal/apps/flash/templates/cards.partial.html — a deck's cards in
+     the home screen's right pane (UI overhaul spec §3). */}}
+
+{{/* deck-toolbar is the deck pane's toolbar, shared by the deck view and
+     cards mode. Pass a dict: Deck, Active ("cards" highlights Cards; ""
+     for none), CSRFToken. */}}
+{{define "deck-toolbar"}}
+<div class="notes-toolbar flash-deck-toolbar">
+	{{template "flash-pane-back"}}
+	<div class="notes-toolbar-actions">
+		<a class="toolbar-btn{{if eq .Active "cards"}} toolbar-btn-active{{end}}" href="/flash/{{.Deck.ID}}/cards/" hx-get="/flash/{{.Deck.ID}}/cards/" hx-target="#deck-detail" hx-push-url="true">{{ticon "cards"}}Cards</a>
+		<a class="toolbar-btn" href="/flash/edit/{{.Deck.ID}}" hx-get="/flash/edit/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "edit"}}Edit</a>
+		<form method="post" action="/flash/{{.Deck.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
+		      data-confirm="Delete “{{.Deck.Name}}” and all its cards? This can't be undone.">
+			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+			<button type="submit" class="toolbar-btn danger">{{ticon "trash"}}Delete</button>
+		</form>
+	</div>
+</div>
+{{end}}
+
+{{define "deck-detail-cards"}}
+<div class="flash-cards-pane deck-c-{{.Deck.Color}}" id="deck-detail-cards">
+	{{template "deck-toolbar" (dict "Deck" .Deck "Active" "cards" "CSRFToken" .CSRFToken)}}
+	<h1 class="flash-pane-title">{{.Deck.Name}}</h1>
+	{{/* Without JS this is a normal GET form to the grid itself. With JS,
+	     typing live-filters just #card-grid through the fragment route. The
+	     hidden tag input keeps the current tag pill while searching. */}}
+	<form class="flash-card-filter" method="get" action="/flash/{{.Deck.ID}}/cards/" role="search">
+		<input type="hidden" name="tag" value="{{.Grid.Tag}}">
+		<input type="search" name="q" value="{{.Grid.Query}}" placeholder="Search cards…" aria-label="Search cards"
+		       hx-get="/flash/{{.Deck.ID}}/cards/grid" hx-include="closest form"
+		       hx-target="#card-grid" hx-swap="outerHTML"
+		       hx-trigger="input changed delay:300ms, search">
+	</form>
+	{{template "card-tag-pills" .Grid}}
+	{{template "card-grid" .Grid}}
+</div>
+{{end}}
+
+{{define "card-tag-pills"}}<div id="card-tag-pills" class="flash-tag-pills"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	{{range .Pills}}<a class="flash-pill{{if .Active}} flash-pill-active{{end}}" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#deck-detail" hx-push-url="true"{{if .Active}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}
+	{{with .AllDecksTagURL}}<a class="flash-all-decks-link" href="{{.}}">Show “{{$.Tag}}” in all decks</a>{{end}}
+</div>{{end}}
+
+{{define "card-grid"}}<div id="card-grid" class="flash-card-grid">
+	<a class="flash-mini-card flash-mini-new" href="/flash/{{.Deck.ID}}/cards/new" hx-get="/flash/{{.Deck.ID}}/cards/new" hx-target="#deck-detail" hx-push-url="true">{{ticon "plus"}}New card</a>
+	{{range .Items}}{{template "flash-mini-card" .}}{{end}}
+	{{if and (not .Items) (or .Query .Tag)}}<p class="flash-grid-empty dim">No cards match. <a href="{{.ClearURL}}" hx-get="{{.ClearURL}}" hx-target="#deck-detail" hx-push-url="true">Clear filters</a></p>{{end}}
+</div>{{end}}
+
+{{/* card-grid-fragment is GET /{deckID}/cards/grid's whole response: the
+     grid (swapped by the search box's hx-target) and the pills out of
+     band, so their links carry the new search text. */}}
+{{define "card-grid-fragment"}}{{template "card-grid" .}}{{template "card-tag-pills" .}}{{end}}
+
+{{define "deck-detail-card"}}
+<div class="flash-opened-card deck-c-{{.Deck.Color}}" id="deck-detail-card">
+	<div class="notes-toolbar flash-deck-toolbar">
+		<a class="toolbar-btn flash-card-back-to-grid" href="{{.Opened.BackURL}}" hx-get="{{.Opened.BackURL}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "arrow-left"}}All cards</a>
+		<div class="notes-toolbar-actions">
+			<a class="toolbar-btn flash-card-edit" href="/flash/{{.Deck.ID}}/cards/edit/{{.Opened.Face.ID}}" hx-get="/flash/{{.Deck.ID}}/cards/edit/{{.Opened.Face.ID}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "edit"}}Edit card</a>
+			<form method="post" action="/flash/{{.Deck.ID}}/cards/{{.Opened.Face.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/cards/{{.Opened.Face.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
+			      data-confirm="Delete this card? This can't be undone.">
+				<input type="hidden" name="{{csrfField}}" value="{{.Opened.CSRFToken}}">
+				<button type="submit" class="toolbar-btn danger">{{ticon "trash"}}Delete card</button>
+			</form>
+		</div>
+	</div>
+	{{with .Opened.MediaError}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+	<div class="flash-viewer">
+		{{if .Opened.PrevURL}}<a class="flash-nav-btn flash-card-prev" href="{{.Opened.PrevURL}}" hx-get="{{.Opened.PrevURL}}" hx-target="#deck-detail" hx-push-url="true" aria-label="Previous card">‹</a>{{else}}<span class="flash-nav-btn flash-nav-btn-empty" aria-hidden="true"></span>{{end}}
+		<div class="flash-viewer-card">
+			{{template "flash-card" (dict "Face" .Opened.Face "FlipID" (printf "flip-%d" .Opened.Face.ID) "Hint" "Tap the card to flip it")}}
+		</div>
+		{{if .Opened.NextURL}}<a class="flash-nav-btn flash-card-next" href="{{.Opened.NextURL}}" hx-get="{{.Opened.NextURL}}" hx-target="#deck-detail" hx-push-url="true" aria-label="Next card">›</a>{{else}}<span class="flash-nav-btn flash-nav-btn-empty" aria-hidden="true"></span>{{end}}
+	</div>
+	<p class="faint flash-viewer-keys">Space flips the card · ← → move between cards · E edits</p>
+
+	{{/* F4's media form, kept until U3 merges it into the card editor. */}}
+	<details class="flash-media-details">
+		<summary>Picture and sound</summary>
+		<form class="stack" id="card-media-form" method="post" action="/flash/{{.Deck.ID}}/cards/{{.Opened.Face.ID}}/media" hx-post="/flash/{{.Deck.ID}}/cards/{{.Opened.Face.ID}}/media" hx-target="#deck-detail" hx-swap="innerHTML" enctype="multipart/form-data">
+			<input type="hidden" name="{{csrfField}}" value="{{.Opened.CSRFToken}}">
+			<div class="field">
+				<label for="card-image-{{.Opened.Face.ID}}">Image</label>
+				<input id="card-image-{{.Opened.Face.ID}}" type="file" name="image" accept="image/*">
+				{{if .Opened.Face.ImageURL}}<label><input type="checkbox" name="remove_image" value="1"> Remove image</label>{{end}}
+			</div>
+			<div class="field">
+				<label for="card-audio-{{.Opened.Face.ID}}">Audio</label>
+				<input id="card-audio-{{.Opened.Face.ID}}" type="file" name="audio" accept="audio/*">
+				{{if .Opened.Face.AudioURL}}<label><input type="checkbox" name="remove_audio" value="1"> Remove audio</label>{{end}}
+			</div>
+			<button type="submit" class="button">Update media</button>
+		</form>
+	</details>
+</div>
+{{end}}
+
+{{/* The card forms below are F1's, moved here unchanged except that they
+     now live in the deck pane (hx-target #deck-detail). U3 replaces them
+     with the card-face editor. Each is passed the deckDetailView; the
+     form's own values are in .CardForm. */}}
+{{define "card-form-fields"}}
+<div class="field">
+	<label for="card-type-{{.IDSuffix}}">Type</label>
+	<select id="card-type-{{.IDSuffix}}" name="card_type">
+		<option value="basic"{{if eq .CardTypeValue "basic"}} selected{{end}}>Question and answer</option>
+		<option value="cloze"{{if eq .CardTypeValue "cloze"}} selected{{end}}>Fill in the blank</option>
+	</select>
+</div>
+<div class="field">
+	<label for="card-front-{{.IDSuffix}}">Front</label>
+	<textarea id="card-front-{{.IDSuffix}}" name="front" rows="3" required>{{.FrontValue}}</textarea>
+</div>
+<div class="field">
+	<label for="card-back-{{.IDSuffix}}">Back (leave empty for fill in the blank)</label>
+	<textarea id="card-back-{{.IDSuffix}}" name="back" rows="3">{{.BackValue}}</textarea>
+</div>
+<div class="field">
+	<label for="card-notes-{{.IDSuffix}}">Extra note (shown after the answer)</label>
+	<textarea id="card-notes-{{.IDSuffix}}" name="notes" rows="3">{{.NotesValue}}</textarea>
+</div>
+<div class="field">
+	<label for="card-tags-{{.IDSuffix}}">Tags (comma-separated)</label>
+	<input id="card-tags-{{.IDSuffix}}" type="text" name="tags" value="{{.TagsValue}}">
+</div>
+{{end}}
+
+{{define "deck-detail-card-new"}}
+{{with .CardForm}}
+<form class="stack flash-card-form" id="card-detail-new" method="post" action="/flash/{{.Deck.ID}}/cards/new" hx-post="/flash/{{.Deck.ID}}/cards/new" hx-target="#deck-detail" hx-swap="innerHTML">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<h1>New card</h1>
+	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+	{{template "card-form-fields" (dict "IDSuffix" "new" "CardTypeValue" .CardTypeValue "FrontValue" .FrontValue "BackValue" .BackValue "NotesValue" .NotesValue "TagsValue" .TagsValue)}}
+	<div class="row">
+		<button type="submit" class="primary">Save card</button>
+		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/" hx-get="/flash/{{.Deck.ID}}/cards/" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
+	</div>
+</form>
+{{end}}
+{{end}}
+
+{{define "deck-detail-card-edit"}}
+{{with .CardForm}}
+<form class="stack flash-card-form" id="card-detail-edit" method="post" action="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}" hx-post="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}" hx-target="#deck-detail" hx-swap="innerHTML">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<h1>Edit card</h1>
+	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+	{{template "card-form-fields" (dict "IDSuffix" .Card.ID "CardTypeValue" .CardTypeValue "FrontValue" .FrontValue "BackValue" .BackValue "NotesValue" .NotesValue "TagsValue" .TagsValue)}}
+	<div class="row">
+		<button type="submit" class="primary">Save card</button>
+		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}" hx-get="/flash/{{.Deck.ID}}/cards/{{.Card.ID}}" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
+	</div>
+</form>
+{{end}}
+{{end}}

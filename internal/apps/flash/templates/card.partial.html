@@ -1,0 +1,42 @@
+{{/* internal/apps/flash/templates/card.partial.html — how a card is drawn
+     (UI overhaul spec §1.3). Parsed into every Flash page's template set. */}}
+
+{{/* flash-card is the large, flippable card. Pass a dict:
+       Face   — a cardFace
+       FlipID — a unique id for the flip checkbox
+       Hint   — optional line under the question ("Tap the card to flip it")
+     It emits three siblings: the visually-hidden checkbox, the card (the
+     checkbox's <label>), and the extras. The flip is pure CSS on
+     .flash-flip:checked, so a caller may put more `.flash-flip:checked ~`
+     siblings after this template in the same parent (U4's grade buttons).
+     Only non-interactive content goes inside the <label>; links and audio
+     go in .flash-card-extras, shown once the card is flipped. */}}
+{{define "flash-card"}}<input type="checkbox" class="visually-hidden flash-flip" id="{{.FlipID}}" aria-label="Show the answer">
+<label class="flash-card deck-c-{{.Face.Color}}" for="{{.FlipID}}">
+	<span class="flash-card-inner">
+		<span class="flash-card-face flash-card-front">
+			<span class="flash-card-text">{{.Face.Question}}</span>
+			{{with .Face.ImageURL}}<img class="flash-card-image" src="{{.}}" alt="">{{end}}
+			{{with $.Hint}}<span class="flash-card-hint">{{.}}</span>{{end}}
+		</span>
+		<span class="flash-card-face flash-card-back">
+			<span class="flash-card-text">{{.Face.Answer}}</span>
+			{{with .Face.Notes}}<span class="flash-card-notes">{{.}}</span>{{end}}
+			{{with .Face.Tags}}<span class="flash-card-tags">{{range .}}<span class="flash-pill">{{.Name}}</span>{{end}}</span>{{end}}
+		</span>
+	</span>
+</label>
+<div class="flash-card-extras">
+	{{with .Face.AudioURL}}<audio controls src="{{.}}"></audio>{{end}}
+	{{with .Face.Tags}}<p class="flash-tag-links">{{range .}}<a class="flash-pill" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#deck-detail" hx-push-url="true">{{.Name}}</a>{{end}}</p>{{end}}
+</div>{{end}}
+
+{{/* flash-mini-card is one grid tile: the question side only, plus a
+     status corner label. Pass a cardGridItem. InPane swaps it into the deck
+     pane; otherwise (the cross-deck tag page) it is a plain link and shows
+     its deck's name. */}}
+{{define "flash-mini-card"}}<a class="flash-mini-card deck-c-{{.Face.Color}}" href="{{.Href}}"{{if .InPane}} hx-get="{{.Href}}" hx-target="#deck-detail" hx-push-url="true"{{end}}>
+	<span class="flash-mini-text">{{.Face.Question}}</span>
+	{{with .Status}}<span class="flash-mini-status">{{.}}</span>{{end}}
+	{{with .DeckName}}<span class="flash-mini-deck">{{.}}</span>{{end}}
+</a>{{end}}

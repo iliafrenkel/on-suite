@@ -173,3 +173,33 @@ func (st *Store) CardsByTag(ctx context.Context, userID int64, tagName string) (
 	}
 	return out, rows.Err()
 }
+
+// CardTagsInDeck returns every tagged card in one of userID's decks, mapped
+// to its tag names in alphabetical order — one query for the whole cards
+// grid rather than a TagsForCard call per card. Untagged cards are absent.
+func (st *Store) CardTagsInDeck(ctx context.Context, userID, deckID int64) (map[int64][]string, error) {
+	rows, err := st.db.QueryContext(ctx,
+		`SELECT ct.card_id, t.name
+		   FROM flash_card_tags ct
+		   JOIN flash_tags t ON t.id = ct.tag_id
+		   JOIN flash_cards c ON c.id = ct.card_id
+		  WHERE c.deck_id = ? AND c.user_id = ?
+		  ORDER BY t.name ASC`, deckID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("flash: card tags in deck: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := map[int64][]string{}
+	for rows.Next() {
+		var (
+			cardID int64
+			name   string
+		)
+		if err := rows.Scan(&cardID, &name); err != nil {
+			return nil, fmt.Errorf("flash: card tags in deck: %w", err)
+		}
+		out[cardID] = append(out[cardID], name)
+	}
+	return out, rows.Err()
+}

@@ -86,6 +86,11 @@ const (
 	deckModeView   = "view"
 	deckModeNew    = "new"
 	deckModeImport = "import"
+	// Card modes (UI overhaul U2): a deck's cards live in the same pane.
+	deckModeCards    = "cards"
+	deckModeCard     = "card"
+	deckModeCardNew  = "card-new"
+	deckModeCardEdit = "card-edit"
 )
 
 // deckDetailView is what the deck detail pane renders, in any mode.
@@ -117,6 +122,12 @@ type deckDetailView struct {
 
 	PayloadValue string
 	FormatValue  string
+
+	// Card modes. Grid is set for "cards", Opened for "card", CardForm for
+	// "card-new" and "card-edit".
+	Grid     cardGridView
+	Opened   openedCardView
+	CardForm cardDetailView
 }
 
 // deckColorOption is one swatch in the colour picker.
@@ -296,6 +307,14 @@ func deckPageTitle(d deckDetailView) string {
 		return "New deck"
 	case deckModeImport:
 		return "Import"
+	case deckModeCards:
+		return "Cards · " + d.Deck.Name
+	case deckModeCard:
+		return "Card · " + d.Deck.Name
+	case deckModeCardNew:
+		return "New card · " + d.Deck.Name
+	case deckModeCardEdit:
+		return "Edit card · " + d.Deck.Name
 	default:
 		return "Decks"
 	}

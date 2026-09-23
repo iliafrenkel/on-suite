@@ -108,6 +108,9 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /{deckID}/cards/{$}", a.cardIndex)
 	r.HandleFunc("GET /{deckID}/cards/new", a.newCardForm)
 	r.HandleFunc("POST /{deckID}/cards/new", a.createCard)
+	// "grid" is a literal at the position where GET /{deckID}/cards/{cardID}
+	// has a wildcard — the same non-ambiguity shape as "new" just above.
+	r.HandleFunc("GET /{deckID}/cards/grid", a.cardGridFragment)
 	r.HandleFunc("GET /{deckID}/cards/{cardID}", a.cardIndex)
 	r.HandleFunc("GET /{deckID}/cards/edit/{cardID}", a.editCardForm)
 	r.HandleFunc("POST /{deckID}/cards/{cardID}", a.updateCard)

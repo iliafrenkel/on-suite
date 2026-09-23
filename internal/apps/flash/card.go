@@ -255,3 +255,41 @@ func scanCardRow(row rowScanner) (Card, error) {
 	}
 	return c, nil
 }
+
+// CardStatusNew and CardStatusDue are the corner labels a mini card in the
+// cards grid can carry (UI overhaul spec §3).
+const (
+	CardStatusNew = "new" // userID has never reviewed it
+	CardStatusDue = "due" // due for review at or before now
+)
+
+// CardStatuses returns the grid label for every card in one of userID's
+// decks that has one; a card that is neither new nor due is absent.
+func (st *Store) CardStatuses(ctx context.Context, userID, deckID int64, now time.Time) (map[int64]string, error) {
+	rows, err := st.db.QueryContext(ctx,
+		`SELECT c.id,
+		        CASE WHEN s.card_id IS NULL THEN ? WHEN s.due_at <= ? THEN ? ELSE '' END
+		   FROM flash_cards c
+		   LEFT JOIN flash_card_state s ON s.card_id = c.id AND s.user_id = c.user_id
+		  WHERE c.deck_id = ? AND c.user_id = ?`,
+		CardStatusNew, formatTime(now), CardStatusDue, deckID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("flash: card statuses: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := map[int64]string{}
+	for rows.Next() {
+		var (
+			id     int64
+			status string
+		)
+		if err := rows.Scan(&id, &status); err != nil {
+			return nil, fmt.Errorf("flash: card statuses: %w", err)
+		}
+		if status != "" {
+			out[id] = status
+		}
+	}
+	return out, rows.Err()
+}

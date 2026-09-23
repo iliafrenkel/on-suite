@@ -3,9 +3,12 @@ package flash_test
 
 import (
 	"net/url"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
+	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 )
 
 func TestCreateAndViewCard(t *testing.T) {
@@ -21,7 +24,7 @@ func TestCreateAndViewCard(t *testing.T) {
 		"/flash/"+itoa(deck.ID)+"/cards/1")
 
 	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/")
-	doc.MustHave(".card-list")
+	doc.MustHave("#card-grid")
 }
 
 func TestCreateCardValidation(t *testing.T) {
@@ -47,5 +50,277 @@ func TestCreatingACardInSomeoneElsesDeckIs404(t *testing.T) {
 		url.Values{"card_type": {flash.CardTypeBasic}, "front": {"a"}, "back": {"b"}})
 	if rec.Code != 404 {
 		t.Errorf("creating a card in someone else's deck = %d, want 404", rec.Code)
+	}
+}
+
+func TestCardsModeRendersInsideTheHomeLayout(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, front := range []string{"hola", "adiós"} {
+		if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, front, "x", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/")
+	doc.MustHave("#deck-list")
+	doc.MustHave(`#deck-list a.deck-row-active`)
+	tiles := doc.QueryAll("#card-grid .flash-mini-card")
+	if len(tiles) != 3 {
+		t.Fatalf("grid has %d tiles, want 3 (New card + 2 cards)", len(tiles))
+	}
+	if href, _ := htmlassert.Attr(tiles[0], "href"); href != "/flash/"+itoa(deck.ID)+"/cards/new" {
+		t.Errorf("first tile href = %q, want the New card form", href)
+	}
+	// htmlassert has no compound selectors (a.class[attr]); select by class,
+	// then check the attribute.
+	active := doc.MustHave(`.flash-deck-toolbar .toolbar-btn-active`)
+	if href, _ := htmlassert.Attr(active, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/" {
+		t.Errorf("active toolbar button href = %q, want the Cards button", href)
+	}
+}
+
+func TestCardGridStatusLabels(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "fresh", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+	graded, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "graded", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, graded.ID, flash.RatingAgain, time.Now().UTC().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/")
+	var labels []string
+	for _, n := range doc.QueryAll("#card-grid .flash-mini-status") {
+		labels = append(labels, htmlassert.Text(n))
+	}
+	if strings.Join(labels, ",") != "due,new" { // ListCards is newest first
+		t.Errorf("status labels = %v, want [due new]", labels)
+	}
+}
+
+func TestCardsSearchAndTagFilter(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ front, tags string }{{"hola", "greetings"}, {"pan", "food"}, {"agua", "food"}} {
+		s.Post(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+			url.Values{"card_type": {"basic"}, "front": {c.front}, "back": {"x"}, "tags": {c.tags}})
+	}
+	count := func(path string) int {
+		return len(s.Get(t, s.Alice, path).QueryAll("#card-grid .flash-mini-card")) - 1 // minus the New card tile
+	}
+	base := "/flash/" + itoa(deck.ID) + "/cards/"
+	if n := count(base + "?q=HOL"); n != 1 {
+		t.Errorf("q=HOL shows %d cards, want 1", n)
+	}
+	if n := count(base + "?tag=food"); n != 2 {
+		t.Errorf("tag=food shows %d cards, want 2", n)
+	}
+	if n := count(base + "?tag=food&q=agua"); n != 1 {
+		t.Errorf("tag=food&q=agua shows %d cards, want 1", n)
+	}
+
+	doc := s.Get(t, s.Alice, base+"?tag=food")
+	active := doc.MustHave("#card-tag-pills .flash-pill-active")
+	if htmlassert.Text(active) != "food" {
+		t.Errorf("active pill = %q, want food", htmlassert.Text(active))
+	}
+	allDecks := doc.MustHave(`#card-tag-pills .flash-all-decks-link`)
+	if href, _ := htmlassert.Attr(allDecks, "href"); href != "/flash/tags/food" {
+		t.Errorf("all-decks link href = %q", href)
+	}
+
+	empty := s.Get(t, s.Alice, base+"?q=zzz")
+	empty.MustHave("#card-grid .flash-grid-empty")
+}
+
+func TestCardGridFragmentForLiveSearch(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	req := httpGet(t, "/flash/"+itoa(deck.ID)+"/cards/grid?q=hol")
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != 200 {
+		t.Fatalf("grid fragment = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Replace-Url"); got != "/flash/"+itoa(deck.ID)+"/cards/?q=hol" {
+		t.Errorf("HX-Replace-Url = %q", got)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#card-grid")
+	pills := doc.MustHave("#card-tag-pills")
+	if _, ok := htmlassert.Attr(pills, "hx-swap-oob"); !ok {
+		t.Error("#card-tag-pills in the grid fragment is not marked hx-swap-oob")
+	}
+	doc.MustNotHave("#deck-list")
+}
+
+func TestOpenedCardIsFlippable(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "informal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/"+itoa(c.ID))
+	flip := doc.MustHave(".flash-viewer input.flash-flip")
+	id, _ := htmlassert.Attr(flip, "id")
+	label := doc.MustHave(".flash-viewer label.flash-card")
+	if f, _ := htmlassert.Attr(label, "for"); f != id {
+		t.Errorf("card label for=%q, checkbox id=%q; they must match for the flip to work", f, id)
+	}
+	if got := htmlassert.Text(doc.MustHave(".flash-card-front")); !strings.Contains(got, "hola") {
+		t.Errorf("front = %q", got)
+	}
+	if got := htmlassert.Text(doc.MustHave(".flash-card-back")); !strings.Contains(got, "hello") || !strings.Contains(got, "informal") {
+		t.Errorf("back = %q, want the answer and the note", got)
+	}
+	edit := doc.MustHave(`a.flash-card-edit`)
+	if href, _ := htmlassert.Attr(edit, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/edit/"+itoa(c.ID) {
+		t.Errorf("Edit card href = %q", href)
+	}
+}
+
+func TestOpenedClozeCardShowsBlankThenAnswer(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Geography", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeCloze, "The capital of France is {{c1::Paris}}.", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/"+itoa(c.ID))
+	front := doc.MustHave(".flash-card-front")
+	if strings.Contains(htmlassert.Text(front), "Paris") {
+		t.Errorf("front shows the answer: %q", htmlassert.Text(front))
+	}
+	doc.MustHave(".flash-card-front .flash-blank")
+	if got := htmlassert.Text(doc.MustHave(".flash-card-back mark.flash-fill")); got != "Paris" {
+		t.Errorf("filled answer = %q, want Paris", got)
+	}
+}
+
+func TestOpenedCardPrevNextFollowTheFilter(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Card ids are 1, 2, 3 in creation order (a fresh database).
+	for _, c := range []struct{ front, tags string }{{"one", "food"}, {"two", "other"}, {"three", "food"}} {
+		rec := s.Post(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+			url.Values{"card_type": {"basic"}, "front": {c.front}, "back": {"x"}, "tags": {c.tags}})
+		if rec.Code != 303 {
+			t.Fatalf("create: %d", rec.Code)
+		}
+	}
+	// ListCards is newest first: three(3), two(2), one(1). Filtered by food:
+	// three, one.
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/3?tag=food")
+	doc.MustNotHave(".flash-card-prev")
+	next := doc.MustHave("a.flash-card-next")
+	if href, _ := htmlassert.Attr(next, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/1?tag=food" {
+		t.Errorf("next href = %q, want card 1 (skipping untagged card 2)", href)
+	}
+	back := doc.MustHave("a.flash-card-back-to-grid")
+	if href, _ := htmlassert.Attr(back, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/?tag=food" {
+		t.Errorf("All cards href = %q, want the filtered grid", href)
+	}
+}
+
+func TestDeleteCardReturnsToTheGrid(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/"+itoa(c.ID)+"/delete", url.Values{})
+	if rec.Code != 200 {
+		t.Fatalf("delete card = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Push-Url"); got != "/flash/"+itoa(deck.ID)+"/cards/" {
+		t.Errorf("HX-Push-Url = %q, want the deck's cards grid URL", got)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#card-grid")
+	doc.MustNotHave(".flash-viewer")
+	if _, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, c.ID); err == nil {
+		t.Error("card still exists after delete")
+	}
+}
+
+func TestCardEditFormRendersPrefilledValues(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "informal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetCardTags(t.Context(), s.Alice.User.ID, c.ID, []string{"basics", "greetings"}); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/edit/"+itoa(c.ID))
+	doc.MustHave("#card-detail-edit")
+
+	front := doc.MustHave("#card-front-" + itoa(c.ID))
+	if got := htmlassert.Text(front); got != "hola" {
+		t.Errorf("front value = %q, want hola", got)
+	}
+	back := doc.MustHave("#card-back-" + itoa(c.ID))
+	if got := htmlassert.Text(back); got != "hello" {
+		t.Errorf("back value = %q, want hello", got)
+	}
+	notes := doc.MustHave("#card-notes-" + itoa(c.ID))
+	if got := htmlassert.Text(notes); got != "informal" {
+		t.Errorf("notes value = %q, want informal", got)
+	}
+	tags := doc.MustHave("#card-tags-" + itoa(c.ID))
+	if got, _ := htmlassert.Attr(tags, "value"); got != "basics, greetings" {
+		t.Errorf("tags value = %q, want %q", got, "basics, greetings")
+	}
+}
+
+func TestDeckPaneCardsButtonSwapsThePane(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID))
+	btn := doc.MustHave(`.flash-deck-toolbar a[href="/flash/` + itoa(deck.ID) + `/cards/"]`)
+	if target, _ := htmlassert.Attr(btn, "hx-target"); target != "#deck-detail" {
+		t.Errorf("Cards button hx-target = %q, want #deck-detail", target)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 )
@@ -245,5 +246,45 @@ func TestDeletingADeckRemovesItsCards(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("%d cards survived their deck", len(got))
+	}
+}
+
+func TestCardStatuses(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "new one", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	due, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "due one", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	later, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "later one", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Again puts a card in a learning step minutes away; Easy days away.
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, due.ID, flash.RatingAgain, now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, later.ID, flash.RatingEasy, now); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.CardStatuses(ctx, f.alice.ID, d.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[fresh.ID] != flash.CardStatusNew || got[due.ID] != flash.CardStatusDue {
+		t.Errorf("CardStatuses = %v, want fresh=new and due=due", got)
+	}
+	if s, ok := got[later.ID]; ok {
+		t.Errorf("a card scheduled days out has status %q, want none", s)
 	}
 }
