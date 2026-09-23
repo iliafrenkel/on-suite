@@ -2995,3 +2995,159 @@ input.flash-tag-entry:focus { outline: none; }
 	.flash-editor-faces,
 	.flash-drops { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---- ON Flash: review (UI overhaul U4) --------------------------------- */
+
+:root {
+	--flash-grade-again: #E24B4A; --flash-grade-again-bg: #FCEBEB; --flash-grade-again-text: #791F1F;
+	--flash-grade-hard:  #EF9F27; --flash-grade-hard-bg:  #FAEEDA; --flash-grade-hard-text:  #633806;
+	--flash-grade-good:  #1D9E75; --flash-grade-good-bg:  #E1F5EE; --flash-grade-good-text:  #085041;
+	--flash-grade-easy:  #378ADD; --flash-grade-easy-bg:  #E6F1FB; --flash-grade-easy-text:  #0C447C;
+}
+:root[data-theme="dark"] {
+	--flash-grade-again-bg: #501313; --flash-grade-again-text: #F7C1C1;
+	--flash-grade-hard-bg:  #412402; --flash-grade-hard-text:  #FAC775;
+	--flash-grade-good-bg:  #04342C; --flash-grade-good-text:  #9FE1CB;
+	--flash-grade-easy-bg:  #042C53; --flash-grade-easy-text:  #B5D4F4;
+}
+
+.flash-review { max-width: 40rem; margin: 0 auto; }
+
+.flash-review-top {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	margin-bottom: var(--s-4);
+	font-size: var(--fs-sm);
+	color: var(--c-text-dim);
+}
+.flash-review-scope { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 12rem; }
+.flash-progress { flex: 1; height: 8px; min-width: 4rem; }
+.flash-progress .track { fill: var(--c-bg-inset); }
+.flash-progress .fill { fill: var(--deck, var(--c-accent)); }
+.flash-review-count { white-space: nowrap; }
+
+.flash-review-card .flash-card { max-width: 28rem; margin: 0 auto; }
+.flash-review-card .flash-card-inner { min-height: 16rem; }
+.flash-card-corner {
+	position: absolute;
+	top: var(--s-4);
+	left: var(--s-4);
+	font-size: var(--fs-xs);
+	color: var(--c-text-faint);
+}
+
+.flash-show-answer {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s-2);
+	width: fit-content;
+	min-height: 2.75rem;
+	margin: var(--s-4) auto 0;
+	padding: var(--s-2) var(--s-6);
+	border-radius: 10px;
+	background: var(--c-accent);
+	color: #fff;
+	font-size: var(--fs-lg);
+	font-weight: 500;
+	cursor: pointer;
+}
+:root[data-theme="dark"] .flash-show-answer { color: #10141a; }
+.flash-show-answer kbd,
+.flash-grade kbd,
+.flash-undo-btn kbd {
+	font-family: var(--font-ui);
+	font-size: var(--fs-2xs);
+	opacity: 0.75;
+}
+
+/* Grade buttons: hidden until the card is flipped (CSS only). */
+.flash-grades {
+	display: none;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: var(--s-3);
+	max-width: 34rem;
+	margin: var(--s-4) auto 0;
+}
+.flash-flip:checked ~ .flash-show-answer { display: none; }
+.flash-flip:checked ~ .flash-grades { display: grid; }
+.flash-grade {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	min-height: 3.5rem;
+	padding: var(--s-2);
+	border-radius: 10px;
+	border: 2px solid;
+	font-size: var(--fs-base);
+	font-weight: 600;
+	cursor: pointer;
+}
+.flash-grade-again { border-color: var(--flash-grade-again); background: var(--flash-grade-again-bg); color: var(--flash-grade-again-text); }
+.flash-grade-hard  { border-color: var(--flash-grade-hard);  background: var(--flash-grade-hard-bg);  color: var(--flash-grade-hard-text); }
+.flash-grade-good  { border-color: var(--flash-grade-good);  background: var(--flash-grade-good-bg);  color: var(--flash-grade-good-text); }
+.flash-grade-easy  { border-color: var(--flash-grade-easy);  background: var(--flash-grade-easy-bg);  color: var(--flash-grade-easy-text); }
+.flash-grade:hover { filter: brightness(0.97); }
+.flash-grade:focus-visible { outline: var(--ring); outline-offset: 2px; }
+
+.flash-undo { display: flex; justify-content: center; margin-top: var(--s-4); }
+
+/* End-of-session summary. */
+.flash-review-summary {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--s-3);
+	padding: var(--s-6) var(--s-4);
+	text-align: center;
+}
+.flash-review-summary h1 { margin: 0; }
+.flash-summary-lead { margin: 0; font-size: var(--fs-lg); }
+.flash-breakdown { width: 100%; max-width: 24rem; height: 12px; border-radius: 6px; overflow: hidden; }
+.flash-seg-good  { fill: var(--flash-grade-good); }
+.flash-seg-easy  { fill: var(--flash-grade-easy); }
+.flash-seg-hard  { fill: var(--flash-grade-hard); }
+.flash-seg-again { fill: var(--flash-grade-again); }
+.flash-breakdown-legend { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
+.flash-streak { margin: 0; font-weight: 500; }
+
+/* A short burst of little cards, played once when the summary appears. */
+.flash-celebrate {
+	position: absolute;
+	top: var(--s-5);
+	left: 50%;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+.flash-celebrate span {
+	position: absolute;
+	width: 14px;
+	height: 18px;
+	border-radius: 3px;
+	background: var(--deck);
+	opacity: 0;
+	animation: flash-burst 1s ease-out forwards;
+}
+.flash-celebrate span:nth-child(1) { --dx: -110px; --dy: -30px; --rot: -40deg; }
+.flash-celebrate span:nth-child(2) { --dx: -60px;  --dy: -70px; --rot: -15deg; animation-delay: 0.05s; }
+.flash-celebrate span:nth-child(3) { --dx: -10px;  --dy: -90px; --rot: 10deg;  animation-delay: 0.1s; }
+.flash-celebrate span:nth-child(4) { --dx: 40px;   --dy: -80px; --rot: 25deg;  animation-delay: 0.05s; }
+.flash-celebrate span:nth-child(5) { --dx: 90px;   --dy: -50px; --rot: 45deg;  animation-delay: 0.1s; }
+.flash-celebrate span:nth-child(6) { --dx: 120px;  --dy: -10px; --rot: 70deg;  animation-delay: 0.15s; }
+@keyframes flash-burst {
+	0%   { opacity: 0; transform: translate(0, 0) rotate(0) scale(0.4); }
+	20%  { opacity: 1; }
+	100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(1); }
+}
+
+@media (max-width: 640px) {
+	.flash-grades { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.flash-celebrate { display: none; }
+}
