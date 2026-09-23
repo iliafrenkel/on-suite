@@ -191,3 +191,64 @@ func TestSaveAndAddAnotherWithoutJS(t *testing.T) {
 		t.Error("the card type was not carried over to the next card")
 	}
 }
+
+func TestNewCardEditorStructure(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new")
+	form := doc.MustHave("form#card-detail-new")
+	if v, _ := htmlassert.Attr(form, "enctype"); v != "multipart/form-data" {
+		t.Errorf("enctype = %q", v)
+	}
+	if v, _ := htmlassert.Attr(form, "hx-encoding"); v != "multipart/form-data" {
+		t.Errorf("hx-encoding = %q", v)
+	}
+	if n := len(doc.QueryAll(`#card-detail-new input[name=card_type]`)); n != 2 {
+		t.Errorf("%d card_type radios, want 2", n)
+	}
+	doc.MustHave(`.flash-editor-front textarea[name=front]`)
+	doc.MustHave(`.flash-editor-back textarea[name=back]`)
+	doc.MustHave(`label.flash-drop input[name=image]`)
+	doc.MustHave(`label.flash-drop input[name=audio]`)
+	doc.MustHave(`#card-detail-new input[data-tag-input]`)
+	next := doc.MustHave(`#card-detail-new button[name=next]`)
+	if v, _ := htmlassert.Attr(next, "value"); v != "new" {
+		t.Errorf("Save and add another value = %q", v)
+	}
+	blank := doc.MustHave(`.flash-make-blank`)
+	if _, ok := htmlassert.Attr(blank, "hidden"); !ok {
+		t.Error("Make blank must start hidden; flash.js reveals it")
+	}
+}
+
+func TestEditCardEditorOffersToRemoveExistingImage(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": onePNG})
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/edit/1")
+	doc.MustHave(`form#card-detail-edit input[name=remove_image]`)
+	doc.MustNotHave(`form#card-detail-edit input[name=remove_audio]`)
+	doc.MustNotHave(`form#card-detail-edit button[name=next]`)
+}
+
+func TestOpenedCardHasNoSeparateMediaForm(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "cat", "gato", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/"+itoa(c.ID))
+	doc.MustNotHave("#card-media-form")
+}
