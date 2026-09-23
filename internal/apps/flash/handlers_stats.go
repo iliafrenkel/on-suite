@@ -68,7 +68,7 @@ func buildChart(title string, days []DayCount, value func(DayCount) int) chartVi
 	return out
 }
 
-// statsView is the whole stats page.
+// statsView is the stats pane's data.
 type statsView struct {
 	Tiles []statTile
 	Chart chartView
@@ -132,14 +132,20 @@ func (a *App) stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cardCounts := make(map[int64]int, len(sums))
+	reviewNow := make(map[int64]int, len(sums))
 	for _, s := range sums {
 		cardCounts[s.Deck.ID] = s.CardCount
+		reviewNow[s.Deck.ID] = s.ReviewNow
 	}
 	rows := make([]deckLoadRow, len(perDeck))
 	for i, l := range perDeck {
 		n := cardCounts[l.Deck.ID]
 		rows[i] = deckLoadRow{
-			Deck: l.Deck, Mastered: l.Mastered, Due: l.Due, Reviews: l.ReviewsLast30Days,
+			// Due comes from DeckSummary.ReviewNow, not PerDeckLoad's own Due,
+			// so this row's badge matches the deck list's badge on the same
+			// screen — capped by the daily review budget (plus today's
+			// allowed new cards) and zeroed while the deck is snoozed.
+			Deck: l.Deck, Mastered: l.Mastered, Due: reviewNow[l.Deck.ID], Reviews: l.ReviewsLast30Days,
 			CardCount: n, MasteredPct: progressPercent(l.Mastered, n), Snoozed: l.Snoozed,
 		}
 	}

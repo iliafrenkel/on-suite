@@ -153,10 +153,11 @@ func TestStatsPageRendersConsistentNumbers(t *testing.T) {
 }
 
 // TestStatsPageMarksSnoozedDeckInPerDeckTable proves the per-deck table
-// gives some visible sign that a snoozed deck's Due count doesn't add up
-// against the account-wide "Cards due" tile the same way an active deck's
-// does (CardsDueToday excludes snoozed decks; PerDeckLoad's per-deck Due
-// deliberately does not).
+// gives some visible sign that a deck is snoozed: its row is marked "taking
+// a break" while an active deck's is not. It does not assert a due-count
+// value — the row's Due now comes from DeckSummary.ReviewNow, which is
+// zeroed for a snoozed deck just like the deck list's own badge, so there is
+// no divergence left to check here.
 func TestStatsPageMarksSnoozedDeckInPerDeckTable(t *testing.T) {
 	s := apptest.NewServer(t, flash.New(), flash.NewStore)
 	ctx := t.Context()
