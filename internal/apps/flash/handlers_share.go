@@ -67,6 +67,9 @@ func (a *App) shareDeck(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
+	if web.IsHTMX(r) {
+		w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
+	}
 	view := a.viewDeckDetail(r, userID, d, recipients, shares)
 	view.ShareOpen = true
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
@@ -103,6 +106,9 @@ func (a *App) revokeShareHandler(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
+	if web.IsHTMX(r) {
+		w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
+	}
 	view := a.viewDeckDetail(r, userID, d, recipients, shares)
 	view.ShareOpen = true
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
@@ -124,6 +130,9 @@ func (a *App) declineShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.deps.Log.Info("share declined", "app", ID, "user_id", userID, "share_id", shareID)
+	if web.IsHTMX(r) {
+		w.Header().Set("HX-Push-Url", "/flash/")
+	}
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, deckDetailView{})
 }
 

@@ -108,6 +108,9 @@ func TestDeclineShareHandler(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("decline: %d; body: %s", rec.Code, rec.Body.String())
 	}
+	if got := rec.Header().Get("HX-Push-Url"); got != "/flash/" {
+		t.Errorf("decline HX-Push-Url = %q, want /flash/ so the URL doesn't dead-end on the gone share", got)
+	}
 	offers, err = s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
 	if err != nil || len(offers) != 0 {
 		t.Fatalf("offers after decline = %+v, want none", offers)
@@ -330,4 +333,40 @@ func TestCardsModeToolbarAlsoHasShare(t *testing.T) {
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")
 	doc := s.Get(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/cards/")
 	doc.MustHave(".flash-deck-toolbar details.flash-share-menu")
+}
+
+// TestShareAndRevokeFromCardsModeSyncURL covers finding #2 from the U5
+// final review: sharing or revoking from Cards mode always renders the
+// deck-view pane, so HX-Push-Url must redirect the URL there too, even
+// though the request came from /flash/{id}/cards/.
+func TestShareAndRevokeFromCardsModeSyncURL(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := strconv.FormatInt(deckID, 10)
+	wantURL := "/flash/" + deckIDStr
+
+	s.Get(t, s.Alice, "/flash/"+deckIDStr+"/cards/") // land in Cards mode first
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/share",
+		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}})
+	if rec.Code != 200 {
+		t.Fatalf("share: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Push-Url"); got != wantURL {
+		t.Errorf("share HX-Push-Url = %q, want %q to match the deck-view pane it renders", got, wantURL)
+	}
+
+	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
+	if err != nil || len(offers) != 1 {
+		t.Fatalf("setup: offers = %+v, err = %v", offers, err)
+	}
+	shareIDStr := strconv.FormatInt(offers[0].ID, 10)
+
+	rec = s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/share/"+shareIDStr+"/revoke", url.Values{})
+	if rec.Code != 200 {
+		t.Fatalf("revoke: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Push-Url"); got != wantURL {
+		t.Errorf("revoke HX-Push-Url = %q, want %q to match the deck-view pane it renders", got, wantURL)
+	}
 }
