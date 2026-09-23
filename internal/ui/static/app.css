@@ -2629,3 +2629,218 @@ kbd {
 	.flash-back-btn { display: inline-flex; }
 	.flash-deck-hero { flex-direction: column; align-items: flex-start; }
 }
+
+/* ---- ON Flash: cards (UI overhaul U2) ---------------------------------- */
+
+:root { --flash-card-bg: #ffffff; }
+:root[data-theme="dark"] { --flash-card-bg: var(--c-bg-inset); }
+
+.flash-pane-title { margin: 0 0 var(--s-3); font-size: var(--fs-xl); }
+
+/* Search and pills above the grid. */
+.flash-card-filter { margin-bottom: var(--s-3); }
+.flash-card-filter input[type="search"] {
+	width: 100%;
+	max-width: 24rem;
+	padding: var(--s-2) var(--s-3);
+	border: 1px solid var(--c-border-firm);
+	border-radius: var(--radius);
+	background: var(--c-bg);
+	color: var(--c-text);
+	font: inherit;
+}
+.flash-tag-pills { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-bottom: var(--s-3); }
+.flash-tag-pills:empty { display: none; }
+
+.flash-pill {
+	display: inline-flex;
+	align-items: center;
+	min-height: 2rem;
+	padding: 0 var(--s-3);
+	border-radius: 999px;
+	border: 1px solid transparent;
+	background: var(--c-bg-subtle);
+	color: var(--c-text-dim);
+	font-size: var(--fs-sm);
+	text-decoration: none;
+}
+a.flash-pill:hover { color: var(--c-text); border-color: var(--c-border-firm); }
+.flash-pill-active {
+	background: var(--c-accent-bg);
+	color: var(--c-accent);
+	border-color: var(--c-accent);
+}
+.flash-all-decks-link { font-size: var(--fs-sm); margin-left: var(--s-2); }
+
+/* The grid of mini cards. */
+.flash-card-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+	gap: var(--s-3);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.flash-mini-card {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s-1);
+	min-height: 5.5rem;
+	padding: var(--s-4) var(--s-2) var(--s-3);
+	overflow: hidden;
+	border-radius: 10px;
+	border: 1px solid var(--c-border);
+	background: var(--flash-card-bg);
+	color: var(--c-text);
+	text-align: center;
+	text-decoration: none;
+	font-size: var(--fs-sm);
+	transition: transform 0.12s, box-shadow 0.12s;
+}
+.flash-mini-card::before {
+	content: "";
+	position: absolute;
+	top: 0; left: 0; right: 0;
+	height: 5px;
+	background: var(--deck, var(--c-border-firm));
+}
+.flash-mini-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgb(0 0 0 / 0.08); }
+.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
+.flash-mini-text {
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	white-space: pre-line;
+}
+.flash-mini-status,
+.flash-mini-deck {
+	position: absolute;
+	bottom: var(--s-1);
+	font-size: var(--fs-2xs);
+	color: var(--c-text-faint);
+}
+.flash-mini-status { right: var(--s-2); }
+.flash-mini-deck { left: var(--s-2); }
+.flash-mini-new {
+	border-style: dashed;
+	border-color: var(--c-border-firm);
+	background: transparent;
+	color: var(--c-text-dim);
+}
+.flash-mini-new::before { display: none; }
+.flash-grid-empty { grid-column: 1 / -1; }
+
+/* The large, flippable card. The checkbox before it holds the state. */
+.flash-viewer {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s-3);
+	margin: var(--s-4) 0 var(--s-2);
+}
+.flash-viewer-card { flex: 0 1 26rem; min-width: 0; }
+.flash-nav-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 2.75rem;
+	height: 2.75rem;
+	border-radius: 50%;
+	border: 1px solid var(--c-border-firm);
+	color: var(--c-text-dim);
+	font-size: 1.5rem;
+	text-decoration: none;
+}
+.flash-nav-btn:hover { background: var(--c-bg-subtle); color: var(--c-text); }
+.flash-nav-btn-empty { visibility: hidden; }
+.flash-viewer-keys { text-align: center; }
+
+.flash-card {
+	display: block;
+	margin: 0;
+	perspective: 1000px;
+	cursor: pointer;
+	color: var(--c-text);
+	font-size: var(--fs-base);
+}
+.flash-card-inner {
+	position: relative;
+	display: block;
+	min-height: 15rem;
+	transition: transform 0.55s cubic-bezier(0.3, 0.7, 0.3, 1.2);
+	transform-style: preserve-3d;
+}
+.flash-flip:checked + .flash-card .flash-card-inner { transform: rotateY(180deg); }
+.flash-card-face {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s-3);
+	padding: var(--s-6) var(--s-4) var(--s-4);
+	overflow: auto;
+	border-radius: 14px;
+	border: 1px solid var(--c-border);
+	background: var(--flash-card-bg);
+	text-align: center;
+	backface-visibility: hidden;
+	-webkit-backface-visibility: hidden;
+}
+.flash-card-face::before {
+	content: "";
+	position: absolute;
+	top: 0; left: 0; right: 0;
+	height: 8px;
+	background: var(--deck, var(--c-border-firm));
+}
+.flash-card-back { transform: rotateY(180deg); }
+.flash-card-text { font-size: var(--fs-xl); font-weight: 500; white-space: pre-line; overflow-wrap: anywhere; }
+.flash-card-notes { color: var(--c-text-dim); font-size: var(--fs-sm); white-space: pre-line; }
+.flash-card-hint { color: var(--c-text-faint); font-size: var(--fs-xs); }
+.flash-card-image { max-width: 100%; max-height: 8rem; border-radius: var(--radius); }
+.flash-card-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-1); }
+.flash-flip:focus-visible + .flash-card .flash-card-face { outline: var(--ring); outline-offset: 3px; }
+
+/* Links and audio sit outside the <label> so clicking them can't also flip
+ * the card; they appear once it has been flipped. */
+.flash-card-extras { display: none; margin-top: var(--s-3); text-align: center; }
+.flash-flip:checked ~ .flash-card-extras { display: block; }
+.flash-tag-links { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); margin: var(--s-2) 0 0; }
+
+/* Cloze blanks and fills. */
+.flash-blank {
+	display: inline-block;
+	min-width: 4em;
+	border-bottom: 3px solid var(--deck, var(--c-accent));
+	color: var(--c-text-faint);
+	font-size: 0.7em;
+	vertical-align: baseline;
+}
+.flash-fill {
+	padding: 0 0.2em;
+	border-radius: 4px;
+	background: var(--deck-soft, var(--c-accent-bg));
+	color: inherit;
+}
+
+.flash-media-details { margin-top: var(--s-5); }
+.flash-media-details summary { cursor: pointer; color: var(--c-text-dim); font-size: var(--fs-sm); }
+
+.flash-card-form { max-width: var(--measure); }
+
+@media (prefers-reduced-motion: reduce) {
+	.flash-card-inner { transition: none; }
+	.flash-flip:checked + .flash-card .flash-card-inner { transform: none; }
+	.flash-card-back { transform: none; opacity: 0; transition: opacity 0.2s; }
+	.flash-card-front { transition: opacity 0.2s; }
+	.flash-flip:checked + .flash-card .flash-card-back { opacity: 1; }
+	.flash-flip:checked + .flash-card .flash-card-front { opacity: 0; }
+	.flash-mini-card { transition: none; }
+	.flash-mini-card:hover { transform: none; }
+}
