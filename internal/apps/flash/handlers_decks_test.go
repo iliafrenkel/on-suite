@@ -176,6 +176,50 @@ func TestSnoozeAndUnsnoozeDeckOverHTTP(t *testing.T) {
 	}
 }
 
+// TestSnoozedDeckPaneAndListRow checks how a snoozed deck actually renders:
+// the pane offers an Unsnooze form and hides the "Take a break" section and
+// the Review CTA, and the deck's list row is marked and says so.
+func TestSnoozedDeckPaneAndListRow(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, time.Now().Add(7*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID))
+
+	form := doc.MustHave(`form[action="/flash/` + itoa(deck.ID) + `/unsnooze"]`)
+	if got := htmlassert.Text(form); !strings.Contains(got, "Unsnooze") {
+		t.Errorf("unsnooze form text = %q, want it to contain Unsnooze", got)
+	}
+
+	doc.MustNotHave(".flash-review-cta")
+
+	for _, section := range doc.QueryAll(".flash-deck-section") {
+		if strings.Contains(htmlassert.Text(section), "Take a break") {
+			t.Error("the pane still shows the \"Take a break\" section on a snoozed deck")
+		}
+	}
+
+	row := doc.MustHave("#deck-list a")
+	class, _ := htmlassert.Attr(row, "class")
+	if !strings.Contains(class, "deck-row-snoozed") {
+		t.Errorf("deck row class = %q, want it to contain deck-row-snoozed", class)
+	}
+	if got := htmlassert.Text(row); !strings.Contains(got, "taking a break") {
+		t.Errorf("deck row text = %q, want it to say taking a break", got)
+	}
+	if n := doc.Query("#deck-list .flash-due-badge"); n != nil {
+		t.Error("a snoozed deck's row still shows a due badge")
+	}
+}
+
 func TestSnoozeDeckRequiresCSRF(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
