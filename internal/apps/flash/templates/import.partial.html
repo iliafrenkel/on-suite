@@ -1,6 +1,7 @@
 {{define "deck-detail-import"}}
 <form class="stack" id="deck-detail-import" method="post" action="/flash/import" hx-post="/flash/import" hx-target="#deck-detail" hx-swap="innerHTML">
 	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<div class="notes-toolbar flash-deck-toolbar">{{template "flash-pane-back"}}</div>
 	<h1>Import</h1>
 	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
 	<div class="field">
@@ -16,7 +17,7 @@
 		<textarea id="import-payload" name="payload" rows="16" autofocus required>{{.PayloadValue}}</textarea>
 	</div>
 	<div class="row">
-		<button type="submit" class="toolbar-btn toolbar-btn-active">Import</button>
+		<button type="submit" class="primary">Import</button>
 		<a class="toolbar-btn" href="/flash/" hx-get="/flash/" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
 	</div>
 </form>

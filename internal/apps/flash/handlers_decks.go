@@ -94,11 +94,22 @@ type deckDetailView struct {
 	Deck      Deck
 	CSRFToken string
 
+	// Summary and NextLabel are filled in by buildDeckIndex for Mode
+	// "view" — the Review button, tiles, and "next cards" line.
+	Summary   DeckSummary
+	NextLabel string
+
+	// HasDecks is filled in by buildDeckIndex for the empty mode: false
+	// shows the first-run welcome, true a "pick a deck" hint.
+	HasDecks bool
+
 	ShareRecipients []auth.Account      // every other account, for the Share dropdown
 	SharedWith      []shareWithUsername // this deck's own share offers, for the creator's list
 
 	NameValue        string
 	DescriptionValue string
+	ColorValue       string
+	Colors           []deckColorOption
 	Error            string
 
 	NewCardsPerDayValue string
@@ -108,9 +119,46 @@ type deckDetailView struct {
 	FormatValue  string
 }
 
-// deckListItem is one row on the deck list page.
+// deckColorOption is one swatch in the colour picker.
+type deckColorOption struct {
+	Name  string // a DeckColors entry, the radio value and the deck-c-* class suffix
+	Label string // its accessible name, e.g. "Teal"
+}
+
+// deckColorOptions lists every DeckColors entry with a label.
+func deckColorOptions() []deckColorOption {
+	out := make([]deckColorOption, len(DeckColors))
+	for i, name := range DeckColors {
+		out[i] = deckColorOption{Name: name, Label: upperFirst(name)}
+	}
+	return out
+}
+
+// deckListItem is one row in the deck list: a projection of DeckSummary
+// down to what the row shows.
 type deckListItem struct {
-	Deck Deck
+	Deck      Deck
+	CardCount int
+	Due       int    // ReviewNow; the badge shows when > 0
+	Status    string // the row's second line
+	Snoozed   bool
+}
+
+func newDeckListItem(s DeckSummary) deckListItem {
+	item := deckListItem{Deck: s.Deck, CardCount: s.CardCount, Due: s.ReviewNow, Snoozed: s.Snoozed}
+	switch {
+	case s.Snoozed:
+		item.Status = "taking a break"
+	case s.CardCount == 0:
+		item.Status = "no cards yet"
+	case s.ReviewNow == 0:
+		item.Status = "all done"
+	case s.CardCount == 1:
+		item.Status = "1 card"
+	default:
+		item.Status = strconv.Itoa(s.CardCount) + " cards"
+	}
+	return item
 }
 
 type deckListFragment struct {
@@ -125,6 +173,7 @@ type deckIndexView struct {
 	Title        string
 	Shell        render.Shell
 	SharedWithMe []shareOfferWithUsername // pending offers addressed to the viewer
+	TotalDue     int                      // sum of every deck's ReviewNow: the "Review all" count
 }
 
 // shareWithUsername is one row of the creator's "Shared with" list: a
@@ -214,31 +263,27 @@ func (a *App) viewDeckDetail(r *http.Request, userID int64, d Deck, recipients [
 	}
 }
 
-func (a *App) newDeckDetail(r *http.Request, errMsg, name, description string) deckDetailView {
+func (a *App) newDeckDetail(r *http.Request, errMsg, name, description, color string) deckDetailView {
+	if color == "" {
+		color = DefaultDeckColor
+	}
 	return deckDetailView{
 		Mode: deckModeNew, NameValue: name, DescriptionValue: description,
+		ColorValue: color, Colors: deckColorOptions(),
 		Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
 	}
 }
 
-func (a *App) editDeckDetail(r *http.Request, d Deck, errMsg, name, description, newCardsPerDay, reviewsPerDay string) deckDetailView {
+func (a *App) editDeckDetail(r *http.Request, d Deck, errMsg, name, description, color, newCardsPerDay, reviewsPerDay string) deckDetailView {
+	if color == "" {
+		color = d.Color
+	}
 	return deckDetailView{
 		Mode: "edit", Deck: d, NameValue: name, DescriptionValue: description,
+		ColorValue: color, Colors: deckColorOptions(),
 		NewCardsPerDayValue: newCardsPerDay, ReviewsPerDayValue: reviewsPerDay,
 		Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
 	}
-}
-
-func (a *App) deckListItems(ctx context.Context, userID int64) ([]deckListItem, error) {
-	decks, err := a.store.ListDecks(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	items := make([]deckListItem, 0, len(decks))
-	for _, d := range decks {
-		items = append(items, deckListItem{Deck: d})
-	}
-	return items, nil
 }
 
 func deckPageTitle(d deckDetailView) string {
@@ -286,44 +331,72 @@ func (a *App) deckIndex(w http.ResponseWriter, r *http.Request) {
 	a.renderDeckIndex(w, r, userID, http.StatusOK, detail)
 }
 
-func (a *App) renderDeckIndex(w http.ResponseWriter, r *http.Request, userID int64, status int, detail deckDetailView) {
-	items, err := a.deckListItems(r.Context(), userID)
+// buildDeckIndex assembles the home screen's whole view model — list,
+// pane, toolbar count, gift offers — for both the full-page and HTMX paths,
+// so the two can never compute any of it differently. oob marks the list
+// for an out-of-band swap (every fragment response sets it).
+func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailView, oob bool) (deckIndexView, error) {
+	ctx := r.Context()
+	now := a.store.now()
+	sums, err := a.store.DeckSummaries(ctx, userID, now)
 	if err != nil {
-		a.deps.Errors.Internal(w, r, err)
-		return
+		return deckIndexView{}, err
 	}
-	offers, err := a.sharedWithMeForViewer(r.Context(), userID)
+	offers, err := a.sharedWithMeForViewer(ctx, userID)
 	if err != nil {
-		a.deps.Errors.Internal(w, r, err)
-		return
+		return deckIndexView{}, err
 	}
-	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
-		view := deckIndexView{List: deckListFragment{Items: items, ActiveID: detail.Deck.ID, OOB: true}, Detail: detail, SharedWithMe: offers}
-		page := a.deps.Page(r, deckPageTitle(detail))
-		view.Title, view.Shell = page.Title, page.Shell
-		if err := a.deps.Render.Fragment(w, http.StatusOK, "flash/decks", "deck-detail-with-list", view); err != nil {
-			a.deps.Errors.Internal(w, r, err)
+
+	items := make([]deckListItem, 0, len(sums))
+	total := 0
+	for _, s := range sums {
+		items = append(items, newDeckListItem(s))
+		total += s.ReviewNow
+		if detail.Mode == deckModeView && s.Deck.ID == detail.Deck.ID {
+			detail.Summary = s
+			detail.NextLabel = nextCardsLabel(s, now)
 		}
+	}
+	if detail.Mode == "" {
+		detail.HasDecks = len(sums) > 0 || len(offers) > 0
+	}
+
+	return deckIndexView{
+		List:         deckListFragment{Items: items, ActiveID: detail.Deck.ID, OOB: oob},
+		Detail:       detail,
+		SharedWithMe: offers,
+		TotalDue:     total,
+	}, nil
+}
+
+// renderDeckIndex renders the home screen: the whole page on a normal
+// request, or just the pane (plus out-of-band list/toolbar/checkbox) on an
+// HTMX one. status is only used for the full page; an HTMX navigation is
+// always 200 (an HTMX 4xx would not be swapped in).
+func (a *App) renderDeckIndex(w http.ResponseWriter, r *http.Request, userID int64, status int, detail deckDetailView) {
+	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
+		a.renderDeckDetailWithList(w, r, userID, http.StatusOK, detail)
 		return
 	}
-	view := deckIndexView{List: deckListFragment{Items: items, ActiveID: detail.Deck.ID}, Detail: detail, SharedWithMe: offers}
+	view, err := a.buildDeckIndex(r, userID, detail, false)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
 	page := a.deps.Page(r, deckPageTitle(detail))
 	page.Data = view
 	a.render(w, r, status, "flash/decks", page)
 }
 
+// renderDeckDetailWithList is the HTMX response for anything that changes
+// the pane: the pane itself plus out-of-band copies of everything outside it
+// that may have changed with it.
 func (a *App) renderDeckDetailWithList(w http.ResponseWriter, r *http.Request, userID int64, status int, detail deckDetailView) {
-	items, err := a.deckListItems(r.Context(), userID)
+	view, err := a.buildDeckIndex(r, userID, detail, true)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	offers, err := a.sharedWithMeForViewer(r.Context(), userID)
-	if err != nil {
-		a.deps.Errors.Internal(w, r, err)
-		return
-	}
-	view := deckIndexView{List: deckListFragment{Items: items, ActiveID: detail.Deck.ID, OOB: true}, Detail: detail, SharedWithMe: offers}
 	page := a.deps.Page(r, deckPageTitle(detail))
 	view.Title, view.Shell = page.Title, page.Shell
 	if err := a.deps.Render.Fragment(w, status, "flash/decks", "deck-detail-with-list", view); err != nil {
@@ -336,7 +409,7 @@ func (a *App) newDeckForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.renderDeckIndex(w, r, userID, http.StatusOK, a.newDeckDetail(r, "", "", ""))
+	a.renderDeckIndex(w, r, userID, http.StatusOK, a.newDeckDetail(r, "", "", "", ""))
 }
 
 func (a *App) createDeck(w http.ResponseWriter, r *http.Request) {
@@ -346,19 +419,36 @@ func (a *App) createDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PostFormValue("name")
 	description := r.PostFormValue("description")
+	color := r.PostFormValue("color")
+	if color == "" {
+		color = DefaultDeckColor
+	}
+	reject := func(err error) {
+		a.renderDeckIndex(w, r, userID, http.StatusBadRequest, a.newDeckDetail(r, userMessage(err), name, description, color))
+	}
 
 	if err := ValidateDeck(name, description); err != nil {
-		a.renderDeckIndex(w, r, userID, http.StatusBadRequest, a.newDeckDetail(r, userMessage(err), name, description))
+		reject(err)
+		return
+	}
+	if !ValidDeckColor(color) {
+		reject(fmt.Errorf("%w: pick one of the colours shown", ErrInvalid))
 		return
 	}
 	d, err := a.store.CreateDeck(r.Context(), userID, name, description)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
-			a.renderDeckIndex(w, r, userID, http.StatusBadRequest, a.newDeckDetail(r, userMessage(err), name, description))
+			reject(err)
 			return
 		}
 		a.deps.Errors.Internal(w, r, err)
 		return
+	}
+	if color != d.Color {
+		if d, err = a.store.SetDeckColor(r.Context(), userID, d.ID, color); err != nil {
+			a.fail(w, r, err)
+			return
+		}
 	}
 
 	if !web.IsHTMX(r) {
@@ -393,7 +483,7 @@ func (a *App) editDeckForm(w http.ResponseWriter, r *http.Request) {
 		reviewsStr = strconv.Itoa(*d.ReviewsPerDay)
 	}
 	a.renderDeckIndex(w, r, userID, http.StatusOK,
-		a.editDeckDetail(r, d, "", d.Name, d.Description, strconv.Itoa(d.NewCardsPerDay), reviewsStr))
+		a.editDeckDetail(r, d, "", d.Name, d.Description, d.Color, strconv.Itoa(d.NewCardsPerDay), reviewsStr))
 }
 
 // parseDeckSettings turns the edit form's two pace fields into
@@ -430,23 +520,32 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PostFormValue("name")
 	description := r.PostFormValue("description")
+	color := r.PostFormValue("color")
+	if color == "" {
+		color = d.Color
+	}
 	newCardsPerDayStr := r.PostFormValue("new_cards_per_day")
 	reviewsPerDayStr := r.PostFormValue("reviews_per_day")
 
 	if err := ValidateDeck(name, description); err != nil {
 		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-			a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
+			a.editDeckDetail(r, d, userMessage(err), name, description, color, newCardsPerDayStr, reviewsPerDayStr))
 		return
 	}
 	newCardsPerDay, reviewsPerDay, err := parseDeckSettings(newCardsPerDayStr, reviewsPerDayStr)
 	if err != nil {
 		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-			a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
+			a.editDeckDetail(r, d, userMessage(err), name, description, color, newCardsPerDayStr, reviewsPerDayStr))
 		return
 	}
 	if err := ValidateDeckSettings(newCardsPerDay, reviewsPerDay); err != nil {
 		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-			a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
+			a.editDeckDetail(r, d, userMessage(err), name, description, color, newCardsPerDayStr, reviewsPerDayStr))
+		return
+	}
+	if !ValidDeckColor(color) {
+		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
+			a.editDeckDetail(r, d, "Pick one of the colours shown.", name, description, d.Color, newCardsPerDayStr, reviewsPerDayStr))
 		return
 	}
 
@@ -454,7 +553,7 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
 			a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-				a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
+				a.editDeckDetail(r, d, userMessage(err), name, description, color, newCardsPerDayStr, reviewsPerDayStr))
 			return
 		}
 		a.fail(w, r, err)
@@ -464,11 +563,17 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
 			a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-				a.editDeckDetail(r, d, userMessage(err), name, description, newCardsPerDayStr, reviewsPerDayStr))
+				a.editDeckDetail(r, d, userMessage(err), name, description, color, newCardsPerDayStr, reviewsPerDayStr))
 			return
 		}
 		a.fail(w, r, err)
 		return
+	}
+	if updated.Color != color {
+		if updated, err = a.store.SetDeckColor(r.Context(), userID, id, color); err != nil {
+			a.fail(w, r, err)
+			return
+		}
 	}
 
 	if !web.IsHTMX(r) {

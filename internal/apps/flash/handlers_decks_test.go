@@ -189,6 +189,214 @@ func TestSnoozeDeckRequiresCSRF(t *testing.T) {
 	}
 }
 
+func TestCreateDeckWithColor(t *testing.T) {
+	s := newServer(t)
+	s.Submit(t, s.Alice, "/flash/new", url.Values{"name": {"Planets"}, "description": {""}, "color": {"purple"}}, "/flash/1")
+	d, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Color != "purple" {
+		t.Errorf("Color = %q, want purple", d.Color)
+	}
+}
+
+func TestCreateDeckWithoutColorIsTeal(t *testing.T) {
+	s := newServer(t)
+	s.Submit(t, s.Alice, "/flash/new", url.Values{"name": {"Planets"}}, "/flash/1")
+	d, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Color != flash.DefaultDeckColor {
+		t.Errorf("Color = %q, want the default", d.Color)
+	}
+}
+
+func TestCreateDeckRejectsUnknownColor(t *testing.T) {
+	s := newServer(t)
+	rec := s.Post(t, s.Alice, "/flash/new", url.Values{"name": {"Planets"}, "color": {"chartreuse"}})
+	if rec.Code != 400 {
+		t.Fatalf("unknown colour = %d, want 400", rec.Code)
+	}
+	htmlassert.Parse(t, rec.Body.String()).MustHave(".notice-error")
+	if decks, _ := s.Store.ListDecks(t.Context(), s.Alice.User.ID); len(decks) != 0 {
+		t.Errorf("a rejected create left %d decks behind", len(decks))
+	}
+}
+
+func TestUpdateDeckChangesColor(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID), url.Values{
+		"name": {"Spanish"}, "description": {""}, "color": {"amber"},
+		"new_cards_per_day": {"20"}, "reviews_per_day": {""},
+	}, "/flash/"+itoa(deck.ID))
+	d, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Color != "amber" {
+		t.Errorf("Color = %q, want amber", d.Color)
+	}
+}
+
+func TestNewDeckFormHasEverySwatch(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/flash/new")
+	swatches := doc.QueryAll(`input[name=color]`)
+	if len(swatches) != len(flash.DeckColors) {
+		t.Fatalf("new deck form has %d colour inputs, want %d", len(swatches), len(flash.DeckColors))
+	}
+	checked := doc.MustHave(`input[value=teal]`)
+	if _, ok := htmlassert.Attr(checked, "checked"); !ok {
+		t.Error("the default colour's swatch is not pre-checked")
+	}
+}
+
+func TestDeckListShowsColorAndDueBadge(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SetDeckColor(t.Context(), s.Alice.User.ID, deck.ID, "blue"); err != nil {
+		t.Fatal(err)
+	}
+	for _, front := range []string{"hola", "adiós"} {
+		if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, front, "x", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/")
+	doc.MustHave(`#deck-list a.deck-row`)
+	doc.MustHave(`#deck-list .deck-c-blue`)
+	badge := doc.MustHave(`#deck-list .flash-due-badge`)
+	if got := htmlassert.Text(badge); got != "2" {
+		t.Errorf("due badge = %q, want 2", got)
+	}
+	reviewAll := doc.MustHave(`#flash-review-all`)
+	if !strings.Contains(htmlassert.Text(reviewAll), "2") {
+		t.Errorf("Review all = %q, want it to show the 2 cards due", htmlassert.Text(reviewAll))
+	}
+}
+
+func TestDeckPaneShowsReviewButtonWithCount(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, front := range []string{"hola", "adiós", "gracias"} {
+		if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, front, "x", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID))
+	cta := doc.MustHave(`a.flash-review-cta`)
+	if href, _ := htmlassert.Attr(cta, "href"); href != "/flash/review/"+itoa(deck.ID) {
+		t.Errorf("Review button href = %q", href)
+	}
+	if got := htmlassert.Text(cta); !strings.Contains(got, "Review 3 cards") {
+		t.Errorf("Review button text = %q, want it to say Review 3 cards", got)
+	}
+	doc.MustNotHave(`.flash-all-done`)
+	if tiles := doc.QueryAll(`.flash-deck-tiles .flash-stat-tile`); len(tiles) != 4 {
+		t.Errorf("deck pane has %d tiles, want 4", len(tiles))
+	}
+}
+
+func TestDeckPaneShowsAllDoneWhenNothingIsDue(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Easy on a new card schedules it days out, so nothing is due now.
+	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, card.ID, flash.RatingEasy, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID))
+	doc.MustNotHave(`a.flash-review-cta`)
+	done := doc.MustHave(`.flash-all-done`)
+	if !strings.Contains(htmlassert.Text(done), "All done for today") {
+		t.Errorf("all-done panel = %q", htmlassert.Text(done))
+	}
+}
+
+func TestDeckPaneForAnEmptyDeckOffersToAddCards(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID))
+	add := doc.MustHave(`a.flash-add-first-card`)
+	if href, _ := htmlassert.Attr(add, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/new" {
+		t.Errorf("add-cards href = %q", href)
+	}
+}
+
+func TestFirstRunShowsWelcome(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/flash/")
+	welcome := doc.MustHave(`.flash-welcome`)
+	if !strings.Contains(htmlassert.Text(welcome), "Make your first deck") {
+		t.Errorf("welcome text = %q", htmlassert.Text(welcome))
+	}
+	doc.MustHave(`.flash-welcome a[href="/flash/new"]`)
+	doc.MustHave(`.flash-welcome a[href="/flash/import"]`)
+}
+
+func TestHomeWithDecksButNoneSelectedAsksToPick(t *testing.T) {
+	s := newServer(t)
+	if _, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", ""); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/")
+	doc.MustNotHave(`.flash-welcome`)
+	doc.MustHave(`.flash-pane-hint`)
+}
+
+func TestHomeToolbarLinks(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/flash/")
+	for _, sel := range []string{
+		`.flash-home-toolbar a[href="/flash/new"]`,
+		`.flash-home-toolbar a[href="/flash/import"]`,
+		`.flash-home-toolbar a[href="/flash/review"]`,
+		`.flash-home-toolbar a[href="/flash/stats"]`,
+	} {
+		doc.MustHave(sel)
+	}
+}
+
+func TestDeckFragmentCarriesOutOfBandListAndToolbar(t *testing.T) {
+	s := newServer(t)
+	rec := s.PostHX(t, s.Alice, "/flash/new", url.Values{"name": {"Spanish"}, "color": {"green"}})
+	if rec.Code != 201 {
+		t.Fatalf("create over HTMX = %d, want 201; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	for _, id := range []string{"#deck-list", "#flash-review-all", "#flash-detail-open", "#shared-with-me"} {
+		n := doc.MustHave(id)
+		if _, ok := htmlassert.Attr(n, "hx-swap-oob"); !ok {
+			t.Errorf("%s in the fragment is not marked hx-swap-oob", id)
+		}
+	}
+	doc.MustHave(`#deck-list .deck-c-green`)
+}
+
 func httpGet(t *testing.T, path string) *http.Request {
 	t.Helper()
 	return httptest.NewRequest(http.MethodGet, path, nil)
