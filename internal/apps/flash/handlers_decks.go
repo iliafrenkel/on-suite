@@ -93,6 +93,9 @@ const (
 	deckModeCardEdit = "card-edit"
 	// deckModeGift is a pending share's preview, before it is adopted.
 	deckModeGift = "gift"
+	// deckModeStats is the stats pane (UI overhaul U6): the old standalone
+	// /flash/stats page moved into the home screen's right pane.
+	deckModeStats = "stats"
 )
 
 // deckDetailView is what the deck detail pane renders, in any mode.
@@ -115,6 +118,9 @@ type deckDetailView struct {
 
 	// Gift is set for Mode "gift": a pending share's preview.
 	Gift giftView
+
+	// Stats is set for Mode "stats": the stats pane.
+	Stats statsView
 
 	// HasDecks is filled in by buildDeckIndex for the empty mode: false
 	// shows the first-run welcome, true a "pick a deck" hint.
@@ -372,6 +378,8 @@ func deckPageTitle(d deckDetailView) string {
 		return "Edit card · " + d.Deck.Name
 	case deckModeGift:
 		return "Shared with you"
+	case deckModeStats:
+		return "Stats"
 	default:
 		return "Decks"
 	}

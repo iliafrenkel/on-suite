@@ -18,6 +18,7 @@
 {{else if eq .Mode "card-new"}}{{template "deck-detail-card-new" .}}
 {{else if eq .Mode "card-edit"}}{{template "deck-detail-card-edit" .}}
 {{else if eq .Mode "gift"}}{{template "deck-detail-gift" .}}
+{{else if eq .Mode "stats"}}{{template "deck-detail-stats" .}}
 {{else}}{{template "deck-detail-empty" .}}
 {{end}}
 {{end}}
@@ -40,7 +41,7 @@
 		<a class="toolbar-btn toolbar-btn-active" href="/flash/new" hx-get="/flash/new" hx-target="#deck-detail" hx-push-url="true">{{ticon "plus"}}New deck</a>
 		<a class="toolbar-btn" href="/flash/import" hx-get="/flash/import" hx-target="#deck-detail" hx-push-url="true">{{ticon "import"}}Import</a>
 		{{template "flash-review-all" (dict "TotalDue" .TotalDue "OOB" false)}}
-		<a class="toolbar-btn" href="/flash/stats">{{ticon "stats"}}Stats</a>
+		<a class="toolbar-btn" href="/flash/stats" hx-get="/flash/stats" hx-target="#deck-detail" hx-push-url="true">{{ticon "stats"}}Stats</a>
 	</div>
 </div>
 {{end}}
