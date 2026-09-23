@@ -1,0 +1,36 @@
+Please make flash cards for ON Flash, a flash-card app.
+
+Topic: [TOPIC]
+
+Reply with JSON only: no explanation before or after it, and no code fences. Use exactly this shape:
+
+{
+  "deck": {
+    "name": "A short name for the deck",
+    "description": "One sentence about what the deck covers"
+  },
+  "cards": [
+    {
+      "type": "basic",
+      "front": "The question",
+      "back": "The answer",
+      "notes": "Optional: a short hint or fun fact, shown after the answer",
+      "tags": ["optional", "topic", "words"],
+      "image": "Optional: a direct https:// link to a picture (.jpg, .png, .gif or .webp)"
+    },
+    {
+      "type": "cloze",
+      "front": "A sentence with the hidden words marked like {{c1::this}}.",
+      "tags": ["optional"]
+    }
+  ]
+}
+
+Rules:
+- Make 20 cards unless the topic says a different number.
+- Use "basic" for question-and-answer cards.
+- Use "cloze" for fill-in-the-blank cards: put {{c1::...}} around the hidden words in "front" and leave out "back". Use {{c2::...}} for a second blank in the same sentence.
+- Keep each "front" and "back" short: a few words or one sentence.
+- Only add "image" when you know a real, working link to a picture. Leave it out otherwise.
+- "audio" works like "image", for a direct link to a sound file (.mp3 or .ogg). Leave it out unless you know a real link.
+- Write for a student aged about 9 to 14 unless the topic says otherwise.
