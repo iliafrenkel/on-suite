@@ -482,3 +482,34 @@ func (st *Store) queryQueueCards(ctx context.Context, query string, args []any, 
 	}
 	return out, nil
 }
+
+// ReviewTally is how many cards were graded on one day, in total and per
+// rating — the review screen's progress count and end-of-session summary
+// (UI overhaul spec §5).
+type ReviewTally struct {
+	Reviewed                int // new_count + review_count
+	Again, Hard, Good, Easy int
+}
+
+// TodayTally sums flash_review_counts for now's UTC day, for one of
+// userID's decks or (deckID nil) all of them. It reads the same counters
+// DueQueue's daily limits use, so it survives a reload and needs no
+// per-session state.
+func (st *Store) TodayTally(ctx context.Context, userID int64, deckID *int64, now time.Time) (ReviewTally, error) {
+	query := `
+		SELECT coalesce(sum(new_count + review_count), 0),
+		       coalesce(sum(again_count), 0), coalesce(sum(hard_count), 0),
+		       coalesce(sum(good_count), 0), coalesce(sum(easy_count), 0)
+		  FROM flash_review_counts
+		 WHERE user_id = ? AND day = ?`
+	args := []any{userID, formatDay(now)}
+	if deckID != nil {
+		query += ` AND deck_id = ?`
+		args = append(args, *deckID)
+	}
+	var t ReviewTally
+	if err := st.db.QueryRowContext(ctx, query, args...).Scan(&t.Reviewed, &t.Again, &t.Hard, &t.Good, &t.Easy); err != nil {
+		return ReviewTally{}, fmt.Errorf("flash: today tally: %w", err)
+	}
+	return t, nil
+}
