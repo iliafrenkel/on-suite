@@ -144,3 +144,11 @@ canonical example's own comment, not here.
   `matchMedia` listener rather than left to silently misapply. Canonical:
   `internal/ui/static/app.css`'s `.reader-panes-row`/`.pane-gutter` and
   `internal/apps/reader/static/reader.js`'s resizable-panes section.
+
+- **Checkbox-driven CSS state instead of JS** — reach for this when a
+  purely visual state (which pane shows, which face of a card is up)
+  should work without JavaScript and inside the CSP: a visually hidden
+  checkbox, a `<label for>` as the control, and `:checked + / ~` rules.
+  Canonical: `internal/apps/flash/templates/card.partial.html`'s
+  `flash-card` (the flip), also `#paste-detail-open` in
+  `internal/apps/paste/templates/index.html`.
