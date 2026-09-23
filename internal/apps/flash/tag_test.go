@@ -4,6 +4,7 @@ package flash_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -152,4 +153,47 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func TestCardTagsInDeck(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c1, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "pan", "bread", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "untagged", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetCardTags(ctx, f.alice.ID, c1.ID, []string{"phrases", "greetings"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetCardTags(ctx, f.alice.ID, c2.ID, []string{"food"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.store.CardTagsInDeck(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[int64][]string{c1.ID: {"greetings", "phrases"}, c2.ID: {"food"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("CardTagsInDeck = %v, want %v", got, want)
+	}
+
+	other, err := f.store.CardTagsInDeck(ctx, f.bob.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(other) != 0 {
+		t.Errorf("bob sees alice's tags: %v", other)
+	}
 }
