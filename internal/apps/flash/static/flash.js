@@ -14,6 +14,7 @@
 	function isTyping(el) {
 		if (!el) return false;
 		var tag = el.tagName;
+		if (tag === "INPUT" && (el.type === "checkbox" || el.type === "radio")) return false;
 		return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
 	}
 
@@ -218,7 +219,10 @@
 		// Space is special-cased: any other key (e.g. ArrowLeft/ArrowRight/E)
 		// must still reach the switch below even while focus sits on the
 		// checkbox, or those shortcuts would stop working after a click.
-		if (e.key === " " && e.target.classList && e.target.classList.contains("flash-flip")) return;
+		if (e.key === " " && e.target.classList && e.target.classList.contains("flash-flip")) {
+			if (e.target.checked) e.preventDefault();
+			return;
+		}
 		if (isTyping(e.target)) return;
 
 		var handled = false;
