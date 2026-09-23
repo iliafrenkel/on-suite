@@ -6,10 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
@@ -60,7 +60,6 @@ type cardDetailView struct {
 	Mode      string
 	Deck      Deck
 	Card      Card
-	Tags      []tagChip
 	CSRFToken string
 
 	CardTypeValue string
@@ -104,39 +103,9 @@ func tagFilterURL(name string) string {
 	return "/flash/tags/" + url.PathEscape(name)
 }
 
-func tagChips(tags []Tag) []tagChip {
-	chips := make([]tagChip, len(tags))
-	for i, tg := range tags {
-		chips[i] = tagChip{Name: tg.Name, Href: tagFilterURL(tg.Name)}
-	}
-	return chips
-}
-
-type cardListItem struct {
-	Card Card
-}
-
-type cardListFragment struct {
-	Items    []cardListItem
-	ActiveID int64
-	OOB      bool
-}
-
-type cardIndexView struct {
-	Deck   Deck
-	List   cardListFragment
-	Detail cardDetailView
-	Title  string
-	Shell  render.Shell
-}
-
 func (a *App) viewCardDetail(r *http.Request, userID int64, d Deck, c Card) cardDetailView {
-	// Best-effort: a tag-lookup failure here is a genuine database error (the
-	// card was just created/updated under this same user), not something
-	// worth failing the whole render over, so the view just shows no chips.
-	tags, _ := a.store.TagsForCard(r.Context(), userID, c.ID)
 	return cardDetailView{
-		Mode: cardModeView, Deck: d, Card: c, Tags: tagChips(tags), CSRFToken: web.CSRFToken(r.Context()),
+		Mode: cardModeView, Deck: d, Card: c, CSRFToken: web.CSRFToken(r.Context()),
 		ImageMediaURL: mediaURL(c.ImageHash), AudioMediaURL: mediaURL(c.AudioHash),
 	}
 }
@@ -164,29 +133,142 @@ func (a *App) editCardDetail(r *http.Request, d Deck, c Card, errMsg, cardType, 
 	}
 }
 
-func (a *App) cardListItems(ctx context.Context, userID, deckID int64) ([]cardListItem, error) {
-	cards, err := a.store.ListCards(ctx, userID, deckID)
+// cardFilterFromQuery reads the grid's ?q= and ?tag= parameters.
+func cardFilterFromQuery(r *http.Request) (q, tag string) {
+	v := r.URL.Query()
+	return strings.TrimSpace(v.Get("q")), normalizeTagName(v.Get("tag"))
+}
+
+// cardGrid builds the cards pane for one deck, filtered by q and tag. It
+// also returns the filtered cards and the deck's tag map, which openedCard
+// needs for previous/next and the card's own tags.
+func (a *App) cardGrid(ctx context.Context, userID int64, deck Deck, q, tag string) (cardGridView, []Card, map[int64][]string, error) {
+	cards, err := a.store.ListCards(ctx, userID, deck.ID)
 	if err != nil {
-		return nil, err
+		return cardGridView{}, nil, nil, err
 	}
-	items := make([]cardListItem, 0, len(cards))
-	for _, c := range cards {
-		items = append(items, cardListItem{Card: c})
+	tags, err := a.store.CardTagsInDeck(ctx, userID, deck.ID)
+	if err != nil {
+		return cardGridView{}, nil, nil, err
 	}
-	return items, nil
+	statuses, err := a.store.CardStatuses(ctx, userID, deck.ID, a.store.now())
+	if err != nil {
+		return cardGridView{}, nil, nil, err
+	}
+	filtered := filterCards(cards, tags, q, tag)
+
+	view := cardGridView{Deck: deck, Query: q, Tag: tag, ClearURL: cardsURL(deck.ID, "", "")}
+	for _, c := range filtered {
+		view.Items = append(view.Items, cardGridItem{
+			Face:   newCardFace(c, deck, tags[c.ID]),
+			Status: statuses[c.ID],
+			Href:   cardURL(deck.ID, c.ID, q, tag),
+			InPane: true,
+		})
+	}
+
+	seen := map[string]bool{}
+	var names []string
+	for _, list := range tags {
+		for _, name := range list {
+			if !seen[name] {
+				seen[name] = true
+				names = append(names, name)
+			}
+		}
+	}
+	sort.Strings(names)
+	if len(names) > 0 {
+		view.Pills = append(view.Pills, tagPill{Label: "All", Href: cardsURL(deck.ID, q, ""), Active: tag == ""})
+		for _, name := range names {
+			view.Pills = append(view.Pills, tagPill{Label: name, Href: cardsURL(deck.ID, q, name), Active: tag == name})
+		}
+	}
+	if tag != "" {
+		view.AllDecksTagURL = tagFilterURL(tag)
+	}
+	return view, filtered, tags, nil
 }
 
-func cardPageTitle(d Deck, detail cardDetailView) string {
-	switch detail.Mode {
-	case cardModeEdit:
-		return "Edit card · " + d.Name
+// openedCard builds the pane for one card opened from the grid. Previous
+// and next step through the same filtered order the grid showed; if c is
+// not in it (the filter changed, or no filter applies to it), both are
+// empty.
+func (a *App) openedCard(ctx context.Context, r *http.Request, userID int64, deck Deck, c Card, q, tag string) (openedCardView, error) {
+	_, filtered, tags, err := a.cardGrid(ctx, userID, deck, q, tag)
+	if err != nil {
+		return openedCardView{}, err
+	}
+	view := openedCardView{
+		Deck:      deck,
+		Face:      newCardFace(c, deck, tags[c.ID]),
+		BackURL:   cardsURL(deck.ID, q, tag),
+		CSRFToken: web.CSRFToken(r.Context()),
+	}
+	for i, fc := range filtered {
+		if fc.ID != c.ID {
+			continue
+		}
+		if i > 0 {
+			view.PrevURL = cardURL(deck.ID, filtered[i-1].ID, q, tag)
+		}
+		if i < len(filtered)-1 {
+			view.NextURL = cardURL(deck.ID, filtered[i+1].ID, q, tag)
+		}
+	}
+	return view, nil
+}
+
+// cardPaneDetail translates a card handler's cardDetailView into the deck
+// pane's view: a form stays a form, a viewed card becomes the opened card,
+// and anything else (after a delete) is the grid.
+func (a *App) cardPaneDetail(r *http.Request, userID int64, deck Deck, cd cardDetailView) (deckDetailView, error) {
+	detail := deckDetailView{Deck: deck, CSRFToken: web.CSRFToken(r.Context())}
+	switch cd.Mode {
 	case cardModeNew:
-		return "New card · " + d.Name
+		detail.Mode, detail.CardForm = deckModeCardNew, cd
+	case cardModeEdit:
+		detail.Mode, detail.CardForm = deckModeCardEdit, cd
+	case cardModeView:
+		opened, err := a.openedCard(r.Context(), r, userID, deck, cd.Card, "", "")
+		if err != nil {
+			return deckDetailView{}, err
+		}
+		opened.MediaError = cd.MediaError
+		detail.Mode, detail.Opened = deckModeCard, opened
 	default:
-		return "Cards · " + d.Name
+		grid, _, _, err := a.cardGrid(r.Context(), userID, deck, "", "")
+		if err != nil {
+			return deckDetailView{}, err
+		}
+		detail.Mode, detail.Grid = deckModeCards, grid
 	}
+	return detail, nil
 }
 
+// renderCardIndex and renderCardDetailWithList keep the names every card
+// handler already calls, but now draw the home layout (UI overhaul U2):
+// a deck's cards live in the deck pane, not on a page of their own.
+func (a *App) renderCardIndex(w http.ResponseWriter, r *http.Request, userID int64, deck Deck, status int, cd cardDetailView) {
+	detail, err := a.cardPaneDetail(r, userID, deck, cd)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	a.renderDeckIndex(w, r, userID, status, detail)
+}
+
+func (a *App) renderCardDetailWithList(w http.ResponseWriter, r *http.Request, userID int64, deck Deck, status int, cd cardDetailView) {
+	detail, err := a.cardPaneDetail(r, userID, deck, cd)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	a.renderDeckDetailWithList(w, r, userID, status, detail)
+}
+
+// cardIndex backs GET /{deckID}/cards/ (the grid) and GET
+// /{deckID}/cards/{cardID} (one opened card), both keeping ?q=/?tag=.
 func (a *App) cardIndex(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -196,54 +278,60 @@ func (a *App) cardIndex(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	q, tag := cardFilterFromQuery(r)
+	detail := deckDetailView{Deck: deck, CSRFToken: web.CSRFToken(r.Context())}
 
-	var detail cardDetailView
-	if r.PathValue("cardID") != "" {
-		id, ok := a.cardIDFromPath(w, r)
-		if !ok {
-			return
-		}
-		c, err := a.store.CardByID(r.Context(), userID, deck.ID, id)
+	if r.PathValue("cardID") == "" {
+		grid, _, _, err := a.cardGrid(r.Context(), userID, deck, q, tag)
 		if err != nil {
-			a.fail(w, r, err)
+			a.deps.Errors.Internal(w, r, err)
 			return
 		}
-		detail = a.viewCardDetail(r, userID, deck, c)
+		detail.Mode, detail.Grid = deckModeCards, grid
+		a.renderDeckIndex(w, r, userID, http.StatusOK, detail)
+		return
 	}
-	a.renderCardIndex(w, r, userID, deck, http.StatusOK, detail)
-}
 
-func (a *App) renderCardIndex(w http.ResponseWriter, r *http.Request, userID int64, deck Deck, status int, detail cardDetailView) {
-	items, err := a.cardListItems(r.Context(), userID, deck.ID)
+	id, ok := a.cardIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	c, err := a.store.CardByID(r.Context(), userID, deck.ID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	opened, err := a.openedCard(r.Context(), r, userID, deck, c, q, tag)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
-		view := cardIndexView{Deck: deck, List: cardListFragment{Items: items, ActiveID: detail.Card.ID, OOB: true}, Detail: detail}
-		page := a.deps.Page(r, cardPageTitle(deck, detail))
-		view.Title, view.Shell = page.Title, page.Shell
-		if err := a.deps.Render.Fragment(w, http.StatusOK, "flash/cards", "card-detail-with-list", view); err != nil {
-			a.deps.Errors.Internal(w, r, err)
-		}
-		return
-	}
-	view := cardIndexView{Deck: deck, List: cardListFragment{Items: items, ActiveID: detail.Card.ID}, Detail: detail}
-	page := a.deps.Page(r, cardPageTitle(deck, detail))
-	page.Data = view
-	a.render(w, r, status, "flash/cards", page)
+	detail.Mode, detail.Opened = deckModeCard, opened
+	a.renderDeckIndex(w, r, userID, http.StatusOK, detail)
 }
 
-func (a *App) renderCardDetailWithList(w http.ResponseWriter, r *http.Request, userID int64, deck Deck, status int, detail cardDetailView) {
-	items, err := a.cardListItems(r.Context(), userID, deck.ID)
+// cardGridFragment backs GET /{deckID}/cards/grid: just the grid tiles plus
+// an out-of-band copy of the tag pills, for the search box's live filter.
+// The URL bar gets the canonical grid URL (HX-Replace-Url), never this
+// route's own.
+func (a *App) cardGridFragment(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	deck, ok := a.cardDeck(w, r, userID)
+	if !ok {
+		return
+	}
+	q, tag := cardFilterFromQuery(r)
+	grid, _, _, err := a.cardGrid(r.Context(), userID, deck, q, tag)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	view := cardIndexView{Deck: deck, List: cardListFragment{Items: items, ActiveID: detail.Card.ID, OOB: true}, Detail: detail}
-	page := a.deps.Page(r, cardPageTitle(deck, detail))
-	view.Title, view.Shell = page.Title, page.Shell
-	if err := a.deps.Render.Fragment(w, status, "flash/cards", "card-detail-with-list", view); err != nil {
+	grid.OOB = true
+	w.Header().Set("HX-Replace-Url", cardsURL(deck.ID, q, tag))
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "flash/decks", "card-grid-fragment", grid); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
 }

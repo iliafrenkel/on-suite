@@ -133,12 +133,30 @@ func TestTagChipHrefEscapesSlash(t *testing.T) {
 		"/flash/"+itoa(deck.ID)+"/cards/1")
 
 	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1")
-	link := doc.MustHave(".tag-list a")
+	link := doc.MustHave(".flash-tag-links a")
 	href, ok := htmlassert.Attr(link, "href")
 	if !ok {
 		t.Fatal("tag chip link has no href")
 	}
-	if want := "/flash/tags/a%2Fb"; href != want {
+	// Tag links now filter this deck's own grid (UI overhaul spec §3); the
+	// tag still has to be escaped, as a query value.
+	if want := "/flash/" + itoa(deck.ID) + "/cards/?tag=a%2Fb"; href != want {
 		t.Errorf("tag chip href = %q, want %q", href, want)
+	}
+}
+
+func TestTagFilterPageShowsMiniCardsWithDeckNames(t *testing.T) {
+	s := newServer(t)
+	deckA, _ := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Alpha", "")
+	s.Submit(t, s.Alice, "/flash/"+itoa(deckA.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"a1"}, "back": {"x"}, "tags": {"hard"}},
+		"/flash/"+itoa(deckA.ID)+"/cards/1")
+	doc := s.Get(t, s.Alice, "/flash/tags/hard")
+	card := doc.MustHave(".tag-filter-item a.flash-mini-card")
+	if href, _ := htmlassert.Attr(card, "href"); href != "/flash/"+itoa(deckA.ID)+"/cards/1" {
+		t.Errorf("mini card href = %q", href)
+	}
+	if got := htmlassert.Text(doc.MustHave(".tag-filter-item .flash-mini-deck")); got != "Alpha" {
+		t.Errorf("deck label = %q, want Alpha", got)
 	}
 }
