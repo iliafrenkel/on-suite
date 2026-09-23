@@ -2595,7 +2595,6 @@ kbd {
 .flash-share-list { margin: var(--s-2) 0 0; padding: 0; list-style: none; }
 .flash-share-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2); padding: var(--s-1) 0; }
 .flash-share-list form { margin: 0; }
-.flash-shared-with-me:not(:empty) { margin-bottom: var(--s-4); }
 
 /* Colour swatches: the radio is visually hidden, its label is the swatch. */
 .flash-color-field { border: none; padding: 0; margin: 0 0 var(--s-4); }
@@ -3151,3 +3150,72 @@ input.flash-tag-entry:focus { outline: none; }
 @media (prefers-reduced-motion: reduce) {
 	.flash-celebrate { display: none; }
 }
+
+/* ---- ON Flash: sharing and breaks (UI overhaul U5) ----------------------- */
+
+/* Gift decks: a dashed, see-through stack, like a present not yet opened. */
+.deck-row-gift { border: 1px dashed var(--c-border-firm); }
+.deck-row-gift .flash-stack > span {
+	background: color-mix(in srgb, var(--deck) 18%, var(--c-bg));
+	border-style: dashed;
+	border-color: var(--deck);
+}
+.flash-gift .flash-stack > span { border-style: dashed; border-color: var(--deck); }
+.flash-gift-badge {
+	padding: 0 var(--s-2);
+	border-radius: 999px;
+	background: var(--deck-soft);
+	color: var(--c-text);
+	font-size: var(--fs-xs);
+	font-weight: 600;
+}
+.flash-gift-from { margin: 0 0 var(--s-1); color: var(--c-text-dim); font-size: var(--fs-sm); }
+.flash-gift-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-4); }
+.flash-gift-actions form { margin: 0; }
+.flash-gift .flash-card-grid { margin-top: var(--s-2); }
+
+/* Share popover. */
+.flash-share-menu { position: relative; }
+.flash-share-menu > summary { list-style: none; }
+.flash-share-menu > summary::-webkit-details-marker { display: none; }
+.flash-share-menu[open] > summary { color: var(--c-accent); background: var(--c-accent-bg); }
+.flash-share-panel {
+	position: absolute;
+	right: 0;
+	top: calc(100% + var(--s-1));
+	z-index: 5;
+	width: min(20rem, 80vw);
+	padding: var(--s-3);
+	border: 1px solid var(--c-border);
+	border-radius: 10px;
+	background: var(--c-bg);
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+.flash-share-form { margin: 0; }
+.flash-share-form .row { align-items: stretch; }
+.flash-share-form select { flex: 1; }
+.flash-share-panel .flash-share-list li { justify-content: flex-start; }
+.flash-share-panel .flash-share-list form { margin-left: auto; }
+.flash-status-pill {
+	padding: 0 var(--s-2);
+	border-radius: 999px;
+	background: var(--c-bg-subtle);
+	color: var(--c-text-dim);
+	font-size: var(--fs-xs);
+}
+.flash-status-adopted { background: var(--c-accent-bg); color: var(--c-accent); }
+
+/* Taking a break: calm, not a warning. */
+.flash-break-banner {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-3);
+	margin-top: var(--s-4);
+	padding: var(--s-3) var(--s-4);
+	border-radius: 10px;
+	background: var(--deck-soft, var(--c-bg-subtle));
+}
+.flash-break-banner form { margin: 0; }
+
+.flash-notice { margin-bottom: var(--s-4); background: var(--c-accent-bg); color: var(--c-accent); }
