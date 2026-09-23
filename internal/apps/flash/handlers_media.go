@@ -201,7 +201,7 @@ func (a *App) uploadCardMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+strconv.FormatInt(cardID, 10))
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, userID, deck, updated))
+	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, deck, updated))
 }
 
 // attachUpload reads one optional file part named field ("image" or

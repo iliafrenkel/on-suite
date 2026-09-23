@@ -68,14 +68,6 @@ type cardDetailView struct {
 	NotesValue    string
 	TagsValue     string
 	Error         string
-
-	// ImageMediaURL/AudioMediaURL are the card's serving-route paths
-	// ("/flash/media/{hash}"), or "" if no such media is attached. Computed
-	// here rather than in the template because Card.ImageHash/AudioHash are
-	// *string: printing a pointer directly would show its address, not the
-	// hash.
-	ImageMediaURL string
-	AudioMediaURL string
 	MediaError    string
 }
 
@@ -103,10 +95,9 @@ func tagFilterURL(name string) string {
 	return "/flash/tags/" + url.PathEscape(name)
 }
 
-func (a *App) viewCardDetail(r *http.Request, userID int64, d Deck, c Card) cardDetailView {
+func (a *App) viewCardDetail(r *http.Request, d Deck, c Card) cardDetailView {
 	return cardDetailView{
 		Mode: cardModeView, Deck: d, Card: c, CSRFToken: web.CSRFToken(r.Context()),
-		ImageMediaURL: mediaURL(c.ImageHash), AudioMediaURL: mediaURL(c.AudioHash),
 	}
 }
 
@@ -114,7 +105,7 @@ func (a *App) viewCardDetail(r *http.Request, userID int64, d Deck, c Card) card
 // a failed media upload, so the card page can show both the card and why
 // the attachment attempt just failed.
 func (a *App) viewCardDetailWithMediaError(r *http.Request, userID int64, d Deck, c Card, errMsg string) cardDetailView {
-	v := a.viewCardDetail(r, userID, d, c)
+	v := a.viewCardDetail(r, d, c)
 	v.MediaError = errMsg
 	return v
 }
@@ -395,7 +386,7 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+strconv.FormatInt(c.ID, 10))
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, a.viewCardDetail(r, userID, deck, c))
+	a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, a.viewCardDetail(r, deck, c))
 }
 
 func (a *App) editCardForm(w http.ResponseWriter, r *http.Request) {
@@ -487,7 +478,7 @@ func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+strconv.FormatInt(id, 10))
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, userID, deck, updated))
+	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, deck, updated))
 }
 
 func (a *App) deleteCard(w http.ResponseWriter, r *http.Request) {
