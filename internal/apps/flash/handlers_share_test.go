@@ -108,105 +108,109 @@ func TestDeclineShareHandler(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("decline: %d; body: %s", rec.Code, rec.Body.String())
 	}
+	if got := rec.Header().Get("HX-Push-Url"); got != "/flash/" {
+		t.Errorf("decline HX-Push-Url = %q, want /flash/ so the URL doesn't dead-end on the gone share", got)
+	}
 	offers, err = s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
 	if err != nil || len(offers) != 0 {
 		t.Fatalf("offers after decline = %+v, want none", offers)
 	}
 }
 
-// TestSharedWithMeRefreshesOutOfBandOnAdoptAndDecline covers finding #2: the
-// "Shared with me" section lives in the full-page "content" block only, so
-// every HTMX share/revoke/adopt/decline response (which re-renders just
-// "deck-detail-with-list") must carry its own out-of-band copy of that
-// section, keeping the resolved offer's row off the recipient's screen
-// without a full reload.
-func TestSharedWithMeRefreshesOutOfBandOnAdoptAndDecline(t *testing.T) {
-	s := newShareServer(t)
-	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+// shareToBob shares one of alice's decks with bob and returns the share id.
+func shareToBob(t *testing.T, s *apptest.Server[*flash.Store], deckID int64) string {
+	t.Helper()
 	s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/share",
 		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}})
 	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
-	if err != nil || len(offers) != 1 {
+	if err != nil || len(offers) == 0 {
 		t.Fatalf("setup: offers = %+v, err = %v", offers, err)
 	}
-	shareID := strconv.FormatInt(offers[0].ID, 10)
-
-	rec := s.PostHX(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {shareID}})
-	if rec.Code != 200 {
-		t.Fatalf("decline: %d; body: %s", rec.Code, rec.Body.String())
-	}
-	doc := htmlassert.Parse(t, rec.Body.String())
-	oob := doc.MustHave("#shared-with-me")
-	if _, ok := htmlassert.Attr(oob, "hx-swap-oob"); !ok {
-		t.Error("#shared-with-me in the fragment response is not marked hx-swap-oob")
-	}
-	if strings.Contains(htmlassert.Text(oob), "Spanish") {
-		t.Errorf("declined offer for Spanish still present in #shared-with-me: %s", htmlassert.Text(oob))
-	}
-
-	// Re-share, then adopt, and check the same thing on the adopt path.
-	s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/share",
-		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}})
-	offers, err = s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
-	if err != nil || len(offers) != 1 {
-		t.Fatalf("setup 2: offers = %+v, err = %v", offers, err)
-	}
-	shareID = strconv.FormatInt(offers[0].ID, 10)
-
-	rec = s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareID}})
-	if rec.Code != 200 {
-		t.Fatalf("adopt: %d; body: %s", rec.Code, rec.Body.String())
-	}
-	doc = htmlassert.Parse(t, rec.Body.String())
-	oob = doc.MustHave("#shared-with-me")
-	if _, ok := htmlassert.Attr(oob, "hx-swap-oob"); !ok {
-		t.Error("#shared-with-me in the adopt fragment response is not marked hx-swap-oob")
-	}
-	if strings.Contains(htmlassert.Text(oob), "Spanish") {
-		t.Errorf("adopted offer for Spanish still present in #shared-with-me: %s", htmlassert.Text(oob))
-	}
+	return strconv.FormatInt(offers[0].ID, 10)
 }
 
-// TestSharedWithMeFormsCarryCSRFTokenWithNoDeckSelected covers finding #3:
-// on GET /flash/ with no deck selected, deckDetailView{}.CSRFToken is empty,
-// so the Adopt/Dismiss forms must fall back to the shell's own CSRF token
-// (always populated) rather than the empty per-deck one.
-func TestSharedWithMeFormsCarryCSRFTokenWithNoDeckSelected(t *testing.T) {
+func TestGiftRowShowsSharerAndDeck(t *testing.T) {
 	s := newShareServer(t)
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")
-	s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/share",
-		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}})
+	shareID := shareToBob(t, s, deckID)
 
 	doc := s.Get(t, s.Bob, "/flash/")
+	gift := doc.MustHave("#deck-list a.deck-row-gift")
+	text := htmlassert.Text(gift)
+	if !strings.Contains(text, "Spanish") || !strings.Contains(text, "From alice") {
+		t.Errorf("gift row = %q, want the deck name and From alice", text)
+	}
+	if href, _ := htmlassert.Attr(gift, "href"); href != "/flash/shared/"+shareID {
+		t.Errorf("gift row href = %q", href)
+	}
+	doc.MustNotHave("#shared-with-me")
+	doc.MustNotHave(".flash-welcome") // a pending gift is not a first run
+}
+
+func TestGiftPreviewPane(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	for _, front := range []string{"hola", "adiós"} {
+		s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/cards/new",
+			url.Values{"card_type": {"basic"}, "front": {front}, "back": {"x"}})
+	}
+	shareID := shareToBob(t, s, deckID)
+
+	doc := s.Get(t, s.Bob, "/flash/shared/"+shareID)
+	pane := doc.MustHave("#deck-detail .flash-gift")
+	text := htmlassert.Text(pane)
+	if !strings.Contains(text, "alice shared this deck with you") || !strings.Contains(text, "2 cards") {
+		t.Errorf("gift pane = %q", text)
+	}
+	if n := len(doc.QueryAll(".flash-gift .flash-mini-card")); n != 2 {
+		t.Errorf("gift pane shows %d sample cards, want 2", n)
+	}
 	for _, sel := range []string{
 		`form[action="/flash/shared/adopt"] input[name=csrf_token]`,
 		`form[action="/flash/shared/decline"] input[name=csrf_token]`,
 	} {
-		n := doc.MustHave(sel)
-		v, _ := htmlassert.Attr(n, "value")
+		v, _ := htmlassert.Attr(doc.MustHave(sel), "value")
 		if v == "" {
-			t.Errorf("%s has an empty CSRF token value with no deck selected", sel)
+			t.Errorf("%s has an empty CSRF token", sel)
 		}
+	}
+	doc.MustHave(`#deck-list a.deck-row-active`) // the gift row is highlighted
+}
+
+func TestGiftPreviewIsRecipientOnly(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	shareID := shareToBob(t, s, deckID)
+
+	if rec := s.Do(t, s.Alice, httpGet(t, "/flash/shared/"+shareID)); rec.Code != 404 {
+		t.Errorf("sharer viewing the gift = %d, want 404", rec.Code)
+	}
+	s.PostHX(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {shareID}})
+	if rec := s.Do(t, s.Bob, httpGet(t, "/flash/shared/"+shareID)); rec.Code != 404 {
+		t.Errorf("gift after declining = %d, want 404", rec.Code)
 	}
 }
 
-// TestSharedWithMeShowsSharerUsername covers finding #4: the recipient's
-// list must show who shared a deck, not just its name, since with more than
-// one other account on the instance the name alone is ambiguous.
-func TestSharedWithMeShowsSharerUsername(t *testing.T) {
+func TestGiftRowLeavesTheListOnAdoptAndDecline(t *testing.T) {
 	s := newShareServer(t)
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")
-	s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/share",
-		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}})
+	shareID := shareToBob(t, s, deckID)
 
-	doc := s.Get(t, s.Bob, "/flash/")
-	shared := doc.MustHave("#shared-with-me")
-	text := htmlassert.Text(shared)
-	if !strings.Contains(text, "alice") {
-		t.Errorf("shared-with-me text = %q, want it to include the sharer's username %q", text, "alice")
+	rec := s.PostHX(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {shareID}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	list := doc.MustHave("#deck-list")
+	if _, ok := htmlassert.Attr(list, "hx-swap-oob"); !ok {
+		t.Error("#deck-list is not refreshed out of band on decline")
 	}
-	if !strings.Contains(text, "Spanish") {
-		t.Errorf("shared-with-me text = %q, want it to include the deck name %q", text, "Spanish")
+	doc.MustNotHave("#deck-list .deck-row-gift")
+
+	shareID = shareToBob(t, s, deckID)
+	rec = s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareID}})
+	doc = htmlassert.Parse(t, rec.Body.String())
+	doc.MustNotHave("#deck-list .deck-row-gift")
+	notice := doc.MustHave("#deck-detail-view .flash-notice")
+	if !strings.Contains(htmlassert.Text(notice), "Spanish") {
+		t.Errorf("adopt notice = %q, want the deck name", htmlassert.Text(notice))
 	}
 }
 
@@ -239,9 +243,9 @@ func TestFullShareCycleThroughHTTP(t *testing.T) {
 	// A plain, non-HTMX GET /flash/ as Bob renders the offer, deck name and
 	// sharer's username, through the real full-page template.
 	doc := s.Get(t, s.Bob, "/flash/")
-	sharedText := htmlassert.Text(doc.MustHave("#shared-with-me"))
-	if !strings.Contains(sharedText, "alice") || !strings.Contains(sharedText, "Spanish") {
-		t.Fatalf("shared-with-me text = %q, want alice's username and the deck name", sharedText)
+	giftText := htmlassert.Text(doc.MustHave("#deck-list a.deck-row-gift"))
+	if !strings.Contains(giftText, "alice") || !strings.Contains(giftText, "Spanish") {
+		t.Fatalf("gift row text = %q, want alice's username and the deck name", giftText)
 	}
 
 	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
@@ -299,5 +303,70 @@ func TestFullShareCycleThroughHTTP(t *testing.T) {
 	}
 	if len(bobCards) != 2 {
 		t.Fatalf("bob's cards after merge = %+v, want 2", bobCards)
+	}
+}
+
+func TestShareMenuListsSharesWithFriendlyStatus(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	rec := s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/share",
+		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	menu := doc.MustHave("details.flash-share-menu")
+	if _, open := htmlassert.Attr(menu, "open"); !open {
+		t.Error("the Share popover should stay open after sharing")
+	}
+	pill := doc.MustHave(".flash-share-menu .flash-status-pill")
+	if got := htmlassert.Text(pill); got != "waiting" {
+		t.Errorf("status pill = %q, want waiting", got)
+	}
+
+	page := s.Get(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10))
+	closed := page.MustHave("details.flash-share-menu")
+	if _, open := htmlassert.Attr(closed, "open"); open {
+		t.Error("the Share popover should start closed on a normal page load")
+	}
+}
+
+func TestCardsModeToolbarAlsoHasShare(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	doc := s.Get(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/cards/")
+	doc.MustHave(".flash-deck-toolbar details.flash-share-menu")
+}
+
+// TestShareAndRevokeFromCardsModeSyncURL covers finding #2 from the U5
+// final review: sharing or revoking from Cards mode always renders the
+// deck-view pane, so HX-Push-Url must redirect the URL there too, even
+// though the request came from /flash/{id}/cards/.
+func TestShareAndRevokeFromCardsModeSyncURL(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := strconv.FormatInt(deckID, 10)
+	wantURL := "/flash/" + deckIDStr
+
+	s.Get(t, s.Alice, "/flash/"+deckIDStr+"/cards/") // land in Cards mode first
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/share",
+		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}})
+	if rec.Code != 200 {
+		t.Fatalf("share: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Push-Url"); got != wantURL {
+		t.Errorf("share HX-Push-Url = %q, want %q to match the deck-view pane it renders", got, wantURL)
+	}
+
+	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
+	if err != nil || len(offers) != 1 {
+		t.Fatalf("setup: offers = %+v, err = %v", offers, err)
+	}
+	shareIDStr := strconv.FormatInt(offers[0].ID, 10)
+
+	rec = s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/share/"+shareIDStr+"/revoke", url.Values{})
+	if rec.Code != 200 {
+		t.Fatalf("revoke: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Push-Url"); got != wantURL {
+		t.Errorf("revoke HX-Push-Url = %q, want %q to match the deck-view pane it renders", got, wantURL)
 	}
 }

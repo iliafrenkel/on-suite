@@ -91,6 +91,8 @@ const (
 	deckModeCard     = "card"
 	deckModeCardNew  = "card-new"
 	deckModeCardEdit = "card-edit"
+	// deckModeGift is a pending share's preview, before it is adopted.
+	deckModeGift = "gift"
 )
 
 // deckDetailView is what the deck detail pane renders, in any mode.
@@ -103,6 +105,16 @@ type deckDetailView struct {
 	// "view" — the Review button, tiles, and "next cards" line.
 	Summary   DeckSummary
 	NextLabel string
+
+	// Notice is a one-off success message at the top of the deck view
+	// ("Planets is now in your decks").
+	Notice string
+
+	ShareOpen bool // render the Share popover open (after a share or revoke)
+	Snoozed   bool // edit mode: whether "Take a break" shows End break
+
+	// Gift is set for Mode "gift": a pending share's preview.
+	Gift giftView
 
 	// HasDecks is filled in by buildDeckIndex for the empty mode: false
 	// shows the first-run welcome, true a "pick a deck" hint.
@@ -172,10 +184,36 @@ func newDeckListItem(s DeckSummary) deckListItem {
 	return item
 }
 
+// giftRow is a pending share shown at the top of the deck list, like a
+// present waiting to be opened (UI overhaul spec §6).
+type giftRow struct {
+	ShareID      int64
+	DeckName     string
+	DeckColor    string
+	FromUsername string
+	IsMerge      bool // the recipient already has this deck; only new cards come
+	NewCardCount int
+}
+
+// giftView is the pane for one gift.
+type giftView struct {
+	ShareID      int64
+	DeckName     string
+	Description  string
+	Color        string
+	FromUsername string
+	IsMerge      bool
+	CardCount    int
+	Samples      []cardGridItem
+	CSRFToken    string
+}
+
 type deckListFragment struct {
-	Items    []deckListItem
-	ActiveID int64
-	OOB      bool
+	Items        []deckListItem
+	ActiveID     int64
+	Gifts        []giftRow
+	ActiveGiftID int64
+	OOB          bool
 }
 
 type deckIndexView struct {
@@ -192,7 +230,22 @@ type deckIndexView struct {
 // Share itself only carries a bare user ID.
 type shareWithUsername struct {
 	Share
-	ToUsername string
+	ToUsername  string
+	StatusLabel string
+}
+
+// shareStatusLabel is how a share's status reads in the Share popover.
+func shareStatusLabel(status string) string {
+	switch status {
+	case ShareStatusPending:
+		return "waiting"
+	case ShareStatusAdopted:
+		return "added"
+	case ShareStatusDeclined:
+		return "said no thanks"
+	default:
+		return status
+	}
 }
 
 // shareOfferWithUsername is one row of the recipient's "Shared with me"
@@ -244,7 +297,7 @@ func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Ac
 	}
 	withNames := make([]shareWithUsername, len(shares))
 	for i, sh := range shares {
-		withNames[i] = shareWithUsername{Share: sh, ToUsername: byID[sh.ToUserID]}
+		withNames[i] = shareWithUsername{Share: sh, ToUsername: byID[sh.ToUserID], StatusLabel: shareStatusLabel(sh.Status)}
 	}
 	return others, withNames, nil
 }
@@ -294,6 +347,7 @@ func (a *App) editDeckDetail(r *http.Request, d Deck, errMsg, name, description,
 		ColorValue: color, Colors: deckColorOptions(),
 		NewCardsPerDayValue: newCardsPerDay, ReviewsPerDayValue: reviewsPerDay,
 		Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
+		Snoozed: d.IsSnoozed(a.store.now()),
 	}
 }
 
@@ -315,6 +369,8 @@ func deckPageTitle(d deckDetailView) string {
 		return "New card · " + d.Deck.Name
 	case deckModeCardEdit:
 		return "Edit card · " + d.Deck.Name
+	case deckModeGift:
+		return "Shared with you"
 	default:
 		return "Decks"
 	}
@@ -366,6 +422,14 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 		return deckIndexView{}, err
 	}
 
+	if (detail.Mode == deckModeView || detail.Mode == deckModeCards) && detail.Deck.ID != 0 && detail.ShareRecipients == nil {
+		recipients, shares, err := a.shareContext(ctx, userID, detail.Deck.ID)
+		if err != nil {
+			return deckIndexView{}, err
+		}
+		detail.ShareRecipients, detail.SharedWith = recipients, shares
+	}
+
 	items := make([]deckListItem, 0, len(sums))
 	total := 0
 	for _, s := range sums {
@@ -381,8 +445,16 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 		detail.HasDecks = len(sums) > 0 || len(offers) > 0
 	}
 
+	gifts := make([]giftRow, len(offers))
+	for i, o := range offers {
+		gifts[i] = giftRow{
+			ShareID: o.ID, DeckName: o.DeckName, DeckColor: o.DeckColor, FromUsername: o.FromUsername,
+			IsMerge: o.PriorAdoptedDeckID != nil, NewCardCount: o.NewCardCount,
+		}
+	}
+
 	return deckIndexView{
-		List:         deckListFragment{Items: items, ActiveID: detail.Deck.ID, OOB: oob},
+		List:         deckListFragment{Items: items, Gifts: gifts, ActiveID: detail.Deck.ID, ActiveGiftID: detail.Gift.ShareID, OOB: oob},
 		Detail:       detail,
 		SharedWithMe: offers,
 		TotalDue:     total,

@@ -2,14 +2,49 @@
      the home screen's right pane (UI overhaul spec §3). */}}
 
 {{/* deck-toolbar is the deck pane's toolbar, shared by the deck view and
-     cards mode. Pass a dict: Deck, Active ("cards" highlights Cards; ""
-     for none), CSRFToken. */}}
+     cards mode. Pass a dict: Deck, Active ("cards" highlights Cards),
+     CSRFToken, and View (the deckDetailView, for the Share popover). The
+     popover is a <details>, the same no-JS disclosure as Notes' shortcuts
+     menu; it is left out when there is nobody to share with. */}}
 {{define "deck-toolbar"}}
 <div class="notes-toolbar flash-deck-toolbar">
 	{{template "flash-pane-back"}}
 	<div class="notes-toolbar-actions">
 		<a class="toolbar-btn{{if eq .Active "cards"}} toolbar-btn-active{{end}}" href="/flash/{{.Deck.ID}}/cards/" hx-get="/flash/{{.Deck.ID}}/cards/" hx-target="#deck-detail" hx-push-url="true">{{ticon "cards"}}Cards</a>
 		<a class="toolbar-btn" href="/flash/edit/{{.Deck.ID}}" hx-get="/flash/edit/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "edit"}}Edit</a>
+		{{with .View}}{{if .ShareRecipients}}
+		<details class="flash-share-menu"{{if .ShareOpen}} open{{end}}>
+			<summary class="toolbar-btn">{{ticon "share"}}Share</summary>
+			<div class="flash-share-panel">
+				<form class="flash-share-form" method="post" action="/flash/{{.Deck.ID}}/share" hx-post="/flash/{{.Deck.ID}}/share" hx-target="#deck-detail" hx-swap="innerHTML">
+					<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+					<label for="share-recipient-{{.Deck.ID}}">Share this deck with</label>
+					<div class="row">
+						<select id="share-recipient-{{.Deck.ID}}" name="to_user_id">
+							{{range .ShareRecipients}}<option value="{{.ID}}">{{.Username}}</option>{{end}}
+						</select>
+						<button type="submit" class="primary">Share</button>
+					</div>
+				</form>
+				{{if .SharedWith}}
+				<ul class="flash-share-list">
+					{{range .SharedWith}}{{if ne .Status "revoked"}}
+					<li>
+						<span>{{.ToUsername}}</span>
+						<span class="flash-status-pill flash-status-{{.Status}}">{{.StatusLabel}}</span>
+						{{if eq .Status "pending"}}
+						<form method="post" action="/flash/{{$.View.Deck.ID}}/share/{{.ID}}/revoke" hx-post="/flash/{{$.View.Deck.ID}}/share/{{.ID}}/revoke" hx-target="#deck-detail" hx-swap="innerHTML">
+							<input type="hidden" name="{{csrfField}}" value="{{$.View.CSRFToken}}">
+							<button type="submit" class="toolbar-btn">Revoke</button>
+						</form>
+						{{end}}
+					</li>
+					{{end}}{{end}}
+				</ul>
+				{{end}}
+			</div>
+		</details>
+		{{end}}{{end}}
 		<form method="post" action="/flash/{{.Deck.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
 		      data-confirm="Delete “{{.Deck.Name}}” and all its cards? This can't be undone.">
 			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
@@ -21,7 +56,7 @@
 
 {{define "deck-detail-cards"}}
 <div class="flash-cards-pane deck-c-{{.Deck.Color}}" id="deck-detail-cards">
-	{{template "deck-toolbar" (dict "Deck" .Deck "Active" "cards" "CSRFToken" .CSRFToken)}}
+	{{template "deck-toolbar" (dict "Deck" .Deck "Active" "cards" "CSRFToken" .CSRFToken "View" .)}}
 	<h1 class="flash-pane-title">{{.Deck.Name}}</h1>
 	{{/* Without JS this is a normal GET form to the grid itself. With JS,
 	     typing live-filters just #card-grid through the fragment route. The

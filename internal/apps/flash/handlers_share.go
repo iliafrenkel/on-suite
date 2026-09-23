@@ -2,6 +2,7 @@
 package flash
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -66,7 +67,12 @@ func (a *App) shareDeck(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, d, recipients, shares))
+	if web.IsHTMX(r) {
+		w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
+	}
+	view := a.viewDeckDetail(r, userID, d, recipients, shares)
+	view.ShareOpen = true
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }
 
 // revokeShareHandler handles POST /{deckID}/share/{shareID}/revoke.
@@ -100,7 +106,12 @@ func (a *App) revokeShareHandler(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, d, recipients, shares))
+	if web.IsHTMX(r) {
+		w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
+	}
+	view := a.viewDeckDetail(r, userID, d, recipients, shares)
+	view.ShareOpen = true
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }
 
 // declineShareHandler handles POST /shared/decline: the recipient
@@ -119,7 +130,50 @@ func (a *App) declineShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.deps.Log.Info("share declined", "app", ID, "user_id", userID, "share_id", shareID)
+	if web.IsHTMX(r) {
+		w.Header().Set("HX-Push-Url", "/flash/")
+	}
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, deckDetailView{})
+}
+
+// giftPreview backs GET /shared/{shareID}: a pending share's preview in the
+// deck pane. Anything but the recipient's own pending share is a 404.
+func (a *App) giftPreview(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	shareID, ok := a.shareIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	p, err := a.store.SharePreview(r.Context(), userID, shareID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	_, byID, err := a.usernamesByID(r.Context())
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	gift := giftView{
+		ShareID: shareID, DeckName: p.Deck.Name, Description: p.Deck.Description, Color: p.Deck.Color,
+		FromUsername: byID[p.Offer.FromUserID], IsMerge: p.Offer.PriorAdoptedDeckID != nil,
+		CardCount: p.CardCount, CSRFToken: web.CSRFToken(r.Context()),
+	}
+	for _, c := range p.Samples {
+		gift.Samples = append(gift.Samples, cardGridItem{Face: newCardFace(c, p.Deck, nil)})
+	}
+	a.renderDeckIndex(w, r, userID, http.StatusOK, deckDetailView{Mode: deckModeGift, Gift: gift})
+}
+
+// plural is "s" unless n is 1.
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // adoptShareHandler handles POST /shared/adopt: the recipient adopts
@@ -132,6 +186,14 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 	shareID, ok := a.shareIDFromForm(w, r)
 	if !ok {
 		return
+	}
+	wasMerge, newCards := false, 0
+	if offers, err := a.store.SharesForRecipient(r.Context(), userID); err == nil {
+		for _, o := range offers {
+			if o.ID == shareID {
+				wasMerge, newCards = o.PriorAdoptedDeckID != nil, o.NewCardCount
+			}
+		}
 	}
 	d, err := a.store.AdoptShare(r.Context(), userID, shareID)
 	if err != nil {
@@ -150,5 +212,10 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, d, recipients, shares))
+	view := a.viewDeckDetail(r, userID, d, recipients, shares)
+	view.Notice = "“" + d.Name + "” is now in your decks."
+	if wasMerge {
+		view.Notice = fmt.Sprintf("%d new card%s added to “%s”.", newCards, plural(newCards), d.Name)
+	}
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }

@@ -36,11 +36,13 @@
 </div>{{end}}
 
 {{/* flash-mini-card is one grid tile: the question side only, plus a
-     status corner label. Pass a cardGridItem. InPane swaps it into the deck
-     pane; otherwise (the cross-deck tag page) it is a plain link and shows
-     its deck's name. */}}
-{{define "flash-mini-card"}}<a class="flash-mini-card deck-c-{{.Face.Color}}" href="{{.Href}}"{{if .InPane}} hx-get="{{.Href}}" hx-target="#deck-detail" hx-push-url="true"{{end}}>
+     status corner label. Pass a cardGridItem. With an Href it is a link
+     (InPane makes it an HTMX swap into the deck pane); without one it is
+     a plain tile (a gift's sample cards). */}}
+{{define "flash-mini-card"}}{{if .Href}}<a class="flash-mini-card deck-c-{{.Face.Color}}" href="{{.Href}}"{{if .InPane}} hx-get="{{.Href}}" hx-target="#deck-detail" hx-push-url="true"{{end}}>{{template "flash-mini-card-body" .}}</a>{{else}}<span class="flash-mini-card deck-c-{{.Face.Color}}">{{template "flash-mini-card-body" .}}</span>{{end}}{{end}}
+
+{{define "flash-mini-card-body"}}
 	<span class="flash-mini-text">{{.Face.Question}}</span>
 	{{with .Status}}<span class="flash-mini-status">{{.}}</span>{{end}}
 	{{with .DeckName}}<span class="flash-mini-deck">{{.}}</span>{{end}}
-</a>{{end}}
+{{end}}

@@ -153,6 +153,12 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /shared/adopt", a.adoptShareHandler)
 	r.HandleFunc("POST /shared/decline", a.declineShareHandler)
 
+	// A gift's preview. Literal-then-wildcard GET, the same shape as GET
+	// /edit/{deckID} and GET /review/{deckID}, differing in its literal, so
+	// it can't collide with them; it is a GET, so it can't collide with the
+	// POST /shared/* routes above either.
+	r.HandleFunc("GET /shared/{shareID}", a.giftPreview)
+
 	// GET /tags/{tagName} is 2 segments (literal "tags", wildcard), a different
 	// shape from GET /{deckID} (1 segment) and GET /edit/{deckID} (literal
 	// "edit", wildcard) — no ambiguity with either.
