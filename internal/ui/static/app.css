@@ -2834,11 +2834,6 @@ a.flash-pill:hover { color: var(--c-text); border-color: var(--c-border-firm); }
 	color: inherit;
 }
 
-.flash-media-details { margin-top: var(--s-5); }
-.flash-media-details summary { cursor: pointer; color: var(--c-text-dim); font-size: var(--fs-sm); }
-
-.flash-card-form { max-width: var(--measure); }
-
 @media (prefers-reduced-motion: reduce) {
 	.flash-card-inner { transition: none; }
 	.flash-flip:checked + .flash-card .flash-card-inner { transform: none; }
