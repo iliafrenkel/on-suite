@@ -9,6 +9,7 @@
 // (Again/Hard/Good/Easy), U undoes the last grade. Mirrors
 // internal/apps/reader/static/reader.js's press()/keydown pattern.
 // Card viewer shortcuts (U2): Space flips, ← → previous/next, E edits.
+// Card editor (U3): Make blank, tag pills, and drag-and-drop for media.
 (function () {
 	"use strict";
 
@@ -42,6 +43,163 @@
 		flip.checked = !flip.checked;
 		return true;
 	}
+
+	// ---- Card editor (U3) -------------------------------------------------
+
+	// nextClozeNumber is one more than the highest {{cN::…}} already in text.
+	function nextClozeNumber(text) {
+		var max = 0;
+		var re = /\{\{c(\d+)::/g;
+		var m;
+		while ((m = re.exec(text)) !== null) {
+			var n = parseInt(m[1], 10);
+			if (n > max) max = n;
+		}
+		return max + 1;
+	}
+
+	// makeBlank wraps the textarea's selection (or a placeholder word) in
+	// the next cloze marker and selects the word, ready to overtype.
+	function makeBlank(btn) {
+		var ta = document.getElementById(btn.getAttribute("data-target"));
+		if (!ta) return;
+		var start = ta.selectionStart, end = ta.selectionEnd;
+		var word = ta.value.slice(start, end) || "answer";
+		var open = "{{c" + nextClozeNumber(ta.value) + "::";
+		ta.value = ta.value.slice(0, start) + open + word + "}}" + ta.value.slice(end);
+		ta.focus();
+		ta.setSelectionRange(start + open.length, start + open.length + word.length);
+		ta.dispatchEvent(new Event("input", { bubbles: true }));
+	}
+
+	// initTagInput turns the comma-separated tags field into pills. The
+	// original input stays in the form (as type=hidden) and keeps the same
+	// comma-separated value the server already parses.
+	function initTagInput(input) {
+		var names = input.value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+		var box = document.createElement("div");
+		box.className = "flash-tag-editor";
+		var entry = document.createElement("input");
+		entry.type = "text";
+		entry.className = "flash-tag-entry";
+		entry.placeholder = names.length ? "" : (input.placeholder || "Add a tag");
+		entry.setAttribute("aria-label", "Add a tag");
+		if (input.id) {
+			// Keep the field's <label for=…> pointing at something focusable.
+			entry.id = input.id;
+			input.id = input.id + "-value";
+		}
+
+		function sync() {
+			input.value = names.join(", ");
+		}
+		function render() {
+			while (box.firstChild !== entry && box.firstChild) box.removeChild(box.firstChild);
+			names.forEach(function (name, i) {
+				var pill = document.createElement("span");
+				pill.className = "flash-pill flash-tag-pill";
+				pill.textContent = name;
+				var x = document.createElement("button");
+				x.type = "button";
+				x.className = "flash-tag-remove";
+				x.setAttribute("aria-label", "Remove tag " + name);
+				x.textContent = "×";
+				x.addEventListener("click", function () {
+					names.splice(i, 1);
+					sync();
+					render();
+					entry.focus();
+				});
+				pill.appendChild(x);
+				box.insertBefore(pill, entry);
+			});
+		}
+		function add(raw) {
+			raw.split(",").forEach(function (part) {
+				var name = part.trim();
+				if (name && names.indexOf(name) === -1) names.push(name);
+			});
+			entry.value = "";
+			sync();
+			render();
+		}
+
+		entry.addEventListener("keydown", function (e) {
+			if (e.key === "Enter" || e.key === ",") {
+				e.preventDefault();
+				add(entry.value);
+			} else if (e.key === "Backspace" && entry.value === "" && names.length) {
+				names.pop();
+				sync();
+				render();
+			}
+		});
+		entry.addEventListener("blur", function () {
+			if (entry.value.trim()) add(entry.value);
+		});
+		if (input.form) {
+			input.form.addEventListener("submit", function () {
+				if (entry.value.trim()) add(entry.value);
+			});
+		}
+
+		input.type = "hidden";
+		input.parentNode.insertBefore(box, input);
+		box.appendChild(entry);
+		render();
+	}
+
+	// initDropZone lets a file be dropped onto the zone's label, and shows
+	// the chosen file's name (the CSP's img-src 'self' rules out a blob:
+	// thumbnail).
+	function initDropZone(zone) {
+		var input = zone.querySelector("input[type=file]");
+		var label = zone.querySelector(".flash-drop-file");
+		if (!input) return;
+		function show() {
+			if (label) label.textContent = input.files.length ? input.files[0].name : "";
+			zone.classList.toggle("flash-drop-chosen", input.files.length > 0);
+		}
+		zone.addEventListener("dragover", function (e) {
+			e.preventDefault();
+			zone.classList.add("flash-drop-over");
+		});
+		zone.addEventListener("dragleave", function () {
+			zone.classList.remove("flash-drop-over");
+		});
+		zone.addEventListener("drop", function (e) {
+			e.preventDefault();
+			zone.classList.remove("flash-drop-over");
+			if (e.dataTransfer && e.dataTransfer.files.length) {
+				input.files = e.dataTransfer.files;
+				show();
+			}
+		});
+		input.addEventListener("change", show);
+	}
+
+	// enhance wires every not-yet-enhanced editor element under root. It is
+	// idempotent, so running it on each htmx:load is safe.
+	function enhance(root) {
+		function each(selector, fn) {
+			var list = root.querySelectorAll(selector);
+			for (var i = 0; i < list.length; i++) {
+				if (list[i].getAttribute("data-enhanced")) continue;
+				list[i].setAttribute("data-enhanced", "1");
+				fn(list[i]);
+			}
+		}
+		each(".flash-make-blank", function (btn) { btn.hidden = false; });
+		each("input[data-tag-input]", initTagInput);
+		each("label[data-drop]", initDropZone);
+	}
+
+	document.addEventListener("click", function (e) {
+		var btn = e.target.closest && e.target.closest(".flash-make-blank");
+		if (btn) makeBlank(btn);
+	});
+	document.addEventListener("htmx:load", function (e) { enhance(e.target); });
+	enhance(document);
 
 	document.addEventListener("keydown", function (e) {
 		if (e.metaKey || e.ctrlKey || e.altKey) return;
