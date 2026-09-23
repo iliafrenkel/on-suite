@@ -63,7 +63,7 @@
 
 {{define "deck-detail-view"}}
 <div class="flash-deck-view deck-c-{{.Deck.Color}}" id="deck-detail-view">
-	{{template "deck-toolbar" (dict "Deck" .Deck "Active" "" "CSRFToken" .CSRFToken)}}
+	{{template "deck-toolbar" (dict "Deck" .Deck "Active" "" "CSRFToken" .CSRFToken "View" .)}}
 	{{with .Notice}}<div class="notice flash-notice" role="status">{{.}}</div>{{end}}
 
 	<div class="flash-deck-hero">
@@ -72,12 +72,11 @@
 			<h1>{{.Deck.Name}}</h1>
 			{{with .Deck.Description}}<p class="dim">{{.}}</p>{{end}}
 			{{if .Summary.Snoozed}}
-			{{/* U5 replaces this with the "taking a break" banner. */}}
-			<div class="notice row">
-				<span>Snoozed until {{.Deck.SnoozedUntil.Format "2 Jan 2006"}}.</span>
+			<div class="flash-break-banner" role="status">
+				<span>Taking a break until {{.Deck.SnoozedUntil.Format "2 Jan"}}.</span>
 				<form method="post" action="/flash/{{.Deck.ID}}/unsnooze" hx-post="/flash/{{.Deck.ID}}/unsnooze" hx-target="#deck-detail" hx-swap="innerHTML">
 					<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-					<button type="submit" class="button">Unsnooze</button>
+					<button type="submit" class="flash-big-btn">End break</button>
 				</form>
 			</div>
 			{{else if .Summary.ReviewNow}}
@@ -103,53 +102,6 @@
 		<div class="flash-stat-tile"><div class="value">{{.Summary.Mastered}}</div><div class="label">mastered</div></div>
 	</div>
 
-	{{/* Share and snooze keep their F5/F2 controls until U5 moves them
-	     into the toolbar popover and the Edit pane. */}}
-	{{if .ShareRecipients}}
-	<section class="flash-deck-section">
-		<h2 class="flash-section-title">Share</h2>
-		<form class="row" method="post" action="/flash/{{.Deck.ID}}/share" hx-post="/flash/{{.Deck.ID}}/share" hx-target="#deck-detail" hx-swap="innerHTML">
-			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-			<label class="visually-hidden" for="share-recipient-{{.Deck.ID}}">Share with</label>
-			<select id="share-recipient-{{.Deck.ID}}" name="to_user_id">
-				{{range .ShareRecipients}}<option value="{{.ID}}">{{.Username}}</option>{{end}}
-			</select>
-			<button type="submit" class="button">Share</button>
-		</form>
-		{{if .SharedWith}}
-		<ul class="flash-share-list">
-			{{range .SharedWith}}
-			<li class="row">
-				<span>{{.ToUsername}} — {{.Status}}</span>
-				{{if eq .Status "pending"}}
-				<form method="post" action="/flash/{{$.Deck.ID}}/share/{{.ID}}/revoke" hx-post="/flash/{{$.Deck.ID}}/share/{{.ID}}/revoke" hx-target="#deck-detail" hx-swap="innerHTML">
-					<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
-					<button type="submit" class="toolbar-btn">Revoke</button>
-				</form>
-				{{end}}
-			</li>
-			{{end}}
-		</ul>
-		{{end}}
-	</section>
-	{{end}}
-	{{if not .Summary.Snoozed}}
-	<section class="flash-deck-section">
-		<h2 class="flash-section-title">Take a break</h2>
-		<div class="row">
-			<form method="post" action="/flash/{{.Deck.ID}}/snooze" hx-post="/flash/{{.Deck.ID}}/snooze" hx-target="#deck-detail" hx-swap="innerHTML">
-				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-				<input type="hidden" name="days" value="7">
-				<button type="submit" class="toolbar-btn">1 week</button>
-			</form>
-			<form method="post" action="/flash/{{.Deck.ID}}/snooze" hx-post="/flash/{{.Deck.ID}}/snooze" hx-target="#deck-detail" hx-swap="innerHTML">
-				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-				<input type="hidden" name="days" value="30">
-				<button type="submit" class="toolbar-btn">1 month</button>
-			</form>
-		</div>
-	</section>
-	{{end}}
 </div>
 {{end}}
 
@@ -192,6 +144,7 @@
 {{end}}
 
 {{define "deck-detail-edit"}}
+<div class="flash-deck-edit">
 <form class="stack flash-deck-form" id="deck-detail-edit" method="post" action="/flash/{{.Deck.ID}}" hx-post="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-swap="innerHTML">
 	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 	<div class="notes-toolbar flash-deck-toolbar">{{template "flash-pane-back"}}</div>
@@ -223,6 +176,33 @@
 		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}" hx-get="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
 	</div>
 </form>
+	<section class="flash-deck-section flash-break-section">
+		<h2 class="flash-section-title">Take a break</h2>
+		{{if .Snoozed}}
+		<div class="flash-break-banner">
+			<span>Taking a break until {{.Deck.SnoozedUntil.Format "2 Jan"}}.</span>
+			<form method="post" action="/flash/{{.Deck.ID}}/unsnooze" hx-post="/flash/{{.Deck.ID}}/unsnooze" hx-target="#deck-detail" hx-swap="innerHTML">
+				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+				<button type="submit" class="flash-big-btn">End break</button>
+			</form>
+		</div>
+		{{else}}
+		<p class="faint">Hide this deck from reviews for a while — handy for holidays. Nothing is lost.</p>
+		<div class="row">
+			<form method="post" action="/flash/{{.Deck.ID}}/snooze" hx-post="/flash/{{.Deck.ID}}/snooze" hx-target="#deck-detail" hx-swap="innerHTML">
+				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+				<input type="hidden" name="days" value="7">
+				<button type="submit" class="button">1 week</button>
+			</form>
+			<form method="post" action="/flash/{{.Deck.ID}}/snooze" hx-post="/flash/{{.Deck.ID}}/snooze" hx-target="#deck-detail" hx-swap="innerHTML">
+				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+				<input type="hidden" name="days" value="30">
+				<button type="submit" class="button">1 month</button>
+			</form>
+		</div>
+		{{end}}
+	</section>
+</div>
 {{end}}
 
 {{define "deck-list-items"}}

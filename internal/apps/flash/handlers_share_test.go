@@ -302,3 +302,32 @@ func TestFullShareCycleThroughHTTP(t *testing.T) {
 		t.Fatalf("bob's cards after merge = %+v, want 2", bobCards)
 	}
 }
+
+func TestShareMenuListsSharesWithFriendlyStatus(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	rec := s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/share",
+		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	menu := doc.MustHave("details.flash-share-menu")
+	if _, open := htmlassert.Attr(menu, "open"); !open {
+		t.Error("the Share popover should stay open after sharing")
+	}
+	pill := doc.MustHave(".flash-share-menu .flash-status-pill")
+	if got := htmlassert.Text(pill); got != "waiting" {
+		t.Errorf("status pill = %q, want waiting", got)
+	}
+
+	page := s.Get(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10))
+	closed := page.MustHave("details.flash-share-menu")
+	if _, open := htmlassert.Attr(closed, "open"); open {
+		t.Error("the Share popover should start closed on a normal page load")
+	}
+}
+
+func TestCardsModeToolbarAlsoHasShare(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	doc := s.Get(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/cards/")
+	doc.MustHave(".flash-deck-toolbar details.flash-share-menu")
+}

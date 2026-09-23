@@ -67,7 +67,9 @@ func (a *App) shareDeck(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, d, recipients, shares))
+	view := a.viewDeckDetail(r, userID, d, recipients, shares)
+	view.ShareOpen = true
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }
 
 // revokeShareHandler handles POST /{deckID}/share/{shareID}/revoke.
@@ -101,7 +103,9 @@ func (a *App) revokeShareHandler(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, d, recipients, shares))
+	view := a.viewDeckDetail(r, userID, d, recipients, shares)
+	view.ShareOpen = true
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }
 
 // declineShareHandler handles POST /shared/decline: the recipient

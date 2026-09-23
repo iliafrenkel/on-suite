@@ -195,8 +195,8 @@ func TestSnoozedDeckPaneAndListRow(t *testing.T) {
 	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID))
 
 	form := doc.MustHave(`form[action="/flash/` + itoa(deck.ID) + `/unsnooze"]`)
-	if got := htmlassert.Text(form); !strings.Contains(got, "Unsnooze") {
-		t.Errorf("unsnooze form text = %q, want it to contain Unsnooze", got)
+	if got := htmlassert.Text(form); !strings.Contains(got, "End break") {
+		t.Errorf("unsnooze form text = %q, want it to contain End break", got)
 	}
 
 	doc.MustNotHave(".flash-review-cta")
@@ -454,3 +454,42 @@ func httpPost(t *testing.T, path string, form url.Values) *http.Request {
 }
 
 func itoa(id int64) string { return strconv.FormatInt(id, 10) }
+
+func TestTakeABreakLivesInTheEditPane(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID))
+	view.MustNotHave(`form[action="/flash/` + itoa(deck.ID) + `/snooze"]`)
+
+	edit := s.Get(t, s.Alice, "/flash/edit/"+itoa(deck.ID))
+	if n := len(edit.QueryAll(`form[action="/flash/` + itoa(deck.ID) + `/snooze"]`)); n != 2 {
+		t.Errorf("edit pane has %d snooze forms, want 2 (1 week, 1 month)", n)
+	}
+}
+
+func TestSnoozedDeckShowsABreakBanner(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, time.Now().Add(72*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID))
+	banner := doc.MustHave(".flash-break-banner")
+	if !strings.Contains(htmlassert.Text(banner), "Taking a break until") {
+		t.Errorf("banner = %q", htmlassert.Text(banner))
+	}
+	doc.MustHave(`.flash-break-banner form[action="/flash/` + itoa(deck.ID) + `/unsnooze"]`)
+	doc.MustNotHave("a.flash-review-cta")
+
+	edit := s.Get(t, s.Alice, "/flash/edit/"+itoa(deck.ID))
+	edit.MustHave(`form[action="/flash/` + itoa(deck.ID) + `/unsnooze"]`)
+}

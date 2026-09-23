@@ -110,6 +110,9 @@ type deckDetailView struct {
 	// ("Planets is now in your decks").
 	Notice string
 
+	ShareOpen bool // render the Share popover open (after a share or revoke)
+	Snoozed   bool // edit mode: whether "Take a break" shows End break
+
 	// Gift is set for Mode "gift": a pending share's preview.
 	Gift giftView
 
@@ -227,7 +230,22 @@ type deckIndexView struct {
 // Share itself only carries a bare user ID.
 type shareWithUsername struct {
 	Share
-	ToUsername string
+	ToUsername  string
+	StatusLabel string
+}
+
+// shareStatusLabel is how a share's status reads in the Share popover.
+func shareStatusLabel(status string) string {
+	switch status {
+	case ShareStatusPending:
+		return "waiting"
+	case ShareStatusAdopted:
+		return "added"
+	case ShareStatusDeclined:
+		return "said no thanks"
+	default:
+		return status
+	}
 }
 
 // shareOfferWithUsername is one row of the recipient's "Shared with me"
@@ -279,7 +297,7 @@ func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Ac
 	}
 	withNames := make([]shareWithUsername, len(shares))
 	for i, sh := range shares {
-		withNames[i] = shareWithUsername{Share: sh, ToUsername: byID[sh.ToUserID]}
+		withNames[i] = shareWithUsername{Share: sh, ToUsername: byID[sh.ToUserID], StatusLabel: shareStatusLabel(sh.Status)}
 	}
 	return others, withNames, nil
 }
@@ -329,6 +347,7 @@ func (a *App) editDeckDetail(r *http.Request, d Deck, errMsg, name, description,
 		ColorValue: color, Colors: deckColorOptions(),
 		NewCardsPerDayValue: newCardsPerDay, ReviewsPerDayValue: reviewsPerDay,
 		Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
+		Snoozed: d.IsSnoozed(a.store.now()),
 	}
 }
 
@@ -401,6 +420,14 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 	offers, err := a.sharedWithMeForViewer(ctx, userID)
 	if err != nil {
 		return deckIndexView{}, err
+	}
+
+	if (detail.Mode == deckModeView || detail.Mode == deckModeCards) && detail.Deck.ID != 0 && detail.ShareRecipients == nil {
+		recipients, shares, err := a.shareContext(ctx, userID, detail.Deck.ID)
+		if err != nil {
+			return deckIndexView{}, err
+		}
+		detail.ShareRecipients, detail.SharedWith = recipients, shares
 	}
 
 	items := make([]deckListItem, 0, len(sums))
