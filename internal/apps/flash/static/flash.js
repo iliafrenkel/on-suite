@@ -19,42 +19,51 @@
 
 	function press(selector) {
 		var el = document.querySelector(selector);
-		if (el) el.click();
+		if (el) {
+			el.click();
+			return true;
+		}
+		return false;
 	}
 
 	function reveal() {
 		var answer = document.querySelector(".flash-review-answer");
-		if (answer) answer.hidden = false;
+		if (answer) {
+			answer.hidden = false;
+			return true;
+		}
+		return false;
 	}
 
 	document.addEventListener("keydown", function (e) {
 		if (e.metaKey || e.ctrlKey || e.altKey) return;
 		if (isTyping(e.target)) return;
 
+		var handled = false;
 		switch (e.key) {
 			case " ":
-				reveal();
+				handled = reveal();
 				break;
 			case "1":
-				press(".flash-grade-again");
+				handled = press(".flash-grade-again");
 				break;
 			case "2":
-				press(".flash-grade-hard");
+				handled = press(".flash-grade-hard");
 				break;
 			case "3":
-				press(".flash-grade-good");
+				handled = press(".flash-grade-good");
 				break;
 			case "4":
-				press(".flash-grade-easy");
+				handled = press(".flash-grade-easy");
 				break;
 			case "u":
 			case "U":
-				press(".flash-undo-btn");
+				handled = press(".flash-undo-btn");
 				break;
 			default:
 				return;
 		}
-		e.preventDefault();
+		if (handled) e.preventDefault();
 	});
 
 	document.addEventListener("click", function (e) {
