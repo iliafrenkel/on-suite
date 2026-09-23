@@ -22,6 +22,11 @@ var scriptFiles embed.FS
 // open many simultaneous connections to one host on first review.
 const mediaFetchConcurrency = 4
 
+// cardFormMaxBytes is the body budget for the card create/update forms,
+// which carry an optional image and sound file since UI overhaul U3 — the
+// same budget as the media upload route below.
+const cardFormMaxBytes = MaxImageFetchBytes + MaxAudioFetchBytes
+
 // App is ON Flash. It is constructed before the platform exists, in the
 // registration slice in main, and receives everything it needs in Mount.
 type App struct {
@@ -107,13 +112,19 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	// about.
 	r.HandleFunc("GET /{deckID}/cards/{$}", a.cardIndex)
 	r.HandleFunc("GET /{deckID}/cards/new", a.newCardForm)
-	r.HandleFunc("POST /{deckID}/cards/new", a.createCard)
+	// The card form carries optional media since UI overhaul U3, so it
+	// needs the same raised body cap as the media upload route below — see
+	// that route's comment below for why both RegisterBodyLimit and
+	// LimitBody are needed.
+	r.RegisterBodyLimit("POST /{deckID}/cards/new", cardFormMaxBytes)
+	r.Handle("POST /{deckID}/cards/new", web.LimitBody(cardFormMaxBytes)(http.HandlerFunc(a.createCard)))
 	// "grid" is a literal at the position where GET /{deckID}/cards/{cardID}
 	// has a wildcard — the same non-ambiguity shape as "new" just above.
 	r.HandleFunc("GET /{deckID}/cards/grid", a.cardGridFragment)
 	r.HandleFunc("GET /{deckID}/cards/{cardID}", a.cardIndex)
 	r.HandleFunc("GET /{deckID}/cards/edit/{cardID}", a.editCardForm)
-	r.HandleFunc("POST /{deckID}/cards/{cardID}", a.updateCard)
+	r.RegisterBodyLimit("POST /{deckID}/cards/{cardID}", cardFormMaxBytes)
+	r.Handle("POST /{deckID}/cards/{cardID}", web.LimitBody(cardFormMaxBytes)(http.HandlerFunc(a.updateCard)))
 	r.HandleFunc("POST /{deckID}/cards/{cardID}/delete", a.deleteCard)
 
 	// Sharing routes. POST /{deckID}/share is the same wildcard-then-literal
