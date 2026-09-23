@@ -353,6 +353,7 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 		items = append(items, newDeckListItem(s))
 		total += s.ReviewNow
 		if detail.Mode == deckModeView && s.Deck.ID == detail.Deck.ID {
+			detail.Deck = s.Deck
 			detail.Summary = s
 			detail.NextLabel = nextCardsLabel(s, now)
 		}

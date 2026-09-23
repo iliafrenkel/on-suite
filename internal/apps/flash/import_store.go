@@ -17,7 +17,7 @@ func (st *Store) ImportDeck(ctx context.Context, userID int64, name, description
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	d := Deck{UserID: userID, Name: name, Description: description, CreatedAt: st.now(), NewCardsPerDay: DefaultNewCardsPerDay}
+	d := Deck{UserID: userID, Name: name, Description: description, CreatedAt: st.now(), NewCardsPerDay: DefaultNewCardsPerDay, Color: DefaultDeckColor}
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO flash_decks (user_id, name, description, created_at)
 		 VALUES (?, ?, ?, ?)
