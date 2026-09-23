@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ON Flash UI overhaul — mockups</title>
+<!--
+  Visual reference for docs/superpowers/specs/2026-09-23-on-flash-ui-overhaul-design.md.
+  These are the mockups agreed during brainstorming. They show layout and
+  hierarchy; colours here are illustrative — the spec's tokens are
+  authoritative. This file is documentation only and is never served by the
+  app, so its inline styles/scripts are not subject to the app's CSP.
+-->
+<style>
+:root{--surface-0:#fbf7f1;--surface-1:#f2e9db;--surface-2:#fefefe;--border:#e3d3bf;--border-strong:#c9b49a;--text-primary:#3a2f26;--text-secondary:#6b5d4f;--text-muted:#948573;--text-danger:#a51d2d}
+body{margin:0;padding:24px;background:var(--surface-0);color:var(--text-primary);font:15px/1.5 Inter,system-ui,sans-serif}
+main{max-width:760px;margin:0 auto}
+h1{font-size:22px;font-weight:500}
+h2{font-size:17px;font-weight:500;margin:2.5rem 0 .5rem}
+.note{color:var(--text-secondary);font-size:13px;margin:0 0 12px}
+.win{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px}
+.bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--border)}
+.btn{border:1px solid var(--border-strong);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--text-primary);white-space:nowrap}
+.pri{background:#2f6f6a;color:#fff;border-color:#2f6f6a}
+.on{background:#d9e8e6;color:#085041;border-color:#2f6f6a}
+.danger{color:var(--text-danger)}
+/* home */
+.body{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:300px}
+.left{border-right:1px solid var(--border);padding:10px}
+.dk{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;margin-bottom:6px}
+.dk.act{background:var(--surface-1);outline:1.5px solid #2f6f6a}
+.dk.gift{border:1px dashed var(--border-strong)}
+.stack{position:relative;width:30px;height:36px;flex:none}
+.stack i{position:absolute;inset:0;border-radius:5px;border:1px solid rgba(0,0,0,.15)}
+.nm{flex:1;min-width:0}.nm b{font-weight:500;display:block}.nm span{font-size:11px;color:var(--text-secondary)}
+.due{background:#f7e4d5;color:#8a3a12;font-size:11px;border-radius:999px;padding:1px 8px}
+.right{padding:16px 20px}
+.hero{display:flex;gap:18px;align-items:center}
+.cover{position:relative;width:86px;height:104px;flex:none}
+.cover i{position:absolute;inset:0;border-radius:10px;border:1px solid rgba(0,0,0,.15)}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:16px}
+.t{background:var(--surface-1);border-radius:8px;padding:8px}.t b{display:block;font-size:18px;font-weight:500}.t span{font-size:11px;color:var(--text-secondary)}
+.cta{display:inline-block;background:#b8551f;color:#fff;border-radius:10px;padding:10px 18px;font-size:15px;font-weight:500;margin-top:14px}
+/* cards grid */
+.pad{padding:14px 16px}
+.srch{flex:1;min-width:120px;border:1px solid var(--border-strong);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--text-muted)}
+.pill{background:#f2e9db;color:#6b5d4f;font-size:11px;border-radius:999px;padding:3px 10px;border:1px solid transparent}
+.pill.sel{background:#E1F5EE;color:#085041;border-color:#1D9E75}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
+.mini{position:relative;background:#fff;border:1px solid #e3d3bf;border-radius:10px;height:78px;display:flex;align-items:center;justify-content:center;text-align:center;padding:8px;overflow:hidden}
+.mini::before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:#1D9E75}
+.mini small{position:absolute;bottom:5px;right:7px;font-size:10px;color:#948573}
+.mini.new{border-style:dashed;color:#6b5d4f;background:transparent}.mini.new::before{display:none}
+.big{position:relative;background:#fff;border:1px solid #e3d3bf;border-radius:14px;height:190px;max-width:340px;margin:14px auto 6px;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:24px;font-weight:500}
+.big::before{content:"";position:absolute;left:0;right:0;top:0;height:8px;background:#1D9E75}
+.hint{font-size:11px;color:var(--text-muted);text-align:center}
+/* editor */
+.seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden}
+.seg span{padding:5px 14px;font-size:12px}.seg .on{background:#2f6f6a;color:#fff}
+.faces{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0}
+.face{position:relative;background:#fff;border:1px solid #e3d3bf;border-radius:14px;height:150px;padding:22px 14px 12px;overflow:hidden}
+.face::before{content:"";position:absolute;left:0;right:0;top:0;height:8px;background:#1D9E75}
+.face label{font-size:11px;color:#948573;display:block}
+.face .txt{font-size:18px;font-weight:500;text-align:center;margin-top:24px}
+.lab{font-size:12px;color:var(--text-secondary);margin:0 0 4px}
+.box{border:1px solid var(--border-strong);border-radius:6px;padding:7px 10px;color:var(--text-muted);font-size:12px;margin-bottom:12px}
+.tagin{display:flex;gap:6px;align-items:center;border:1px solid var(--border-strong);border-radius:6px;padding:5px 8px;margin-bottom:12px}
+.tagin .pill{background:#E1F5EE;color:#085041}
+.drops{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.drop{border:1px dashed var(--border-strong);border-radius:10px;padding:12px;text-align:center;color:var(--text-secondary);font-size:12px}
+/* review */
+.rv{background:var(--surface-1);border-radius:12px;padding:16px 20px}
+.top{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--text-secondary)}
+.pb{flex:1;height:8px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);overflow:hidden}
+.pb i{display:block;height:100%;width:25%;background:#1D9E75;transition:width .3s}
+.sc{perspective:1000px;height:230px;max-width:380px;margin:18px auto 14px;cursor:pointer}
+.in{position:relative;width:100%;height:100%;transition:transform .55s cubic-bezier(.3,.7,.3,1.2);transform-style:preserve-3d}
+.sc.f .in{transform:rotateY(180deg)}
+.fc{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;background:#fff;border-radius:14px;border:1px solid #e3d3bf;overflow:hidden}
+.fc::before{content:"";position:absolute;left:0;right:0;top:0;height:8px;background:#1D9E75}
+.bk{transform:rotateY(180deg)}
+.w{font-size:26px;font-weight:500}.q{font-size:19px;line-height:1.5}
+.blank{display:inline-block;min-width:70px;border-bottom:2px solid #1D9E75;color:transparent}
+.fill{background:#E1F5EE;color:#085041;border-radius:4px;padding:0 4px}
+.s{font-size:13px;color:#6b5d4f;margin-top:10px}
+.tags{position:absolute;bottom:12px;display:flex;gap:6px}
+.meta{position:absolute;top:16px;left:16px;font-size:11px;color:#948573}
+.fh{position:absolute;bottom:12px;font-size:12px;color:#948573}
+.gr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;max-width:520px;margin:0 auto;visibility:hidden}
+.gr.on{visibility:visible}
+.g{border-radius:10px;padding:10px 4px;text-align:center;cursor:pointer;border:1.5px solid}
+.g b{display:block;font-size:15px;font-weight:500}.g span{font-size:11px}
+.flipbtn{display:block;margin:0 auto;border-radius:10px;padding:10px 26px;font-size:15px;background:#2f6f6a;color:#fff;border:none;cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+<h1>ON Flash UI overhaul — mockups</h1>
+<p class="note">Reference for the design spec. Layout and hierarchy are binding; exact colours come from the spec's tokens.</p>
+
+<h2>1. Home screen (U1, gift deck from U5)</h2>
+<p class="note">App toolbar above both panes. Deck list with coloured stacks and due badges. Right pane: deck toolbar, hero, one big Review button, tiles.</p>
+<div class="win">
+<div class="bar"><span class="btn pri">+ New deck</span><span class="btn">Import</span><span class="btn">Review all (17)</span><span class="btn">Stats</span></div>
+<div class="body">
+<div class="left">
+<div class="dk gift"><div class="stack"><i style="background:#F4C0D1;transform:rotate(-8deg)"></i><i style="background:#ED93B1;transform:rotate(4deg)"></i><i style="background:#D4537E"></i></div><div class="nm"><b>Planets</b><span>From Dad</span></div></div>
+<div class="dk act"><div class="stack"><i style="background:#9FE1CB;transform:rotate(-8deg)"></i><i style="background:#5DCAA5;transform:rotate(4deg)"></i><i style="background:#1D9E75"></i></div><div class="nm"><b>Spanish travel</b><span>30 cards</span></div><span class="due">12</span></div>
+<div class="dk"><div class="stack"><i style="background:#FAC775;transform:rotate(-8deg)"></i><i style="background:#EF9F27;transform:rotate(4deg)"></i><i style="background:#BA7517"></i></div><div class="nm"><b>Times tables</b><span>144 cards</span></div><span class="due">5</span></div>
+<div class="dk"><div class="stack"><i style="background:#CECBF6;transform:rotate(-8deg)"></i><i style="background:#AFA9EC;transform:rotate(4deg)"></i><i style="background:#7F77DD"></i></div><div class="nm"><b>Moons</b><span>all done</span></div></div>
+<div class="dk" style="opacity:.6"><div class="stack"><i style="background:#D3D1C7;transform:rotate(-8deg)"></i><i style="background:#B4B2A9;transform:rotate(4deg)"></i><i style="background:#888780"></i></div><div class="nm"><b>Capitals</b><span>taking a break</span></div></div>
+</div>
+<div class="right">
+<div class="bar" style="padding:0 0 12px;border:none"><span class="btn">Cards</span><span class="btn">Edit</span><span class="btn">Share</span><span class="btn danger">Delete</span></div>
+<div class="hero"><div class="cover"><i style="background:#9FE1CB;transform:rotate(-7deg)"></i><i style="background:#5DCAA5;transform:rotate(4deg)"></i><i style="background:#1D9E75"></i></div>
+<div><div style="font-size:20px;font-weight:500">Spanish travel</div><div style="color:var(--text-secondary)">Phrases for our trip to Barcelona</div>
+<span class="cta">Review 12 cards →</span></div></div>
+<div class="tiles"><div class="t"><b>12</b><span>due today</span></div><div class="t"><b>5</b><span>new today</span></div><div class="t"><b>30</b><span>cards</span></div><div class="t"><b>8</b><span>mastered</span></div></div>
+</div></div></div>
+
+<h2>2. Cards mode (U2)</h2>
+<p class="note">Right pane swaps to a grid. Search and tag pills filter it live. "+ New card" is always first; corner labels mark new/due cards.</p>
+<div class="win pad">
+<div class="bar" style="padding:0;border:none"><span class="btn on">Cards</span><span class="btn">Edit</span><span class="btn">Share</span><span class="btn danger">Delete</span></div>
+<div class="bar" style="padding:12px 0 0;border:none"><span class="srch">Search cards…</span><span class="pill sel">All</span><span class="pill">phrases</span><span class="pill">places</span><span class="pill">food</span></div>
+<div class="grid">
+<div class="mini new">+ New card</div><div class="mini">hola<small>new</small></div><div class="mini">gracias</div><div class="mini">¿Dónde está la playa?</div>
+<div class="mini">la cuenta, por favor<small>due</small></div><div class="mini">el tren</div><div class="mini">The capital of Spain is ___.</div><div class="mini">buenos días</div>
+</div></div>
+<p class="note" style="margin-top:14px">Clicking a mini card opens it large and flippable, with prev/next:</p>
+<div class="win pad">
+<div class="bar" style="padding:0;border:none"><span class="btn">← All cards</span><span style="flex:1"></span><span class="btn">Edit card</span><span class="btn danger">Delete card</span></div>
+<div class="big">¿Dónde está la playa?</div>
+<p class="hint">Click the card to flip · ← → for previous / next card</p>
+</div>
+
+<h2>3. Card editor (U3)</h2>
+<p class="note">Faces drawn as the card. "Fill in the blank" hides the Back face and shows a Make blank button. Media drop zones live in the same form.</p>
+<div class="win pad">
+<div class="seg"><span class="on">Question and answer</span><span>Fill in the blank</span></div>
+<div class="faces">
+<div class="face"><label>Front: the question</label><div class="txt">¿Dónde está la playa?</div></div>
+<div class="face" style="background:#fbfaf7"><label>Back: the answer</label><div class="txt">Where is the beach?</div></div>
+</div>
+<p class="lab">Extra note (shown after the answer)</p>
+<div class="box">"Playa" is feminine: la playa</div>
+<p class="lab">Tags</p>
+<div class="tagin"><span class="pill">phrases ×</span><span class="pill">places ×</span><span style="color:var(--text-muted);font-size:12px">add a tag…</span></div>
+<div class="drops"><div class="drop">Drop an image or click to choose</div><div class="drop">Drop a sound or click to choose</div></div>
+<div class="bar" style="padding:0;border:none"><span class="btn pri">Save card</span><span class="btn">Save and add another</span><span class="btn">Cancel</span></div>
+</div>
+
+<h2>4. Review screen (U4) — interactive</h2>
+<p class="note">Click the card or "Show answer" to flip, then grade. The second card is a fill-in-the-blank card.</p>
+<div class="rv">
+<div class="top"><span class="btn">← Stop</span><span>Spanish travel</span><div class="pb"><i id="pb"></i></div><span id="ct">3 of 12</span></div>
+<div class="sc" id="card"><div class="in"><div class="fc" id="front"></div><div class="fc bk" id="back"></div></div></div>
+<button class="flipbtn" id="fb">Show answer <span style="opacity:.7;font-size:12px">(Space)</span></button>
+<div class="gr" id="gr">
+<div class="g" style="border-color:#E24B4A;background:#FCEBEB;color:#791F1F"><b>Forgot</b><span>1</span></div>
+<div class="g" style="border-color:#EF9F27;background:#FAEEDA;color:#633806"><b>Hard</b><span>2</span></div>
+<div class="g" style="border-color:#1D9E75;background:#E1F5EE;color:#085041"><b>Got it</b><span>3</span></div>
+<div class="g" style="border-color:#378ADD;background:#E6F1FB;color:#0C447C"><b>Easy</b><span>4</span></div>
+</div>
+<p style="text-align:center;font-size:12px;color:var(--text-muted);margin:12px 0 0">Undo last (U)</p>
+</div>
+</main>
+<script>
+var cards=[{f:'<span class="meta">new</span><div class="w">¿Dónde está la playa?</div><div class="fh">tap the card or press Space</div>',b:'<div class="w">Where is the beach?</div><div class="s">"Playa" is feminine: la playa</div><div class="tags"><span class="pill">phrases</span><span class="pill">places</span></div>'},{f:'<div class="q">The capital of Spain is <span class="blank">Madrid</span>.</div><div class="fh">tap the card or press Space</div>',b:'<div class="q">The capital of Spain is <span class="fill">Madrid</span>.</div><div class="tags"><span class="pill">geography</span></div>'}];
+var i=0,n=3,card=document.getElementById('card'),gr=document.getElementById('gr'),fb=document.getElementById('fb');
+function load(){document.getElementById('front').innerHTML=cards[i%2].f;document.getElementById('back').innerHTML=cards[i%2].b;document.getElementById('ct').textContent=n+' of 12';document.getElementById('pb').style.width=Math.round(n/12*100)+'%'}
+function flip(){card.classList.add('f');gr.classList.add('on');fb.style.visibility='hidden'}
+card.onclick=flip;fb.onclick=flip;
+document.addEventListener('keydown',function(e){if(e.key===' '){e.preventDefault();flip()}});
+gr.querySelectorAll('.g').forEach(function(g){g.onclick=function(){card.classList.remove('f');gr.classList.remove('on');fb.style.visibility='visible';i++;n=Math.min(12,n+1);setTimeout(load,280)}});
+load();
+</script>
+</body>
+</html>
