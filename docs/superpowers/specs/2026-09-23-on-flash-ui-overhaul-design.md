@@ -36,9 +36,15 @@ deletion number.
 
 ## Delivery: six phased PRs
 
-One spec, one implementation plan, six PRs, each shippable on its own and
-each small enough to hold in context. Order matters — U2's card component is
-reused by U3 and U4.
+One spec, six implementation plans (one per PR), each shippable on its own
+and each small enough to hold in context. Order matters — U2's card
+component is reused by U3 and U4. Plans:
+[U1](../plans/2026-09-23-flash-ui-u1-foundation.md) ·
+[U2](../plans/2026-09-23-flash-ui-u2-cards.md) ·
+[U3](../plans/2026-09-23-flash-ui-u3-editor.md) ·
+[U4](../plans/2026-09-23-flash-ui-u4-review.md) ·
+[U5](../plans/2026-09-23-flash-ui-u5-sharing.md) ·
+[U6](../plans/2026-09-23-flash-ui-u6-import-stats.md).
 
 | Phase | Scope |
 |---|---|
@@ -62,7 +68,13 @@ reused by U3 and U4.
 - All new Flash CSS goes in the existing Flash section of
   [internal/ui/static/app.css](../../../internal/ui/static/app.css), with
   `flash-` prefixed class names. Every new colour token is defined for light
-  mode **and** in both of app.css's existing dark-mode blocks.
+  mode on `:root` **and** in app.css's single dark-mode block,
+  `:root[data-theme="dark"]` (the theme is always set server-side, so there
+  is no `prefers-color-scheme` fallback to maintain).
+- **No `style=` attributes, ever** (CSP). Anything whose size varies per row
+  — progress bars, the review breakdown bar, the mastered bar — is an inline
+  `<svg>` whose `<rect>` `width` attribute is computed in Go, the same
+  technique as `.reader-ratio` in app.css.
 - Copy style: sentence case, verb-first buttons, no "please", no
   "successfully". Friendly but plain.
 
@@ -117,6 +129,12 @@ colour, and a unique id suffix.
   the checkbox (Space toggles it natively); a visible focus ring is drawn on
   the card when the checkbox has focus.
 - `prefers-reduced-motion: reduce`: no rotation — the faces cross-fade.
+- Only non-interactive content goes inside the flip `<label>` (question,
+  answer, notes, image, tag names as plain pills). Interactive extras —
+  `<audio controls>` and tag *links* — render in a `.flash-card-extras`
+  block right after the card, shown only once the card is flipped (the same
+  `:checked ~` sibling selector), because clicking a control inside a
+  `<label>` would also toggle the checkbox.
 - Mini cards do not flip; they are links (front only, plus a status corner
   label — see U2).
 
@@ -159,7 +177,7 @@ attributes, each a no-op when its elements are absent:
 |---|---|---|
 | Review shortcuts: Space flip, 1–4 grade, U undo, Esc stop | U4 (existing keys move here in U1) | buttons |
 | Card viewer shortcuts: ← → prev/next, Space flip, E edit | U2 | links |
-| Type toggle hides Back face / shows Make blank | U3 | both faces shown, with hint text |
+| Make blank button (the type toggle itself is CSS-only, via `:has()`) | U3 | type the markers by hand |
 | Make blank (wrap selection as `{{cN::…}}`) | U3 | type the markers |
 | Tag-pill input | U3 | plain comma-separated text input |
 | Media drag-and-drop + filename/thumbnail preview | U3 | plain file inputs |
@@ -248,16 +266,22 @@ existing methods would require N+1 calls.
   The Cards toolbar button shows as active.
 - **Grid** (`#card-grid`): responsive (`repeat(auto-fill, minmax(9rem,
   1fr))`), first tile always "+ New card" (dashed outline), then mini cards
-  in creation order. A mini card shows its question side and a corner label:
+  in `ListCards` order (newest first). A mini card shows its question side and a corner label:
   **new** (the user has never reviewed it) or **due** (due now). A new store
   method `CardStatuses(ctx, userID, deckID, now) (map[int64]string, error)`
   returns these in one query.
 - **Search and tag filter**: a search box and a row of tag pills ("All" plus
   every tag used in this deck, alphabetical). Both are plain GET parameters
-  on the same route (`?q=…&tag=…`); the form uses the existing live-search
-  pattern (`hx-get`, `hx-trigger="input changed delay:300ms, search"`,
-  `hx-target="#card-grid"`, `hx-replace-url="true"`). Tag pills are links
-  that set/clear `tag` and keep `q`. `q` matches front, back and notes,
+  (`?q=…&tag=…`) on `GET /flash/{deckID}/cards/`, which is what the form
+  submits without JS. With JS, the search input uses the existing
+  live-search pattern (`hx-trigger="input changed delay:300ms, search"`,
+  `hx-include="closest form"`) against a new fragment route,
+  `GET /flash/{deckID}/cards/grid`, which returns only the grid tiles
+  (`hx-target="#card-grid"`) plus an out-of-band copy of the tag-pill row
+  (so the pills' links carry the new `q`), and sets `HX-Replace-Url` to the
+  canonical `/flash/{deckID}/cards/?q=…&tag=…`. Tag pills are links to the
+  full cards pane (`hx-target="#deck-detail"`, `hx-push-url="true"`) that
+  set/clear `tag` and keep `q`. `q` matches front, back and notes,
   case-insensitively. Empty result: "No cards match" plus a "Clear filters"
   link. A filtered-by-tag grid shows a small "Show “tag” in all decks" link
   to `/flash/tags/{tag}`.
@@ -286,11 +310,13 @@ existing methods would require N+1 calls.
   "Extra note (shown after the answer)"; Tags; image and audio drop zones;
   actions **Save card** (primary), **Save and add another**, **Cancel**.
 - **Type toggle**: two radios (`card_type` = `basic` / `cloze`) styled as a
-  segmented control. With JS, choosing "Fill in the blank" hides the Back
-  face and shows a **Make blank** button beside the Front face; it wraps the
-  current selection in `{{cN::…}}`, where N is one more than the highest
-  existing number in the textarea. Without JS, both faces show and the Back
-  label reads "Back (leave empty for fill in the blank)".
+  segmented control. Choosing "Fill in the blank" hides the Back face with
+  CSS alone (`.flash-editor:has(input[value=cloze]:checked)`), so it works
+  without JS. With JS, a **Make blank** button appears beside the Front
+  face; it wraps the current selection in `{{cN::…}}`, where N is one more
+  than the highest existing number in the textarea. A cloze card's Back is
+  ignored on save, so text typed there before switching type can't trip
+  validation.
 - **One form for everything**: create (`POST /flash/{deckID}/cards/new`) and
   update (`POST /flash/{deckID}/cards/{cardID}`) become
   `multipart/form-data`, wrapped in `web.LimitBody` with the same limit the
@@ -313,8 +339,9 @@ existing methods would require N+1 calls.
   zone shows the current image/audio and a "Remove" checkbox styled as ×.
 - **Save and add another**: a second submit button, `name="next"
   value="new"`. On success the handler responds with an empty new-card form
-  for the same deck, a "Card saved" notice, the card type and tags carried
-  over, and the grid updated out of band if it is present.
+  for the same deck, a "Card saved" notice, and the card type and tags
+  carried over (without JS: a redirect to `…/cards/new?saved=1&type=…&tags=…`).
+  The deck list refreshes out of band as with every pane change.
 - **Errors**: `.notice-error` at the top of the form; every field keeps its
   value (current behaviour, restyled). An upload error does not lose the
   text fields.
