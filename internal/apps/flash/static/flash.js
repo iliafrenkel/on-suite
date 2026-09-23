@@ -46,9 +46,12 @@
 	document.addEventListener("keydown", function (e) {
 		if (e.metaKey || e.ctrlKey || e.altKey) return;
 		// The flip checkbox is an <input>, but Space on it should still flip
-		// — natively, which is why this returns before isTyping and before
-		// our own Space handling (doing both would flip twice).
-		if (e.target.classList && e.target.classList.contains("flash-flip")) return;
+		// — natively, which is why Space returns here before isTyping and
+		// before our own Space handling (doing both would flip twice). Only
+		// Space is special-cased: any other key (e.g. ArrowLeft/ArrowRight/E)
+		// must still reach the switch below even while focus sits on the
+		// checkbox, or those shortcuts would stop working after a click.
+		if (e.key === " " && e.target.classList && e.target.classList.contains("flash-flip")) return;
 		if (isTyping(e.target)) return;
 
 		var handled = false;
