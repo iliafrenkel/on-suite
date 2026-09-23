@@ -251,6 +251,64 @@ func TestOpenedCardPrevNextFollowTheFilter(t *testing.T) {
 	}
 }
 
+func TestDeleteCardReturnsToTheGrid(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/"+itoa(c.ID)+"/delete", url.Values{})
+	if rec.Code != 200 {
+		t.Fatalf("delete card = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Push-Url"); got != "/flash/"+itoa(deck.ID)+"/cards/" {
+		t.Errorf("HX-Push-Url = %q, want the deck's cards grid URL", got)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#card-grid")
+	doc.MustNotHave(".flash-viewer")
+}
+
+func TestCardEditFormRendersPrefilledValues(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "informal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetCardTags(t.Context(), s.Alice.User.ID, c.ID, []string{"basics", "greetings"}); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/edit/"+itoa(c.ID))
+	doc.MustHave("#card-detail-edit")
+
+	front := doc.MustHave("#card-front-" + itoa(c.ID))
+	if got := htmlassert.Text(front); got != "hola" {
+		t.Errorf("front value = %q, want hola", got)
+	}
+	back := doc.MustHave("#card-back-" + itoa(c.ID))
+	if got := htmlassert.Text(back); got != "hello" {
+		t.Errorf("back value = %q, want hello", got)
+	}
+	notes := doc.MustHave("#card-notes-" + itoa(c.ID))
+	if got := htmlassert.Text(notes); got != "informal" {
+		t.Errorf("notes value = %q, want informal", got)
+	}
+	tags := doc.MustHave("#card-tags-" + itoa(c.ID))
+	if got, _ := htmlassert.Attr(tags, "value"); got != "basics, greetings" {
+		t.Errorf("tags value = %q, want %q", got, "basics, greetings")
+	}
+}
+
 func TestDeckPaneCardsButtonSwapsThePane(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
