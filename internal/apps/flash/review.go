@@ -345,6 +345,26 @@ type QueueCard struct {
 	IsNew bool
 }
 
+// dailyBudget is how many more review and new cards deck d may put in
+// today's queue, given what has already been graded today. A
+// reviewsRemaining of -1 means unlimited. Shared by DueQueue and
+// DeckSummaries so the Review button's count and the review page itself can
+// never disagree about the limits.
+func dailyBudget(d Deck, newCount, reviewCount int) (reviewsRemaining, newRemaining int) {
+	reviewsRemaining = -1 // sentinel: unlimited
+	if d.ReviewsPerDay != nil {
+		reviewsRemaining = *d.ReviewsPerDay - reviewCount
+		if reviewsRemaining < 0 {
+			reviewsRemaining = 0
+		}
+	}
+	newRemaining = d.NewCardsPerDay - newCount
+	if newRemaining < 0 {
+		newRemaining = 0
+	}
+	return reviewsRemaining, newRemaining
+}
+
 // DueQueue returns cards eligible for review right now, in review-then-new
 // order. If deckID is non-nil, only that deck is considered — and only if
 // it is not currently snoozed, the same rule applied to every deck when
@@ -361,24 +381,14 @@ func (st *Store) DueQueue(ctx context.Context, userID int64, deckID *int64, now 
 		if err != nil {
 			return nil, err
 		}
+		reviewsRemaining, newRemaining := dailyBudget(d, newCount, reviewCount)
 
-		reviewsRemaining := -1 // sentinel: unlimited
-		if d.ReviewsPerDay != nil {
-			reviewsRemaining = *d.ReviewsPerDay - reviewCount
-			if reviewsRemaining < 0 {
-				reviewsRemaining = 0
-			}
-		}
 		due, err := st.dueReviewCards(ctx, userID, d, now, reviewsRemaining)
 		if err != nil {
 			return nil, err
 		}
 		reviews = append(reviews, due...)
 
-		newRemaining := d.NewCardsPerDay - newCount
-		if newRemaining < 0 {
-			newRemaining = 0
-		}
 		newCards, err := st.newQueueCards(ctx, userID, d, newRemaining)
 		if err != nil {
 			return nil, err
