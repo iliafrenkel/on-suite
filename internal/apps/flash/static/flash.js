@@ -5,9 +5,7 @@
 // that needs them, so it is a no-op everywhere else (UI overhaul spec §1.6).
 // Everything here is progressive enhancement: every page works without it.
 //
-// Review keyboard shortcuts: Space reveals the answer, 1-4 grade it
-// (Again/Hard/Good/Easy), U undoes the last grade. Mirrors
-// internal/apps/reader/static/reader.js's press()/keydown pattern.
+// Review shortcuts: Space shows the answer, 1-4 grade it (Forgot/Hard/Got it/Easy) once it shows, U undoes the last grade, Esc stops.
 // Card viewer shortcuts (U2): Space flips, ← → previous/next, E edits.
 // Card editor (U3): Make blank, tag pills, and drag-and-drop for media.
 (function () {
@@ -16,6 +14,7 @@
 	function isTyping(el) {
 		if (!el) return false;
 		var tag = el.tagName;
+		if (tag === "INPUT" && (el.type === "checkbox" || el.type === "radio")) return false;
 		return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
 	}
 
@@ -28,13 +27,6 @@
 		return true;
 	}
 
-	function reveal() {
-		var answer = document.querySelector(".flash-review-answer");
-		if (!answer) return false;
-		answer.hidden = false;
-		return true;
-	}
-
 	// toggleFlip turns the opened card over. The flip itself is CSS on the
 	// checkbox's :checked state; this only changes the state.
 	function toggleFlip() {
@@ -42,6 +34,24 @@
 		if (!flip) return false;
 		flip.checked = !flip.checked;
 		return true;
+	}
+
+	// flipReview shows the review card's answer. It never flips back: once
+	// the answer is showing, Space has nothing more to do.
+	function flipReview() {
+		var flip = document.querySelector("#review-card .flash-flip");
+		if (!flip) return false;
+		flip.checked = true;
+		return true;
+	}
+
+	// grade presses a grade button, but only once the answer is showing —
+	// the buttons are hidden until then, and a stray key must not grade a
+	// card nobody has looked at.
+	function grade(selector) {
+		var flip = document.querySelector("#review-card .flash-flip");
+		if (!flip || !flip.checked) return false;
+		return press(selector);
 	}
 
 	// ---- Card editor (U3) -------------------------------------------------
@@ -209,25 +219,28 @@
 		// Space is special-cased: any other key (e.g. ArrowLeft/ArrowRight/E)
 		// must still reach the switch below even while focus sits on the
 		// checkbox, or those shortcuts would stop working after a click.
-		if (e.key === " " && e.target.classList && e.target.classList.contains("flash-flip")) return;
+		if (e.key === " " && e.target.classList && e.target.classList.contains("flash-flip")) {
+			if (e.target.checked) e.preventDefault();
+			return;
+		}
 		if (isTyping(e.target)) return;
 
 		var handled = false;
 		switch (e.key) {
 			case " ":
-				handled = toggleFlip() || reveal();
+				handled = flipReview() || toggleFlip();
 				break;
 			case "1":
-				handled = press(".flash-grade-again");
+				handled = grade(".flash-grade-again");
 				break;
 			case "2":
-				handled = press(".flash-grade-hard");
+				handled = grade(".flash-grade-hard");
 				break;
 			case "3":
-				handled = press(".flash-grade-good");
+				handled = grade(".flash-grade-good");
 				break;
 			case "4":
-				handled = press(".flash-grade-easy");
+				handled = grade(".flash-grade-easy");
 				break;
 			case "u":
 			case "U":
@@ -243,11 +256,11 @@
 			case "E":
 				handled = press(".flash-card-edit");
 				break;
+			case "Escape":
+				handled = press(".flash-review-stop");
+				break;
 		}
 		if (handled) e.preventDefault();
 	});
 
-	document.addEventListener("click", function (e) {
-		if (e.target.closest && e.target.closest(".flash-reveal-btn")) reveal();
-	});
 })();

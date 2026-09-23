@@ -615,3 +615,54 @@ func TestBumpDailyCountsFloorsRatingColumnAtZero(t *testing.T) {
 		t.Errorf("again_count after undo of an already-zeroed column = %d, want 0 (floored, not negative)", got)
 	}
 }
+
+func TestTodayTally(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
+	a, err := f.store.CreateDeck(ctx, f.alice.ID, "A", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := f.store.CreateDeck(ctx, f.alice.ID, "B", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	grade := func(deckID int64, rating int, at time.Time) {
+		t.Helper()
+		c, err := f.store.CreateCard(ctx, f.alice.ID, deckID, flash.CardTypeBasic, "q", "a", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.store.GradeCard(ctx, f.alice.ID, c.ID, rating, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	grade(a.ID, flash.RatingGood, now)
+	grade(a.ID, flash.RatingGood, now)
+	grade(a.ID, flash.RatingAgain, now)
+	grade(b.ID, flash.RatingEasy, now)
+	grade(b.ID, flash.RatingHard, now.AddDate(0, 0, -1)) // yesterday: not counted
+
+	got, err := f.store.TodayTally(ctx, f.alice.ID, &a.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (flash.ReviewTally{Reviewed: 3, Again: 1, Good: 2}); got != want {
+		t.Errorf("deck A tally = %+v, want %+v", got, want)
+	}
+	all, err := f.store.TodayTally(ctx, f.alice.ID, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (flash.ReviewTally{Reviewed: 4, Again: 1, Good: 2, Easy: 1}); all != want {
+		t.Errorf("all-decks tally = %+v, want %+v", all, want)
+	}
+	bob, err := f.store.TodayTally(ctx, f.bob.ID, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bob != (flash.ReviewTally{}) {
+		t.Errorf("bob's tally = %+v, want zero", bob)
+	}
+}

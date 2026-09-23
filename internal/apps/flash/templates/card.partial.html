@@ -5,6 +5,9 @@
        Face   — a cardFace
        FlipID — a unique id for the flip checkbox
        Hint   — optional line under the question ("Tap the card to flip it")
+       Corner — optional word for the front's corner ("new")
+       Static — true leaves the tag links out of the extras (the review
+                page has no deck pane for them to open in)
      It emits three siblings: the visually-hidden checkbox, the card (the
      checkbox's <label>), and the extras. The flip is pure CSS on
      .flash-flip:checked, so a caller may put more `.flash-flip:checked ~`
@@ -15,6 +18,7 @@
 <label class="flash-card deck-c-{{.Face.Color}}" for="{{.FlipID}}">
 	<span class="flash-card-inner">
 		<span class="flash-card-face flash-card-front">
+			{{with $.Corner}}<span class="flash-card-corner">{{.}}</span>{{end}}
 			<span class="flash-card-text">{{.Face.Question}}</span>
 			{{with .Face.ImageURL}}<img class="flash-card-image" src="{{.}}" alt="">{{end}}
 			{{with $.Hint}}<span class="flash-card-hint">{{.}}</span>{{end}}
@@ -28,7 +32,7 @@
 </label>
 <div class="flash-card-extras">
 	{{with .Face.AudioURL}}<audio controls src="{{.}}"></audio>{{end}}
-	{{with .Face.Tags}}<p class="flash-tag-links">{{range .}}<a class="flash-pill" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#deck-detail" hx-push-url="true">{{.Name}}</a>{{end}}</p>{{end}}
+	{{if not $.Static}}{{with .Face.Tags}}<p class="flash-tag-links">{{range .}}<a class="flash-pill" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#deck-detail" hx-push-url="true">{{.Name}}</a>{{end}}</p>{{end}}{{end}}
 </div>{{end}}
 
 {{/* flash-mini-card is one grid tile: the question side only, plus a
