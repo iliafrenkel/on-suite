@@ -1,3 +1,13 @@
+{{/* internal/apps/flash/templates/decks.html — the ON Flash home screen
+     (UI overhaul spec §2): app toolbar, deck list on the left, the deck
+     pane on the right. Mirrors internal/apps/paste's split view, including
+     its CSS-only narrow-screen toggle (#flash-detail-open). */}}
+
+{{define "head"}}
+<script src="/flash/flash.js" defer></script>
+{{end}}
+
+{{/* deck-detail-body dispatches on the pane's mode. */}}
 {{define "deck-detail-body"}}
 {{if eq .Mode "view"}}{{template "deck-detail-view" .}}
 {{else if eq .Mode "edit"}}{{template "deck-detail-edit" .}}
@@ -7,47 +17,117 @@
 {{end}}
 {{end}}
 
-{{define "deck-detail-with-list"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "deck-detail-body" .Detail}}{{template "deck-list-items" .List}}<div id="shared-with-me" class="stack" hx-swap-oob="true">{{template "shared-with-me" (dict "Offers" .SharedWithMe "CSRFToken" .Shell.CSRFToken)}}</div>{{end}}
+{{/* deck-detail-with-list is the whole HTMX response for anything that
+     changes the pane. Everything outside #deck-detail that can change with
+     it rides along out of band: the crumb, the deck list, the Review-all
+     count, the gift/shared list, and the narrow-screen checkbox (checked
+     whenever the pane has something to show, so a phone or portrait tablet
+     flips to the pane). */}}
+{{define "deck-detail-with-list"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "deck-detail-body" .Detail}}{{template "deck-list-items" .List}}{{template "flash-review-all" (dict "TotalDue" .TotalDue "OOB" true)}}<div id="shared-with-me" class="flash-shared-with-me" hx-swap-oob="true">{{template "shared-with-me" (dict "Offers" .SharedWithMe "CSRFToken" .Shell.CSRFToken)}}</div><input type="checkbox" id="flash-detail-open" class="visually-hidden" hx-swap-oob="true"{{if .Detail.Mode}} checked{{end}} aria-hidden="true" tabindex="-1">{{end}}
+
+{{/* flash-review-all is the toolbar's Review-all button. It shows the
+     total due count, and is re-sent out of band with every pane change. */}}
+{{define "flash-review-all"}}<a id="flash-review-all" class="toolbar-btn" href="/flash/review"{{if .OOB}} hx-swap-oob="true"{{end}}>{{ticon "play"}}Review all{{if .TotalDue}} <span class="flash-due-badge">{{.TotalDue}}</span>{{end}}</a>{{end}}
+
+{{define "flash-home-toolbar"}}
+<div class="notes-toolbar flash-home-toolbar">
+	<div class="notes-toolbar-actions">
+		<a class="toolbar-btn toolbar-btn-active" href="/flash/new" hx-get="/flash/new" hx-target="#deck-detail" hx-push-url="true">{{ticon "plus"}}New deck</a>
+		<a class="toolbar-btn" href="/flash/import" hx-get="/flash/import" hx-target="#deck-detail" hx-push-url="true">{{ticon "import"}}Import</a>
+		{{template "flash-review-all" (dict "TotalDue" .TotalDue "OOB" false)}}
+		<a class="toolbar-btn" href="/flash/stats">{{ticon "stats"}}Stats</a>
+	</div>
+</div>
+{{end}}
 
 {{define "deck-detail-empty"}}
-<p class="dim">Select a deck to view it.</p>
+{{if .HasDecks}}
+<p class="dim flash-pane-hint">Pick a deck on the left to see it here.</p>
+{{else}}
+<div class="flash-welcome">
+	{{template "flash-stack" (dict "Size" "lg" "Color" "teal")}}
+	<h1>Make your first deck</h1>
+	<p class="dim">A deck is a pile of cards about one topic. Make one yourself, or paste in cards an AI wrote for you.</p>
+	<div class="flash-welcome-actions">
+		<a class="flash-big-btn flash-big-btn-primary" href="/flash/new" hx-get="/flash/new" hx-target="#deck-detail" hx-push-url="true">{{ticon "plus"}}Create a deck</a>
+		<a class="flash-big-btn" href="/flash/import" hx-get="/flash/import" hx-target="#deck-detail" hx-push-url="true">{{ticon "import"}}Import a deck</a>
+	</div>
+</div>
+{{end}}
 {{end}}
 
 {{define "deck-detail-view"}}
-<div class="stack" id="deck-detail-view">
-	<div class="row">
-		<h1>{{.Deck.Name}}</h1>
+<div class="flash-deck-view deck-c-{{.Deck.Color}}" id="deck-detail-view">
+	<div class="notes-toolbar flash-deck-toolbar">
+		{{template "flash-pane-back"}}
+		<div class="notes-toolbar-actions">
+			<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/">{{ticon "cards"}}Cards</a>
+			<a class="toolbar-btn" href="/flash/edit/{{.Deck.ID}}" hx-get="/flash/edit/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "edit"}}Edit</a>
+			<form method="post" action="/flash/{{.Deck.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
+			      data-confirm="Delete “{{.Deck.Name}}” and all its cards? This can't be undone.">
+				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+				<button type="submit" class="toolbar-btn danger">{{ticon "trash"}}Delete</button>
+			</form>
+		</div>
 	</div>
-	{{with .Deck.Description}}<p>{{.}}</p>{{end}}
-	<div class="row">
-		<a class="toolbar-btn" href="/flash/edit/{{.Deck.ID}}" hx-get="/flash/edit/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">Edit</a>
-		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}/cards/">View cards</a>
-		<a class="toolbar-btn" href="/flash/review/{{.Deck.ID}}">Review</a>
-		<form method="post" action="/flash/{{.Deck.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
-		      data-confirm="Delete “{{.Deck.Name}}”? This also deletes every card in it.">
-			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-			<button type="submit" class="toolbar-btn danger">Delete</button>
-		</form>
-	</div>
-	{{if .ShareRecipients}}
-	<div class="stack">
-		<form method="post" action="/flash/{{.Deck.ID}}/share" hx-post="/flash/{{.Deck.ID}}/share" hx-target="#deck-detail" hx-swap="innerHTML">
-			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-			<div class="field">
-				<label for="share-recipient-{{.Deck.ID}}">Share with</label>
-				<select id="share-recipient-{{.Deck.ID}}" name="to_user_id">
-					{{range .ShareRecipients}}<option value="{{.ID}}">{{.Username}}</option>{{end}}
-				</select>
-				<button type="submit" class="toolbar-btn">Share</button>
+
+	<div class="flash-deck-hero">
+		{{template "flash-stack" (dict "Size" "lg")}}
+		<div class="flash-deck-hero-text">
+			<h1>{{.Deck.Name}}</h1>
+			{{with .Deck.Description}}<p class="dim">{{.}}</p>{{end}}
+			{{if .Summary.Snoozed}}
+			{{/* U5 replaces this with the "taking a break" banner. */}}
+			<div class="notice row">
+				<span>Snoozed until {{.Deck.SnoozedUntil.Format "2 Jan 2006"}}.</span>
+				<form method="post" action="/flash/{{.Deck.ID}}/unsnooze" hx-post="/flash/{{.Deck.ID}}/unsnooze" hx-target="#deck-detail" hx-swap="innerHTML">
+					<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+					<button type="submit" class="button">Unsnooze</button>
+				</form>
 			</div>
+			{{else if .Summary.ReviewNow}}
+			<a class="flash-review-cta" href="/flash/review/{{.Deck.ID}}">Review {{.Summary.ReviewNow}} card{{if ne .Summary.ReviewNow 1}}s{{end}} <span aria-hidden="true">→</span></a>
+			{{else if eq .Summary.CardCount 0}}
+			<div class="flash-all-done" role="status">
+				<strong>This deck has no cards yet</strong>
+				<a class="flash-big-btn flash-big-btn-primary flash-add-first-card" href="/flash/{{.Deck.ID}}/cards/new">{{ticon "plus"}}Add cards</a>
+			</div>
+			{{else}}
+			<div class="flash-all-done" role="status">
+				<strong>All done for today</strong>
+				{{with .NextLabel}}<span class="dim">{{.}}</span>{{end}}
+			</div>
+			{{end}}
+		</div>
+	</div>
+
+	<div class="flash-stat-tiles flash-deck-tiles">
+		<div class="flash-stat-tile"><div class="value">{{.Summary.DueToday}}</div><div class="label">due today</div></div>
+		<div class="flash-stat-tile"><div class="value">{{.Summary.NewToday}}</div><div class="label">new today</div></div>
+		<div class="flash-stat-tile"><div class="value">{{.Summary.CardCount}}</div><div class="label">cards</div></div>
+		<div class="flash-stat-tile"><div class="value">{{.Summary.Mastered}}</div><div class="label">mastered</div></div>
+	</div>
+
+	{{/* Share and snooze keep their F5/F2 controls until U5 moves them
+	     into the toolbar popover and the Edit pane. */}}
+	{{if .ShareRecipients}}
+	<section class="flash-deck-section">
+		<h2 class="flash-section-title">Share</h2>
+		<form class="row" method="post" action="/flash/{{.Deck.ID}}/share" hx-post="/flash/{{.Deck.ID}}/share" hx-target="#deck-detail" hx-swap="innerHTML">
+			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+			<label class="visually-hidden" for="share-recipient-{{.Deck.ID}}">Share with</label>
+			<select id="share-recipient-{{.Deck.ID}}" name="to_user_id">
+				{{range .ShareRecipients}}<option value="{{.ID}}">{{.Username}}</option>{{end}}
+			</select>
+			<button type="submit" class="button">Share</button>
 		</form>
 		{{if .SharedWith}}
-		<ul class="tag-list">
+		<ul class="flash-share-list">
 			{{range .SharedWith}}
-			<li>
-				{{.ToUsername}} — {{.Status}}
+			<li class="row">
+				<span>{{.ToUsername}} — {{.Status}}</span>
 				{{if eq .Status "pending"}}
-				<form method="post" action="/flash/{{$.Deck.ID}}/share/{{.ID}}/revoke" hx-post="/flash/{{$.Deck.ID}}/share/{{.ID}}/revoke" hx-target="#deck-detail" hx-swap="innerHTML" style="display:inline">
+				<form method="post" action="/flash/{{$.Deck.ID}}/share/{{.ID}}/revoke" hx-post="/flash/{{$.Deck.ID}}/share/{{.ID}}/revoke" hx-target="#deck-detail" hx-swap="innerHTML">
 					<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
 					<button type="submit" class="toolbar-btn">Revoke</button>
 				</form>
@@ -56,56 +136,70 @@
 			{{end}}
 		</ul>
 		{{end}}
-	</div>
+	</section>
 	{{end}}
-	{{if .Deck.SnoozedUntil}}
-	<div class="notice row">
-		<span>Snoozed until {{.Deck.SnoozedUntil.Format "2 Jan 2006"}}.</span>
-		<form method="post" action="/flash/{{.Deck.ID}}/unsnooze" hx-post="/flash/{{.Deck.ID}}/unsnooze" hx-target="#deck-detail" hx-swap="innerHTML">
-			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-			<button type="submit" class="button">Unsnooze</button>
-		</form>
-	</div>
-	{{else}}
-	<div class="row">
-		<form method="post" action="/flash/{{.Deck.ID}}/snooze" hx-post="/flash/{{.Deck.ID}}/snooze" hx-target="#deck-detail" hx-swap="innerHTML">
-			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-			<input type="hidden" name="days" value="7">
-			<button type="submit" class="toolbar-btn">Snooze 1 week</button>
-		</form>
-		<form method="post" action="/flash/{{.Deck.ID}}/snooze" hx-post="/flash/{{.Deck.ID}}/snooze" hx-target="#deck-detail" hx-swap="innerHTML">
-			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-			<input type="hidden" name="days" value="30">
-			<button type="submit" class="toolbar-btn">Snooze 1 month</button>
-		</form>
-	</div>
+	{{if not .Summary.Snoozed}}
+	<section class="flash-deck-section">
+		<h2 class="flash-section-title">Take a break</h2>
+		<div class="row">
+			<form method="post" action="/flash/{{.Deck.ID}}/snooze" hx-post="/flash/{{.Deck.ID}}/snooze" hx-target="#deck-detail" hx-swap="innerHTML">
+				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+				<input type="hidden" name="days" value="7">
+				<button type="submit" class="toolbar-btn">1 week</button>
+			</form>
+			<form method="post" action="/flash/{{.Deck.ID}}/snooze" hx-post="/flash/{{.Deck.ID}}/snooze" hx-target="#deck-detail" hx-swap="innerHTML">
+				<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+				<input type="hidden" name="days" value="30">
+				<button type="submit" class="toolbar-btn">1 month</button>
+			</form>
+		</div>
+	</section>
 	{{end}}
 </div>
 {{end}}
 
+{{/* deck-color-field is the swatch picker: one visually-hidden radio per
+     colour, each followed by the <label> that is its visible swatch. Pass
+     a dict with Colors ([]deckColorOption), Value (the checked name) and
+     IDSuffix (keeps ids unique between the New and Edit forms). */}}
+{{define "deck-color-field"}}
+<fieldset class="field flash-color-field">
+	<legend>Colour</legend>
+	<div class="flash-swatches">
+		{{range .Colors}}
+		<input type="radio" class="visually-hidden flash-swatch-input" name="color" value="{{.Name}}" id="deck-color-{{$.IDSuffix}}-{{.Name}}"{{if eq .Name $.Value}} checked{{end}}>
+		<label class="flash-swatch deck-c-{{.Name}}" for="deck-color-{{$.IDSuffix}}-{{.Name}}"><span class="visually-hidden">{{.Label}}</span></label>
+		{{end}}
+	</div>
+</fieldset>
+{{end}}
+
 {{define "deck-detail-new"}}
-<form class="stack" id="deck-detail-new" method="post" action="/flash/new" hx-post="/flash/new" hx-target="#deck-detail" hx-swap="innerHTML">
+<form class="stack flash-deck-form" id="deck-detail-new" method="post" action="/flash/new" hx-post="/flash/new" hx-target="#deck-detail" hx-swap="innerHTML">
 	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<div class="notes-toolbar flash-deck-toolbar">{{template "flash-pane-back"}}</div>
 	<h1>New deck</h1>
 	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
 	<div class="field">
 		<label for="deck-name">Name</label>
-		<input id="deck-name" type="text" name="name" value="{{.NameValue}}" autofocus required>
+		<input id="deck-name" type="text" name="name" value="{{.NameValue}}" placeholder="Spanish for our trip" autofocus required>
 	</div>
 	<div class="field">
-		<label for="deck-description">Description</label>
+		<label for="deck-description">What's it about? (optional)</label>
 		<textarea id="deck-description" name="description" rows="3">{{.DescriptionValue}}</textarea>
 	</div>
+	{{template "deck-color-field" (dict "Colors" .Colors "Value" .ColorValue "IDSuffix" "new")}}
 	<div class="row">
-		<button type="submit" class="toolbar-btn toolbar-btn-active">Save</button>
+		<button type="submit" class="primary">Create deck</button>
 		<a class="toolbar-btn" href="/flash/" hx-get="/flash/" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
 	</div>
 </form>
 {{end}}
 
 {{define "deck-detail-edit"}}
-<form class="stack" id="deck-detail-edit" method="post" action="/flash/{{.Deck.ID}}" hx-post="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-swap="innerHTML">
+<form class="stack flash-deck-form" id="deck-detail-edit" method="post" action="/flash/{{.Deck.ID}}" hx-post="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-swap="innerHTML">
 	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+	<div class="notes-toolbar flash-deck-toolbar">{{template "flash-pane-back"}}</div>
 	<h1>Edit deck</h1>
 	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
 	<div class="field">
@@ -113,19 +207,24 @@
 		<input id="deck-name-{{.Deck.ID}}" type="text" name="name" value="{{.NameValue}}" autofocus required>
 	</div>
 	<div class="field">
-		<label for="deck-description-{{.Deck.ID}}">Description</label>
+		<label for="deck-description-{{.Deck.ID}}">What's it about? (optional)</label>
 		<textarea id="deck-description-{{.Deck.ID}}" name="description" rows="3">{{.DescriptionValue}}</textarea>
 	</div>
-	<div class="field">
-		<label for="deck-new-per-day-{{.Deck.ID}}">New cards per day</label>
-		<input id="deck-new-per-day-{{.Deck.ID}}" type="number" min="0" name="new_cards_per_day" value="{{.NewCardsPerDayValue}}" required>
-	</div>
-	<div class="field">
-		<label for="deck-reviews-per-day-{{.Deck.ID}}">Reviews per day (blank for unlimited)</label>
-		<input id="deck-reviews-per-day-{{.Deck.ID}}" type="number" min="0" name="reviews_per_day" value="{{.ReviewsPerDayValue}}">
+	{{template "deck-color-field" (dict "Colors" .Colors "Value" .ColorValue "IDSuffix" .Deck.ID)}}
+	<h2 class="flash-section-title">Daily limits</h2>
+	<p class="faint">How many cards this deck may show each day, so a big deck doesn't arrive all at once.</p>
+	<div class="row field-row">
+		<div class="field">
+			<label for="deck-new-per-day-{{.Deck.ID}}">New cards per day</label>
+			<input id="deck-new-per-day-{{.Deck.ID}}" type="number" min="0" name="new_cards_per_day" value="{{.NewCardsPerDayValue}}" required>
+		</div>
+		<div class="field">
+			<label for="deck-reviews-per-day-{{.Deck.ID}}">Reviews per day (blank for no limit)</label>
+			<input id="deck-reviews-per-day-{{.Deck.ID}}" type="number" min="0" name="reviews_per_day" value="{{.ReviewsPerDayValue}}">
+		</div>
 	</div>
 	<div class="row">
-		<button type="submit" class="toolbar-btn toolbar-btn-active">Save</button>
+		<button type="submit" class="primary">Save</button>
 		<a class="toolbar-btn" href="/flash/{{.Deck.ID}}" hx-get="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">Cancel</a>
 	</div>
 </form>
@@ -133,17 +232,18 @@
 
 {{define "deck-list-items"}}
 <ul class="deck-list" id="deck-list"{{if .OOB}} hx-swap-oob="true"{{end}}>
-	{{if .Items}}
 	{{range .Items}}
 	{{$d := .Deck}}
 	<li>
-		<a class="deck-row{{if eq $d.ID $.ActiveID}} deck-row-active{{end}}" href="/flash/{{$d.ID}}" hx-get="/flash/{{$d.ID}}" hx-target="#deck-detail" hx-push-url="true">
-			{{$d.Name}}
+		<a class="deck-row deck-c-{{$d.Color}}{{if eq $d.ID $.ActiveID}} deck-row-active{{end}}{{if .Snoozed}} deck-row-snoozed{{end}}" href="/flash/{{$d.ID}}" hx-get="/flash/{{$d.ID}}" hx-target="#deck-detail" hx-push-url="true"{{if eq $d.ID $.ActiveID}} aria-current="true"{{end}}>
+			{{template "flash-stack" (dict "Size" "sm")}}
+			<span class="deck-row-text">
+				<span class="deck-row-name">{{$d.Name}}</span>
+				<span class="deck-row-status">{{.Status}}</span>
+			</span>
+			{{if and .Due (not .Snoozed)}}<span class="flash-due-badge" aria-label="{{.Due}} to review">{{.Due}}</span>{{end}}
 		</a>
 	</li>
-	{{end}}
-	{{else}}
-	<li class="dim">No decks yet.</li>
 	{{end}}
 </ul>
 {{end}}
@@ -154,31 +254,30 @@
      renders it plain (a normal part of the full page), and
      "deck-detail-with-list" re-renders it wrapped in an
      hx-swap-oob="true" div with the same id, so every share/revoke/
-     adopt/decline HTMX response keeps this list in sync too — the same
-     pattern base.html and this file already use for #shell-crumb-tail.
-     Both callers pass a dict with Offers ([]ShareOffer, enriched with
-     FromUsername — see shareOfferWithUsername) and CSRFToken (always the
-     page-level Shell's token, which is populated regardless of which deck,
-     if any, is selected — unlike deckDetailView.CSRFToken, which is empty
-     both on a plain GET /flash/ with no deck selected and after a
-     decline). */}}
+     adopt/decline HTMX response keeps this list in sync too. Both callers
+     pass a dict with Offers ([]ShareOffer, enriched with FromUsername —
+     see shareOfferWithUsername) and CSRFToken (always the page-level
+     Shell's token, populated regardless of which deck, if any, is
+     selected). U5 replaces this list with gift rows. */}}
 {{define "shared-with-me"}}
 {{if .Offers}}
-<h3>Shared with me</h3>
-<ul class="tag-list">
+<h2 class="flash-list-title">Shared with you</h2>
+<ul class="flash-share-list">
 	{{range .Offers}}
 	<li>
-		{{.FromUsername}} — {{.DeckName}} — {{if .PriorAdoptedDeckID}}{{.NewCardCount}} new card{{if ne .NewCardCount 1}}s{{end}} to merge{{else}}new deck{{end}}
-		<form method="post" action="/flash/shared/adopt" hx-post="/flash/shared/adopt" hx-target="#deck-detail" hx-swap="innerHTML" style="display:inline">
-			<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
-			<input type="hidden" name="share_id" value="{{.ID}}">
-			<button type="submit" class="toolbar-btn toolbar-btn-active">{{if .PriorAdoptedDeckID}}Merge{{else}}Adopt{{end}}</button>
-		</form>
-		<form method="post" action="/flash/shared/decline" hx-post="/flash/shared/decline" hx-target="#deck-detail" hx-swap="innerHTML" style="display:inline">
-			<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
-			<input type="hidden" name="share_id" value="{{.ID}}">
-			<button type="submit" class="toolbar-btn">Dismiss</button>
-		</form>
+		<span>{{.FromUsername}} — {{.DeckName}} — {{if .PriorAdoptedDeckID}}{{.NewCardCount}} new card{{if ne .NewCardCount 1}}s{{end}} to merge{{else}}new deck{{end}}</span>
+		<span class="row">
+			<form method="post" action="/flash/shared/adopt" hx-post="/flash/shared/adopt" hx-target="#deck-detail" hx-swap="innerHTML">
+				<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
+				<input type="hidden" name="share_id" value="{{.ID}}">
+				<button type="submit" class="toolbar-btn toolbar-btn-active">{{if .PriorAdoptedDeckID}}Merge{{else}}Adopt{{end}}</button>
+			</form>
+			<form method="post" action="/flash/shared/decline" hx-post="/flash/shared/decline" hx-target="#deck-detail" hx-swap="innerHTML">
+				<input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
+				<input type="hidden" name="share_id" value="{{.ID}}">
+				<button type="submit" class="toolbar-btn">Dismiss</button>
+			</form>
+		</span>
 	</li>
 	{{end}}
 </ul>
@@ -186,18 +285,21 @@
 {{end}}
 
 {{define "content"}}
-<div class="stack">
-	<div class="row list-head">
-		<h2>Decks</h2>
-		<a class="toolbar-btn" href="/flash/new" hx-get="/flash/new" hx-target="#deck-detail" hx-push-url="true">New deck</a>
-		<a class="toolbar-btn" href="/flash/import" hx-get="/flash/import" hx-target="#deck-detail" hx-push-url="true">Import</a>
-		<a class="toolbar-btn" href="/flash/review">Review</a>
-		<a class="toolbar-btn" href="/flash/stats">Stats</a>
-	</div>
-	<div id="shared-with-me" class="stack">{{template "shared-with-me" (dict "Offers" .Data.SharedWithMe "CSRFToken" .Shell.CSRFToken)}}</div>
-	{{template "deck-list-items" .Data.List}}
-	<div id="deck-detail">
-		{{template "deck-detail-body" .Data.Detail}}
+<div class="flash-home">
+	{{template "flash-home-toolbar" .Data}}
+	<div class="flash-shell">
+		{{/* Checked whenever the pane has something to show; below 900px
+		     app.css shows the pane in place of the list. Replaced out of
+		     band by deck-detail-with-list, like Pastes' #paste-detail-open. */}}
+		<input type="checkbox" id="flash-detail-open" class="visually-hidden"{{if .Data.Detail.Mode}} checked{{end}} aria-hidden="true" tabindex="-1">
+		<div class="flash-list-pane">
+			<h2 class="flash-list-title">Your decks</h2>
+			<div id="shared-with-me" class="flash-shared-with-me">{{template "shared-with-me" (dict "Offers" .Data.SharedWithMe "CSRFToken" .Shell.CSRFToken)}}</div>
+			{{template "deck-list-items" .Data.List}}
+		</div>
+		<div id="deck-detail" class="flash-detail-pane">
+			{{template "deck-detail-body" .Data.Detail}}
+		</div>
 	</div>
 </div>
 {{end}}

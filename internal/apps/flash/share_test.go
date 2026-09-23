@@ -478,3 +478,26 @@ func TestSharesForRecipientDistinguishesFirstOfferFromMerge(t *testing.T) {
 		t.Errorf("NewCardCount = %d, want 1 (only the newly added card)", offers[0].NewCardCount)
 	}
 }
+
+func TestAdoptShareCopiesDeckColor(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "pink"); err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adopted, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if adopted.Color != "pink" {
+		t.Errorf("adopted deck Color = %q, want the source deck's pink", adopted.Color)
+	}
+}

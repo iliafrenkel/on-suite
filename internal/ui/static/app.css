@@ -2392,3 +2392,240 @@ kbd {
 	white-space: nowrap;
 }
 .flash-snoozed-marker { color: var(--c-text-dim); font-size: var(--fs-xs); }
+
+/* ---- ON Flash: home screen (UI overhaul U1) ------------------------------
+ * Spec: docs/superpowers/specs/2026-09-23-on-flash-ui-overhaul-design.md.
+ * The CSP forbids style="", so a deck's colour arrives as a deck-c-<name>
+ * class that sets --deck/--deck-soft for everything inside it. */
+
+.deck-c-teal   { --deck: #1D9E75; --deck-soft: #E1F5EE; }
+.deck-c-blue   { --deck: #378ADD; --deck-soft: #E6F1FB; }
+.deck-c-purple { --deck: #7F77DD; --deck-soft: #EEEDFE; }
+.deck-c-pink   { --deck: #D4537E; --deck-soft: #FBEAF0; }
+.deck-c-coral  { --deck: #D85A30; --deck-soft: #FAECE7; }
+.deck-c-amber  { --deck: #BA7517; --deck-soft: #FAEEDA; }
+.deck-c-green  { --deck: #639922; --deck-soft: #EAF3DE; }
+.deck-c-gray   { --deck: #888780; --deck-soft: #F1EFE8; }
+:root[data-theme="dark"] .deck-c-teal   { --deck-soft: #085041; }
+:root[data-theme="dark"] .deck-c-blue   { --deck-soft: #0C447C; }
+:root[data-theme="dark"] .deck-c-purple { --deck-soft: #3C3489; }
+:root[data-theme="dark"] .deck-c-pink   { --deck-soft: #72243E; }
+:root[data-theme="dark"] .deck-c-coral  { --deck-soft: #712B13; }
+:root[data-theme="dark"] .deck-c-amber  { --deck-soft: #633806; }
+:root[data-theme="dark"] .deck-c-green  { --deck-soft: #27500A; }
+:root[data-theme="dark"] .deck-c-gray   { --deck-soft: #444441; }
+
+/* A deck drawn as three stacked cards. */
+.flash-stack {
+	position: relative;
+	display: inline-block;
+	flex: none;
+}
+.flash-stack-sm { width: 1.9rem; height: 2.3rem; }
+.flash-stack-lg { width: 5.5rem; height: 6.5rem; }
+.flash-stack > span {
+	position: absolute;
+	inset: 0;
+	border-radius: 5px;
+	border: 1px solid color-mix(in srgb, var(--deck, #888780) 60%, #000);
+}
+.flash-stack-lg > span { border-radius: 10px; }
+.flash-stack > span:nth-child(1) {
+	background: color-mix(in srgb, var(--deck, #888780) 45%, var(--c-bg));
+	transform: rotate(-8deg);
+}
+.flash-stack > span:nth-child(2) {
+	background: color-mix(in srgb, var(--deck, #888780) 70%, var(--c-bg));
+	transform: rotate(4deg);
+}
+.flash-stack > span:nth-child(3) { background: var(--deck, #888780); }
+
+.flash-due-badge {
+	display: inline-block;
+	min-width: 1.5rem;
+	padding: 0 var(--s-2);
+	border-radius: 999px;
+	background: var(--c-accent-attention-bg);
+	color: var(--c-accent-attention);
+	font-size: var(--fs-xs);
+	font-weight: 600;
+	text-align: center;
+	line-height: 1.5;
+}
+
+/* Layout: toolbar above a two-pane split, like ON Paste. */
+.flash-home-toolbar { margin-bottom: var(--s-4); justify-content: flex-start; }
+.flash-home-toolbar .notes-toolbar-actions { flex-wrap: wrap; }
+
+.flash-shell {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--s-5);
+}
+.flash-list-pane { flex: 0 0 17rem; min-width: 0; }
+.flash-detail-pane { flex: 1; min-width: 0; }
+
+.flash-list-title {
+	margin: 0 0 var(--s-2);
+	font-size: var(--fs-sm);
+	font-weight: 500;
+	color: var(--c-text-dim);
+}
+
+/* Deck list rows. Tall enough to be a comfortable touch target (44px+). */
+.deck-list { margin: 0; padding: 0; list-style: none; }
+.deck-row {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	min-height: 3.25rem;
+	padding: var(--s-2) var(--s-3);
+	margin-bottom: var(--s-1);
+	border-radius: 8px;
+	color: inherit;
+	text-decoration: none;
+}
+.deck-row:hover { background: var(--c-bg-subtle); }
+.deck-row-active,
+.deck-row-active:hover {
+	background: var(--c-bg-subtle);
+	box-shadow: inset 0 0 0 2px var(--c-accent);
+}
+.deck-row-snoozed { opacity: 0.6; }
+.deck-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.deck-row-name {
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.deck-row-status { font-size: var(--fs-xs); color: var(--c-text-dim); }
+
+/* The narrow-screen back button only exists below the breakpoint. */
+.flash-back-btn { display: none; }
+
+.flash-deck-toolbar { margin-bottom: var(--s-4); }
+.flash-deck-toolbar .notes-toolbar-actions { margin-left: auto; flex-wrap: wrap; }
+.flash-deck-toolbar form { margin: 0; }
+
+.flash-deck-hero {
+	display: flex;
+	align-items: center;
+	gap: var(--s-5);
+	margin-bottom: var(--s-5);
+}
+.flash-deck-hero-text { min-width: 0; }
+.flash-deck-hero-text h1 { margin: 0 0 var(--s-1); }
+.flash-deck-hero-text p { margin: 0; }
+
+/* The one primary action on the deck pane. */
+.flash-review-cta {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	margin-top: var(--s-4);
+	padding: var(--s-3) var(--s-5);
+	min-height: 2.75rem;
+	border-radius: 10px;
+	background: var(--c-accent-attention);
+	color: #fff;
+	font-size: var(--fs-lg);
+	font-weight: 600;
+	text-decoration: none;
+}
+.flash-review-cta:hover { filter: brightness(1.08); }
+.flash-review-cta:focus-visible { outline: var(--ring); outline-offset: 2px; }
+
+.flash-all-done {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--s-2);
+	margin-top: var(--s-4);
+	padding: var(--s-3) var(--s-4);
+	border-radius: 10px;
+	background: var(--deck-soft, var(--c-bg-subtle));
+}
+
+/* Big, friendly buttons for the welcome and empty states. */
+.flash-big-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	min-height: 2.75rem;
+	padding: var(--s-2) var(--s-4);
+	border-radius: 10px;
+	border: 1px solid var(--c-border-firm);
+	background: var(--c-bg);
+	color: var(--c-text);
+	font-weight: 500;
+	text-decoration: none;
+}
+.flash-big-btn:hover { background: var(--c-bg-subtle); }
+.flash-big-btn-primary {
+	background: var(--c-accent);
+	border-color: var(--c-accent);
+	color: #fff;
+}
+.flash-big-btn-primary:hover { background: var(--c-accent); filter: brightness(1.1); }
+:root[data-theme="dark"] .flash-big-btn-primary { color: #10141a; }
+
+.flash-welcome {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	gap: var(--s-3);
+	padding: var(--s-6) var(--s-4);
+}
+.flash-welcome h1 { margin: var(--s-3) 0 0; }
+.flash-welcome p { max-width: 28rem; margin: 0; }
+.flash-welcome-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-3); margin-top: var(--s-2); }
+
+.flash-pane-hint { padding: var(--s-4) 0; }
+
+.flash-deck-tiles { margin-bottom: var(--s-5); }
+
+.flash-deck-section { margin-top: var(--s-5); }
+.flash-section-title {
+	margin: 0 0 var(--s-2);
+	font-size: var(--fs-base);
+	font-weight: 500;
+}
+.flash-share-list { margin: var(--s-2) 0 0; padding: 0; list-style: none; }
+.flash-share-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2); padding: var(--s-1) 0; }
+.flash-share-list form { margin: 0; }
+.flash-shared-with-me:not(:empty) { margin-bottom: var(--s-4); }
+
+/* Colour swatches: the radio is visually hidden, its label is the swatch. */
+.flash-color-field { border: none; padding: 0; margin: 0 0 var(--s-4); }
+.flash-color-field legend { margin-bottom: var(--s-2); font-size: var(--fs-sm); color: var(--c-text-dim); padding: 0; }
+.flash-swatches { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.flash-swatch {
+	width: 2.75rem;
+	height: 2.75rem;
+	margin: 0;
+	border-radius: 50%;
+	background: var(--deck);
+	border: 3px solid var(--c-bg);
+	box-shadow: 0 0 0 1px var(--c-border-firm);
+	cursor: pointer;
+}
+.flash-swatch-input:checked + .flash-swatch { box-shadow: 0 0 0 3px var(--c-text); }
+.flash-swatch-input:focus-visible + .flash-swatch { outline: var(--ring); outline-offset: 3px; }
+
+.flash-deck-form { max-width: var(--measure); }
+
+/* Below 900px the list and the pane can't sit side by side: show one at a
+ * time, driven by #flash-detail-open (checked by the server whenever the
+ * pane has something to show). Same mechanism as #paste-detail-open. */
+@media (max-width: 900px) {
+	.flash-shell { flex-direction: column; }
+	.flash-list-pane,
+	.flash-detail-pane { flex: none; width: 100%; }
+	.flash-detail-pane { display: none; }
+	#flash-detail-open:checked ~ .flash-list-pane { display: none; }
+	#flash-detail-open:checked ~ .flash-detail-pane { display: block; }
+	.flash-back-btn { display: inline-flex; }
+	.flash-deck-hero { flex-direction: column; align-items: flex-start; }
+}

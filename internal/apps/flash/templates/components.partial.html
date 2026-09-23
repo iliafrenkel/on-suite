@@ -1,0 +1,13 @@
+{{/* internal/apps/flash/templates/components.partial.html — small pieces
+     shared by more than one Flash page. A *.partial.html is parsed into
+     every one of this app's page template sets (render.AddApp). */}}
+
+{{/* flash-stack is a deck drawn as three stacked cards in the deck's
+     colour. Pass a dict: Size is "sm" (list rows) or "lg" (hero); Color is
+     optional — without it the colour comes from a deck-c-* class on an
+     ancestor. */}}
+{{define "flash-stack"}}<span class="flash-stack flash-stack-{{.Size}}{{with .Color}} deck-c-{{.}}{{end}}" aria-hidden="true"><span></span><span></span><span></span></span>{{end}}
+
+{{/* flash-pane-back is the "← Decks" button a narrow screen needs to get
+     from the pane back to the list; app.css hides it on wide screens. */}}
+{{define "flash-pane-back"}}<a class="toolbar-btn flash-back-btn" href="/flash/" hx-get="/flash/" hx-target="#deck-detail" hx-push-url="true">{{ticon "arrow-left"}}Decks</a>{{end}}

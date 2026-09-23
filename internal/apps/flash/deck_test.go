@@ -333,3 +333,86 @@ func TestValidateDeck(t *testing.T) {
 		})
 	}
 }
+
+func TestNewDeckIsTealByDefault(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Color != flash.DefaultDeckColor {
+		t.Errorf("CreateDeck Color = %q, want %q", d.Color, flash.DefaultDeckColor)
+	}
+	got, err := f.store.DeckByID(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Color != flash.DefaultDeckColor {
+		t.Errorf("DeckByID Color = %q, want %q", got.Color, flash.DefaultDeckColor)
+	}
+}
+
+func TestSetDeckColor(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "purple")
+	if err != nil {
+		t.Fatalf("SetDeckColor: %v", err)
+	}
+	if updated.Color != "purple" {
+		t.Errorf("Color = %q, want purple", updated.Color)
+	}
+	decks, err := f.store.ListDecks(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decks) != 1 || decks[0].Color != "purple" {
+		t.Errorf("ListDecks = %+v, want one purple deck", decks)
+	}
+}
+
+func TestSetDeckColorRejectsUnknownColor(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "chartreuse"); !errors.Is(err, flash.ErrInvalid) {
+		t.Errorf("SetDeckColor(chartreuse) err = %v, want ErrInvalid", err)
+	}
+}
+
+func TestSetDeckColorRejectsSomeoneElsesDeck(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SetDeckColor(ctx, f.bob.ID, d.ID, "blue"); !errors.Is(err, flash.ErrNotFound) {
+		t.Errorf("SetDeckColor as bob err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestValidDeckColor(t *testing.T) {
+	for _, c := range flash.DeckColors {
+		if !flash.ValidDeckColor(c) {
+			t.Errorf("ValidDeckColor(%q) = false, want true", c)
+		}
+	}
+	for _, c := range []string{"", "Teal", "red", "#1D9E75", "teal "} {
+		if flash.ValidDeckColor(c) {
+			t.Errorf("ValidDeckColor(%q) = true, want false", c)
+		}
+	}
+	if len(flash.DeckColors) != 8 || flash.DeckColors[0] != flash.DefaultDeckColor {
+		t.Errorf("DeckColors = %v, want 8 names starting with the default", flash.DeckColors)
+	}
+}

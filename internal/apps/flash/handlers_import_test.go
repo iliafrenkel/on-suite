@@ -59,6 +59,29 @@ func TestImportMarkdownOverHTTP(t *testing.T) {
 	}
 }
 
+// TestImportOverHTMXShowsDeckColorImmediately guards against a regression
+// where the HTMX import path rendered the freshly-imported deck's pane
+// with no colour class at all (deck-c-), because ImportDeck's returned
+// Deck value never got its Color field set and the pane was built
+// straight from that value instead of a re-read from the DB.
+func TestImportOverHTMXShowsDeckColorImmediately(t *testing.T) {
+	s := newServer(t)
+	payload := `{
+		"deck": {"name": "Spanish travel phrases", "description": "Travel basics"},
+		"cards": [{"type": "basic", "front": "Thank you", "back": "Gracias", "tags": ["travel"]}]
+	}`
+	rec := s.PostHX(t, s.Alice, "/flash/import", url.Values{"payload": {payload}, "format": {"json"}})
+	if rec.Code != 201 {
+		t.Fatalf("POST /flash/import over HTMX = %d, want 201; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	view := doc.MustHave("#deck-detail-view")
+	class, _ := htmlassert.Attr(view, "class")
+	if !strings.Contains(class, "deck-c-teal") {
+		t.Errorf("#deck-detail-view class = %q, want it to contain deck-c-teal", class)
+	}
+}
+
 func TestImportMalformedWritesNothing(t *testing.T) {
 	s := newServer(t)
 

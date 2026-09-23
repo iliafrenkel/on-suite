@@ -230,11 +230,11 @@ func TestReviewRespectsTheDailyNewCardLimit(t *testing.T) {
 	doc.MustNotHave(".flash-review-front")
 }
 
-func TestReviewScriptIsServed(t *testing.T) {
+func TestFlashScriptIsServed(t *testing.T) {
 	s := newServer(t)
-	rec := s.Do(t, s.Alice, httpGet(t, "/flash/flash-review.js"))
+	rec := s.Do(t, s.Alice, httpGet(t, "/flash/flash.js"))
 	if rec.Code != 200 {
-		t.Fatalf("GET /flash/flash-review.js = %d, want 200", rec.Code)
+		t.Fatalf("GET /flash/flash.js = %d, want 200", rec.Code)
 	}
 	if ct := rec.Header().Get("Content-Type"); ct != "text/javascript; charset=utf-8" {
 		t.Errorf("Content-Type = %q", ct)

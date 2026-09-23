@@ -211,10 +211,10 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck,
 		targetDeckID = *priorAdoptedDeckID
 	} else {
 		err = tx.QueryRowContext(ctx,
-			`INSERT INTO flash_decks (user_id, name, description, created_at)
-			 VALUES (?, ?, ?, ?)
+			`INSERT INTO flash_decks (user_id, name, description, created_at, color)
+			 VALUES (?, ?, ?, ?, ?)
 			 RETURNING id`,
-			toUserID, src.Name, src.Description, formatTime(st.now()),
+			toUserID, src.Name, src.Description, formatTime(st.now()), src.Color,
 		).Scan(&targetDeckID)
 		if err != nil {
 			if isUniqueViolation(err) {
@@ -275,8 +275,7 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck,
 // valid pending share for it (checked by the caller before this is called).
 func deckByIDIgnoringOwner(ctx context.Context, tx *sql.Tx, id int64) (Deck, error) {
 	return scanDeck(tx.QueryRowContext(ctx,
-		`SELECT id, user_id, name, description, created_at, new_cards_per_day, reviews_per_day, snoozed_until
-		 FROM flash_decks WHERE id = ?`, id))
+		`SELECT `+deckColumns+` FROM flash_decks WHERE id = ?`, id))
 }
 
 // cardsInDeckIgnoringOwner reads every card in deckID regardless of owner —

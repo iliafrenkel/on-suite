@@ -110,6 +110,26 @@ var toolbarIcons = map[string]template.HTML{
 		<rect x="3" y="4" width="18" height="16" rx="2"/>
 		<path d="M9 4v16"/>
 	</svg>`,
+	"edit": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M12 20h9"/>
+		<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+	</svg>`,
+	"trash": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M3 6h18"/>
+		<path d="M8 6V4h8v2"/>
+		<path d="M19 6l-1 14H6L5 6"/>
+	</svg>`,
+	"cards": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<rect x="3" y="7" width="13" height="14" rx="2"/>
+		<path d="M8 3h11a2 2 0 0 1 2 2v12"/>
+	</svg>`,
+	"play": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M7 4l13 8-13 8Z"/>
+	</svg>`,
+	"arrow-left": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M19 12H5"/>
+		<path d="M12 19l-7-7 7-7"/>
+	</svg>`,
 }
 
 // ToolbarIconFor returns the markup for a known toolbar/menu/dialog icon
