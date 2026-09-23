@@ -501,3 +501,125 @@ func TestAdoptShareCopiesDeckColor(t *testing.T) {
 		t.Errorf("adopted deck Color = %q, want the source deck's pink", adopted.Color)
 	}
 }
+
+func TestSharesForRecipientCarriesDeckColor(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "purple"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID); err != nil {
+		t.Fatal(err)
+	}
+	offers, err := f.store.SharesForRecipient(ctx, f.bob.ID)
+	if err != nil || len(offers) != 1 {
+		t.Fatalf("offers = %+v, %v", offers, err)
+	}
+	if offers[0].DeckColor != "purple" {
+		t.Errorf("DeckColor = %q, want purple", offers[0].DeckColor)
+	}
+}
+
+func TestSharePreviewForTheRecipient(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "The solar system")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, front := range []string{"Mercury", "Venus", "Earth", "Mars", "Jupiter"} {
+		if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, front, "a planet", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := f.store.SharePreview(ctx, f.bob.ID, sh.ID)
+	if err != nil {
+		t.Fatalf("SharePreview: %v", err)
+	}
+	if p.Deck.Name != "Planets" || p.Deck.Description != "The solar system" {
+		t.Errorf("preview deck = %+v", p.Deck)
+	}
+	if p.CardCount != 5 {
+		t.Errorf("CardCount = %d, want 5", p.CardCount)
+	}
+	if len(p.Samples) != 4 || p.Samples[0].Front != "Mercury" {
+		t.Errorf("Samples = %+v, want the first four, oldest first", p.Samples)
+	}
+}
+
+func TestSharePreviewIsOnlyForThePendingRecipient(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The sharer is not the recipient.
+	if _, err := f.store.SharePreview(ctx, f.alice.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
+		t.Errorf("preview as the sharer: err = %v, want ErrNotFound", err)
+	}
+	// An unknown share.
+	if _, err := f.store.SharePreview(ctx, f.bob.ID, sh.ID+100); !errors.Is(err, flash.ErrNotFound) {
+		t.Errorf("preview of a missing share: err = %v, want ErrNotFound", err)
+	}
+	// A resolved share is no longer previewable.
+	if err := f.store.DeclineShare(ctx, f.bob.ID, sh.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SharePreview(ctx, f.bob.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
+		t.Errorf("preview of a declined share: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSharePreviewOfAMergeCountsOnlyNewCards(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "Mercury", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, front := range []string{"Venus", "Earth"} {
+		if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, front, "x", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	again, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := f.store.SharePreview(ctx, f.bob.ID, again.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Offer.PriorAdoptedDeckID == nil || p.CardCount != 2 {
+		t.Errorf("merge preview = %+v, want a merge of 2 new cards", p)
+	}
+	for _, c := range p.Samples {
+		if c.Front == "Mercury" {
+			t.Errorf("merge samples include the already-adopted card: %+v", p.Samples)
+		}
+	}
+}

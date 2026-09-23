@@ -420,7 +420,8 @@ func (st *Store) SharesForDeck(ctx context.Context, fromUserID, deckID int64) ([
 // yet.
 type ShareOffer struct {
 	Share
-	DeckName string
+	DeckName  string
+	DeckColor string // the source deck's colour, for the gift row
 	// PriorAdoptedDeckID is nil for a first-time offer ("New deck") and
 	// non-nil for a merge offer (an earlier offer for the same triple was
 	// already adopted into that deck).
@@ -434,7 +435,7 @@ type ShareOffer struct {
 func (st *Store) SharesForRecipient(ctx context.Context, toUserID int64) ([]ShareOffer, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`SELECT s.id, s.deck_id, s.from_user_id, s.to_user_id, s.status, s.adopted_deck_id, s.created_at, s.responded_at,
-		        d.name,
+		        d.name, d.color,
 		        (SELECT ad.adopted_deck_id FROM flash_shares ad
 		          WHERE ad.deck_id = s.deck_id AND ad.from_user_id = s.from_user_id AND ad.to_user_id = s.to_user_id
 		            AND ad.status = ?
@@ -459,7 +460,7 @@ func (st *Store) SharesForRecipient(ctx context.Context, toUserID int64) ([]Shar
 			priorAdoptedDeckID sql.NullInt64
 		)
 		err := rows.Scan(&o.ID, &o.DeckID, &o.FromUserID, &o.ToUserID, &o.Status, &adoptedDeckID, &createdAt, &respondedAt,
-			&o.DeckName, &priorAdoptedDeckID)
+			&o.DeckName, &o.DeckColor, &priorAdoptedDeckID)
 		if err != nil {
 			return nil, fmt.Errorf("flash: shares for recipient: %w", err)
 		}
@@ -520,4 +521,77 @@ func (st *Store) newCardCount(ctx context.Context, sourceDeckID, targetDeckID in
 		return 0, fmt.Errorf("flash: new card count: %w", err)
 	}
 	return n, nil
+}
+
+// sharePreviewSamples is how many cards a gift deck's preview shows.
+const sharePreviewSamples = 4
+
+// SharePreview is what the recipient sees before adopting a share: the
+// source deck's name, description and colour, how many cards they would
+// get, and a few of them. Deck is the *source* deck — someone else's — so
+// only its display fields are meant to be shown.
+type SharePreview struct {
+	Offer     ShareOffer
+	Deck      Deck
+	CardCount int
+	Samples   []Card
+}
+
+// SharePreview loads the preview of one of toUserID's pending offers. Any
+// other share id — missing, addressed to someone else, or already
+// resolved — is ErrNotFound. That guard is SharesForRecipient itself (it
+// only returns pending offers addressed to toUserID), and it runs before
+// the source deck is read without an owner check.
+func (st *Store) SharePreview(ctx context.Context, toUserID, shareID int64) (SharePreview, error) {
+	offers, err := st.SharesForRecipient(ctx, toUserID)
+	if err != nil {
+		return SharePreview{}, err
+	}
+	var p SharePreview
+	found := false
+	for _, o := range offers {
+		if o.ID == shareID {
+			p.Offer, found = o, true
+			break
+		}
+	}
+	if !found {
+		return SharePreview{}, ErrNotFound
+	}
+
+	p.Deck, err = scanDeck(st.db.QueryRowContext(ctx,
+		`SELECT `+deckColumns+` FROM flash_decks WHERE id = ?`, p.Offer.DeckID))
+	if err != nil {
+		return SharePreview{}, err
+	}
+
+	// A merge only brings the cards not already adopted; a first-time
+	// adopt brings them all. Same NOT EXISTS rule as newCardCount.
+	where := `c.deck_id = ?`
+	args := []any{p.Offer.DeckID}
+	if p.Offer.PriorAdoptedDeckID != nil {
+		where += ` AND NOT EXISTS (SELECT 1 FROM flash_cards tc WHERE tc.deck_id = ? AND tc.origin_card_id = c.id)`
+		args = append(args, *p.Offer.PriorAdoptedDeckID)
+	}
+	if err := st.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM flash_cards c WHERE `+where, args...).Scan(&p.CardCount); err != nil {
+		return SharePreview{}, fmt.Errorf("flash: share preview: %w", err)
+	}
+	rows, err := st.db.QueryContext(ctx,
+		`SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at, c.image_hash, c.audio_hash
+		   FROM flash_cards c WHERE `+where+`
+		  ORDER BY c.created_at ASC, c.id ASC LIMIT ?`,
+		append(args, sharePreviewSamples)...)
+	if err != nil {
+		return SharePreview{}, fmt.Errorf("flash: share preview: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		c, err := scanCardRow(rows)
+		if err != nil {
+			return SharePreview{}, err
+		}
+		p.Samples = append(p.Samples, c)
+	}
+	return p, rows.Err()
 }
