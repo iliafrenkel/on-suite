@@ -130,6 +130,12 @@ var toolbarIcons = map[string]template.HTML{
 		<path d="M19 12H5"/>
 		<path d="M12 19l-7-7 7-7"/>
 	</svg>`,
+	"share": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<circle cx="18" cy="5" r="3"/>
+		<circle cx="6" cy="12" r="3"/>
+		<circle cx="18" cy="19" r="3"/>
+		<path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
+	</svg>`,
 }
 
 // ToolbarIconFor returns the markup for a known toolbar/menu/dialog icon
