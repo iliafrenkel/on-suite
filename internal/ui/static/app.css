@@ -2822,6 +2822,11 @@ a.flash-pill:hover { color: var(--c-text); border-color: var(--c-border-firm); }
 	font-size: 0.7em;
 	vertical-align: baseline;
 }
+.flash-blank-hint {
+	font-size: 0.6em;
+	font-style: italic;
+	color: var(--c-text-faint);
+}
 .flash-fill {
 	padding: 0 0.2em;
 	border-radius: 4px;
