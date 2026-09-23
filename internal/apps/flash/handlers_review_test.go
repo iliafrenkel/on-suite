@@ -3,6 +3,7 @@ package flash_test
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,13 +22,13 @@ func TestReviewShowsACardAcrossAllDecks(t *testing.T) {
 	}
 
 	doc := s.Get(t, s.Alice, "/flash/review")
-	doc.MustHave(".flash-review-front")
+	doc.MustHave(".flash-review-card")
 }
 
 func TestReviewShowsNothingDueWhenQueueIsEmpty(t *testing.T) {
 	s := newServer(t)
 	doc := s.Get(t, s.Alice, "/flash/review")
-	doc.MustNotHave(".flash-review-front")
+	doc.MustNotHave(".flash-review-card")
 }
 
 func TestReviewScopedToOneDeck(t *testing.T) {
@@ -47,7 +48,7 @@ func TestReviewScopedToOneDeck(t *testing.T) {
 	// deckA has no cards, so its own review page shows nothing due even
 	// though deckB (a different deck) has one.
 	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deckA.ID))
-	doc.MustNotHave(".flash-review-front")
+	doc.MustNotHave(".flash-review-card")
 }
 
 func TestGradingACardAdvancesTheQueue(t *testing.T) {
@@ -66,7 +67,7 @@ func TestGradingACardAdvancesTheQueue(t *testing.T) {
 		t.Fatalf("grade = %d, want 200", rec.Code)
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustNotHave(".flash-review-front") // the only card was just graded; nothing left due
+	doc.MustNotHave(".flash-review-card") // the only card was just graded; nothing left due
 	doc.MustHave(".flash-undo-btn")
 }
 
@@ -136,7 +137,7 @@ func TestUndoAfterGradingReshowsTheCard(t *testing.T) {
 		t.Fatalf("undo = %d, want 200", rec.Code)
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustHave(".flash-review-front")
+	doc.MustHave(".flash-review-card")
 	doc.MustNotHave(".flash-undo-btn") // the undo slot was just spent
 }
 
@@ -227,7 +228,7 @@ func TestReviewRespectsTheDailyNewCardLimit(t *testing.T) {
 	// so the second (never-reviewed) card must not show up today, even
 	// though it's otherwise due.
 	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
-	doc.MustNotHave(".flash-review-front")
+	doc.MustNotHave(".flash-review-card")
 }
 
 func TestFlashScriptIsServed(t *testing.T) {
@@ -238,5 +239,175 @@ func TestFlashScriptIsServed(t *testing.T) {
 	}
 	if ct := rec.Header().Get("Content-Type"); ct != "text/javascript; charset=utf-8" {
 		t.Errorf("Content-Type = %q", ct)
+	}
+}
+
+func TestReviewCardFlipsAndGradesWithFriendlyLabels(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	doc.MustHave("#review-card input#review-flip")
+	show := doc.MustHave("#review-card .flash-show-answer")
+	if f, _ := htmlassert.Attr(show, "for"); f != "review-flip" {
+		t.Errorf("Show answer label for=%q, want review-flip", f)
+	}
+	var labels []string
+	for _, b := range doc.QueryAll("#review-card .flash-grades button") {
+		labels = append(labels, htmlassert.Text(b))
+	}
+	want := []string{"Forgot 1", "Hard 2", "Got it 3", "Easy 4"}
+	if strings.Join(labels, "|") != strings.Join(want, "|") {
+		t.Errorf("grade buttons = %v, want %v", labels, want)
+	}
+	if got := htmlassert.Text(doc.MustHave("#review-card .flash-card-corner")); got != "new" {
+		t.Errorf("corner = %q, want new", got)
+	}
+	doc.MustNotHave("#review-card .flash-tag-links")
+	stop := doc.MustHave("a.flash-review-stop")
+	if href, _ := htmlassert.Attr(stop, "href"); href != "/flash/"+itoa(deck.ID) {
+		t.Errorf("Stop href = %q, want the deck", href)
+	}
+}
+
+func TestReviewShowsProgress(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var first flash.Card
+	for i, front := range []string{"uno", "dos", "tres"} {
+		c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, front, "x", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = c
+		}
+	}
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	if got := htmlassert.Text(doc.MustHave(".flash-review-count")); got != "1 of 3" {
+		t.Errorf("count before grading = %q, want 1 of 3", got)
+	}
+
+	// Got it on a new card schedules it minutes away, so it leaves today's
+	// queue for now.
+	rec := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(first.ID)}, "rating": {"3"}})
+	if rec.Code != 200 {
+		t.Fatalf("grade = %d", rec.Code)
+	}
+	after := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(after.MustHave(".flash-review-count")); got != "2 of 3" {
+		t.Errorf("count after one grade = %q, want 2 of 3", got)
+	}
+	fill := after.MustHave(".flash-progress rect.fill")
+	if w, _ := htmlassert.Attr(fill, "width"); w != "33" {
+		t.Errorf("progress width = %q, want 33", w)
+	}
+}
+
+func TestReviewSummaryAfterTheLastCard(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(c.ID)}, "rating": {"3"}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	summary := doc.MustHave(".flash-review-summary")
+	if text := htmlassert.Text(summary); !strings.Contains(text, "You reviewed 1 card today") {
+		t.Errorf("summary = %q", text)
+	}
+	if got := htmlassert.Text(doc.MustHave(".flash-breakdown-legend")); got != "1 got it" {
+		t.Errorf("legend = %q", got)
+	}
+	doc.MustHave(".flash-celebrate")
+	back := doc.MustHave("a.flash-back-to-decks")
+	if href, _ := htmlassert.Attr(back, "href"); href != "/flash/" {
+		t.Errorf("Back to decks href = %q", href)
+	}
+	doc.MustNotHave(".flash-streak") // a 1-day streak isn't mentioned
+	doc.MustHave(".flash-undo-btn")  // the last grade can still be undone
+}
+
+func TestReviewSummarySuggestsTheNextDeck(t *testing.T) {
+	s := newServer(t)
+	a, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Alpha", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Beta", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, a.ID, flash.CardTypeBasic, "a", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, front := range []string{"b1", "b2"} {
+		if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, b.ID, flash.CardTypeBasic, front, "x", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(a.ID), url.Values{"card_id": {itoa(ca.ID)}, "rating": {"3"}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	next := doc.MustHave("a.flash-next-deck")
+	if href, _ := htmlassert.Attr(next, "href"); href != "/flash/review/"+itoa(b.ID) {
+		t.Errorf("next deck href = %q", href)
+	}
+	if text := htmlassert.Text(next); !strings.Contains(text, "Beta") || !strings.Contains(text, "2 due") {
+		t.Errorf("next deck text = %q", text)
+	}
+}
+
+func TestReviewSummaryShowsAStreak(t *testing.T) {
+	s := newServer(t)
+	other, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Yesterday", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, other.ID, flash.CardTypeBasic, "old", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, old.ID, flash.RatingEasy, time.Now().UTC().AddDate(0, 0, -1)); err != nil {
+		t.Fatal(err)
+	}
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Today", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "new", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(c.ID)}, "rating": {"3"}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(doc.MustHave(".flash-streak")); !strings.Contains(got, "2 days in a row") {
+		t.Errorf("streak = %q, want 2 days in a row", got)
+	}
+}
+
+func TestReviewWithNothingToDoHasNoCelebration(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/flash/review")
+	summary := doc.MustHave(".flash-review-summary")
+	if !strings.Contains(htmlassert.Text(summary), "Nothing to review right now") {
+		t.Errorf("summary = %q", htmlassert.Text(summary))
+	}
+	doc.MustNotHave(".flash-celebrate")
+	stop := doc.MustHave("a.flash-review-stop")
+	if href, _ := htmlassert.Attr(stop, "href"); href != "/flash/" {
+		t.Errorf("Stop href for Review all = %q, want /flash/", href)
 	}
 }

@@ -1,53 +1,88 @@
+{{/* internal/apps/flash/templates/review.html — the focused review screen
+     (UI overhaul spec §5). No deck list: just progress, the card, and the
+     grade buttons. The flip is U2's CSS-only checkbox; the Show answer
+     label and the grade form are later siblings of that checkbox, so
+     `.flash-flip:checked ~` rules swap one for the other with no JS. */}}
 {{define "head"}}
 <script src="/flash/flash.js" defer></script>
 {{end}}
 
 {{define "review-body"}}
-{{if .Current}}
-<div class="stack flash-review-card" id="review-card">
-	<p class="faint">{{.Current.Deck.Name}} · {{if .Current.IsNew}}new{{else}}review{{end}}</p>
-	<div class="flash-review-front">{{.Current.Card.Front}}</div>
-	{{with .Current.ImageMediaURL}}<img class="card-media-image flash-review-image" src="{{.}}" alt="">{{end}}
-	{{with .Current.AudioMediaURL}}<audio controls src="{{.}}"></audio>{{end}}
-	<button type="button" class="toolbar-btn flash-reveal-btn">Reveal (Space)</button>
-	<div class="flash-review-answer" hidden>
-		{{if eq .Current.Card.CardType "basic"}}<div class="flash-review-back">{{.Current.Card.Back}}</div>{{end}}
-		{{with .Current.Card.Notes}}<p class="dim">{{.}}</p>{{end}}
-		<form method="post"
+<div class="flash-review{{with .Color}} deck-c-{{.}}{{end}}">
+	<div class="flash-review-top">
+		<a class="toolbar-btn flash-review-stop" href="{{.StopURL}}">{{ticon "arrow-left"}}Stop</a>
+		<span class="flash-review-scope">{{.ScopeName}}</span>
+		{{if .Total}}
+		<svg class="flash-progress" viewBox="0 0 100 8" preserveAspectRatio="none" role="img" aria-label="{{.Done}} of {{.Total}} reviewed">
+			<rect class="track" x="0" y="0" width="100" height="8" rx="4"/>
+			<rect class="fill" x="0" y="0" width="{{.ProgressPct}}" height="8" rx="4"/>
+		</svg>
+		{{if .Current}}<span class="flash-review-count">{{.Position}} of {{.Total}}</span>{{end}}
+		{{end}}
+	</div>
+
+	{{if .Current}}
+	<div class="flash-review-card" id="review-card">
+		{{template "flash-card" (dict "Face" .Current.Face "FlipID" "review-flip" "Hint" "Tap the card or press Space" "Corner" (and .Current.IsNew "new") "Static" true)}}
+		<label for="review-flip" class="flash-show-answer">Show answer <kbd>Space</kbd></label>
+		<form class="flash-grades" method="post"
 		      action="/flash/review/grade{{if .DeckScope}}?deck={{.DeckScope}}{{end}}"
 		      hx-post="/flash/review/grade{{if .DeckScope}}?deck={{.DeckScope}}{{end}}"
-		      hx-target="#review-body" hx-swap="innerHTML" class="row">
+		      hx-target="#review-body" hx-swap="innerHTML">
 			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-			<input type="hidden" name="card_id" value="{{.Current.Card.ID}}">
-			<button type="submit" name="rating" value="1" class="toolbar-btn flash-grade-again">Again (1)</button>
-			<button type="submit" name="rating" value="2" class="toolbar-btn flash-grade-hard">Hard (2)</button>
-			<button type="submit" name="rating" value="3" class="toolbar-btn flash-grade-good">Good (3)</button>
-			<button type="submit" name="rating" value="4" class="toolbar-btn flash-grade-easy">Easy (4)</button>
+			<input type="hidden" name="card_id" value="{{.Current.Face.ID}}">
+			<button type="submit" name="rating" value="1" class="flash-grade flash-grade-again">Forgot <kbd>1</kbd></button>
+			<button type="submit" name="rating" value="2" class="flash-grade flash-grade-hard">Hard <kbd>2</kbd></button>
+			<button type="submit" name="rating" value="3" class="flash-grade flash-grade-good">Got it <kbd>3</kbd></button>
+			<button type="submit" name="rating" value="4" class="flash-grade flash-grade-easy">Easy <kbd>4</kbd></button>
 		</form>
 	</div>
+	{{else}}
+	{{template "review-summary" .}}
+	{{end}}
+
+	{{if .LastGradedCardID}}
+	<form class="flash-undo" method="post"
+	      action="/flash/review/undo{{if .DeckScope}}?deck={{.DeckScope}}{{end}}"
+	      hx-post="/flash/review/undo{{if .DeckScope}}?deck={{.DeckScope}}{{end}}"
+	      hx-target="#review-body" hx-swap="innerHTML">
+		<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+		<input type="hidden" name="card_id" value="{{.LastGradedCardID}}">
+		<button type="submit" class="toolbar-btn flash-undo-btn">Undo last <kbd>U</kbd></button>
+	</form>
+	{{end}}
 </div>
-{{else}}
-<p class="dim">All done for now.</p>
 {{end}}
-{{if .LastGradedCardID}}
-<form method="post"
-      action="/flash/review/undo{{if .DeckScope}}?deck={{.DeckScope}}{{end}}"
-      hx-post="/flash/review/undo{{if .DeckScope}}?deck={{.DeckScope}}{{end}}"
-      hx-target="#review-body" hx-swap="innerHTML">
-	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
-	<input type="hidden" name="card_id" value="{{.LastGradedCardID}}">
-	<button type="submit" class="toolbar-btn flash-undo-btn">Undo (U)</button>
-</form>
+
+{{define "review-summary"}}
+{{with .Summary}}
+<div class="flash-review-summary" role="status">
+	{{if .Reviewed}}
+	<div class="flash-celebrate" aria-hidden="true">{{range $.CelebrationColors}}<span class="deck-c-{{.}}"></span>{{end}}</div>
+	<h1>Nice work!</h1>
+	<p class="flash-summary-lead">You reviewed {{.Reviewed}} card{{if ne .Reviewed 1}}s{{end}} today.</p>
+	{{if .Segments}}
+	<svg class="flash-breakdown" viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="{{.Legend}}">
+		{{range .Segments}}<rect class="{{.Class}}" x="{{.X}}" y="0" width="{{.Width}}" height="10"/>{{end}}
+	</svg>
+	<p class="flash-breakdown-legend">{{.Legend}}</p>
+	{{end}}
+	{{if ge .Streak 2}}<p class="flash-streak">🔥 {{.Streak}} days in a row</p>{{end}}
+	{{else}}
+	<h1>Nothing to review right now</h1>
+	<p class="dim">New cards and reviews come back over time. Check again later.</p>
+	{{end}}
+	{{if .NextURL}}
+	<a class="flash-review-cta flash-next-deck" href="{{.NextURL}}">Review {{.NextName}} next ({{.NextDue}} due) <span aria-hidden="true">→</span></a>
+	{{else}}
+	<a class="flash-review-cta flash-back-to-decks" href="/flash/">Back to decks</a>
+	{{end}}
+</div>
 {{end}}
 {{end}}
 
 {{define "content"}}
-<div class="stack">
-	<div class="row list-head">
-		<h1>Review</h1>
-	</div>
-	<div id="review-body">
-		{{template "review-body" .Data}}
-	</div>
+<div id="review-body">
+	{{template "review-body" .Data}}
 </div>
 {{end}}
