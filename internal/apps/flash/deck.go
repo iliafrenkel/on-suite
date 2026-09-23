@@ -26,6 +26,34 @@ const (
 	DefaultNewCardsPerDay = 20
 )
 
+// DeckColors is the fixed palette a deck's owner picks from, in the order
+// the swatch picker shows them. The names — not hex values — are stored:
+// templates turn one into a deck-c-<name> class and app.css decides what
+// that looks like in light and dark mode (UI overhaul spec §1.2).
+var DeckColors = []string{"teal", "blue", "purple", "pink", "coral", "amber", "green", "gray"}
+
+// DefaultDeckColor must match migrations/0010_deck_color.sql's column
+// default, for the same reason DefaultNewCardsPerDay must match 0005's:
+// CreateDeck never re-reads the row it inserts.
+const DefaultDeckColor = "teal"
+
+// ValidDeckColor reports whether c is one of DeckColors, exactly (the
+// comparison is case-sensitive and does not trim).
+func ValidDeckColor(c string) bool {
+	for _, name := range DeckColors {
+		if c == name {
+			return true
+		}
+	}
+	return false
+}
+
+// deckColumns is the column list every query feeding scanDeckRow selects,
+// in scanDeckRow's own Scan order. One constant, so adding a column can't
+// leave one of the three SELECTs (DeckByID, ListDecks, share.go's
+// deckByIDIgnoringOwner) behind.
+const deckColumns = `id, user_id, name, description, created_at, new_cards_per_day, reviews_per_day, snoozed_until, color`
+
 // Deck is one flash-card deck.
 type Deck struct {
 	ID          int64
@@ -37,6 +65,8 @@ type Deck struct {
 	NewCardsPerDay int
 	ReviewsPerDay  *int       // nil = unlimited
 	SnoozedUntil   *time.Time // nil = not snoozed
+	// Color is one of DeckColors.
+	Color string
 }
 
 // IsSnoozed reports whether the deck is hidden from the review queue at now.
@@ -73,7 +103,7 @@ func (st *Store) CreateDeck(ctx context.Context, userID int64, name, description
 		return Deck{}, err
 	}
 
-	d := Deck{UserID: userID, Name: name, Description: description, CreatedAt: st.now(), NewCardsPerDay: DefaultNewCardsPerDay}
+	d := Deck{UserID: userID, Name: name, Description: description, CreatedAt: st.now(), NewCardsPerDay: DefaultNewCardsPerDay, Color: DefaultDeckColor}
 	err := st.db.QueryRowContext(ctx,
 		`INSERT INTO flash_decks (user_id, name, description, created_at)
 		 VALUES (?, ?, ?, ?)
@@ -118,15 +148,13 @@ func (st *Store) UpdateDeck(ctx context.Context, userID, id int64, name, descrip
 // DeckByID fetches one of userID's own decks.
 func (st *Store) DeckByID(ctx context.Context, userID, id int64) (Deck, error) {
 	return scanDeck(st.db.QueryRowContext(ctx,
-		`SELECT id, user_id, name, description, created_at, new_cards_per_day, reviews_per_day, snoozed_until
-		 FROM flash_decks WHERE id = ? AND user_id = ?`, id, userID))
+		`SELECT `+deckColumns+` FROM flash_decks WHERE id = ? AND user_id = ?`, id, userID))
 }
 
 // ListDecks returns userID's decks, newest first.
 func (st *Store) ListDecks(ctx context.Context, userID int64) ([]Deck, error) {
 	rows, err := st.db.QueryContext(ctx,
-		`SELECT id, user_id, name, description, created_at, new_cards_per_day, reviews_per_day, snoozed_until
-		 FROM flash_decks WHERE user_id = ?
+		`SELECT `+deckColumns+` FROM flash_decks WHERE user_id = ?
 		 ORDER BY created_at DESC, id DESC`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("flash: list decks: %w", err)
@@ -181,7 +209,7 @@ func scanDeckRow(row rowScanner) (Deck, error) {
 		snoozedUntil  sql.NullString
 	)
 	err := row.Scan(&d.ID, &d.UserID, &d.Name, &d.Description, &createdAt,
-		&d.NewCardsPerDay, &reviewsPerDay, &snoozedUntil)
+		&d.NewCardsPerDay, &reviewsPerDay, &snoozedUntil, &d.Color)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Deck{}, sql.ErrNoRows // translated by scanDeck
@@ -271,6 +299,26 @@ func (st *Store) UnsnoozeDeck(ctx context.Context, userID, id int64) (Deck, erro
 	n, err := res.RowsAffected()
 	if err != nil {
 		return Deck{}, fmt.Errorf("flash: unsnooze deck: %w", err)
+	}
+	if n == 0 {
+		return Deck{}, ErrNotFound
+	}
+	return st.DeckByID(ctx, userID, id)
+}
+
+// SetDeckColor changes userID's own deck's colour.
+func (st *Store) SetDeckColor(ctx context.Context, userID, id int64, color string) (Deck, error) {
+	if !ValidDeckColor(color) {
+		return Deck{}, fmt.Errorf("%w: %q is not a deck colour", ErrInvalid, color)
+	}
+	res, err := st.db.ExecContext(ctx,
+		`UPDATE flash_decks SET color = ? WHERE id = ? AND user_id = ?`, color, id, userID)
+	if err != nil {
+		return Deck{}, fmt.Errorf("flash: set deck colour: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return Deck{}, fmt.Errorf("flash: set deck colour: %w", err)
 	}
 	if n == 0 {
 		return Deck{}, ErrNotFound
