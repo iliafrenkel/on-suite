@@ -1,7 +1,12 @@
-// internal/apps/flash/static/flash-review.js
+// internal/apps/flash/static/flash.js
 //
-// Keyboard shortcuts for the review page: Space reveals the answer, 1-4
-// grade it (Again/Hard/Good/Easy), U undoes the last grade. Mirrors
+// ON Flash's only script, loaded by every Flash page. Each feature is a
+// small, independent piece keyed off elements that only exist on the page
+// that needs them, so it is a no-op everywhere else (UI overhaul spec §1.6).
+// Everything here is progressive enhancement: every page works without it.
+//
+// Review keyboard shortcuts: Space reveals the answer, 1-4 grade it
+// (Again/Hard/Good/Easy), U undoes the last grade. Mirrors
 // internal/apps/reader/static/reader.js's press()/keydown pattern.
 (function () {
 	"use strict";

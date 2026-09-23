@@ -13,7 +13,7 @@ import (
 //go:embed templates/*.html
 var templateFiles embed.FS
 
-//go:embed static/flash-review.js
+//go:embed static/flash.js
 var scriptFiles embed.FS
 
 // mediaFetchConcurrency bounds outbound media fetches across all requests,
@@ -54,14 +54,14 @@ func (a *App) Templates() fs.FS {
 	return sub
 }
 
-// script serves flash-review.js, behind the same sign-in requirement as
+// script serves flash.js, behind the same sign-in requirement as
 // every other route here — no page loads it without already being on an
 // authenticated Flash page. Mirrors internal/apps/reader's own script
 // method for reader.js.
 func (a *App) script(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	http.ServeFileFS(w, r, scriptFiles, "static/flash-review.js")
+	http.ServeFileFS(w, r, scriptFiles, "static/flash.js")
 }
 
 // Mount wires the app up. Everything registered with Handle requires a
@@ -144,7 +144,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	// "edit", wildcard) — no ambiguity with either.
 	r.HandleFunc("GET /tags/{tagName}", a.tagFilter)
 
-	// Review routes. "review" and "flash-review.js" are literal single
+	// Review routes. "review" and "flash.js" are literal single
 	// segments alongside the existing wildcard single-segment routes
 	// (/{deckID}, /tags/{tagName}'s "tags" is also a literal single segment at
 	// this same position but a different word) — literals never conflict with
@@ -183,7 +183,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /review/{deckID}", a.deckReview)
 	r.HandleFunc("POST /review/grade", a.gradeCardHandler)
 	r.HandleFunc("POST /review/undo", a.undoGradeHandler)
-	r.HandleFunc("GET /flash-review.js", a.script)
+	r.HandleFunc("GET /flash.js", a.script)
 
 	// "stats" is a literal single segment, the same non-ambiguity shape as
 	// "new"/"review"/"import"/"tags" alongside the existing wildcard
