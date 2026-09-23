@@ -3,6 +3,7 @@ package flash
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -14,7 +15,7 @@ func (a *App) importDeckDetail(r *http.Request, errMsg, payload, format string) 
 		format = "auto"
 	}
 	return deckDetailView{
-		Mode: deckModeImport, PayloadValue: payload, FormatValue: format,
+		Mode: deckModeImport, PayloadValue: payload, FormatValue: format, ImportPrompt: importPrompt,
 		Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
 	}
 }
@@ -60,5 +61,7 @@ func (a *App) importDeck(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderDeckDetailWithList(w, r, userID, http.StatusCreated, a.viewDeckDetail(r, userID, d, recipients, shares))
+	view := a.viewDeckDetail(r, userID, d, recipients, shares)
+	view.Notice = fmt.Sprintf("Imported %d card%s into “%s”.", len(parsed.Cards), plural(len(parsed.Cards)), d.Name)
+	a.renderDeckDetailWithList(w, r, userID, http.StatusCreated, view)
 }

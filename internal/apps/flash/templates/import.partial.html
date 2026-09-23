@@ -1,21 +1,53 @@
+{{/* internal/apps/flash/templates/import.partial.html — the import pane
+     (UI overhaul spec §7). Three steps: copy a ready-made prompt, ask any
+     AI, paste its answer. Without JS the prompt is in a read-only box to
+     select and copy by hand; flash.js adds the Copy button. */}}
 {{define "deck-detail-import"}}
-<form class="stack" id="deck-detail-import" method="post" action="/flash/import" hx-post="/flash/import" hx-target="#deck-detail" hx-swap="innerHTML">
+<form class="stack flash-import" id="deck-detail-import" method="post" action="/flash/import" hx-post="/flash/import" hx-target="#deck-detail" hx-swap="innerHTML">
 	<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 	<div class="notes-toolbar flash-deck-toolbar">{{template "flash-pane-back"}}</div>
-	<h1>Import</h1>
+	<h1>Import a deck</h1>
 	{{with .Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+
+	<ol class="flash-import-steps">
+		<li>
+			<strong>Copy the prompt</strong>
+			<span class="dim">It tells the AI exactly how to write the cards.</span>
+			<button type="button" class="flash-big-btn flash-copy-prompt" data-copy-target="import-prompt" hidden>{{ticon "doc"}}<span class="flash-copy-label">Copy the prompt</span></button>
+		</li>
+		<li>
+			<strong>Ask your AI</strong>
+			<span class="dim">Paste the prompt into any AI chat and replace [TOPIC] with what you want to learn.</span>
+		</li>
+		<li>
+			<strong>Paste the answer below</strong>
+			<span class="dim">Then press Import.</span>
+		</li>
+	</ol>
+
+	<details class="flash-import-prompt">
+		<summary>Show the prompt</summary>
+		<label class="visually-hidden" for="import-prompt">The AI prompt</label>
+		<textarea id="import-prompt" rows="14" readonly>{{.ImportPrompt}}</textarea>
+	</details>
+
 	<div class="field">
-		<label for="import-format">Format</label>
-		<select id="import-format" name="format">
-			<option value="auto"{{if eq .FormatValue "auto"}} selected{{end}}>Auto-detect</option>
-			<option value="markdown"{{if eq .FormatValue "markdown"}} selected{{end}}>Markdown</option>
-			<option value="json"{{if eq .FormatValue "json"}} selected{{end}}>JSON</option>
-		</select>
+		<label for="import-payload">The AI's answer</label>
+		<textarea id="import-payload" name="payload" rows="12" placeholder='{"deck": {"name": "…"}, "cards": […]}' required>{{.PayloadValue}}</textarea>
 	</div>
-	<div class="field">
-		<label for="import-payload">Paste your deck</label>
-		<textarea id="import-payload" name="payload" rows="16" autofocus required>{{.PayloadValue}}</textarea>
-	</div>
+
+	<details class="flash-import-format"{{if and .FormatValue (ne .FormatValue "auto")}} open{{end}}>
+		<summary>Choose format (usually not needed)</summary>
+		<div class="field">
+			<label for="import-format">Format</label>
+			<select id="import-format" name="format">
+				<option value="auto"{{if eq .FormatValue "auto"}} selected{{end}}>Work it out for me</option>
+				<option value="json"{{if eq .FormatValue "json"}} selected{{end}}>JSON</option>
+				<option value="markdown"{{if eq .FormatValue "markdown"}} selected{{end}}>Markdown</option>
+			</select>
+		</div>
+	</details>
+
 	<div class="row">
 		<button type="submit" class="primary">Import</button>
 		<a class="toolbar-btn" href="/flash/" hx-get="/flash/" hx-target="#deck-detail" hx-push-url="true">Cancel</a>

@@ -134,6 +134,7 @@ type deckDetailView struct {
 
 	PayloadValue string
 	FormatValue  string
+	ImportPrompt string // the AI prompt shown in the import pane
 
 	// Card modes. Grid is set for "cards", Opened for "card", CardForm for
 	// "card-new" and "card-edit".

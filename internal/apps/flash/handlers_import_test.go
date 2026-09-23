@@ -138,3 +138,42 @@ func TestImportDuplicateNameOverHTTPWritesNothingAndPreservesInput(t *testing.T)
 		t.Errorf("len(decks) = %d, want 1 (only the original 'Existing' deck, nothing partially imported)", len(decks))
 	}
 }
+
+func TestImportPaneHasTheThreeStepsAndThePrompt(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/flash/import")
+	if n := len(doc.QueryAll(".flash-import-steps li")); n != 3 {
+		t.Errorf("import pane shows %d steps, want 3", n)
+	}
+	prompt := doc.MustHave("textarea#import-prompt")
+	if !strings.Contains(htmlassert.Text(prompt), "[TOPIC]") {
+		t.Error("the prompt box does not contain the AI prompt")
+	}
+	if _, ok := htmlassert.Attr(prompt, "readonly"); !ok {
+		t.Error("the prompt box should be read-only")
+	}
+	copyBtn := doc.MustHave("button.flash-copy-prompt")
+	if target, _ := htmlassert.Attr(copyBtn, "data-copy-target"); target != "import-prompt" {
+		t.Errorf("Copy button data-copy-target = %q", target)
+	}
+	if _, ok := htmlassert.Attr(copyBtn, "hidden"); !ok {
+		t.Error("the Copy button must start hidden; flash.js reveals it")
+	}
+	// The format picker is tucked away; auto-detect is the default.
+	doc.MustHave(`details.flash-import-format select[name=format]`)
+	doc.MustHave(`textarea[name=payload]`)
+}
+
+func TestImportSuccessShowsANotice(t *testing.T) {
+	s := newServer(t)
+	payload := `{"deck":{"name":"Planets"},"cards":[{"type":"basic","front":"Mars","back":"red"},{"type":"basic","front":"Earth","back":"home"}]}`
+	rec := s.PostHX(t, s.Alice, "/flash/import", url.Values{"payload": {payload}, "format": {"auto"}})
+	if rec.Code != 201 {
+		t.Fatalf("import over HTMX = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	notice := doc.MustHave("#deck-detail-view .flash-notice")
+	if got := htmlassert.Text(notice); !strings.Contains(got, "Imported 2 cards") {
+		t.Errorf("notice = %q, want Imported 2 cards", got)
+	}
+}
