@@ -272,6 +272,9 @@ func TestDeleteCardReturnsToTheGrid(t *testing.T) {
 	doc := htmlassert.Parse(t, rec.Body.String())
 	doc.MustHave("#card-grid")
 	doc.MustNotHave(".flash-viewer")
+	if _, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, c.ID); err == nil {
+		t.Error("card still exists after delete")
+	}
 }
 
 func TestCardEditFormRendersPrefilledValues(t *testing.T) {
