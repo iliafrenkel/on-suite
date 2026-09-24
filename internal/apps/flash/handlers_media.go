@@ -43,8 +43,16 @@ const (
 // a URL — the only way a hash resolves is if ImportDeck or an upload
 // recorded it, so there is no input here that makes this fetch something
 // else.
+//
+// It serves a hash only to someone whose own card uses it (#302.4):
+// flash_media is a content-addressed cache shared across accounts, and it
+// holds files people picked off their own disks, not just public images.
+// Someone else's file, one no card uses and one that doesn't exist all get
+// the same 404. A recipient sees a shared deck's media once they adopt it,
+// because adoption copies the hashes into their own cards.
 func (a *App) media(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.userID(w, r); !ok {
+	userID, ok := a.userID(w, r)
+	if !ok {
 		return
 	}
 	hash := r.PathValue("hash")
@@ -53,7 +61,7 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, err := a.store.MediaByHash(r.Context(), hash)
+	m, err := a.store.MediaForUser(r.Context(), userID, hash)
 	if err != nil {
 		a.fail(w, r, err)
 		return

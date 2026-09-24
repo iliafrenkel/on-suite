@@ -35,22 +35,46 @@ type dbExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// MediaByHash loads one media record. An unknown hash is ErrNotFound.
+// mediaColumns is every flash_media column a Media carries, in scanMedia's
+// order.
+const mediaColumns = `hash, kind, content_type, bytes, source_url, fetched_at, error_count, last_error`
+
+// MediaByHash loads one media record, whoever's it is. An unknown hash is
+// ErrNotFound. The media route uses MediaForUser instead; this is for
+// tests and internal checks that aren't answering a viewer.
 func (st *Store) MediaByHash(ctx context.Context, hash string) (Media, error) {
 	return mediaByHash(ctx, st.db, hash)
 }
 
 func mediaByHash(ctx context.Context, exec dbExecutor, hash string) (Media, error) {
+	return scanMedia(exec.QueryRowContext(ctx,
+		`SELECT `+mediaColumns+` FROM flash_media WHERE hash = ?`, hash))
+}
+
+// MediaForUser loads one media record, but only if one of userID's own
+// cards uses it as its image or its sound. Anything else — a hash no card
+// of theirs uses, or no such hash at all — is the same ErrNotFound, so the
+// media route can't tell anyone what another account has attached
+// (#302.4). A deck adopted from someone else counts: AdoptShare copies the
+// sharer's hashes into the recipient's own cards.
+func (st *Store) MediaForUser(ctx context.Context, userID int64, hash string) (Media, error) {
+	return scanMedia(st.db.QueryRowContext(ctx,
+		`SELECT `+mediaColumns+` FROM flash_media
+		  WHERE hash = ?
+		    AND EXISTS (SELECT 1 FROM flash_cards c
+		                 WHERE c.user_id = ?
+		                   AND (c.image_hash = flash_media.hash OR c.audio_hash = flash_media.hash))`,
+		hash, userID))
+}
+
+func scanMedia(row rowScanner) (Media, error) {
 	var (
 		m         Media
 		bytes     []byte
 		sourceURL sql.NullString
 		fetched   sql.NullString
 	)
-	err := exec.QueryRowContext(ctx,
-		`SELECT hash, kind, content_type, bytes, source_url, fetched_at, error_count, last_error
-		 FROM flash_media WHERE hash = ?`, hash,
-	).Scan(&m.Hash, &m.Kind, &m.ContentType, &bytes, &sourceURL, &fetched, &m.ErrorCount, &m.LastError)
+	err := row.Scan(&m.Hash, &m.Kind, &m.ContentType, &bytes, &sourceURL, &fetched, &m.ErrorCount, &m.LastError)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Media{}, ErrNotFound
 	}
