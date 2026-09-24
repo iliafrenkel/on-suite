@@ -284,6 +284,38 @@ func (a *App) usernamesByID(ctx context.Context) ([]auth.Account, map[int64]stri
 	return accounts, byID, nil
 }
 
+// otherAccounts filters accounts down to everyone but userID — the Share
+// dropdown's recipient list.
+func otherAccounts(accounts []auth.Account, userID int64) []auth.Account {
+	others := make([]auth.Account, 0, len(accounts))
+	for _, acc := range accounts {
+		if acc.ID != userID {
+			others = append(others, acc)
+		}
+	}
+	return others
+}
+
+// sharesWithUsernames pairs each of the creator's own shares with its
+// recipient's username, resolved from byID (see usernamesByID).
+func sharesWithUsernames(shares []Share, byID map[int64]string) []shareWithUsername {
+	out := make([]shareWithUsername, len(shares))
+	for i, sh := range shares {
+		out[i] = shareWithUsername{Share: sh, ToUsername: byID[sh.ToUserID], StatusLabel: shareStatusLabel(sh.Status)}
+	}
+	return out
+}
+
+// offersWithUsernames pairs each pending offer with its sharer's username,
+// resolved from byID (see usernamesByID).
+func offersWithUsernames(offers []ShareOffer, byID map[int64]string) []shareOfferWithUsername {
+	out := make([]shareOfferWithUsername, len(offers))
+	for i, o := range offers {
+		out[i] = shareOfferWithUsername{ShareOffer: o, FromUsername: byID[o.FromUserID]}
+	}
+	return out
+}
+
 // shareContext loads everything the deck detail view's Share section
 // needs: every other account on the instance (for the dropdown) and this
 // deck's own share offers, each paired with its recipient's username (for
@@ -293,39 +325,29 @@ func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Ac
 	if err != nil {
 		return nil, nil, err
 	}
-	others := make([]auth.Account, 0, len(accounts))
-	for _, acc := range accounts {
-		if acc.ID != userID {
-			others = append(others, acc)
-		}
-	}
 	shares, err := a.store.SharesForDeck(ctx, userID, deckID)
 	if err != nil {
 		return nil, nil, err
 	}
-	withNames := make([]shareWithUsername, len(shares))
-	for i, sh := range shares {
-		withNames[i] = shareWithUsername{Share: sh, ToUsername: byID[sh.ToUserID], StatusLabel: shareStatusLabel(sh.Status)}
-	}
-	return others, withNames, nil
+	return otherAccounts(accounts, userID), sharesWithUsernames(shares, byID), nil
 }
 
 // giftOffers loads userID's pending offers, each paired with the sharer's
-// username, for the gift rows at the top of the deck list.
+// username, for the gift rows at the top of the deck list. It skips the
+// account lookup entirely when there are no offers to enrich.
 func (a *App) giftOffers(ctx context.Context, userID int64) ([]shareOfferWithUsername, error) {
 	offers, err := a.store.SharesForRecipient(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
+	if len(offers) == 0 {
+		return nil, nil
+	}
 	_, byID, err := a.usernamesByID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]shareOfferWithUsername, len(offers))
-	for i, o := range offers {
-		out[i] = shareOfferWithUsername{ShareOffer: o, FromUsername: byID[o.FromUserID]}
-	}
-	return out, nil
+	return offersWithUsernames(offers, byID), nil
 }
 
 func (a *App) viewDeckDetail(r *http.Request, userID int64, d Deck, recipients []auth.Account, sharedWith []shareWithUsername) deckDetailView {
@@ -427,17 +449,37 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 	if err != nil {
 		return deckIndexView{}, err
 	}
-	offers, err := a.giftOffers(ctx, userID)
+	rawOffers, err := a.store.SharesForRecipient(ctx, userID)
 	if err != nil {
 		return deckIndexView{}, err
 	}
 
-	if (detail.Mode == deckModeView || detail.Mode == deckModeCards) && detail.Deck.ID != 0 && detail.ShareRecipients == nil {
-		recipients, shares, err := a.shareContext(ctx, userID, detail.Deck.ID)
+	needShareContext := (detail.Mode == deckModeView || detail.Mode == deckModeCards) && detail.Deck.ID != 0 && detail.ShareRecipients == nil
+	var rawShares []Share
+	if needShareContext {
+		rawShares, err = a.store.SharesForDeck(ctx, userID, detail.Deck.ID)
 		if err != nil {
 			return deckIndexView{}, err
 		}
-		detail.ShareRecipients, detail.SharedWith = recipients, shares
+	}
+
+	// The account map is only needed to enrich offers or shares with
+	// usernames, and ListAccounts is a full-table scan — so it's fetched at
+	// most once per render, and only when one of the two actually has rows
+	// to enrich.
+	var offers []shareOfferWithUsername
+	if len(rawOffers) > 0 || needShareContext {
+		accounts, byID, err := a.usernamesByID(ctx)
+		if err != nil {
+			return deckIndexView{}, err
+		}
+		if len(rawOffers) > 0 {
+			offers = offersWithUsernames(rawOffers, byID)
+		}
+		if needShareContext {
+			detail.ShareRecipients = otherAccounts(accounts, userID)
+			detail.SharedWith = sharesWithUsernames(rawShares, byID)
+		}
 	}
 
 	items := make([]deckListItem, 0, len(sums))
