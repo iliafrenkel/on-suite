@@ -264,10 +264,25 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck,
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE flash_shares SET status = ?, adopted_deck_id = ?, responded_at = ? WHERE id = ?`,
-		ShareStatusAdopted, targetDeckID, formatTime(st.now()), shareID); err != nil {
+	// The status guard here isn't reachable through this same function call —
+	// the pending check above already ruled out anything but a pending row —
+	// but it closes the same window resolveShare's UPDATE closes: two
+	// concurrent adopts of the same share racing between that check and this
+	// UPDATE. Without "AND status = 'pending'", the loser would still report
+	// success and silently duplicate the copied deck/cards; with it, the
+	// loser's UPDATE affects 0 rows and the whole transaction rolls back.
+	res, err := tx.ExecContext(ctx,
+		`UPDATE flash_shares SET status = ?, adopted_deck_id = ?, responded_at = ? WHERE id = ? AND status = ?`,
+		ShareStatusAdopted, targetDeckID, formatTime(st.now()), shareID, ShareStatusPending)
+	if err != nil {
 		return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+	}
+	if n == 0 {
+		return Deck{}, fmt.Errorf("%w: this share has already been resolved", ErrInvalid)
 	}
 
 	if err := tx.Commit(); err != nil {
