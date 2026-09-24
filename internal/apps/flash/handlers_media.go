@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
 // mediaCacheControl is private because the response is only meaningful to a
@@ -18,12 +20,13 @@ const mediaCacheControl = "private, max-age=86400"
 // tooLargeMessage is shown when a card form's whole body exceeds
 // cardFormMaxBytes (#330) — the request is too large to have been read at
 // all, as opposed to one field being individually oversized (readUpload's
-// own per-field message below). It matches web.Errors' own copy for a
-// request over its route's size limit (see
-// internal/platform/web/errors.go's http.StatusRequestEntityTooLarge
-// title), so the two show the same wording regardless of which layer
-// catches the oversized request.
-const tooLargeMessage = "That was larger than the limit."
+// own per-field message below). It reuses web.TooLargeMessage, the exact
+// copy web.Errors' own http.StatusRequestEntityTooLarge page shows, rather
+// than a hand-copied duplicate, so the two can't drift and show the same
+// wording regardless of which layer catches the oversized request — the
+// platform's own CSRF/body-cap layer (internal/platform/web/csrf.go) or
+// this app's own readCardUploads below.
+const tooLargeMessage = web.TooLargeMessage
 
 // maxMediaFetchAttempts and mediaRetryBackoff mirror
 // internal/apps/reader's own maxImageFetchAttempts/imageRetryBackoff: give up
