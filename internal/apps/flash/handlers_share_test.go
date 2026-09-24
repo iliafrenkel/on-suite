@@ -633,3 +633,38 @@ func TestShareAndRevokeFromCardsModeSyncURL(t *testing.T) {
 		t.Errorf("revoke HX-Push-Url = %q, want %q to match the deck-view pane it renders", got, wantURL)
 	}
 }
+
+// TestAdoptRenamesOnNameCollision covers #304 bullet 5 through HTTP: the
+// click used to 400 (which HTMX doesn't swap, so nothing happened). Now it
+// adds the deck under a suffixed name and the notice uses that name.
+func TestAdoptRenamesOnNameCollision(t *testing.T) {
+	s := newShareServer(t)
+	aliceDeck := createDeckHX(t, s, s.Alice, "Spanish")
+	createDeckHX(t, s, s.Bob, "Spanish")
+	shareID := shareToBob(t, s, aliceDeck)
+
+	rec := s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareID}})
+	if rec.Code != 200 {
+		t.Fatalf("adopt with a name collision: %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(doc.MustHave("#deck-detail-view .flash-notice")); got != "“Spanish (from alice)” is now in your decks." {
+		t.Errorf("notice = %q", got)
+	}
+	if got := htmlassert.Text(doc.MustHave("#deck-detail-view h1")); got != "Spanish (from alice)" {
+		t.Errorf("deck heading = %q", got)
+	}
+	doc.MustNotHave("#deck-list .deck-row-gift")
+
+	decks, err := s.Store.ListDecks(t.Context(), s.Bob.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, d := range decks {
+		got[d.Name] = true
+	}
+	if len(decks) != 2 || !got["Spanish"] || !got["Spanish (from alice)"] {
+		t.Errorf("bob's decks = %+v, want Spanish and Spanish (from alice)", decks)
+	}
+}

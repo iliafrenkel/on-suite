@@ -6,7 +6,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Share statuses. A row starts pending and moves to exactly one of the other
@@ -199,7 +203,15 @@ type AdoptResult struct {
 // there (by origin_card_id) — so cards and progress the recipient already
 // has are never touched. Either way, no FSRS review state is ever copied:
 // every copied card starts brand new in the recipient's review queue.
-func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (AdoptResult, error) {
+//
+// A first-time adoption never fails over a name the recipient already uses
+// (#304): the copy takes the first free name freeDeckName finds, e.g.
+// "Spanish (from alice)". usernames maps account ids to usernames for that
+// suffix. The store can't see accounts, and a lookup callback would run
+// inside this transaction on the database's only connection, so the caller
+// passes plain data it already has (the handler's usernamesByID). A missing
+// entry, or a nil map, gives "(shared)" instead.
+func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64, usernames map[int64]string) (AdoptResult, error) {
 	tx, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
 		return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
@@ -234,15 +246,22 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Adopt
 	if priorAdoptedDeckID != nil {
 		targetDeckID = *priorAdoptedDeckID
 	} else {
+		name, err := freeDeckName(ctx, tx, toUserID, src.Name, usernames[sh.FromUserID])
+		if err != nil {
+			return AdoptResult{}, err
+		}
 		err = tx.QueryRowContext(ctx,
 			`INSERT INTO flash_decks (user_id, name, description, created_at, color)
 			 VALUES (?, ?, ?, ?, ?)
 			 RETURNING id`,
-			toUserID, src.Name, src.Description, formatTime(st.now()), src.Color,
+			toUserID, name, src.Description, formatTime(st.now()), src.Color,
 		).Scan(&targetDeckID)
 		if err != nil {
+			// freeDeckName checked this exact name inside this transaction,
+			// on the only connection, so the unique index is just the
+			// backstop here.
 			if isUniqueViolation(err) {
-				return AdoptResult{}, fmt.Errorf("%w: you already have a deck named %q", ErrInvalid, src.Name)
+				return AdoptResult{}, fmt.Errorf("%w: you already have a deck named %q", ErrInvalid, name)
 			}
 			return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
 		}
@@ -431,6 +450,52 @@ func priorAdoptedDeck(ctx context.Context, tx *sql.Tx, deckID, fromUserID, toUse
 	}
 	v := id.Int64
 	return &v, nil
+}
+
+// adoptedDeckName is the nth candidate name (n >= 1) for a first-time
+// adoption's copy when the source deck's own name is taken (#304): "base
+// (from alice)", then "base (from alice) (2)", "(3)"…, or "(shared)" in
+// place of "(from alice)" when the sharer's name isn't known. The base is
+// cut short, never the suffix, so the result always fits
+// MaxDeckNameRunes. A username is at most 32 characters, so the suffix
+// never comes close to eating the whole name.
+func adoptedDeckName(base, sharer string, n int) string {
+	suffix := " (shared)"
+	if sharer != "" {
+		suffix = " (from " + sharer + ")"
+	}
+	if n > 1 {
+		suffix += " (" + strconv.Itoa(n) + ")"
+	}
+	keep := MaxDeckNameRunes - utf8.RuneCountInString(suffix)
+	if r := []rune(base); len(r) > keep {
+		base = strings.TrimRightFunc(string(r[:keep]), unicode.IsSpace)
+	}
+	return base + suffix
+}
+
+// freeDeckName is the name AdoptShare gives a first-time copy: base itself
+// if userID has no deck called exactly that (the unique index compares
+// bytes, and so does this), otherwise the first adoptedDeckName candidate
+// they don't have. The loop always ends, because every taken candidate is
+// a distinct deck the user already owns. It runs inside AdoptShare's
+// transaction on the database's single connection (db.go's
+// SetMaxOpenConns(1)), so nothing can take the name between this check
+// and the INSERT.
+func freeDeckName(ctx context.Context, tx *sql.Tx, userID int64, base, sharer string) (string, error) {
+	name := base
+	for n := 1; ; n++ {
+		var one int
+		err := tx.QueryRowContext(ctx,
+			`SELECT 1 FROM flash_decks WHERE user_id = ? AND name = ?`, userID, name).Scan(&one)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return name, nil
+		case err != nil:
+			return "", fmt.Errorf("flash: adopt share: deck name: %w", err)
+		}
+		name = adoptedDeckName(base, sharer, n)
+	}
 }
 
 // SharesForDeck is the creator's "Shared with" list for one of their own

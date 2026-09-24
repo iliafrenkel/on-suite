@@ -210,7 +210,15 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	result, err := a.store.AdoptShare(r.Context(), userID, shareID)
+	// The sharer's username names a renamed copy ("Spanish (from alice)",
+	// #304). It's looked up up front because AdoptShare can't call back
+	// into the database from inside its transaction.
+	_, byID, err := a.usernamesByID(r.Context())
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	result, err := a.store.AdoptShare(r.Context(), userID, shareID, byID)
 	if err != nil {
 		a.fail(w, r, err)
 		return
