@@ -224,12 +224,11 @@ type deckListFragment struct {
 }
 
 type deckIndexView struct {
-	List         deckListFragment
-	Detail       deckDetailView
-	Title        string
-	Shell        render.Shell
-	SharedWithMe []shareOfferWithUsername // pending offers addressed to the viewer
-	TotalDue     int                      // sum of every deck's ReviewNow: the "Review all" count
+	List     deckListFragment
+	Detail   deckDetailView
+	Title    string
+	Shell    render.Shell
+	TotalDue int // sum of every deck's ReviewNow: the "Review all" count
 }
 
 // shareWithUsername is one row of the creator's "Shared with" list: a
@@ -255,22 +254,24 @@ func shareStatusLabel(status string) string {
 	}
 }
 
-// shareOfferWithUsername is one row of the recipient's "Shared with me"
-// list: a ShareOffer plus the creator's username, resolved the same way
+// shareOfferWithUsername is one pending offer addressed to the viewer: a
+// ShareOffer plus the creator's username, resolved the same way
 // shareWithUsername resolves the recipient's — the design spec's UI section
 // calls for showing who shared a deck, not just its name, since with more
 // than one other account on the instance that would otherwise be
-// ambiguous.
+// ambiguous. It backs the gift rows in the deck list and a gift's preview
+// pane.
 type shareOfferWithUsername struct {
 	ShareOffer
 	FromUsername string
 }
 
 // usernamesByID loads every account on the instance and returns it two
-// ways: the full list, and a lookup from account id to username. Both
-// shareContext (the creator's "Shared with" list) and
-// sharedWithMeForViewer (the recipient's "Shared with me" list) need this
-// same lookup — one keyed by ToUserID, the other by FromUserID.
+// ways: the full list, and a lookup from account id to username. shareContext
+// (the creator's "Shared with" list and the Share dropdown's recipients),
+// giftOffers (the recipient's pending gift rows), shareDeck (validating a
+// share's to_user_id), and giftPreview (a gift's "From" username) all need
+// this same lookup.
 func (a *App) usernamesByID(ctx context.Context) ([]auth.Account, map[int64]string, error) {
 	accounts, err := a.deps.Users.ListAccounts(ctx)
 	if err != nil {
@@ -309,9 +310,9 @@ func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Ac
 	return others, withNames, nil
 }
 
-// sharedWithMeForViewer loads userID's pending offers, each paired with the
-// sharer's username (for the "Shared with me" list).
-func (a *App) sharedWithMeForViewer(ctx context.Context, userID int64) ([]shareOfferWithUsername, error) {
+// giftOffers loads userID's pending offers, each paired with the sharer's
+// username, for the gift rows at the top of the deck list.
+func (a *App) giftOffers(ctx context.Context, userID int64) ([]shareOfferWithUsername, error) {
 	offers, err := a.store.SharesForRecipient(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -426,7 +427,7 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 	if err != nil {
 		return deckIndexView{}, err
 	}
-	offers, err := a.sharedWithMeForViewer(ctx, userID)
+	offers, err := a.giftOffers(ctx, userID)
 	if err != nil {
 		return deckIndexView{}, err
 	}
@@ -463,10 +464,9 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 	}
 
 	return deckIndexView{
-		List:         deckListFragment{Items: items, Gifts: gifts, ActiveID: detail.Deck.ID, ActiveGiftID: detail.Gift.ShareID, OOB: oob},
-		Detail:       detail,
-		SharedWithMe: offers,
-		TotalDue:     total,
+		List:     deckListFragment{Items: items, Gifts: gifts, ActiveID: detail.Deck.ID, ActiveGiftID: detail.Gift.ShareID, OOB: oob},
+		Detail:   detail,
+		TotalDue: total,
 	}, nil
 }
 

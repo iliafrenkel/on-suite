@@ -10,7 +10,8 @@ import (
 )
 
 // shareIDFromPath parses the {shareID} wildcard, used by the creator's
-// revoke action, which operates on a share row nested under its deck.
+// revoke action, which operates on a share row nested under its deck, and by
+// giftPreview, where it names the recipient's own pending share directly.
 func (a *App) shareIDFromPath(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("shareID"), 10, 64)
 	if err != nil || id <= 0 {

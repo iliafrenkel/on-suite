@@ -314,10 +314,12 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Adopt
 	return AdoptResult{Deck: d, Merged: merged, CardsCopied: cardsCopied}, nil
 }
 
-// deckByIDIgnoringOwner reads a deck regardless of who owns it — used only
-// inside AdoptShare, where the recipient legitimately needs to read the
-// source deck's name/description despite not owning it, because they hold a
-// valid pending share for it (checked by the caller before this is called).
+// deckByIDIgnoringOwner reads a deck regardless of who owns it — used inside
+// AdoptShare, where the recipient legitimately needs to read the source
+// deck's name/description despite not owning it, because they hold a valid
+// pending share for it (checked by the caller before this is called).
+// SharePreview needs the same unowned read for the same reason, but does it
+// with its own inline query rather than calling this helper.
 func deckByIDIgnoringOwner(ctx context.Context, tx *sql.Tx, id int64) (Deck, error) {
 	return scanDeck(tx.QueryRowContext(ctx,
 		`SELECT `+deckColumns+` FROM flash_decks WHERE id = ?`, id))
@@ -460,9 +462,9 @@ func (st *Store) SharesForDeck(ctx context.Context, fromUserID, deckID int64) ([
 }
 
 // ShareOffer is one pending share addressed to a recipient, enriched with
-// what the "shared with me" list needs to display: the source deck's name,
-// and — if a merge offer — how many source cards the recipient doesn't have
-// yet.
+// what a gift row and its preview pane need to display: the source deck's
+// name, and — if a merge offer — how many source cards the recipient doesn't
+// have yet.
 type ShareOffer struct {
 	Share
 	DeckName  string
@@ -475,8 +477,8 @@ type ShareOffer struct {
 	NewCardCount int
 }
 
-// SharesForRecipient lists every pending offer addressed to toUserID,
-// newest first — the recipient's "shared with me" list.
+// SharesForRecipient lists every pending offer addressed to toUserID, newest
+// first — the recipient's gift rows.
 func (st *Store) SharesForRecipient(ctx context.Context, toUserID int64) ([]ShareOffer, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`SELECT s.id, s.deck_id, s.from_user_id, s.to_user_id, s.status, s.adopted_deck_id, s.created_at, s.responded_at,
