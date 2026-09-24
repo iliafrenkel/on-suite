@@ -98,9 +98,11 @@ func (d Deps) databaseInfo(ctx context.Context) (DatabaseInfo, error) {
 
 	for rows.Next() {
 		var m MigrationInfo
-		if err := rows.Scan(&m.Key, &m.Name, &m.AppliedAt); err != nil {
+		var appliedAt string
+		if err := rows.Scan(&m.Key, &m.Name, &appliedAt); err != nil {
 			return info, fmt.Errorf("scan migration: %w", err)
 		}
+		m.AppliedAt = appliedAtLabel(appliedAt)
 		info.Migrations = append(info.Migrations, m)
 	}
 	if err := rows.Err(); err != nil {
