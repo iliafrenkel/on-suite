@@ -7,6 +7,7 @@ import (
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 func readerDeps() app.Deps { return app.Deps{} }
@@ -24,7 +25,7 @@ func TestPurgeKeepsStarredAndUnreadItems(t *testing.T) {
 	// Backdate the subscription so the old items are inside alice's window.
 	if _, err := f.store.DB().ExecContext(ctx,
 		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		old.Add(-24*time.Hour).Format(time.RFC3339Nano), sub.ID); err != nil {
+		db.FormatTime(old.Add(-24*time.Hour)), sub.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
@@ -102,7 +103,7 @@ func TestPurgeKeepsAnItemAnotherUserHasNotRead(t *testing.T) {
 	for _, id := range []int64{aliceSub.ID, bobSub.ID} {
 		if _, err := f.store.DB().ExecContext(ctx,
 			`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-			old.Add(-24*time.Hour).Format(time.RFC3339Nano), id); err != nil {
+			db.FormatTime(old.Add(-24*time.Hour)), id); err != nil {
 			t.Fatal(err)
 		}
 	}

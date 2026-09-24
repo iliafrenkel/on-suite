@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 func TestSaveFullArticleRoundTrips(t *testing.T) {
@@ -171,7 +172,7 @@ func TestPurgeFreesAFullArticlesImages(t *testing.T) {
 	}
 	if _, err := f.store.DB().ExecContext(ctx,
 		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		old.Add(-24*time.Hour).Format(time.RFC3339Nano), sub.ID); err != nil {
+		db.FormatTime(old.Add(-24*time.Hour)), sub.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{

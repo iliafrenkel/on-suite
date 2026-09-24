@@ -16,6 +16,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
@@ -1462,7 +1463,7 @@ func setAddedAt(t *testing.T, s *apptest.Server[*reader.Store], subID int64, at 
 	t.Helper()
 	if _, err := s.Store.DB().ExecContext(context.Background(),
 		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		at.UTC().Format(time.RFC3339Nano), subID); err != nil {
+		db.FormatTime(at.UTC()), subID); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1820,7 +1821,7 @@ func TestFetchFullArticleRetriesPastTheBackoffWindow(t *testing.T) {
 	old := time.Now().UTC().Add(-reader.FullArticleRetryBackoffForTest - time.Minute)
 	if _, err := s.Store.DB().ExecContext(ctx,
 		`UPDATE reader_items SET full_fetched_at = ? WHERE id = ?`,
-		old.Format(time.RFC3339Nano), items[0].ID); err != nil {
+		db.FormatTime(old), items[0].ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2794,7 +2795,7 @@ func TestRefreshFeedControlFetchesOneFeedRegardlessOfSchedule(t *testing.T) {
 	// what fetch-on-add leaves behind — "Refresh feed" must still fetch it.
 	if _, err := s.Store.DB().ExecContext(ctx,
 		`UPDATE reader_feeds SET next_fetch_at = ? WHERE id = ?`,
-		time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano), sub.FeedID); err != nil {
+		db.FormatTime(time.Now().UTC().Add(time.Hour)), sub.FeedID); err != nil {
 		t.Fatal(err)
 	}
 

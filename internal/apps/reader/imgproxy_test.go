@@ -10,6 +10,7 @@ import (
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 // onePNG is the smallest thing http.DetectContentType calls an image/png.
@@ -60,7 +61,7 @@ func setImageFetchState(t *testing.T, s *apptest.Server[*reader.Store], hash str
 	t.Helper()
 	if _, err := s.Store.DB().ExecContext(context.Background(),
 		`UPDATE reader_images SET error_count = ?, fetched_at = ? WHERE url_hash = ?`,
-		errorCount, fetchedAt.UTC().Format(time.RFC3339Nano), hash); err != nil {
+		errorCount, db.FormatTime(fetchedAt.UTC()), hash); err != nil {
 		t.Fatal(err)
 	}
 }
