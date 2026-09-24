@@ -127,23 +127,33 @@ func cardFilterFromQuery(r *http.Request) (q, tag string) {
 	return strings.TrimSpace(v.Get("q")), normalizeTagName(v.Get("tag"))
 }
 
-// cardGrid builds the cards pane for one deck, filtered by q and tag. It
-// also returns the filtered cards and the deck's tag map, which openedCard
-// needs for previous/next and the card's own tags.
-func (a *App) cardGrid(ctx context.Context, userID int64, deck Deck, q, tag string) (cardGridView, []Card, map[int64][]string, error) {
+// loadFilteredCards is the data step shared by cardGrid and openedCard: a
+// deck's cards filtered by q and tag, plus the deck's tag map (needed for
+// filtering and for a card's own tags). It does none of the extra work
+// (status lookup, view assembly) that only the grid itself needs, so
+// opening one card doesn't pay for building the whole grid.
+func (a *App) loadFilteredCards(ctx context.Context, userID int64, deck Deck, q, tag string) (filtered []Card, tags map[int64][]string, err error) {
 	cards, err := a.store.ListCards(ctx, userID, deck.ID)
 	if err != nil {
-		return cardGridView{}, nil, nil, err
+		return nil, nil, err
 	}
-	tags, err := a.store.CardTagsInDeck(ctx, userID, deck.ID)
+	tags, err = a.store.CardTagsInDeck(ctx, userID, deck.ID)
 	if err != nil {
-		return cardGridView{}, nil, nil, err
+		return nil, nil, err
+	}
+	return filterCards(cards, tags, q, tag), tags, nil
+}
+
+// cardGrid builds the cards pane for one deck, filtered by q and tag.
+func (a *App) cardGrid(ctx context.Context, userID int64, deck Deck, q, tag string) (cardGridView, error) {
+	filtered, tags, err := a.loadFilteredCards(ctx, userID, deck, q, tag)
+	if err != nil {
+		return cardGridView{}, err
 	}
 	statuses, err := a.store.CardStatuses(ctx, userID, deck.ID, a.store.now())
 	if err != nil {
-		return cardGridView{}, nil, nil, err
+		return cardGridView{}, err
 	}
-	filtered := filterCards(cards, tags, q, tag)
 
 	view := cardGridView{Deck: deck, Query: q, Tag: tag, ClearURL: cardsURL(deck.ID, "", "")}
 	for _, c := range filtered {
@@ -175,7 +185,7 @@ func (a *App) cardGrid(ctx context.Context, userID int64, deck Deck, q, tag stri
 	if tag != "" {
 		view.AllDecksTagURL = tagFilterURL(tag)
 	}
-	return view, filtered, tags, nil
+	return view, nil
 }
 
 // openedCard builds the pane for one card opened from the grid. Previous
@@ -183,7 +193,7 @@ func (a *App) cardGrid(ctx context.Context, userID int64, deck Deck, q, tag stri
 // not in it (the filter changed, or no filter applies to it), both are
 // empty.
 func (a *App) openedCard(ctx context.Context, r *http.Request, userID int64, deck Deck, c Card, q, tag string) (openedCardView, error) {
-	_, filtered, tags, err := a.cardGrid(ctx, userID, deck, q, tag)
+	filtered, tags, err := a.loadFilteredCards(ctx, userID, deck, q, tag)
 	if err != nil {
 		return openedCardView{}, err
 	}
@@ -224,7 +234,7 @@ func (a *App) cardPaneDetail(r *http.Request, userID int64, deck Deck, cd cardDe
 		}
 		detail.Mode, detail.Opened = deckModeCard, opened
 	default:
-		grid, _, _, err := a.cardGrid(r.Context(), userID, deck, "", "")
+		grid, err := a.cardGrid(r.Context(), userID, deck, "", "")
 		if err != nil {
 			return deckDetailView{}, err
 		}
@@ -269,7 +279,7 @@ func (a *App) cardIndex(w http.ResponseWriter, r *http.Request) {
 	detail := deckDetailView{Deck: deck, CSRFToken: web.CSRFToken(r.Context())}
 
 	if r.PathValue("cardID") == "" {
-		grid, _, _, err := a.cardGrid(r.Context(), userID, deck, q, tag)
+		grid, err := a.cardGrid(r.Context(), userID, deck, q, tag)
 		if err != nil {
 			a.deps.Errors.Internal(w, r, err)
 			return
@@ -311,7 +321,7 @@ func (a *App) cardGridFragment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q, tag := cardFilterFromQuery(r)
-	grid, _, _, err := a.cardGrid(r.Context(), userID, deck, q, tag)
+	grid, err := a.cardGrid(r.Context(), userID, deck, q, tag)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
