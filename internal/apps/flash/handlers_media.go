@@ -17,6 +17,16 @@ import (
 // source produces a different hash and therefore a different path.
 const mediaCacheControl = "private, max-age=86400"
 
+// tooLargeMessage is shown when a card form's whole body exceeds
+// cardFormMaxBytes (#330) — the request is too large to have been read at
+// all, as opposed to one field being individually oversized (readUpload's
+// own per-field message below). It matches web.Errors' own copy for a
+// request over its route's size limit (see
+// internal/platform/web/errors.go's http.StatusRequestEntityTooLarge
+// title), so the two show the same wording regardless of which layer
+// catches the oversized request.
+const tooLargeMessage = "That was larger than the limit."
+
 // maxMediaFetchAttempts and mediaRetryBackoff mirror
 // internal/apps/reader's own maxImageFetchAttempts/imageRetryBackoff: give up
 // permanently after 3 consecutive failures, otherwise wait an hour between
@@ -198,11 +208,18 @@ func readCardUploads(w http.ResponseWriter, r *http.Request) (cardUploads, strin
 	// ParseMultipartForm's argument is only a maxMemory hint, not a hard cap
 	// on bytes read: without an outer limit it would read the entire body
 	// (spilling to a temp file) before any size check below runs. The
-	// budget covers one image plus one audio part in the same request.
-	r.Body = http.MaxBytesReader(w, r.Body, MaxImageFetchBytes+MaxAudioFetchBytes)
+	// budget covers one image plus one audio part in the same request, plus
+	// cardFormMaxBytes's own allowance for the form's text fields and
+	// multipart overhead (#330) — the same constant the route's own body
+	// limit in flash.go's Mount uses, so the two stay in sync.
+	r.Body = http.MaxBytesReader(w, r.Body, cardFormMaxBytes)
 	// A text-only or remove-only form may arrive urlencoded; ErrNotMultipart
 	// is expected then — ParseMultipartForm still fills r.PostForm.
 	if err := r.ParseMultipartForm(MaxAudioFetchBytes); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return cardUploads{}, tooLargeMessage
+		}
 		return cardUploads{}, "That upload could not be read."
 	}
 

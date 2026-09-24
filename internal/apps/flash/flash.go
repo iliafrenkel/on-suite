@@ -23,9 +23,16 @@ var scriptFiles embed.FS
 const mediaFetchConcurrency = 4
 
 // cardFormMaxBytes is the body budget for the card create/update forms,
-// which carry an optional image and sound file since UI overhaul U3 — the
-// same budget as the media upload route below.
-const cardFormMaxBytes = MaxImageFetchBytes + MaxAudioFetchBytes
+// which carry an optional image and sound file since UI overhaul U3.
+// MaxImageFetchBytes+MaxAudioFetchBytes alone covers only the two files'
+// bytes: a request with a full-size image and a full-size audio file
+// already uses the entire budget on file content, leaving nothing for the
+// form's text fields (front/back/notes/tags) or multipart encoding
+// overhead (per-part boundaries and headers) — every such request would
+// fail even though every part is individually within its own cap (#330).
+// The extra 1 MiB is a generous allowance for that overhead; readCardUploads
+// uses the same constant for its own MaxBytesReader so the two stay in sync.
+const cardFormMaxBytes = MaxImageFetchBytes + MaxAudioFetchBytes + 1<<20
 
 // App is ON Flash. It is constructed before the platform exists, in the
 // registration slice in main, and receives everything it needs in Mount.

@@ -71,6 +71,43 @@ func TestCreateCardWithImageInOneForm(t *testing.T) {
 	}
 }
 
+// TestCreateCardWithNearMaxImageAndAudioSucceeds is the regression test for
+// #330: cardFormMaxBytes used to be exactly
+// MaxImageFetchBytes+MaxAudioFetchBytes, with no allowance for the form's
+// text fields or multipart encoding overhead (per-part boundaries and
+// headers). A request carrying a full-size image and a full-size audio
+// file — each individually within its own per-field cap — already
+// consumes the entire old budget on file bytes alone, so the multipart
+// overhead and text fields pushed the total over the old cap and the
+// request failed even though every part was individually valid. The new
+// cap adds a 1 MiB allowance for exactly that overhead.
+func TestCreateCardWithNearMaxImageAndAudioSucceeds(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	image := make([]byte, flash.MaxImageFetchBytes)
+	copy(image, onePNG)
+	audio := make([]byte, flash.MaxAudioFetchBytes)
+	copy(audio, []byte("ID3"))
+
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}, "notes": {"a note"}, "tags": {"animals, pets"}},
+		map[string][]byte{"image": image, "audio": audio})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create with near-max image+audio = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	cards, err := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil || len(cards) != 1 {
+		t.Fatalf("ListCards = %v, %v", cards, err)
+	}
+	if cards[0].ImageHash == nil || cards[0].AudioHash == nil {
+		t.Error("both the image and the audio sent with the card form should be attached")
+	}
+}
+
 func TestCreateCardWithBadImageKeepsTheFormAndCreatesNothing(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
