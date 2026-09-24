@@ -55,6 +55,25 @@ func TestShareDeckHandlerCreatesOfferForRecipient(t *testing.T) {
 	}
 }
 
+// TestShareDeckHandlerRejectsUnknownRecipient covers #304 bullet 3: a
+// tampered form naming a to_user_id that isn't a real account must 400
+// rather than creating an offer to nobody.
+func TestShareDeckHandlerRejectsUnknownRecipient(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/share",
+		url.Values{"to_user_id": {"999999"}})
+	if rec.Code != 400 {
+		t.Fatalf("share with unknown to_user_id: %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+
+	shares, err := s.Store.SharesForDeck(t.Context(), s.Alice.User.ID, deckID)
+	if err != nil || len(shares) != 0 {
+		t.Fatalf("shares after rejected share = %+v, err = %v, want none", shares, err)
+	}
+}
+
 func TestShareDeckHandlerRejectsNonOwner(t *testing.T) {
 	s := newShareServer(t)
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")

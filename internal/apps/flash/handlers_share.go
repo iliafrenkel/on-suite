@@ -50,6 +50,19 @@ func (a *App) shareDeck(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Status(w, r, http.StatusBadRequest)
 		return
 	}
+	// The store has no FK from flash_shares to the accounts table (and
+	// couldn't enforce auth even if it did), so a tampered to_user_id has to
+	// be caught here: reject anything that isn't one of the accounts this
+	// handler already has access to before it ever reaches the store.
+	_, byID, err := a.usernamesByID(r.Context())
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	if _, ok := byID[toUserID]; !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
 
 	if _, err := a.store.ShareDeck(r.Context(), userID, deckID, toUserID); err != nil {
 		a.fail(w, r, err)
