@@ -196,7 +196,17 @@ func readCardUploads(w http.ResponseWriter, r *http.Request) (cardUploads, strin
 func readUpload(w http.ResponseWriter, r *http.Request, kind, field string, maxBytes int64) (*pendingUpload, string) {
 	file, header, err := r.FormFile(field)
 	if err != nil {
-		return nil, ""
+		// http.ErrMissingFile (no part with this name — a file input left
+		// untouched) and http.ErrNotMultipart (a text-only or remove-only
+		// submission, which readCardUploads already tolerates on
+		// ParseMultipartForm) both mean "no file", not a problem worth
+		// reporting. Any other error — the part's underlying temp file
+		// could not be opened, say — is a real read failure and must not
+		// be treated the same as "nothing was submitted" (#302.2).
+		if errors.Is(err, http.ErrMissingFile) || errors.Is(err, http.ErrNotMultipart) {
+			return nil, ""
+		}
+		return nil, "That upload could not be read."
 	}
 	defer func() { _ = file.Close() }()
 	if header.Size == 0 {
