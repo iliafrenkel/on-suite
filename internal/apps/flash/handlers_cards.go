@@ -127,10 +127,13 @@ func (a *App) newCardDetail(r *http.Request, d Deck, errMsg, cardType, front, ba
 }
 
 func (a *App) editCardDetail(r *http.Request, d Deck, c Card, errMsg, cardType, front, back, notes, tags, q, tag string) cardDetailView {
+	// Saving an edit returns to the same opened card, so Cancel/Back-to-the-
+	// card and the form's own action both point at it.
+	href := cardURL(d.ID, c.ID, q, tag)
 	return cardDetailView{
 		Mode: cardModeEdit, Deck: d, Card: c, CardTypeValue: cardType, FrontValue: front, BackValue: back, NotesValue: notes,
 		TagsValue: tags, Error: errMsg, Query: q, Tag: tag,
-		ActionURL: cardURL(d.ID, c.ID, q, tag), CancelURL: cardURL(d.ID, c.ID, q, tag),
+		ActionURL: href, CancelURL: href,
 		CSRFToken:     web.CSRFToken(r.Context()),
 		ImageMediaURL: mediaURL(c.ImageHash), AudioMediaURL: mediaURL(c.AudioHash),
 	}

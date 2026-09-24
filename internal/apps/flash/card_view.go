@@ -70,9 +70,9 @@ func cardEditURL(deckID, cardID int64, q, tag string) string {
 	return cardBasePath(deckID) + "edit/" + strconv.FormatInt(cardID, 10) + filterQuery(q, tag)
 }
 
-// cardDeleteURL is a card's delete form action, carrying the filter so a
-// GET back to the (now missing) card 404s into the same filtered context
-// rather than an unfiltered one.
+// cardDeleteURL is a card's delete form action, carrying the filter so
+// deleteCard, which reads it back off the action URL, returns to the
+// filtered grid rather than an unfiltered one.
 func cardDeleteURL(deckID, cardID int64, q, tag string) string {
 	return cardBasePath(deckID) + strconv.FormatInt(cardID, 10) + "/delete" + filterQuery(q, tag)
 }
