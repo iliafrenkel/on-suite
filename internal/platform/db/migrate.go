@@ -147,7 +147,7 @@ func applyOne(ctx context.Context, handle *sql.DB, m Migration) error {
 		`INSERT INTO schema_migrations (key, namespace, id, name, applied_at)
 		 VALUES (?, ?, ?, ?, ?)`,
 		m.Key(), m.Namespace, m.ID, m.Name,
-		time.Now().UTC().Format(time.RFC3339Nano),
+		FormatTime(time.Now()),
 	); err != nil {
 		return fmt.Errorf("record %s: %w", m.Key(), err)
 	}
