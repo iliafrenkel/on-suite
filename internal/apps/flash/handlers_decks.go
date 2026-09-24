@@ -269,8 +269,8 @@ type shareOfferWithUsername struct {
 // usernamesByID loads every account on the instance and returns it two
 // ways: the full list, and a lookup from account id to username. shareContext
 // (the creator's "Shared with" list and the Share dropdown's recipients),
-// giftOffers (the recipient's pending gift rows), shareDeck (validating a
-// share's to_user_id), and giftPreview (a gift's "From" username) all need
+// buildDeckIndex (the recipient's pending gift rows), shareDeck (validating
+// a share's to_user_id), and giftPreview (a gift's "From" username) all need
 // this same lookup.
 func (a *App) usernamesByID(ctx context.Context) ([]auth.Account, map[int64]string, error) {
 	accounts, err := a.deps.Users.ListAccounts(ctx)
@@ -330,24 +330,6 @@ func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Ac
 		return nil, nil, err
 	}
 	return otherAccounts(accounts, userID), sharesWithUsernames(shares, byID), nil
-}
-
-// giftOffers loads userID's pending offers, each paired with the sharer's
-// username, for the gift rows at the top of the deck list. It skips the
-// account lookup entirely when there are no offers to enrich.
-func (a *App) giftOffers(ctx context.Context, userID int64) ([]shareOfferWithUsername, error) {
-	offers, err := a.store.SharesForRecipient(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if len(offers) == 0 {
-		return nil, nil
-	}
-	_, byID, err := a.usernamesByID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return offersWithUsernames(offers, byID), nil
 }
 
 func (a *App) viewDeckDetail(r *http.Request, userID int64, d Deck, recipients []auth.Account, sharedWith []shareWithUsername) deckDetailView {
