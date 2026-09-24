@@ -106,6 +106,15 @@ numbers its own migrations under its own namespace (e.g. `paste:0001`) via
 `db.Collect`, so apps never coordinate schema changes. Store-layer tests run
 against a real SQLite file in a temp dir, not `:memory:`, because the bugs
 that matter live in SQL and WAL behavior `:memory:` doesn't reproduce.
+Timestamps are TEXT in `db.TimeLayout` — UTC, always nine fractional
+digits, 30 characters — written with `db.FormatTime` and read with
+`db.ParseTime` ([internal/platform/db/timefmt.go](internal/platform/db/timefmt.go));
+fixed width is what makes `ORDER BY`, `<`, `min()` and `max()` on the text
+agree with time order, including within one second (#356). Never store a
+time formatted with `time.RFC3339Nano`, which trims trailing zeros;
+`TestRFC3339IsContained` in the arch test enforces that. Date-only columns
+use `"2006-01-02"`. A migration that adds a timestamp column needs nothing
+special; one that backfills one must write the same 30-character form.
 
 **Auth**: Argon2id password hashing, invite-only accounts (no public
 registration), sessions with throttled sliding expiry (30-day lifetime,

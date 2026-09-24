@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 // Store is all the SQL for ON Notes. It has no HTTP knowledge, so it can be
@@ -175,14 +177,17 @@ func scanNode(row rowScanner, extra ...any) (Node, error) {
 	return n, nil
 }
 
-// Timestamps match the platform's convention: RFC 3339 nanoseconds in UTC,
-// which sorts chronologically as text.
+// Timestamps match the platform's convention, db.TimeLayout: UTC with
+// exactly nine fractional digits, which sorts chronologically as text even
+// within one second (#356). Archive's ORDER BY archived_at relies on it.
+func formatTime(t time.Time) string { return db.FormatTime(t) }
+
 func parseTime(s string) (time.Time, error) {
-	t, err := time.Parse(time.RFC3339Nano, s)
+	t, err := db.ParseTime(s)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("notes: parse timestamp %q: %w", s, err)
 	}
-	return t.UTC(), nil
+	return t, nil
 }
 
 // Children returns a parent's direct children in position order. parentID may

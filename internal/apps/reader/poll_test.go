@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 func quietLogger() *slog.Logger {
@@ -207,7 +208,7 @@ func TestFetchNowFetchesAFeedRegardlessOfDueStatus(t *testing.T) {
 	// method: "refresh this one, right now" cannot wait on next_fetch_at.
 	if _, err := f.db.ExecContext(ctx,
 		`UPDATE reader_feeds SET next_fetch_at = ? WHERE id = ?`,
-		time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano), sub.FeedID); err != nil {
+		db.FormatTime(time.Now().UTC().Add(time.Hour)), sub.FeedID); err != nil {
 		t.Fatal(err)
 	}
 

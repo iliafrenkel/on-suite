@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 // exportedFolder, exportedSubscription and exportedItem are the shapes
@@ -87,13 +90,26 @@ func (s *Store) Export(ctx context.Context, userID int64) (exportPayload, error)
 			return exportPayload{}, fmt.Errorf("reader: scan starred: %w", err)
 		}
 		it.URL = url.String
-		it.PublishedAt = published.String
+		it.PublishedAt = exportTime(published.String)
+		it.StarredAt = exportTime(it.StarredAt)
 		out.Starred = append(out.Starred, it)
 	}
 	if err := rows.Err(); err != nil {
 		return exportPayload{}, fmt.Errorf("reader: iterate starred: %w", err)
 	}
 	return out, nil
+}
+
+// exportTime keeps the backup's timestamps in the RFC3339Nano text they have
+// always had (trailing fractional zeros trimmed), although the database now
+// stores db.TimeLayout (#356): the backup format changes only when this file
+// says so. A value that does not parse is passed through as stored.
+func exportTime(stored string) string {
+	t, err := db.ParseTime(stored)
+	if err != nil {
+		return stored
+	}
+	return t.Format(time.RFC3339Nano)
 }
 
 func exportedSub(s Subscription, folder string) exportedSubscription {

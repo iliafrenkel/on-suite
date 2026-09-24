@@ -69,6 +69,13 @@ canonical example's own comment, not here.
   file-backed transactions and WAL behavior. Canonical:
   `internal/apps/notes/store_test.go`'s test fixture setup.
 
+- **Stored timestamps through `db.FormatTime`** — reach for this whenever a
+  time goes into (or is compared against) a TEXT column: each package keeps
+  a one-line `formatTime`/`parseTime` wrapping `db.FormatTime`/
+  `db.ParseTime`, whose fixed-width `db.TimeLayout` makes text order time
+  order (#356). Canonical: `internal/platform/db/timefmt.go`, wrapped in
+  `internal/apps/flash/store.go`.
+
 - **Status-code-to-title/message table for error pages** — reach for this
   when adding a new HTTP error response: add an entry to `titles` rather
   than hand-writing another error page. Canonical:

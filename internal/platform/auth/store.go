@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 // Namespace is the migration namespace the platform's own schema is recorded
@@ -223,16 +225,17 @@ func (s *Store) scanUser(row *sql.Row) (User, error) {
 	return u, nil
 }
 
-// Timestamps are stored as RFC 3339 nanosecond strings in UTC, which sort
-// lexically in the same order they sort chronologically.
-func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+// Timestamps are stored in db.TimeLayout — UTC, always nine fractional
+// digits — which sorts lexically in the same order it sorts chronologically,
+// including within one second (#356).
+func formatTime(t time.Time) string { return db.FormatTime(t) }
 
 func parseTime(s string) (time.Time, error) {
-	t, err := time.Parse(time.RFC3339Nano, s)
+	t, err := db.ParseTime(s)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("auth: parse timestamp %q: %w", s, err)
 	}
-	return t.UTC(), nil
+	return t, nil
 }
 
 func boolToInt(b bool) int {

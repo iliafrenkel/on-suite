@@ -10,7 +10,7 @@ import (
 )
 
 // formatDay is flash_review_counts' calendar-day convention: a plain UTC
-// date, coarser than this package's usual RFC3339Nano timestamps, because a
+// date, coarser than this package's usual db.TimeLayout timestamps, because a
 // daily counter only ever needs to compare "same day or not."
 func formatDay(t time.Time) string { return t.UTC().Format("2006-01-02") }
 

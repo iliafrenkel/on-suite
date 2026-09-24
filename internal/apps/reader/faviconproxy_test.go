@@ -10,6 +10,7 @@ import (
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 // oneICO is the smallest thing http.DetectContentType calls an image.
@@ -101,7 +102,7 @@ func TestFaviconProxyBackoffWindowIsABareNotFound(t *testing.T) {
 	if _, err := s.Store.DB().ExecContext(context.Background(),
 		`INSERT INTO reader_feed_icons (url_hash, src_url, error_count, fetched_at, last_error)
 		 VALUES (?, ?, 1, ?, 'boom')`,
-		hash, "https://cdn.example/favicon.ico", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		hash, "https://cdn.example/favicon.ico", db.FormatTime(time.Now().UTC())); err != nil {
 		t.Fatal(err)
 	}
 

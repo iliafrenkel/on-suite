@@ -195,8 +195,6 @@ func countChildren(ctx context.Context, tx *sql.Tx, userID, parentID int64) (int
 // clamp bounds v to [lo, hi].
 func clamp(v, lo, hi int) int { return min(max(v, lo), hi) }
 
-func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
-
 // SetCollapsed records whether a bullet's children are hidden. It is stored
 // rather than kept in the browser because Outline stops descending at a
 // collapsed node: the flag decides what the server sends, not just what the

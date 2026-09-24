@@ -14,6 +14,8 @@ import (
 	"io/fs"
 	"strings"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 // ID is the app id: the URL prefix, the migration namespace, and the prefix
@@ -73,14 +75,16 @@ func isUniqueViolation(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
-// Timestamps match the platform's convention: RFC 3339 nanoseconds in UTC,
-// which sorts chronologically as text.
-func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+// Timestamps match the platform's convention, db.TimeLayout: UTC with
+// exactly nine fractional digits, which sorts chronologically as text even
+// within one second (#356) — the property ORDER BY created_at, due_at <= ?
+// and min(due_at) all rely on.
+func formatTime(t time.Time) string { return db.FormatTime(t) }
 
 func parseTime(s string) (time.Time, error) {
-	t, err := time.Parse(time.RFC3339Nano, s)
+	t, err := db.ParseTime(s)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("flash: parse timestamp %q: %w", s, err)
 	}
-	return t.UTC(), nil
+	return t, nil
 }

@@ -3,6 +3,7 @@ package notes_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 )
@@ -104,24 +105,29 @@ func TestArchiveExcludesADoublyNestedArchivedDescendant(t *testing.T) {
 }
 
 // TestArchiveOrdersChronologicallyAcrossWholeAndFractionalSeconds is issue
-// #108: formatTime strips a whole-second timestamp's trailing zero
-// fraction, so "...T10:00:00Z" and "...T10:00:00.5Z" — chronologically the
-// former is earlier — sort in the wrong order under a plain lexicographic
-// ORDER BY archived_at DESC ('Z' > '.' byte-wise). archived_at is written
-// directly here, bypassing SetArchived's own clock, to construct exactly
-// that pair regardless of how fast this test runs.
+// #108 and #356: "earlier" is archived on a whole second, "later" half a
+// second after it and "latest" 4µs after that. RFC3339Nano wrote the first
+// as "...T10:00:00Z", which sorted after "...T10:00:00.5Z" as text, and
+// the julianday() workaround for that resolved only milliseconds, tying the
+// last two. Stored as db.TimeLayout, a plain ORDER BY gets all three right.
 func TestArchiveOrdersChronologicallyAcrossWholeAndFractionalSeconds(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	earlier := f.mk(t, notes.RootID, "earlier, whole second")
 	later := f.mk(t, notes.RootID, "later, fractional second")
+	latest := f.mk(t, notes.RootID, "latest, 4µs after later")
 
-	for id, ts := range map[int64]string{
-		earlier.ID: "2026-01-01T10:00:00Z",
-		later.ID:   "2026-01-01T10:00:00.5Z",
+	second := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	for _, step := range []struct {
+		id int64
+		at time.Time
+	}{
+		{earlier.ID, second},
+		{later.ID, second.Add(500 * time.Millisecond)},
+		{latest.ID, second.Add(500*time.Millisecond + 4*time.Microsecond)},
 	} {
-		if _, err := f.db.ExecContext(ctx,
-			`UPDATE notes_nodes SET archived_at = ? WHERE id = ?`, ts, id); err != nil {
+		f.store.SetClock(func() time.Time { return step.at })
+		if err := f.store.SetArchived(ctx, f.alice.ID, step.id, true); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -130,8 +136,8 @@ func TestArchiveOrdersChronologicallyAcrossWholeAndFractionalSeconds(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].ID != later.ID || got[1].ID != earlier.ID {
-		t.Fatalf("Archive = %+v, want [later, earlier] (most recent first)", got)
+	if len(got) != 3 || got[0].ID != latest.ID || got[1].ID != later.ID || got[2].ID != earlier.ID {
+		t.Fatalf("Archive = %+v, want [latest, later, earlier] (most recent first)", got)
 	}
 }
 

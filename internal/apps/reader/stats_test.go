@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 func TestRecordDailyStatsCountsTodaysActivity(t *testing.T) {
@@ -25,7 +26,7 @@ func TestRecordDailyStatsCountsTodaysActivity(t *testing.T) {
 	// subscription existed.
 	if _, err := f.store.DB().ExecContext(ctx,
 		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		now.Add(-24*time.Hour).Format(time.RFC3339Nano), sub.ID); err != nil {
+		db.FormatTime(now.Add(-24*time.Hour)), sub.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
@@ -78,7 +79,7 @@ func TestRecordDailyStatsIsIdempotent(t *testing.T) {
 	}
 	if _, err := f.store.DB().ExecContext(ctx,
 		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		now.Add(-24*time.Hour).Format(time.RFC3339Nano), sub.ID); err != nil {
+		db.FormatTime(now.Add(-24*time.Hour)), sub.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
@@ -112,7 +113,7 @@ func TestDailyStatsIsPerUser(t *testing.T) {
 	}
 	if _, err := f.store.DB().ExecContext(ctx,
 		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		now.Add(-24*time.Hour).Format(time.RFC3339Nano), sub.ID); err != nil {
+		db.FormatTime(now.Add(-24*time.Hour)), sub.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
@@ -147,7 +148,7 @@ func TestBackfillMarksRowsReconstructed(t *testing.T) {
 	// alice subscribed and exclude it entirely.
 	if _, err := f.store.DB().ExecContext(ctx,
 		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		now.Add(-6*24*time.Hour).Format(time.RFC3339Nano), sub.ID); err != nil {
+		db.FormatTime(now.Add(-6*24*time.Hour)), sub.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
@@ -233,7 +234,7 @@ func TestBackfillDoesNotOverwriteMeasuredDays(t *testing.T) {
 	}
 	if _, err := f.store.DB().ExecContext(ctx,
 		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		now.Add(-24*time.Hour).Format(time.RFC3339Nano), sub.ID); err != nil {
+		db.FormatTime(now.Add(-24*time.Hour)), sub.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
@@ -294,7 +295,7 @@ func TestSubscriptionVisibilityCutoffAgreesAcrossQueries(t *testing.T) {
 	addedAt := now.Add(-72 * time.Hour)
 	if _, err := f.store.DB().ExecContext(ctx,
 		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		addedAt.Format(time.RFC3339Nano), sub.ID); err != nil {
+		db.FormatTime(addedAt), sub.ID); err != nil {
 		t.Fatal(err)
 	}
 
