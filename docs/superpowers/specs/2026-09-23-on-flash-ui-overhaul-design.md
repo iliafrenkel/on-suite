@@ -414,9 +414,9 @@ existing methods would require N+1 calls.
     card in *Deck*" with a single **Got it**. Got it adopts the offer, which
     copies nothing, so it leaves the list. (#346)
   - Buttons post to the existing adopt/decline routes. After adopting, the
-    pane opens the (new or merged) deck with a notice: ""*Planets*" is now
-    in your decks", "N new cards added to "*Planets*"", or, after Got it,
-    ""*Planets*" is already up to date". After declining, the pane shows the
+    pane opens the (new or merged) deck with a notice: "“*Planets*” is now
+    in your decks", "N new cards added to “*Planets*”", or, after Got it,
+    "“*Planets*” is already up to date". After declining, the pane shows the
     default state.
   - Adding a first-time offer never fails over a name the recipient
     already uses. The copy is named "Spanish (from alice)", or "Spanish
