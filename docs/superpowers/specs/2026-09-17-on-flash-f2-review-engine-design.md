@@ -133,8 +133,12 @@ Given an account and either "all decks" or one specific deck:
    is NULL).
 4. New cards: cards with no `flash_card_state` row at all, up to
    `new_cards_per_day - new_count`.
-5. Concatenate due-reviews-then-new across all included decks (reviews
-   first, then new, per the chosen ordering) and serve one card at a time.
+5. Serve every due review first, ordered by `due_at` across all included
+   decks (most overdue first; ties go to deck order, newest deck first,
+   then card id), then new cards deck by deck in that same deck order. Each
+   deck's own limits from steps 3–4 still cap its share. Serve one card at
+   a time. (Revised by #296: this used to concatenate deck by deck, so the
+   newest deck always went first.)
 
 ### Routes
 

@@ -3,6 +3,7 @@ package flash_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -664,5 +665,97 @@ func TestTodayTally(t *testing.T) {
 	}
 	if bob != (flash.ReviewTally{}) {
 		t.Errorf("bob's tally = %+v, want zero", bob)
+	}
+}
+
+func queueIDs(q []flash.QueueCard) []int64 {
+	ids := make([]int64, len(q))
+	for i, qc := range q {
+		ids[i] = qc.Card.ID
+	}
+	return ids
+}
+
+func TestDueQueueOrdersReviewsByDueDateAcrossDecks(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	older, err := f.store.CreateDeck(ctx, f.alice.ID, "Older", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer, err := f.store.CreateDeck(ctx, f.alice.ID, "Newer", "") // listed first by ListDecks
+	if err != nil {
+		t.Fatal(err)
+	}
+	overdue, err := f.store.CreateCard(ctx, f.alice.ID, older.ID, flash.CardTypeBasic, "overdue", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recent, err := f.store.CreateCard(ctx, f.alice.ID, newer.ID, flash.CardTypeBasic, "recent", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := f.store.CreateCard(ctx, f.alice.ID, newer.ID, flash.CardTypeBasic, "fresh", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, overdue.ID, flash.RatingAgain, now.AddDate(0, 0, -10)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, recent.ID, flash.RatingAgain, now.AddDate(0, 0, -1)); err != nil {
+		t.Fatal(err)
+	}
+
+	queue, err := f.store.DueQueue(ctx, f.alice.ID, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The older deck's card is ten days overdue, so it goes first even though
+	// the newer deck is listed first; new cards still come after every review.
+	if got, want := queueIDs(queue), []int64{overdue.ID, recent.ID, fresh.ID}; !slices.Equal(got, want) {
+		t.Errorf("DueQueue order = %v, want %v (overdue, recent, fresh)", got, want)
+	}
+	if queue[0].DueAt.IsZero() || !queue[2].DueAt.IsZero() {
+		t.Errorf("DueAt: review = %v, new = %v; want set for a review, zero for a new card", queue[0].DueAt, queue[2].DueAt)
+	}
+}
+
+func TestDueQueueBreaksDueDateTiesByDeckOrder(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	past := now.AddDate(0, 0, -2)
+	older, err := f.store.CreateDeck(ctx, f.alice.ID, "Older", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer, err := f.store.CreateDeck(ctx, f.alice.ID, "Newer", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := f.store.CreateCard(ctx, f.alice.ID, older.ID, flash.CardTypeBasic, "a", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := f.store.CreateCard(ctx, f.alice.ID, newer.ID, flash.CardTypeBasic, "b", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{a.ID, b.ID} {
+		if _, err := f.store.GradeCard(ctx, f.alice.ID, id, flash.RatingAgain, past); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	queue, err := f.store.DueQueue(ctx, f.alice.ID, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queue) != 2 || !queue[0].DueAt.Equal(queue[1].DueAt) {
+		t.Fatalf("setup: want two reviews due at the same instant, got %+v", queue)
+	}
+	if got, want := queueIDs(queue), []int64{b.ID, a.ID}; !slices.Equal(got, want) {
+		t.Errorf("tie order = %v, want %v (the newer deck, as ListDecks lists it)", got, want)
 	}
 }
