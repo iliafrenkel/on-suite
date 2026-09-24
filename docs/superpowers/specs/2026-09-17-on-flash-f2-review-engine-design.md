@@ -149,7 +149,10 @@ Given an account and either "all decks" or one specific deck:
 - `POST /flash/review/{cardID}/grade` — grades the current card (form field
   `rating` = 1..4), applies `scheduleCard`, updates the day's counter,
   saves the pre-grade snapshot into `prev_*`, and returns the next card in
-  the queue (or an empty-state "all done for now" view).
+  the queue (or an empty-state "all done for now" view). A no-JS request
+  (no HTMX header) instead gets a 303 redirect back to the review page
+  (POST-redirect-GET), with `?undo=<cardID>` on the query string so the
+  reloaded page can still offer Undo for the card that was just graded.
 - `POST /flash/review/{cardID}/undo` — restores that card's `prev_*`
   columns back into the live columns, decrements the counter that grading
   it had incremented, and clears `prev_*` (so undoing the same card twice
@@ -161,7 +164,9 @@ Given an account and either "all decks" or one specific deck:
   until either undone or overwritten by that same card's next review, so
   more than one card can have a stale, no-longer-relevant snapshot sitting
   around at once. A request naming a card whose `prev_state` is already
-  NULL (nothing to undo) is a no-op that reports as much, not an error.
+  NULL (nothing to undo) is a no-op that reports as much, not an error. A
+  no-JS request also gets the 303 redirect back to the review page,
+  mirroring the grade route.
 
 ### Card presentation
 

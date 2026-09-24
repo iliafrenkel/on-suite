@@ -523,7 +523,9 @@ func (st *Store) dueQueueDecks(ctx context.Context, userID int64, deckID *int64,
 	return out, nil
 }
 
-// dueReviewCards returns d's cards that are due at or before now, oldest due date first (then card id), up to limit (a negative limit means unlimited).
+// dueReviewCards returns d's cards that are due at or before now, oldest due
+// date first (then card id), up to limit (a negative limit means
+// unlimited).
 func (st *Store) dueReviewCards(ctx context.Context, userID int64, d Deck, now time.Time, limit int) ([]QueueCard, error) {
 	if limit == 0 {
 		return nil, nil

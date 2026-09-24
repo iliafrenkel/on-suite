@@ -316,6 +316,8 @@ func (a *App) undoGradeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !web.IsHTMX(r) {
+		// POST-redirect-GET, like every other Flash form: refreshing the page
+		// after a no-JS undo must not undo again.
 		http.Redirect(w, r, reviewPath(deck), http.StatusSeeOther)
 		return
 	}

@@ -45,9 +45,11 @@ func (st *Store) DeckSummaries(ctx context.Context, userID int64, now time.Time)
 	return out, nil
 }
 
-// deckSummary builds one deck's DeckSummary. QueueFront counts today's
-// queue with it too, so the Review button, the review screen's "N of M" and
-// DueQueue's length all follow one rule.
+// deckSummary builds one deck's DeckSummary. QueueFront and DueQueue share
+// its dailyBudget helper and the same due/snooze filters, so the Review
+// button, the review screen's "N of M" and DueQueue's length all agree
+// (pinned by TestQueueFrontAgreesWithDueQueue and
+// TestDeckSummariesAgreeWithDueQueue).
 func (st *Store) deckSummary(ctx context.Context, userID int64, d Deck, now time.Time) (DeckSummary, error) {
 	s := DeckSummary{Deck: d, Snoozed: d.IsSnoozed(now)}
 	var nextDue sql.NullString
@@ -63,7 +65,7 @@ func (st *Store) deckSummary(ctx context.Context, userID int64, d Deck, now time
 		formatTime(now), formatTime(now), d.ID, userID,
 	).Scan(&s.CardCount, &s.Mastered, &s.DueTotal, &s.NewUnseen, &nextDue)
 	if err != nil {
-		return DeckSummary{}, fmt.Errorf("flash: deck summaries: %w", err)
+		return DeckSummary{}, fmt.Errorf("flash: deck summary: %w", err)
 	}
 	if nextDue.Valid {
 		t, err := parseTime(nextDue.String)
