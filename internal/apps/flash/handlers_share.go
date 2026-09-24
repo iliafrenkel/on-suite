@@ -55,7 +55,11 @@ func (a *App) shareDeck(w http.ResponseWriter, r *http.Request) {
 	// couldn't enforce auth even if it did), so a tampered to_user_id has to
 	// be caught here: reject anything that isn't one of the accounts this
 	// handler already has access to before it ever reaches the store.
-	_, byID, err := a.usernamesByID(r.Context())
+	//
+	// accounts/byID are kept (rather than loading just byID, as before) so
+	// the render below can reuse this one load instead of running
+	// ListAccounts again — see withAccountsPreload and #359.
+	accounts, byID, err := a.usernamesByID(r.Context())
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -81,13 +85,12 @@ func (a *App) shareDeck(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	recipients, shares, err := a.shareContext(r.Context(), userID, deckID)
+	view, err := a.viewDeckDetailWithAccounts(r, userID, d, accounts, byID)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	view := a.viewDeckDetail(r, userID, d, recipients, shares)
 	view.ShareOpen = true
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }
@@ -123,13 +126,12 @@ func (a *App) revokeShareHandler(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	recipients, shares, err := a.shareContext(r.Context(), userID, deckID)
+	view, err := a.viewDeckDetailWithShareContext(r, userID, d)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	view := a.viewDeckDetail(r, userID, d, recipients, shares)
 	view.ShareOpen = true
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }
@@ -175,7 +177,10 @@ func (a *App) giftPreview(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	_, byID, err := a.usernamesByID(r.Context())
+	// accounts/byID are preloaded onto the detail below so buildDeckIndex
+	// does not run ListAccounts a second time to enrich the pending-offer
+	// gift rows — a preview always has at least this one (#359).
+	accounts, byID, err := a.usernamesByID(r.Context())
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -199,7 +204,8 @@ func (a *App) giftPreview(w http.ResponseWriter, r *http.Request) {
 	for _, c := range p.Samples {
 		gift.Samples = append(gift.Samples, cardGridItem{Face: newCardFace(c, p.Deck, nil)})
 	}
-	a.renderDeckIndex(w, r, userID, http.StatusOK, deckDetailView{Mode: deckModeGift, Gift: gift})
+	detail := withAccountsPreload(deckDetailView{Mode: deckModeGift, Gift: gift}, accounts, byID)
+	a.renderDeckIndex(w, r, userID, http.StatusOK, detail)
 }
 
 // plural is "s" unless n is 1.
@@ -223,8 +229,10 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// The sharer's username names a renamed copy ("Spanish (from alice)",
 	// #304). It's looked up up front because AdoptShare can't call back
-	// into the database from inside its transaction.
-	_, byID, err := a.usernamesByID(r.Context())
+	// into the database from inside its transaction. accounts is kept
+	// alongside byID (rather than discarded, as before) so the render below
+	// can reuse this one load instead of running ListAccounts again (#359).
+	accounts, byID, err := a.usernamesByID(r.Context())
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -242,12 +250,11 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	recipients, shares, err := a.shareContext(r.Context(), userID, d.ID)
+	view, err := a.viewDeckDetailWithAccounts(r, userID, d, accounts, byID)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	view := a.viewDeckDetail(r, userID, d, recipients, shares)
 	switch {
 	case result.Merged && result.CardsCopied == 0:
 		// Got it on an up-to-date re-share (#346): nothing was copied.

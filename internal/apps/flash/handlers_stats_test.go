@@ -219,3 +219,72 @@ func TestStatsRenderInsideTheHomeLayout(t *testing.T) {
 		t.Errorf("toolbar Stats hx-target = %q, want the pane", target)
 	}
 }
+
+// TestStatsRowsSortByName: the per-deck rows are sorted by name, not in
+// ListDecks' newest-first order. Decks are created in an order that is
+// neither alphabetical nor its reverse, so either mistake is caught.
+func TestStatsRowsSortByName(t *testing.T) {
+	s := newServer(t)
+	for _, name := range []string{"Zebra", "Apple", "Mango"} {
+		if _, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, name, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc := s.Get(t, s.Alice, "/flash/stats")
+	var names []string
+	for _, n := range doc.QueryAll(".flash-load-row .flash-load-name") {
+		names = append(names, htmlassert.Text(n))
+	}
+	if got := strings.Join(names, ","); got != "Apple,Mango,Zebra" {
+		t.Errorf("row names = %v, want [Apple Mango Zebra]", names)
+	}
+}
+
+// TestStatsHTMXPaneMatchesFullPage: the HTMX response (pane plus
+// out-of-band deck list) shows exactly what the full page does, both in
+// the stats pane and in the deck list.
+func TestStatsHTMXPaneMatchesFullPage(t *testing.T) {
+	s := newServer(t)
+	ctx := t.Context()
+	t0 := time.Now().UTC().Add(-3 * time.Hour)
+	for i, name := range []string{"Beta", "Alpha", "Gamma"} {
+		d, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, name, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j := 0; j <= i; j++ {
+			c, err := s.Store.CreateCard(ctx, s.Alice.User.ID, d.ID, flash.CardTypeBasic, "front", "back", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if j < i {
+				if _, err := s.Store.GradeCard(ctx, s.Alice.User.ID, c.ID, flash.RatingGood, t0); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if name == "Gamma" {
+			if _, err := s.Store.SnoozeDeck(ctx, s.Alice.User.ID, d.ID, time.Now().Add(24*time.Hour)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	full := s.Get(t, s.Alice, "/flash/stats")
+	req := httpGet(t, "/flash/stats")
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("HTMX GET /flash/stats = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	frag := htmlassert.Parse(t, rec.Body.String())
+
+	for _, sel := range []string{".flash-stats", "#deck-list"} {
+		if got, want := htmlassert.Text(frag.MustHave(sel)), htmlassert.Text(full.MustHave(sel)); got != want {
+			t.Errorf("%s differs:\n HTMX %q\n full %q", sel, got, want)
+		}
+	}
+	if n := len(full.QueryAll(".flash-load-row")); n != 3 {
+		t.Errorf("full page has %d stats rows, want 3", n)
+	}
+}

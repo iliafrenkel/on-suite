@@ -250,10 +250,18 @@ and when a modifier key is held (the existing `isTyping` guard).
 
 Deck list rows need, per deck: card count, due count, snoozed flag. The deck
 pane needs due today / new today / total / mastered and the next due date.
-Reuse existing store methods (`DueQueue`, `PerDeckLoad`, `DailyCounts`,
-`CardsMastered`-style queries) where they fit; add a single batched
-`DeckSummaries(userID, now)` query rather than one query per deck if the
-existing methods would require N+1 calls.
+These come from `DeckSummaries(userID, now)`, which runs a fixed number of
+batched queries however many decks the account has, rather than one query
+per deck (#319): `ListDecks`, one card aggregate grouped by deck (card
+count, mastered, due, never-reviewed, next due date), and one read of
+today's `flash_review_counts` for every deck. Both reach their rows through
+`flash_decks`, so they use the deck, card and counter indexes. The daily
+limits are not applied in SQL: a pure Go function (`summarise`, built on
+`dailyBudget`, which `DueQueue` shares) turns each deck's raw numbers and
+today's counts into its summary, so the Review button, the review screen
+and `DueQueue` cannot disagree. The review screen's all-decks
+`QueueFront` reuses these batched summaries; a one-deck scope reads just
+that deck.
 
 ## 3. U2 — Card component and Cards mode
 
@@ -466,6 +474,9 @@ existing methods would require N+1 calls.
   - Per-deck rows replacing the table: small stack, name, a "mastered"
     progress bar (mastered / total cards, in `var(--deck)`), due badge,
     "taking a break" when snoozed. Each row loads that deck into the pane.
+    The rows are built from the same `DeckSummaries` the deck list shows
+    (fetched once per request and handed to the list), plus one grouped
+    query for each deck's reviews in the last 30 days (#351).
 
 ## 8. Testing
 

@@ -4,6 +4,7 @@ package flash
 import (
 	"fmt"
 	"net/http"
+	"sort"
 )
 
 // statTile is one of the plain-number tiles at the top of the stats page —
@@ -120,34 +121,15 @@ func (a *App) stats(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	perDeck, err := a.store.PerDeckLoad(ctx, userID, now)
-	if err != nil {
-		a.deps.Errors.Internal(w, r, err)
-		return
-	}
-
 	sums, err := a.store.DeckSummaries(ctx, userID, now)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	cardCounts := make(map[int64]int, len(sums))
-	reviewNow := make(map[int64]int, len(sums))
-	for _, s := range sums {
-		cardCounts[s.Deck.ID] = s.CardCount
-		reviewNow[s.Deck.ID] = s.ReviewNow
-	}
-	rows := make([]deckLoadRow, len(perDeck))
-	for i, l := range perDeck {
-		n := cardCounts[l.Deck.ID]
-		rows[i] = deckLoadRow{
-			// Due comes from DeckSummary.ReviewNow, not PerDeckLoad's own Due,
-			// so this row's badge matches the deck list's badge on the same
-			// screen — capped by the daily review budget (plus today's
-			// allowed new cards) and zeroed while the deck is snoozed.
-			Deck: l.Deck, Mastered: l.Mastered, Due: reviewNow[l.Deck.ID], Reviews: l.ReviewsLast30Days,
-			CardCount: n, MasteredPct: progressPercent(l.Mastered, n), Snoozed: l.Snoozed,
-		}
+	reviews, err := a.store.ReviewsPerDeck(ctx, userID, now.AddDate(0, 0, -29))
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
 	}
 
 	view := statsView{
@@ -159,7 +141,30 @@ func (a *App) stats(w http.ResponseWriter, r *http.Request) {
 		},
 		Chart: buildChart("Reviews per day", days, func(d DayCount) int { return d.Count }),
 		Days:  days,
-		Rows:  rows,
+		Rows:  statsRows(sums, reviews),
 	}
-	a.renderDeckIndex(w, r, userID, http.StatusOK, deckDetailView{Mode: deckModeStats, Stats: view})
+	// The deck list shows the same summaries; hand them over rather than
+	// have buildDeckIndex query them again (#351).
+	a.renderDeckIndex(w, r, userID, http.StatusOK, deckDetailView{
+		Mode: deckModeStats, Stats: view,
+		preload: deckIndexPreload{summaries: sums, now: now, haveSummaries: true},
+	})
+}
+
+// statsRows builds the per-deck rows from the deck summaries the page has
+// already loaded, plus each deck's reviews in the last 30 days, sorted by
+// name — the spec's order for this list, unlike ListDecks' newest first
+// (the sort is stable, so equal names keep that order). Due is ReviewNow,
+// so a row's badge matches the deck list's badge on the same screen:
+// capped by the daily limits and zero while the deck is snoozed.
+func statsRows(sums []DeckSummary, reviews map[int64]int) []deckLoadRow {
+	rows := make([]deckLoadRow, len(sums))
+	for i, s := range sums {
+		rows[i] = deckLoadRow{
+			Deck: s.Deck, Mastered: s.Mastered, Due: s.ReviewNow, Reviews: reviews[s.Deck.ID],
+			CardCount: s.CardCount, MasteredPct: progressPercent(s.Mastered, s.CardCount), Snoozed: s.Snoozed,
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Deck.Name < rows[j].Deck.Name })
+	return rows
 }

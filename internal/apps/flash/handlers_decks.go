@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
@@ -137,6 +138,11 @@ type deckDetailView struct {
 
 	NewCardsPerDayValue string
 	ReviewsPerDayValue  string
+
+	// preload carries data the handler has already fetched for its own
+	// pane, so buildDeckIndex does not query it again. Templates never see
+	// it.
+	preload deckIndexPreload
 
 	PayloadValue    string
 	FormatValue     string
@@ -274,8 +280,9 @@ type shareOfferWithUsername struct {
 }
 
 // usernamesByID loads every account on the instance and returns it two
-// ways: the full list, and a lookup from account id to username. shareContext
-// (the creator's "Shared with" list and the Share dropdown's recipients),
+// ways: the full list, and a lookup from account id to username.
+// shareContextWithAccounts (the creator's "Shared with" list and the Share
+// dropdown's recipients),
 // buildDeckIndex (the recipient's pending gift rows and, for the open deck,
 // the inline Share section), shareDeck (validating a share's to_user_id),
 // and giftPreview (a gift's "From" username) all need this same lookup.
@@ -323,20 +330,62 @@ func offersWithUsernames(offers []ShareOffer, byID map[int64]string) []shareOffe
 	return out
 }
 
-// shareContext loads everything the deck detail view's Share section
-// needs: every other account on the instance (for the dropdown) and the
-// "Shared with" list (one row per recipient, see SharesForDeck), each row
-// paired with its recipient's username.
-func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Account, []shareWithUsername, error) {
-	accounts, byID, err := a.usernamesByID(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
+// composeShareContext turns an already-loaded account list and userID's
+// deck shares into the deck detail view's Share section: every other
+// account (for the dropdown) and the "Shared with" list (one row per
+// recipient), each row paired with its recipient's username. It is the one
+// place shareContextWithAccounts and buildDeckIndex's own needShareContext
+// branch both compose this, so they can't drift apart.
+func composeShareContext(accounts []auth.Account, byID map[int64]string, userID int64, shares []Share) ([]auth.Account, []shareWithUsername) {
+	return otherAccounts(accounts, userID), sharesWithUsernames(shares, byID)
+}
+
+// shareContextWithAccounts loads everything the deck detail view's Share
+// section needs — every other account on the instance (for the dropdown)
+// and the "Shared with" list (one row per recipient, see SharesForDeck),
+// each row paired with its recipient's username — given an account list and
+// byID map the caller has already loaded (via usernamesByID), so this does
+// not run ListAccounts itself. Every caller has one to hand it: either it
+// loaded accounts for its own purposes first (validating a share recipient,
+// resolving a sharer's username), or it goes through
+// viewDeckDetailWithShareContext, which loads it right here.
+func (a *App) shareContextWithAccounts(ctx context.Context, userID, deckID int64, accounts []auth.Account, byID map[int64]string) ([]auth.Account, []shareWithUsername, error) {
 	shares, err := a.store.SharesForDeck(ctx, userID, deckID)
 	if err != nil {
 		return nil, nil, err
 	}
-	return otherAccounts(accounts, userID), sharesWithUsernames(shares, byID), nil
+	recipients, sharedWith := composeShareContext(accounts, byID, userID, shares)
+	return recipients, sharedWith, nil
+}
+
+// viewDeckDetailWithShareContext is viewDeckDetail plus its Share section —
+// what every handler that lands back on a deck's own pane needs, whether or
+// not it already had a reason to call usernamesByID itself. The account
+// list is loaded once and preloaded onto the returned view (see
+// withAccountsPreload), so a subsequent buildDeckIndex (rendering the pane
+// alongside the list and any pending gifts) does not run ListAccounts again
+// to enrich them — the fix for #359.
+func (a *App) viewDeckDetailWithShareContext(r *http.Request, userID int64, d Deck) (deckDetailView, error) {
+	accounts, byID, err := a.usernamesByID(r.Context())
+	if err != nil {
+		return deckDetailView{}, err
+	}
+	return a.viewDeckDetailWithAccounts(r, userID, d, accounts, byID)
+}
+
+// viewDeckDetailWithAccounts is viewDeckDetailWithShareContext's second
+// half: share context, then view, then preload — given an account list and
+// byID map the caller has already loaded (via usernamesByID), so this does
+// not run ListAccounts itself. shareDeck and adopt each have their own
+// reason to load accounts up front (validating a share recipient, naming a
+// re-shared copy after its sharer) and hand that same load in here rather
+// than repeating this tail themselves.
+func (a *App) viewDeckDetailWithAccounts(r *http.Request, userID int64, d Deck, accounts []auth.Account, byID map[int64]string) (deckDetailView, error) {
+	recipients, shares, err := a.shareContextWithAccounts(r.Context(), userID, d.ID, accounts, byID)
+	if err != nil {
+		return deckDetailView{}, err
+	}
+	return withAccountsPreload(a.viewDeckDetail(r, userID, d, recipients, shares), accounts, byID), nil
 }
 
 func (a *App) viewDeckDetail(r *http.Request, userID int64, d Deck, recipients []auth.Account, sharedWith []shareWithUsername) deckDetailView {
@@ -417,14 +466,45 @@ func (a *App) deckIndex(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, r, err)
 			return
 		}
-		recipients, shares, err := a.shareContext(r.Context(), userID, d.ID)
-		if err != nil {
+		if detail, err = a.viewDeckDetailWithShareContext(r, userID, d); err != nil {
 			a.deps.Errors.Internal(w, r, err)
 			return
 		}
-		detail = a.viewDeckDetail(r, userID, d, recipients, shares)
 	}
 	a.renderDeckIndex(w, r, userID, http.StatusOK, detail)
+}
+
+// deckIndexPreload is what a handler may hand buildDeckIndex so it can skip
+// a query it would otherwise run. Every field is optional; the zero value
+// preloads nothing.
+type deckIndexPreload struct {
+	// summaries is DeckSummaries(userID, now) as the handler loaded it,
+	// valid only when haveSummaries is set (a user with no decks has an
+	// empty slice, which is still a valid preload). buildDeckIndex then
+	// uses this now too, so the list agrees with the handler's pane.
+	summaries     []DeckSummary
+	now           time.Time
+	haveSummaries bool
+
+	// accounts/byID are usernamesByID's own two return values, as the
+	// handler already loaded them (see (*App).withAccountsPreload), valid
+	// only when haveAccounts is set. ListAccounts runs a per-account
+	// session-count subquery for every row, so buildDeckIndex reuses these
+	// instead of loading the list again to enrich offers or a share
+	// context of its own.
+	accounts     []auth.Account
+	byID         map[int64]string
+	haveAccounts bool
+}
+
+// withAccountsPreload returns detail with accounts/byID attached to its
+// preload, for a handler that has already called usernamesByID for its own
+// purposes (validating a share recipient, resolving a sharer's username,
+// building its own shareContextWithAccounts) and wants buildDeckIndex to
+// reuse the same load rather than running ListAccounts again.
+func withAccountsPreload(detail deckDetailView, accounts []auth.Account, byID map[int64]string) deckDetailView {
+	detail.preload.accounts, detail.preload.byID, detail.preload.haveAccounts = accounts, byID, true
+	return detail
 }
 
 // buildDeckIndex assembles the home screen's whole view model — list,
@@ -433,10 +513,16 @@ func (a *App) deckIndex(w http.ResponseWriter, r *http.Request) {
 // for an out-of-band swap (every fragment response sets it).
 func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailView, oob bool) (deckIndexView, error) {
 	ctx := r.Context()
-	now := a.store.now()
-	sums, err := a.store.DeckSummaries(ctx, userID, now)
-	if err != nil {
-		return deckIndexView{}, err
+	var now time.Time
+	sums := detail.preload.summaries
+	if detail.preload.haveSummaries {
+		now = detail.preload.now
+	} else {
+		now = a.store.now()
+		var err error
+		if sums, err = a.store.DeckSummaries(ctx, userID, now); err != nil {
+			return deckIndexView{}, err
+		}
 	}
 	rawOffers, err := a.store.SharesForRecipient(ctx, userID)
 	if err != nil {
@@ -454,20 +540,23 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 
 	// The account map is only needed to enrich offers or shares with
 	// usernames, and ListAccounts runs a per-account session-count subquery
-	// for every row — so it's fetched at most once per render, and only
-	// when one of the two actually has rows to enrich.
+	// for every row — so it's fetched at most once per render, reusing the
+	// handler's own load (see withAccountsPreload) when there is one, and
+	// only when one of the two actually has rows to enrich otherwise.
 	var offers []shareOfferWithUsername
 	if len(rawOffers) > 0 || needShareContext {
-		accounts, byID, err := a.usernamesByID(ctx)
-		if err != nil {
-			return deckIndexView{}, err
+		accounts, byID := detail.preload.accounts, detail.preload.byID
+		if !detail.preload.haveAccounts {
+			var err error
+			if accounts, byID, err = a.usernamesByID(ctx); err != nil {
+				return deckIndexView{}, err
+			}
 		}
 		if len(rawOffers) > 0 {
 			offers = offersWithUsernames(rawOffers, byID)
 		}
 		if needShareContext {
-			detail.ShareRecipients = otherAccounts(accounts, userID)
-			detail.SharedWith = sharesWithUsernames(rawShares, byID)
+			detail.ShareRecipients, detail.SharedWith = composeShareContext(accounts, byID, userID, rawShares)
 		}
 	}
 
@@ -595,12 +684,12 @@ func (a *App) createDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	recipients, shares, err := a.shareContext(r.Context(), userID, d.ID)
+	detail, err := a.viewDeckDetailWithShareContext(r, userID, d)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderDeckDetailWithList(w, r, userID, http.StatusCreated, a.viewDeckDetail(r, userID, d, recipients, shares))
+	a.renderDeckDetailWithList(w, r, userID, http.StatusCreated, detail)
 }
 
 func (a *App) editDeckForm(w http.ResponseWriter, r *http.Request) {
@@ -720,12 +809,12 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(id, 10))
-	recipients, shares, err := a.shareContext(r.Context(), userID, updated.ID)
+	detail, err := a.viewDeckDetailWithShareContext(r, userID, updated)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, updated, recipients, shares))
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, detail)
 }
 
 func (a *App) deleteDeck(w http.ResponseWriter, r *http.Request) {
@@ -783,12 +872,12 @@ func (a *App) snoozeDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(id, 10))
-	recipients, shares, err := a.shareContext(r.Context(), userID, updated.ID)
+	detail, err := a.viewDeckDetailWithShareContext(r, userID, updated)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, updated, recipients, shares))
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, detail)
 }
 
 func (a *App) unsnoozeDeck(w http.ResponseWriter, r *http.Request) {
@@ -812,10 +901,10 @@ func (a *App) unsnoozeDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(id, 10))
-	recipients, shares, err := a.shareContext(r.Context(), userID, updated.ID)
+	detail, err := a.viewDeckDetailWithShareContext(r, userID, updated)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, a.viewDeckDetail(r, userID, updated, recipients, shares))
+	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, detail)
 }

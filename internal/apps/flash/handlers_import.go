@@ -57,12 +57,11 @@ func (a *App) importDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	recipients, shares, err := a.shareContext(r.Context(), userID, d.ID)
+	view, err := a.viewDeckDetailWithShareContext(r, userID, d)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	view := a.viewDeckDetail(r, userID, d, recipients, shares)
 	view.Notice = fmt.Sprintf("Imported %d card%s into “%s”.", len(parsed.Cards), plural(len(parsed.Cards)), d.Name)
 	a.renderDeckDetailWithList(w, r, userID, http.StatusCreated, view)
 }

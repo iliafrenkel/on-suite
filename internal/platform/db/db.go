@@ -20,6 +20,17 @@ import (
 //	foreign_keys(1)    SQLite leaves FK enforcement OFF by default
 const pragmas = "_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
 
+// DSN builds the data source name Open passes to the "sqlite" driver for
+// path. It is exported so a test that must open its own connection — for
+// example to wrap it in a statement-counting driver.Driver, as
+// internal/apps/flash's deck_summary_batch_test.go does — uses the exact
+// same pragmas Open does, rather than a hand-copied string that can drift
+// out of sync with this one (and, before this existed, once did: it was
+// missing journal_mode(WAL)).
+func DSN(path string) string {
+	return "file:" + path + "?" + pragmas
+}
+
 // Open opens the database at path, creating the file and its parent
 // directory if they do not exist.
 //
@@ -33,7 +44,7 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create database directory: %w", err)
 	}
 
-	handle, err := sql.Open("sqlite", "file:"+path+"?"+pragmas)
+	handle, err := sql.Open("sqlite", DSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
