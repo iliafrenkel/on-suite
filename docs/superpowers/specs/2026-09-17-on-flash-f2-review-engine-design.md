@@ -133,8 +133,12 @@ Given an account and either "all decks" or one specific deck:
    is NULL).
 4. New cards: cards with no `flash_card_state` row at all, up to
    `new_cards_per_day - new_count`.
-5. Concatenate due-reviews-then-new across all included decks (reviews
-   first, then new, per the chosen ordering) and serve one card at a time.
+5. Serve every due review first, ordered by `due_at` across all included
+   decks (most overdue first; ties go to deck order, newest deck first,
+   then card id), then new cards deck by deck in that same deck order. Each
+   deck's own limits from steps 3–4 still cap its share. Serve one card at
+   a time. (Revised by #296: this used to concatenate deck by deck, so the
+   newest deck always went first.)
 
 ### Routes
 
@@ -145,7 +149,10 @@ Given an account and either "all decks" or one specific deck:
 - `POST /flash/review/{cardID}/grade` — grades the current card (form field
   `rating` = 1..4), applies `scheduleCard`, updates the day's counter,
   saves the pre-grade snapshot into `prev_*`, and returns the next card in
-  the queue (or an empty-state "all done for now" view).
+  the queue (or an empty-state "all done for now" view). A no-JS request
+  (no HTMX header) instead gets a 303 redirect back to the review page
+  (POST-redirect-GET), with `?undo=<cardID>` on the query string so the
+  reloaded page can still offer Undo for the card that was just graded.
 - `POST /flash/review/{cardID}/undo` — restores that card's `prev_*`
   columns back into the live columns, decrements the counter that grading
   it had incremented, and clears `prev_*` (so undoing the same card twice
@@ -157,7 +164,9 @@ Given an account and either "all decks" or one specific deck:
   until either undone or overwritten by that same card's next review, so
   more than one card can have a stale, no-longer-relevant snapshot sitting
   around at once. A request naming a card whose `prev_state` is already
-  NULL (nothing to undo) is a no-op that reports as much, not an error.
+  NULL (nothing to undo) is a no-op that reports as much, not an error. A
+  no-JS request also gets the 303 redirect back to the review page,
+  mirroring the grade route.
 
 ### Card presentation
 

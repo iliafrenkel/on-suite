@@ -343,6 +343,9 @@ type QueueCard struct {
 	Card  Card
 	Deck  Deck
 	IsNew bool
+	// DueAt is when a review card fell due; zero for a new card. It is what
+	// orders reviews across decks, most overdue first.
+	DueAt time.Time
 }
 
 // dailyBudget is how many more review and new cards deck d may put in
@@ -365,17 +368,24 @@ func dailyBudget(d Deck, newCount, reviewCount int) (reviewsRemaining, newRemain
 	return reviewsRemaining, newRemaining
 }
 
-// DueQueue returns cards eligible for review right now, in review-then-new
-// order. If deckID is non-nil, only that deck is considered — and only if
-// it is not currently snoozed, the same rule applied to every deck when
-// deckID is nil (every non-snoozed deck belonging to userID).
+// DueQueue returns cards eligible for review right now: every due review
+// first, most overdue first across all decks in scope, then new cards deck
+// by deck in ListDecks order. Each deck's daily limits cap its own share of
+// both. If deckID is non-nil, only that deck is considered — and only if it
+// is not currently snoozed, the same rule applied to every deck when deckID
+// is nil (every non-snoozed deck belonging to userID).
+//
+// The review screen reads QueueFront instead, which returns this queue's
+// first card and length without loading the rest; DueQueue is the
+// reference its tests compare against.
 func (st *Store) DueQueue(ctx context.Context, userID int64, deckID *int64, now time.Time) ([]QueueCard, error) {
 	decks, err := st.dueQueueDecks(ctx, userID, deckID, now)
 	if err != nil {
 		return nil, err
 	}
 
-	var reviews, fresh []QueueCard
+	reviews := make([][]QueueCard, 0, len(decks))
+	var fresh []QueueCard
 	for _, d := range decks {
 		newCount, reviewCount, err := st.dailyCounts(ctx, userID, d.ID, now)
 		if err != nil {
@@ -387,7 +397,7 @@ func (st *Store) DueQueue(ctx context.Context, userID int64, deckID *int64, now 
 		if err != nil {
 			return nil, err
 		}
-		reviews = append(reviews, due...)
+		reviews = append(reviews, due)
 
 		newCards, err := st.newQueueCards(ctx, userID, d, newRemaining)
 		if err != nil {
@@ -395,7 +405,94 @@ func (st *Store) DueQueue(ctx context.Context, userID int64, deckID *int64, now 
 		}
 		fresh = append(fresh, newCards...)
 	}
-	return append(reviews, fresh...), nil
+	return append(mergeByDue(reviews), fresh...), nil
+}
+
+// earliestDue returns the index of the list whose first card fell due
+// soonest, or -1 if every list is empty. On a tie the earlier list wins —
+// lists are in ListDecks order, so the newer deck — and within one deck
+// dueReviewCards has already ordered by due date, then card id. DueQueue's
+// merge and QueueFront's head both pick with this, so they cannot disagree.
+func earliestDue(lists [][]QueueCard) int {
+	best := -1
+	for i, l := range lists {
+		if len(l) == 0 {
+			continue
+		}
+		if best < 0 || l[0].DueAt.Before(lists[best][0].DueAt) {
+			best = i
+		}
+	}
+	return best
+}
+
+// mergeByDue interleaves per-deck review lists, each already in due order,
+// into one list, most overdue first. A household has a handful of decks, so
+// a linear scan per card is plenty. It consumes lists.
+func mergeByDue(lists [][]QueueCard) []QueueCard {
+	var out []QueueCard
+	for i := earliestDue(lists); i >= 0; i = earliestDue(lists) {
+		out = append(out, lists[i][0])
+		lists[i] = lists[i][1:]
+	}
+	return out
+}
+
+// QueueFront is what the review screen needs from today's queue: the card
+// to show and how many are left, without loading the rest.
+type QueueFront struct {
+	Head      QueueCard // valid only when HasHead
+	HasHead   bool
+	Remaining int // exactly len(DueQueue) for the same scope and time
+}
+
+// QueueFront returns DueQueue's first card and its length while reading at
+// most one card per deck. The head is the most overdue of each deck's first
+// review (when that deck's review budget allows one, picked by earliestDue
+// exactly as DueQueue's merge does). Only if no deck has a review does it
+// fall back to the first new card of the first deck, in ListDecks order,
+// whose new-card budget allows one. Remaining sums deckSummary's ReviewNow,
+// the Review button's own count.
+func (st *Store) QueueFront(ctx context.Context, userID int64, deckID *int64, now time.Time) (QueueFront, error) {
+	decks, err := st.dueQueueDecks(ctx, userID, deckID, now)
+	if err != nil {
+		return QueueFront{}, err
+	}
+
+	var front QueueFront
+	heads := make([][]QueueCard, len(decks))
+	newRoom := make([]bool, len(decks))
+	for i, d := range decks {
+		s, err := st.deckSummary(ctx, userID, d, now)
+		if err != nil {
+			return QueueFront{}, err
+		}
+		front.Remaining += s.ReviewNow
+		newRoom[i] = s.NewToday > 0
+		if s.DueToday > 0 {
+			if heads[i], err = st.dueReviewCards(ctx, userID, d, now, 1); err != nil {
+				return QueueFront{}, err
+			}
+		}
+	}
+	if i := earliestDue(heads); i >= 0 {
+		front.Head, front.HasHead = heads[i][0], true
+		return front, nil
+	}
+	for i, d := range decks {
+		if !newRoom[i] {
+			continue
+		}
+		fresh, err := st.newQueueCards(ctx, userID, d, 1)
+		if err != nil {
+			return QueueFront{}, err
+		}
+		if len(fresh) > 0 {
+			front.Head, front.HasHead = fresh[0], true
+			return front, nil
+		}
+	}
+	return front, nil
 }
 
 // dueQueueDecks resolves which decks DueQueue should consider: the one
@@ -426,18 +523,19 @@ func (st *Store) dueQueueDecks(ctx context.Context, userID int64, deckID *int64,
 	return out, nil
 }
 
-// dueReviewCards returns d's cards that are due at or before now, oldest
-// due date first, up to limit (a negative limit means unlimited).
+// dueReviewCards returns d's cards that are due at or before now, oldest due
+// date first (then card id), up to limit (a negative limit means
+// unlimited).
 func (st *Store) dueReviewCards(ctx context.Context, userID int64, d Deck, now time.Time, limit int) ([]QueueCard, error) {
 	if limit == 0 {
 		return nil, nil
 	}
 	query := `
-		SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at, c.image_hash, c.audio_hash
+		SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at, c.image_hash, c.audio_hash, s.due_at
 		FROM flash_cards c
 		JOIN flash_card_state s ON s.card_id = c.id AND s.user_id = c.user_id
 		WHERE c.deck_id = ? AND c.user_id = ? AND s.due_at <= ?
-		ORDER BY s.due_at ASC`
+		ORDER BY s.due_at ASC, c.id ASC`
 	args := []any{d.ID, userID, formatTime(now)}
 	if limit > 0 {
 		query += ` LIMIT ?`
@@ -447,7 +545,7 @@ func (st *Store) dueReviewCards(ctx context.Context, userID int64, d Deck, now t
 }
 
 // newQueueCards returns up to limit of d's cards that have never been
-// reviewed, oldest-created first.
+// reviewed, oldest-created first (then card id).
 func (st *Store) newQueueCards(ctx context.Context, userID int64, d Deck, limit int) ([]QueueCard, error) {
 	if limit <= 0 {
 		return nil, nil
@@ -457,11 +555,13 @@ func (st *Store) newQueueCards(ctx context.Context, userID int64, d Deck, limit 
 		FROM flash_cards c
 		LEFT JOIN flash_card_state s ON s.card_id = c.id AND s.user_id = c.user_id
 		WHERE c.deck_id = ? AND c.user_id = ? AND s.card_id IS NULL
-		ORDER BY c.created_at ASC
+		ORDER BY c.created_at ASC, c.id ASC
 		LIMIT ?`
 	return st.queryQueueCards(ctx, query, []any{d.ID, userID, limit}, d, true)
 }
 
+// queryQueueCards runs a due-queue query. Review queries (isNew false)
+// select s.due_at after the card columns; new-card queries don't.
 func (st *Store) queryQueueCards(ctx context.Context, query string, args []any, d Deck, isNew bool) ([]QueueCard, error) {
 	rows, err := st.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -471,17 +571,39 @@ func (st *Store) queryQueueCards(ctx context.Context, query string, args []any, 
 
 	var out []QueueCard
 	for rows.Next() {
-		c, err := scanCardRow(rows)
+		var (
+			row   rowScanner = rows
+			dueAt string
+		)
+		if !isNew {
+			row = withDueAt{rows: rows, dueAt: &dueAt}
+		}
+		c, err := scanCardRow(row)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, QueueCard{Card: c, Deck: d, IsNew: isNew})
+		qc := QueueCard{Card: c, Deck: d, IsNew: isNew}
+		if !isNew {
+			if qc.DueAt, err = parseTime(dueAt); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, qc)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("flash: due queue: %w", err)
 	}
 	return out, nil
 }
+
+// withDueAt lets scanCardRow read a review query's row, which carries
+// s.due_at after the usual card columns.
+type withDueAt struct {
+	rows  *sql.Rows
+	dueAt *string
+}
+
+func (w withDueAt) Scan(dest ...any) error { return w.rows.Scan(append(dest, w.dueAt)...) }
 
 // ReviewTally is how many cards were graded on one day, in total and per
 // rating — the review screen's progress count and end-of-session summary

@@ -177,13 +177,16 @@ func TestGradingScopedToSomeoneElsesDeckIs404(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The card grades fine (it's Alice's own), but re-rendering the queue
-	// scoped to ?deck=<bob's deck> must 404, not 500, since that deck isn't
-	// Alice's.
+	// The card is Alice's own, but the ?deck= scope is Bob's deck: that must
+	// 404 before anything is graded, not grade first and then fail to
+	// re-render.
 	rec := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(bobDeck.ID),
 		url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
 	if rec.Code != 404 {
 		t.Errorf("grade scoped to someone else's deck = %d, want 404", rec.Code)
+	}
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || reviewed {
+		t.Errorf("after a 404 grade: reviewed = %v (err %v), want the card left ungraded", reviewed, err)
 	}
 }
 
@@ -409,5 +412,178 @@ func TestReviewWithNothingToDoHasNoCelebration(t *testing.T) {
 	stop := doc.MustHave("a.flash-review-stop")
 	if href, _ := htmlassert.Attr(stop, "href"); href != "/flash/" {
 		t.Errorf("Stop href for Review all = %q, want /flash/", href)
+	}
+}
+
+func TestReviewOfASnoozedDeckSaysItIsOnABreak(t *testing.T) {
+	// s.Store.SetClock has no effect here: the app under test builds its own
+	// Store via NewStore(deps.DB) (see flash.go's App.Mount), so this test
+	// works off the real wall clock instead, like
+	// TestSnoozeDaysMustBeBetweenOneAndAYear.
+	s := newServer(t)
+	now := time.Now().UTC()
+	until := now.AddDate(0, 0, 7)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, until); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	brk := doc.MustHave(".flash-review-break")
+	wantUntil := "Taking a break until " + until.Format("2 Jan") + "."
+	if text := htmlassert.Text(brk); !strings.Contains(text, wantUntil) {
+		t.Errorf("break panel = %q, want it to contain %q", text, wantUntil)
+	}
+	end := doc.MustHave(`.flash-review-break form[action="/flash/` + itoa(deck.ID) + `/unsnooze"]`)
+	if got := htmlassert.Text(end); !strings.Contains(got, "End break") {
+		t.Errorf("end-break form text = %q", got)
+	}
+	doc.MustNotHave(".flash-review-summary")
+	doc.MustNotHave(".flash-review-card")
+
+	// The review page also shows the break panel when the deck is scoped
+	// via ?deck= instead of the /flash/review/{id} path.
+	scoped := s.Get(t, s.Alice, "/flash/review?deck="+itoa(deck.ID))
+	scoped.MustHave(".flash-review-break")
+
+	// Review all is unaffected: a snoozed deck is simply left out there.
+	all := s.Get(t, s.Alice, "/flash/review")
+	all.MustNotHave(".flash-review-break")
+	all.MustHave(".flash-review-summary")
+
+	// Ending the break (no JS) lands on the deck pane; the card is back.
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID)+"/unsnooze", url.Values{}, "/flash/"+itoa(deck.ID))
+	back := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	back.MustHave(".flash-review-card")
+	back.MustNotHave(".flash-review-break")
+}
+
+func TestReviewAllShowsTheMostOverdueCardFirst(t *testing.T) {
+	// s.Store.SetClock has no effect here (see the note on
+	// TestReviewOfASnoozedDeckSaysItIsOnABreak above), so this uses the real
+	// wall clock and anchors every card relative to it.
+	s := newServer(t)
+	now := time.Now().UTC()
+	older, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Older", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Newer", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	overdue, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, older.ID, flash.CardTypeBasic, "overdue", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recent, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, newer.ID, flash.CardTypeBasic, "recent", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, newer.ID, flash.CardTypeBasic, "fresh", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, overdue.ID, flash.RatingAgain, now.AddDate(0, 0, -10)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, recent.ID, flash.RatingAgain, now.AddDate(0, 0, -1)); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/review")
+	if got := htmlassert.Text(doc.MustHave("#review-card .flash-card-front")); !strings.Contains(got, "overdue") {
+		t.Errorf("first card front = %q, want the older deck's overdue card", got)
+	}
+	// Nothing graded today, three cards queued: M is still exact.
+	if got := htmlassert.Text(doc.MustHave(".flash-review-count")); got != "1 of 3" {
+		t.Errorf("count = %q, want 1 of 3", got)
+	}
+}
+
+func TestGradingWithoutHTMXRedirectsBackToTheReview(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "uno", "one", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "dos", "two", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Scoped to one deck: back to that deck's review page.
+	s.Submit(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID),
+		url.Values{"card_id": {itoa(first.ID)}, "rating": {"3"}},
+		"/flash/review/"+itoa(deck.ID)+"?undo="+itoa(first.ID))
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, first.ID); err != nil || !reviewed {
+		t.Fatalf("after a no-JS grade: reviewed = %v (err %v), want graded", reviewed, err)
+	}
+
+	// Review all: back to Review all.
+	s.Submit(t, s.Alice, "/flash/review/grade",
+		url.Values{"card_id": {itoa(second.ID)}, "rating": {"3"}},
+		"/flash/review?undo="+itoa(second.ID))
+}
+
+func TestReviewOffersUndoFromTheRedirect(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Submit(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID),
+		url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}},
+		"/flash/review/"+itoa(deck.ID)+"?undo="+itoa(card.ID))
+
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID)+"?undo="+itoa(card.ID))
+	doc.MustHave(".flash-undo-btn")
+	id := doc.MustHave(".flash-undo input[name=card_id]")
+	if v, _ := htmlassert.Attr(id, "value"); v != itoa(card.ID) {
+		t.Errorf("undo card_id = %q, want %s", v, itoa(card.ID))
+	}
+	form := doc.MustHave(".flash-review form.flash-undo")
+	if action, _ := htmlassert.Attr(form, "action"); action != "/flash/review/undo?deck="+itoa(deck.ID) {
+		t.Errorf("undo action = %q, want it to keep the deck scope", action)
+	}
+}
+
+func TestUndoWithoutHTMXRedirectsBackToTheReview(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
+
+	s.Submit(t, s.Alice, "/flash/review/undo?deck="+itoa(deck.ID),
+		url.Values{"card_id": {itoa(card.ID)}}, "/flash/review/"+itoa(deck.ID))
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	doc.MustHave(".flash-review-card") // the card is back
+	doc.MustNotHave(".flash-undo-btn") // and the undo slot is spent
+}
+
+func TestReviewIgnoresAMalformedUndoParam(t *testing.T) {
+	s := newServer(t)
+	for _, v := range []string{"abc", "0", "-3", ""} {
+		doc := s.Get(t, s.Alice, "/flash/review?undo="+url.QueryEscape(v))
+		doc.MustNotHave(".flash-undo-btn")
 	}
 }

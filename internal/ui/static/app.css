@@ -3094,7 +3094,8 @@ input.flash-tag-entry:focus { outline: none; }
 .flash-undo { display: flex; justify-content: center; margin-top: var(--s-4); }
 
 /* End-of-session summary. */
-.flash-review-summary {
+.flash-review-summary,
+.flash-review-break {
 	position: relative;
 	display: flex;
 	flex-direction: column;
@@ -3103,7 +3104,8 @@ input.flash-tag-entry:focus { outline: none; }
 	padding: var(--s-6) var(--s-4);
 	text-align: center;
 }
-.flash-review-summary h1 { margin: 0; }
+.flash-review-summary h1,
+.flash-review-break h1 { margin: 0; }
 .flash-summary-lead { margin: 0; font-size: var(--fs-lg); }
 .flash-breakdown { width: 100%; max-width: 24rem; height: 12px; border-radius: 6px; overflow: hidden; }
 .flash-seg-good  { fill: var(--flash-grade-good); }
