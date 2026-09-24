@@ -36,46 +36,57 @@ func (st *Store) DeckSummaries(ctx context.Context, userID int64, now time.Time)
 	}
 	out := make([]DeckSummary, 0, len(decks))
 	for _, d := range decks {
-		s := DeckSummary{Deck: d, Snoozed: d.IsSnoozed(now)}
-		var nextDue sql.NullString
-		err := st.db.QueryRowContext(ctx, `
-			SELECT count(*),
-			       coalesce(sum(CASE WHEN s.state = 'review' THEN 1 ELSE 0 END), 0),
-			       coalesce(sum(CASE WHEN s.card_id IS NOT NULL AND s.due_at <= ? THEN 1 ELSE 0 END), 0),
-			       coalesce(sum(CASE WHEN s.card_id IS NULL THEN 1 ELSE 0 END), 0),
-			       min(CASE WHEN s.due_at > ? THEN s.due_at END)
-			  FROM flash_cards c
-			  LEFT JOIN flash_card_state s ON s.card_id = c.id AND s.user_id = c.user_id
-			 WHERE c.deck_id = ? AND c.user_id = ?`,
-			formatTime(now), formatTime(now), d.ID, userID,
-		).Scan(&s.CardCount, &s.Mastered, &s.DueTotal, &s.NewUnseen, &nextDue)
+		s, err := st.deckSummary(ctx, userID, d, now)
 		if err != nil {
-			return nil, fmt.Errorf("flash: deck summaries: %w", err)
-		}
-		if nextDue.Valid {
-			t, err := parseTime(nextDue.String)
-			if err != nil {
-				return nil, err
-			}
-			s.NextDueAt = &t
-		}
-
-		if !s.Snoozed {
-			newCount, reviewCount, err := st.dailyCounts(ctx, userID, d.ID, now)
-			if err != nil {
-				return nil, err
-			}
-			reviewsRemaining, newRemaining := dailyBudget(d, newCount, reviewCount)
-			s.DueToday = s.DueTotal
-			if reviewsRemaining >= 0 && s.DueToday > reviewsRemaining {
-				s.DueToday = reviewsRemaining
-			}
-			s.NewToday = min(s.NewUnseen, newRemaining)
-			s.ReviewNow = s.DueToday + s.NewToday
+			return nil, err
 		}
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// deckSummary builds one deck's DeckSummary. QueueFront counts today's
+// queue with it too, so the Review button, the review screen's "N of M" and
+// DueQueue's length all follow one rule.
+func (st *Store) deckSummary(ctx context.Context, userID int64, d Deck, now time.Time) (DeckSummary, error) {
+	s := DeckSummary{Deck: d, Snoozed: d.IsSnoozed(now)}
+	var nextDue sql.NullString
+	err := st.db.QueryRowContext(ctx, `
+		SELECT count(*),
+		       coalesce(sum(CASE WHEN s.state = 'review' THEN 1 ELSE 0 END), 0),
+		       coalesce(sum(CASE WHEN s.card_id IS NOT NULL AND s.due_at <= ? THEN 1 ELSE 0 END), 0),
+		       coalesce(sum(CASE WHEN s.card_id IS NULL THEN 1 ELSE 0 END), 0),
+		       min(CASE WHEN s.due_at > ? THEN s.due_at END)
+		  FROM flash_cards c
+		  LEFT JOIN flash_card_state s ON s.card_id = c.id AND s.user_id = c.user_id
+		 WHERE c.deck_id = ? AND c.user_id = ?`,
+		formatTime(now), formatTime(now), d.ID, userID,
+	).Scan(&s.CardCount, &s.Mastered, &s.DueTotal, &s.NewUnseen, &nextDue)
+	if err != nil {
+		return DeckSummary{}, fmt.Errorf("flash: deck summaries: %w", err)
+	}
+	if nextDue.Valid {
+		t, err := parseTime(nextDue.String)
+		if err != nil {
+			return DeckSummary{}, err
+		}
+		s.NextDueAt = &t
+	}
+
+	if !s.Snoozed {
+		newCount, reviewCount, err := st.dailyCounts(ctx, userID, d.ID, now)
+		if err != nil {
+			return DeckSummary{}, err
+		}
+		reviewsRemaining, newRemaining := dailyBudget(d, newCount, reviewCount)
+		s.DueToday = s.DueTotal
+		if reviewsRemaining >= 0 && s.DueToday > reviewsRemaining {
+			s.DueToday = reviewsRemaining
+		}
+		s.NewToday = min(s.NewUnseen, newRemaining)
+		s.ReviewNow = s.DueToday + s.NewToday
+	}
+	return s, nil
 }
 
 // nextCardsLabel is the second line of the deck pane's "All done for today"

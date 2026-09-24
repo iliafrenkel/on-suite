@@ -143,7 +143,7 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 	if deck != nil {
 		deckID = &deck.ID
 	}
-	queue, err := a.store.DueQueue(ctx, userID, deckID, now)
+	front, err := a.store.QueueFront(ctx, userID, deckID, now)
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -161,7 +161,7 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 		ScopeName:         "All decks",
 		StopURL:           "/flash/",
 		Done:              tally.Reviewed,
-		Total:             tally.Reviewed + len(queue),
+		Total:             tally.Reviewed + front.Remaining,
 		CelebrationColors: celebrationColors,
 	}
 	view.ProgressPct = progressPercent(view.Done, view.Total)
@@ -170,8 +170,8 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 	}
 
 	switch {
-	case len(queue) > 0:
-		qc := queue[0]
+	case front.HasHead:
+		qc := front.Head
 		tags, err := a.store.TagsForCard(ctx, userID, qc.Card.ID)
 		if err != nil {
 			a.fail(w, r, err)

@@ -438,6 +438,63 @@ func mergeByDue(lists [][]QueueCard) []QueueCard {
 	return out
 }
 
+// QueueFront is what the review screen needs from today's queue: the card
+// to show and how many are left, without loading the rest.
+type QueueFront struct {
+	Head      QueueCard // valid only when HasHead
+	HasHead   bool
+	Remaining int // exactly len(DueQueue) for the same scope and time
+}
+
+// QueueFront returns DueQueue's first card and its length while reading at
+// most one card per deck. The head is the most overdue of each deck's first
+// review (when that deck's review budget allows one, picked by earliestDue
+// exactly as DueQueue's merge does). Only if no deck has a review does it
+// fall back to the first new card of the first deck, in ListDecks order,
+// whose new-card budget allows one. Remaining sums deckSummary's ReviewNow,
+// the Review button's own count.
+func (st *Store) QueueFront(ctx context.Context, userID int64, deckID *int64, now time.Time) (QueueFront, error) {
+	decks, err := st.dueQueueDecks(ctx, userID, deckID, now)
+	if err != nil {
+		return QueueFront{}, err
+	}
+
+	var front QueueFront
+	heads := make([][]QueueCard, len(decks))
+	newRoom := make([]bool, len(decks))
+	for i, d := range decks {
+		s, err := st.deckSummary(ctx, userID, d, now)
+		if err != nil {
+			return QueueFront{}, err
+		}
+		front.Remaining += s.ReviewNow
+		newRoom[i] = s.NewToday > 0
+		if s.DueToday > 0 {
+			if heads[i], err = st.dueReviewCards(ctx, userID, d, now, 1); err != nil {
+				return QueueFront{}, err
+			}
+		}
+	}
+	if i := earliestDue(heads); i >= 0 {
+		front.Head, front.HasHead = heads[i][0], true
+		return front, nil
+	}
+	for i, d := range decks {
+		if !newRoom[i] {
+			continue
+		}
+		fresh, err := st.newQueueCards(ctx, userID, d, 1)
+		if err != nil {
+			return QueueFront{}, err
+		}
+		if len(fresh) > 0 {
+			front.Head, front.HasHead = fresh[0], true
+			return front, nil
+		}
+	}
+	return front, nil
+}
+
 // dueQueueDecks resolves which decks DueQueue should consider: the one
 // named by deckID (if it is not snoozed), or every one of userID's decks
 // that are not currently snoozed.

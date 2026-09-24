@@ -456,3 +456,43 @@ func TestReviewOfASnoozedDeckSaysItIsOnABreak(t *testing.T) {
 	back.MustHave(".flash-review-card")
 	back.MustNotHave(".flash-review-break")
 }
+
+func TestReviewAllShowsTheMostOverdueCardFirst(t *testing.T) {
+	s := newServer(t)
+	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	s.Store.SetClock(func() time.Time { return now })
+	older, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Older", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Newer", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	overdue, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, older.ID, flash.CardTypeBasic, "overdue", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recent, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, newer.ID, flash.CardTypeBasic, "recent", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, newer.ID, flash.CardTypeBasic, "fresh", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, overdue.ID, flash.RatingAgain, now.AddDate(0, 0, -10)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, recent.ID, flash.RatingAgain, now.AddDate(0, 0, -1)); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/review")
+	if got := htmlassert.Text(doc.MustHave("#review-card .flash-card-front")); !strings.Contains(got, "overdue") {
+		t.Errorf("first card front = %q, want the older deck's overdue card", got)
+	}
+	// Nothing graded today, three cards queued: M is still exact.
+	if got := htmlassert.Text(doc.MustHave(".flash-review-count")); got != "1 of 3" {
+		t.Errorf("count = %q, want 1 of 3", got)
+	}
+}

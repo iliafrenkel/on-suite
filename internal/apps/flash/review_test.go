@@ -759,3 +759,156 @@ func TestDueQueueBreaksDueDateTiesByDeckOrder(t *testing.T) {
 		t.Errorf("tie order = %v, want %v (the newer deck, as ListDecks lists it)", got, want)
 	}
 }
+
+// queueFixture helpers keep TestQueueFrontAgreesWithDueQueue's cases short.
+func qDeck(t *testing.T, f *fixture, name string) flash.Deck {
+	t.Helper()
+	d, err := f.store.CreateDeck(context.Background(), f.alice.ID, name, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+func qCard(t *testing.T, f *fixture, deckID int64, front string) flash.Card {
+	t.Helper()
+	c, err := f.store.CreateCard(context.Background(), f.alice.ID, deckID, flash.CardTypeBasic, front, "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func qGrade(t *testing.T, f *fixture, cardID int64, rating int, at time.Time) {
+	t.Helper()
+	if _, err := f.store.GradeCard(context.Background(), f.alice.ID, cardID, rating, at); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func qSettings(t *testing.T, f *fixture, deckID int64, newPerDay int, reviewsPerDay *int) {
+	t.Helper()
+	if _, err := f.store.UpdateDeckSettings(context.Background(), f.alice.ID, deckID, newPerDay, reviewsPerDay); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestQueueFrontAgreesWithDueQueue pins the review screen's shortcut to the
+// full queue: its head is DueQueue's first card and its count is
+// len(DueQueue), across scopes, limits, snoozes and mixed decks.
+func TestQueueFrontAgreesWithDueQueue(t *testing.T) {
+	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	one := 1
+	cases := []struct {
+		name     string
+		setup    func(t *testing.T, f *fixture) *int64 // returns the scope; nil = every deck
+		wantHead string                                // front of the expected head; "" = empty queue
+		wantLeft int
+	}{
+		{"no decks", func(t *testing.T, f *fixture) *int64 { return nil }, "", 0},
+		{"new cards only", func(t *testing.T, f *fixture) *int64 {
+			d := qDeck(t, f, "A")
+			qCard(t, f, d.ID, "n1")
+			qCard(t, f, d.ID, "n2")
+			return nil
+		}, "n1", 2},
+		{"review before new, one deck", func(t *testing.T, f *fixture) *int64 {
+			d := qDeck(t, f, "A")
+			qCard(t, f, d.ID, "new")
+			due := qCard(t, f, d.ID, "due")
+			qGrade(t, f, due.ID, flash.RatingAgain, now.AddDate(0, 0, -3))
+			return &d.ID
+		}, "due", 2},
+		{"new-card limit", func(t *testing.T, f *fixture) *int64 {
+			d := qDeck(t, f, "A")
+			qSettings(t, f, d.ID, 1, nil)
+			qCard(t, f, d.ID, "n1")
+			qCard(t, f, d.ID, "n2")
+			qCard(t, f, d.ID, "n3")
+			return &d.ID
+		}, "n1", 1},
+		{"review limit already spent today", func(t *testing.T, f *fixture) *int64 {
+			d := qDeck(t, f, "A")
+			qSettings(t, f, d.ID, 5, &one)
+			a := qCard(t, f, d.ID, "a")
+			b := qCard(t, f, d.ID, "b")
+			qGrade(t, f, a.ID, flash.RatingAgain, now.AddDate(0, 0, -3))
+			qGrade(t, f, b.ID, flash.RatingAgain, now.AddDate(0, 0, -3))
+			qGrade(t, f, a.ID, flash.RatingGood, now) // today's one review; b stays due but capped
+			qCard(t, f, d.ID, "new")
+			return &d.ID
+		}, "new", 1},
+		{"snoozed deck, scoped", func(t *testing.T, f *fixture) *int64 {
+			d := qDeck(t, f, "A")
+			qCard(t, f, d.ID, "a")
+			if _, err := f.store.SnoozeDeck(context.Background(), f.alice.ID, d.ID, now.AddDate(0, 0, 7)); err != nil {
+				t.Fatal(err)
+			}
+			return &d.ID
+		}, "", 0},
+		{"snoozed deck skipped in Review all", func(t *testing.T, f *fixture) *int64 {
+			a := qDeck(t, f, "A")
+			due := qCard(t, f, a.ID, "snoozed-due")
+			qGrade(t, f, due.ID, flash.RatingAgain, now.AddDate(0, 0, -3))
+			if _, err := f.store.SnoozeDeck(context.Background(), f.alice.ID, a.ID, now.AddDate(0, 0, 7)); err != nil {
+				t.Fatal(err)
+			}
+			b := qDeck(t, f, "B")
+			qCard(t, f, b.ID, "b-new")
+			return nil
+		}, "b-new", 1},
+		{"overdue card in an older deck goes first", func(t *testing.T, f *fixture) *int64 {
+			older := qDeck(t, f, "Older")
+			newer := qDeck(t, f, "Newer")
+			o := qCard(t, f, older.ID, "overdue")
+			r := qCard(t, f, newer.ID, "recent")
+			qCard(t, f, newer.ID, "fresh")
+			qGrade(t, f, o.ID, flash.RatingAgain, now.AddDate(0, 0, -10))
+			qGrade(t, f, r.ID, flash.RatingAgain, now.AddDate(0, 0, -1))
+			return nil
+		}, "overdue", 3},
+		{"an older deck's review beats a newer deck's new card", func(t *testing.T, f *fixture) *int64 {
+			older := qDeck(t, f, "Older")
+			newer := qDeck(t, f, "Newer")
+			r := qCard(t, f, older.ID, "review")
+			qGrade(t, f, r.ID, flash.RatingAgain, now.AddDate(0, 0, -1))
+			qCard(t, f, newer.ID, "new")
+			return nil
+		}, "review", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			ctx := context.Background()
+			scope := tc.setup(t, f)
+
+			queue, err := f.store.DueQueue(ctx, f.alice.ID, scope, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			front, err := f.store.QueueFront(ctx, f.alice.ID, scope, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if front.Remaining != len(queue) || front.Remaining != tc.wantLeft {
+				t.Errorf("Remaining = %d, len(DueQueue) = %d, want both %d", front.Remaining, len(queue), tc.wantLeft)
+			}
+			if front.HasHead != (len(queue) > 0) {
+				t.Fatalf("HasHead = %v with len(DueQueue) = %d", front.HasHead, len(queue))
+			}
+			if !front.HasHead {
+				if tc.wantHead != "" {
+					t.Errorf("no head, want %q", tc.wantHead)
+				}
+				return
+			}
+			got, want := front.Head, queue[0]
+			if got.Card.ID != want.Card.ID || got.Deck.ID != want.Deck.ID || got.IsNew != want.IsNew || !got.DueAt.Equal(want.DueAt) {
+				t.Errorf("head = %+v, want DueQueue[0] = %+v", got, want)
+			}
+			if got.Card.Front != tc.wantHead {
+				t.Errorf("head front = %q, want %q", got.Card.Front, tc.wantHead)
+			}
+		})
+	}
+}
