@@ -1,0 +1,79 @@
+{{/* internal/apps/flash/templates/stats.partial.html — stats in the home
+     screen's right pane (UI overhaul spec §7). Same numbers as F6's page;
+     the per-deck table is now one row per deck, in its colour. */}}
+{{define "deck-detail-stats"}}
+{{with .Stats}}
+<div class="flash-stats" id="deck-detail-stats">
+	<div class="notes-toolbar flash-deck-toolbar">{{template "flash-pane-back"}}</div>
+	<h1>Stats</h1>
+
+	<div class="flash-stat-tiles">
+		{{range .Tiles}}
+		<div class="flash-stat-tile">
+			<div class="value">{{.Value}}</div>
+			<div class="label">{{.Label}}</div>
+		</div>
+		{{end}}
+	</div>
+
+	<figure class="flash-chart">
+		<figcaption>{{.Chart.Title}}</figcaption>
+		{{if .Chart.Empty}}
+		<p class="empty">Nothing yet.</p>
+		{{else}}
+		<svg viewBox="0 0 {{.Chart.Width}} {{.Chart.Height}}" role="img"
+		     aria-label="{{.Chart.Title}}, daily, peak {{.Chart.Max}}" preserveAspectRatio="none">
+			{{range .Chart.Bars}}
+			<rect x="{{.X}}" y="{{.Y}}" width="{{.Width}}" height="{{.Height}}" rx="1">
+				<title>{{.Label}}</title>
+			</rect>
+			{{end}}
+		</svg>
+		{{end}}
+	</figure>
+
+	{{if .Days}}
+	<details class="flash-stats-daily">
+		<summary>Daily figures (text alternative to the chart above)</summary>
+		<div class="flash-table-scroll">
+			<table class="flash-stats-table">
+				<thead><tr><th>Date</th><th>Reviews</th></tr></thead>
+				<tbody>
+					{{range .Days}}
+					<tr><td>{{.Day.Format "2 Jan 2006"}}</td><td>{{.Count}}</td></tr>
+					{{end}}
+				</tbody>
+			</table>
+		</div>
+	</details>
+	{{end}}
+
+	<h2 class="flash-section-title">Your decks</h2>
+	{{if .Rows}}
+	<ul class="flash-load-list">
+		{{range .Rows}}
+		<li>
+			<a class="flash-load-row deck-c-{{.Deck.Color}}" href="/flash/{{.Deck.ID}}" hx-get="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">
+				{{template "flash-stack" (dict "Size" "sm")}}
+				<span class="flash-load-main">
+					<span class="flash-load-name">{{.Deck.Name}}</span>
+					{{if .Snoozed}}<span class="flash-snoozed-marker">taking a break</span>{{end}}
+					<span class="flash-load-mastery">
+						<svg class="flash-mastery-bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+							<rect class="track" x="0" y="0" width="100" height="6" rx="3"/>
+							<rect class="fill" x="0" y="0" width="{{.MasteredPct}}" height="6" rx="3"/>
+						</svg>
+						<span><span class="flash-load-mastered">{{.Mastered}}</span> of {{.CardCount}} mastered · <span class="flash-load-reviews-count">{{.Reviews}}</span> reviews in 30 days</span>
+					</span>
+				</span>
+				<span class="flash-load-due{{if .Due}} flash-due-badge{{end}}">{{if .Due}}{{.Due}} due{{else}}all done{{end}}</span>
+			</a>
+		</li>
+		{{end}}
+	</ul>
+	{{else}}
+	<p class="empty">No decks yet.</p>
+	{{end}}
+</div>
+{{end}}
+{{end}}

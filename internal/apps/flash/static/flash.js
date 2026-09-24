@@ -8,6 +8,7 @@
 // Review shortcuts: Space shows the answer, 1-4 grade it (Forgot/Hard/Got it/Easy) once it shows, U undoes the last grade, Esc stops.
 // Card viewer shortcuts (U2): Space flips, ← → previous/next, E edits.
 // Card editor (U3): Make blank, tag pills, and drag-and-drop for media.
+// Import (U6): Copy the prompt.
 (function () {
 	"use strict";
 
@@ -202,11 +203,39 @@
 		each(".flash-make-blank", function (btn) { btn.hidden = false; });
 		each("input[data-tag-input]", initTagInput);
 		each("label[data-drop]", initDropZone);
+		each(".flash-copy-prompt", function (btn) { btn.hidden = false; });
 	}
 
 	document.addEventListener("click", function (e) {
 		var btn = e.target.closest && e.target.closest(".flash-make-blank");
 		if (btn) makeBlank(btn);
+	});
+
+	// Copy the import prompt to the clipboard, confirming on the button.
+	// navigator.clipboard needs a secure context (https or localhost); where
+	// it is missing, open the prompt box and select its text instead.
+	document.addEventListener("click", function (e) {
+		var btn = e.target.closest && e.target.closest(".flash-copy-prompt");
+		if (!btn) return;
+		var box = document.getElementById(btn.getAttribute("data-copy-target"));
+		if (!box) return;
+		var label = btn.querySelector(".flash-copy-label") || btn;
+		function done(text) {
+			label.textContent = text;
+			setTimeout(function () { label.textContent = "Copy the prompt"; }, 2000);
+		}
+		function selectIt() {
+			var details = box.closest("details");
+			if (details) details.open = true;
+			box.focus();
+			box.select();
+			done("Press Ctrl+C to copy");
+		}
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard.writeText(box.value).then(function () { done("Copied!"); }, selectIt);
+		} else {
+			selectIt();
+		}
 	});
 	document.addEventListener("htmx:load", function (e) { enhance(e.target); });
 	enhance(document);
