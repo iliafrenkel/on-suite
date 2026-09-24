@@ -53,14 +53,12 @@ type archiveView struct {
 // requirement, and "what did I put away most recently" is the natural way
 // to scan a list like this one.
 //
-// julianday(n.archived_at), not a plain ORDER BY n.archived_at: formatTime
-// (tree.go) writes RFC3339Nano, which strips a whole-second timestamp's
-// trailing zero fraction, so "...T10:00:00Z" sorts after
-// "...T10:00:00.5Z" under a byte-wise DESC compare ('Z' > '.') despite
-// being chronologically earlier — issue #108. julianday parses the string
-// as an actual instant rather than comparing bytes, so this orders
-// correctly regardless of which timestamps in the table happen to land on
-// a whole second.
+// A plain ORDER BY n.archived_at is chronological because formatTime
+// (store.go) writes db.TimeLayout, fixed width with nine fractional digits
+// (#356). This used to be julianday(n.archived_at), a workaround for
+// RFC3339Nano trimming "...T10:00:00Z" shorter than "...T10:00:00.5Z"
+// (issue #108); julianday resolves only milliseconds, so it tied two
+// archives a few microseconds apart, which the stored text does not.
 //
 // query, when non-empty, additionally requires a title/note match — the
 // filter behind /notes/archive's own search box. "" matches every row, the
@@ -81,7 +79,7 @@ func (st *Store) Archive(ctx context.Context, userID int64, query string) ([]Nod
 		   FROM notes_nodes n
 		  WHERE n.user_id = ? AND n.archived_at IS NOT NULL
 		    AND (n.parent_id IS NULL OR n.parent_id NOT IN (SELECT id FROM archived_below))`+matchClause+`
-		  ORDER BY julianday(n.archived_at) DESC`,
+		  ORDER BY n.archived_at DESC`,
 		args...)
 	if err != nil {
 		return nil, fmt.Errorf("notes: archive: %w", err)
