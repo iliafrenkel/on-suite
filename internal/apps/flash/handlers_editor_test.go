@@ -127,6 +127,121 @@ func TestCreateCardRequiresCSRF(t *testing.T) {
 	}
 }
 
+// TestCreateCardOverBodyCapWithNoJSGetsA413NotA403 is the regression test
+// for #330's no-JS-specific edge: a plain (JavaScript-off) card-form
+// submission carries the CSRF token in the form field, which the platform's
+// CSRF middleware can only find by calling r.ParseMultipartForm on the
+// request body (see web/csrf.go's formToken). When the body is over this
+// route's own cardFormMaxBytes cap, that parse used to fail with
+// *http.MaxBytesError, formToken returned "", and CSRF verification failed
+// exactly like a forged or missing token would — surfacing as a generic 403
+// "Not allowed" instead of a "too large" error. It must now answer 413 with
+// the platform's own friendly copy, before ever reaching this app's own
+// readCardUploads size checks.
+//
+// postCardForm always puts the token in the form field, never the
+// X-CSRF-Token header (see its own doc comment) — the no-JS path this test
+// targets — even though it also sets HX-Request for other tests' benefit.
+func TestCreateCardOverBodyCapWithNoJSGetsA413NotA403(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Comfortably over cardFormMaxBytes (MaxImageFetchBytes+MaxAudioFetchBytes
+	// +1MiB = 16MiB), so the platform's own registered body-limit override
+	// for this route rejects the body before any per-field check runs.
+	oversized := make([]byte, flash.MaxImageFetchBytes+flash.MaxAudioFetchBytes+(2<<20))
+	copy(oversized, onePNG)
+
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": oversized})
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("over-cap no-JS create = %d, want 413; body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), web.TooLargeMessage) {
+		t.Errorf("body = %q, want it to contain %q", rec.Body.String(), web.TooLargeMessage)
+	}
+	if cards, _ := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID); len(cards) != 0 {
+		t.Errorf("a rejected over-cap request still created %d card(s)", len(cards))
+	}
+}
+
+// postCardFormHTMXHeaderToken submits a card form as multipart/form-data the
+// way HTMX itself always actually does in this app (base.html's
+// hx-headers sends the CSRF token as the X-CSRF-Token header on every
+// request, including multipart ones) — unlike postCardForm above, which
+// puts the token in the form field to exercise the no-JS path. It carries
+// no CSRF form field at all, so a test using it exercises the header-only
+// verification path cleanly.
+func postCardFormHTMXHeaderToken(t *testing.T, s *apptest.Server[*flash.Store], sess *apptest.Session, path string, fields url.Values, files map[string][]byte) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	for name, values := range fields {
+		for _, v := range values {
+			if err := mw.WriteField(name, v); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for name, data := range files {
+		part, err := mw.CreateFormFile(name, name+".bin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set(web.CSRFHeader, s.CSRFToken(t, sess))
+	return s.Do(t, sess, req)
+}
+
+// TestCreateCardOverBodyCapOverHTMXGetsTheFriendlyMessage is the HTMX
+// counterpart to TestCreateCardOverBodyCapWithNoJSGetsA413NotA403: a real
+// HTMX request carries its CSRF token in the X-CSRF-Token header (see
+// postCardFormHTMXHeaderToken), so CSRF verification never touches the
+// body — the request sails past CSRF and hits this app's own
+// readCardUploads, whose ParseMultipartForm(*http.MaxBytesError) branch is
+// what must show tooLargeMessage (#330's handler-level half, as opposed to
+// the platform-level half the no-JS test above covers). This is the gap
+// #331 flagged: postCardForm's token-in-form-field shape meant no existing
+// test actually exercised the header-only HTMX path for this case.
+func TestCreateCardOverBodyCapOverHTMXGetsTheFriendlyMessage(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oversized := make([]byte, flash.MaxImageFetchBytes+flash.MaxAudioFetchBytes+(2<<20))
+	copy(oversized, onePNG)
+
+	rec := postCardFormHTMXHeaderToken(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": oversized})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("over-cap create over HTMX = %d, want 200 with a notice-error fragment; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	notice := doc.MustHave("#card-detail-new .notice-error")
+	if got := htmlassert.Text(notice); got != web.TooLargeMessage {
+		t.Errorf("notice = %q, want %q", got, web.TooLargeMessage)
+	}
+	if cards, _ := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID); len(cards) != 0 {
+		t.Errorf("a rejected over-cap request still created %d card(s)", len(cards))
+	}
+}
+
 // TestCreateCardWithOversizedImageIsRejected is
 // TestUploadCardImageRejectsOversizedFile, moved to the card-form route.
 func TestCreateCardWithOversizedImageIsRejected(t *testing.T) {
@@ -150,7 +265,10 @@ func TestCreateCardWithOversizedImageIsRejected(t *testing.T) {
 		t.Fatalf("oversized image over HTMX = %d, want 200 with a notice-error fragment", rec.Code)
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustHave("#card-detail-new .notice-error")
+	notice := doc.MustHave("#card-detail-new .notice-error")
+	if got := htmlassert.Text(notice); !strings.Contains(got, "larger than the 5MB limit") {
+		t.Errorf("notice = %q, want it to mention the 5MB limit", got)
+	}
 
 	if cards, _ := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID); len(cards) != 0 {
 		t.Errorf("a rejected oversized upload still created %d card(s)", len(cards))
@@ -188,6 +306,44 @@ func TestCreateCardWithImageOverGlobalCapSucceeds(t *testing.T) {
 	}
 	if cards[0].ImageHash == nil {
 		t.Fatal("ImageHash is nil after a ~2MB upload that should have succeeded")
+	}
+}
+
+// TestUpdateCardWithImageOverGlobalCapSucceeds is the update-route
+// counterpart to TestCreateCardWithImageOverGlobalCapSucceeds: the update
+// route (POST /{deckID}/cards/{cardID}) has its own RegisterBodyLimit /
+// LimitBody(cardFormMaxBytes) override in flash.go's Mount, separate from
+// the create route's, and nothing exercised it before this. A ~2MB file
+// sits strictly between the platform's global 1MB cap and cardFormMaxBytes,
+// so it only succeeds once the update route's own override is in effect.
+func TestUpdateCardWithImageOverGlobalCapSucceeds(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}}, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d; body: %s", rec.Code, rec.Body.String())
+	}
+
+	const size = 2 << 20
+	big := make([]byte, size)
+	copy(big, onePNG)
+
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": big})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update with a ~2MB image = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	c, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ImageHash == nil {
+		t.Fatal("ImageHash is nil after a ~2MB update upload that should have succeeded")
 	}
 }
 
