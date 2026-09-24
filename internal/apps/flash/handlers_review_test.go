@@ -180,10 +180,16 @@ func TestGradingScopedToSomeoneElsesDeckIs404(t *testing.T) {
 	// The card grades fine (it's Alice's own), but re-rendering the queue
 	// scoped to ?deck=<bob's deck> must 404, not 500, since that deck isn't
 	// Alice's.
+	// The card is Alice's own, but the ?deck= scope is Bob's deck: that must
+	// 404 before anything is graded, not grade first and then fail to
+	// re-render.
 	rec := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(bobDeck.ID),
 		url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
 	if rec.Code != 404 {
 		t.Errorf("grade scoped to someone else's deck = %d, want 404", rec.Code)
+	}
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || reviewed {
+		t.Errorf("after a 404 grade: reviewed = %v (err %v), want the card left ungraded", reviewed, err)
 	}
 }
 
@@ -410,4 +416,43 @@ func TestReviewWithNothingToDoHasNoCelebration(t *testing.T) {
 	if href, _ := htmlassert.Attr(stop, "href"); href != "/flash/" {
 		t.Errorf("Stop href for Review all = %q, want /flash/", href)
 	}
+}
+
+func TestReviewOfASnoozedDeckSaysItIsOnABreak(t *testing.T) {
+	s := newServer(t)
+	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	s.Store.SetClock(func() time.Time { return now })
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, now.AddDate(0, 0, 7)); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	brk := doc.MustHave(".flash-review-break")
+	if text := htmlassert.Text(brk); !strings.Contains(text, "Taking a break until 1 Oct") {
+		t.Errorf("break panel = %q, want it to say until 1 Oct", text)
+	}
+	end := doc.MustHave(`.flash-review-break form[action="/flash/` + itoa(deck.ID) + `/unsnooze"]`)
+	if got := htmlassert.Text(end); !strings.Contains(got, "End break") {
+		t.Errorf("end-break form text = %q", got)
+	}
+	doc.MustNotHave(".flash-review-summary")
+	doc.MustNotHave(".flash-review-card")
+
+	// Review all is unaffected: a snoozed deck is simply left out there.
+	all := s.Get(t, s.Alice, "/flash/review")
+	all.MustNotHave(".flash-review-break")
+	all.MustHave(".flash-review-summary")
+
+	// Ending the break (no JS) lands on the deck pane; the card is back.
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID)+"/unsnooze", url.Values{}, "/flash/"+itoa(deck.ID))
+	back := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	back.MustHave(".flash-review-card")
+	back.MustNotHave(".flash-review-break")
 }

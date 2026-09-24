@@ -37,6 +37,8 @@
 			<button type="submit" name="rating" value="4" class="flash-grade flash-grade-easy">Easy <kbd>4</kbd></button>
 		</form>
 	</div>
+	{{else if .Break}}
+	{{template "review-break" .}}
 	{{else}}
 	{{template "review-summary" .}}
 	{{end}}
@@ -52,6 +54,26 @@
 	</form>
 	{{end}}
 </div>
+{{end}}
+
+{{define "review-break"}}
+{{with .Break}}
+<div class="flash-review-break" role="status">
+    <h1>This deck is taking a break</h1>
+    <div class="flash-break-banner">
+        <span>Taking a break until {{.Until}}.</span>
+        {{/* A plain POST, deliberately without hx-post: unsnooze's HTMX
+             response is the deck-pane fragment (#deck-detail), which has no
+             target on this page. The no-JS 303 lands on the deck pane, where
+             Review is one click away. */}}
+        <form method="post" action="/flash/{{.DeckID}}/unsnooze">
+            <input type="hidden" name="{{csrfField}}" value="{{$.CSRFToken}}">
+            <button type="submit" class="flash-big-btn">End break</button>
+        </form>
+    </div>
+    <a class="flash-review-cta flash-back-to-decks" href="/flash/">Back to decks</a>
+</div>
+{{end}}
 {{end}}
 
 {{define "review-summary"}}

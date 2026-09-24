@@ -32,6 +32,23 @@ func deckScopeString(deckID *int64) string {
 	return strconv.FormatInt(*deckID, 10)
 }
 
+// reviewScope resolves the optional ?deck= scope to the deck it names — nil
+// means every deck. A malformed id, or a deck that isn't userID's, writes a
+// 404 and returns false; grade and undo call it before touching anything,
+// so a bad scope never half-applies a grade.
+func (a *App) reviewScope(w http.ResponseWriter, r *http.Request, userID int64) (*Deck, bool) {
+	deckID, ok := a.deckScopeFromQuery(w, r)
+	if !ok || deckID == nil {
+		return nil, ok
+	}
+	d, err := a.store.DeckByID(r.Context(), userID, *deckID)
+	if err != nil {
+		a.fail(w, r, err)
+		return nil, false
+	}
+	return &d, true
+}
+
 // cardIDFromForm parses the card_id form field grade/undo use in place of a
 // path wildcard — see flash.go's Mount comment on why these two routes take
 // the card id from the POST body rather than the URL path.
@@ -55,11 +72,19 @@ type reviewCardView struct {
 // cards uses — any fixed handful of DeckColors will do.
 var celebrationColors = []string{"teal", "amber", "pink", "blue", "purple", "green"}
 
+// reviewBreak is what a snoozed deck's own review page shows in place of
+// the end-of-session summary: the deck is resting, not finished.
+type reviewBreak struct {
+	DeckID int64
+	Until  string // "2 Jan", the deck pane's own format
+}
+
 // reviewView is what templates/review.html's "review-body" block renders,
 // both as a full page and as an HTMX fragment after grading or undoing.
 type reviewView struct {
 	Current          *reviewCardView // nil once the queue is empty
-	Summary          *reviewSummary  // set exactly when Current is nil
+	Summary          *reviewSummary  // set when Current and Break are both nil
+	Break            *reviewBreak    // set instead of Summary on a snoozed deck's own review page
 	DeckScope        string          // "" (all decks) or a deck id, threaded into every form action
 	LastGradedCardID int64           // 0 = nothing to undo yet
 	CSRFToken        string
@@ -82,17 +107,11 @@ func (a *App) review(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	deckID, ok := a.deckScopeFromQuery(w, r)
+	deck, ok := a.reviewScope(w, r, userID)
 	if !ok {
 		return
 	}
-	if deckID != nil {
-		if _, err := a.store.DeckByID(r.Context(), userID, *deckID); err != nil {
-			a.fail(w, r, err)
-			return
-		}
-	}
-	a.renderReview(w, r, userID, deckID, http.StatusOK, 0)
+	a.renderReview(w, r, userID, deck, http.StatusOK, 0)
 }
 
 // deckReview backs GET /review/{deckID}: always scoped to the deck named in
@@ -106,16 +125,24 @@ func (a *App) deckReview(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := a.store.DeckByID(r.Context(), userID, id); err != nil {
+	d, err := a.store.DeckByID(r.Context(), userID, id)
+	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderReview(w, r, userID, &id, http.StatusOK, 0)
+	a.renderReview(w, r, userID, &d, http.StatusOK, 0)
 }
 
-func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64, deckID *int64, status int, lastGradedCardID int64) {
+// renderReview draws the review screen for deck (nil = every deck). The
+// caller has already loaded and ownership-checked deck, so it is not looked
+// up again here (#333).
+func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64, deck *Deck, status int, lastGradedCardID int64) {
 	ctx := r.Context()
 	now := a.store.now()
+	var deckID *int64
+	if deck != nil {
+		deckID = &deck.ID
+	}
 	queue, err := a.store.DueQueue(ctx, userID, deckID, now)
 	if err != nil {
 		a.fail(w, r, err)
@@ -138,16 +165,12 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 		CelebrationColors: celebrationColors,
 	}
 	view.ProgressPct = progressPercent(view.Done, view.Total)
-	if deckID != nil {
-		d, err := a.store.DeckByID(ctx, userID, *deckID)
-		if err != nil {
-			a.fail(w, r, err)
-			return
-		}
-		view.ScopeName, view.StopURL, view.Color = d.Name, "/flash/"+strconv.FormatInt(d.ID, 10), d.Color
+	if deck != nil {
+		view.ScopeName, view.StopURL, view.Color = deck.Name, "/flash/"+strconv.FormatInt(deck.ID, 10), deck.Color
 	}
 
-	if len(queue) > 0 {
+	switch {
+	case len(queue) > 0:
 		qc := queue[0]
 		tags, err := a.store.TagsForCard(ctx, userID, qc.Card.ID)
 		if err != nil {
@@ -160,10 +183,12 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 		}
 		view.Current = &reviewCardView{Face: newCardFace(qc.Card, qc.Deck, names), IsNew: qc.IsNew, DeckName: qc.Deck.Name}
 		view.Position = view.Done + 1
-		if deckID == nil {
+		if deck == nil {
 			view.Color = qc.Deck.Color
 		}
-	} else {
+	case deck != nil && deck.IsSnoozed(now):
+		view.Break = &reviewBreak{DeckID: deck.ID, Until: deck.SnoozedUntil.Format("2 Jan")}
+	default:
 		summary, err := a.reviewSummaryFor(ctx, userID, deckID, tally, now)
 		if err != nil {
 			a.deps.Errors.Internal(w, r, err)
@@ -223,7 +248,7 @@ func (a *App) gradeCardHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	deckID, ok := a.deckScopeFromQuery(w, r)
+	deck, ok := a.reviewScope(w, r, userID)
 	if !ok {
 		return
 	}
@@ -237,7 +262,7 @@ func (a *App) gradeCardHandler(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderReview(w, r, userID, deckID, http.StatusOK, cardID)
+	a.renderReview(w, r, userID, deck, http.StatusOK, cardID)
 }
 
 func (a *App) undoGradeHandler(w http.ResponseWriter, r *http.Request) {
@@ -249,7 +274,7 @@ func (a *App) undoGradeHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	deckID, ok := a.deckScopeFromQuery(w, r)
+	deck, ok := a.reviewScope(w, r, userID)
 	if !ok {
 		return
 	}
@@ -263,5 +288,5 @@ func (a *App) undoGradeHandler(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Status(w, r, http.StatusBadRequest)
 		return
 	}
-	a.renderReview(w, r, userID, deckID, http.StatusOK, 0)
+	a.renderReview(w, r, userID, deck, http.StatusOK, 0)
 }
