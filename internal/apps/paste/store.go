@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 // ID is the app id: the URL prefix, the migration namespace, and the prefix on
@@ -376,16 +377,17 @@ func newShareSlug() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// Timestamps match the platform's convention: RFC 3339 nanoseconds in UTC,
-// which sorts chronologically as text.
-func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+// Timestamps match the platform's convention, db.TimeLayout: UTC with
+// exactly nine fractional digits, which sorts chronologically as text even
+// within one second (#356). List's ORDER BY created_at relies on it.
+func formatTime(t time.Time) string { return db.FormatTime(t) }
 
 func parseTime(s string) (time.Time, error) {
-	t, err := time.Parse(time.RFC3339Nano, s)
+	t, err := db.ParseTime(s)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("paste: parse timestamp %q: %w", s, err)
 	}
-	return t.UTC(), nil
+	return t, nil
 }
 
 // Stats is the whole app in five numbers, for the admin page. It implements
