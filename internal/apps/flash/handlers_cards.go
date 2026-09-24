@@ -359,18 +359,26 @@ func cardBasePath(deckID int64) string {
 const cardSavedNotice = "Card saved. Add the next one."
 
 // newCardFormURL is the new-card form pre-filled for the next card after
-// "Save and add another": same type, same tags. saved adds the "Card
-// saved" notice (saved=1) — the no-JS redirect wants it (a fresh page load
-// has nothing else to show it happened), but the HTMX push-url must leave
-// it out: the fragment response already carries the notice, and reloading
-// that pushed URL later should not repeat it.
-func newCardFormURL(deckID int64, cardType, tags string, saved bool) string {
+// "Save and add another": same type, same tags, and the grid filter the
+// user came from (if any), so its Cancel/"All cards"/back link still return
+// to the filtered grid. saved adds the "Card saved" notice (saved=1) — the
+// no-JS redirect wants it (a fresh page load has nothing else to show it
+// happened), but the HTMX push-url must leave it out: the fragment response
+// already carries the notice, and reloading that pushed URL later should
+// not repeat it.
+func newCardFormURL(deckID int64, cardType, tags, q, tag string, saved bool) string {
 	v := url.Values{"type": {cardType}}
 	if saved {
 		v.Set("saved", "1")
 	}
 	if tags != "" {
 		v.Set("tags", tags)
+	}
+	if q != "" {
+		v.Set("q", q)
+	}
+	if tag != "" {
+		v.Set("tag", tag)
 	}
 	return cardBasePath(deckID) + "new?" + v.Encode()
 }
@@ -459,12 +467,17 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.PostFormValue("next") == "new" {
+		// The saved card itself and the final Save both stay unfiltered (the
+		// new card may not match the filter), but the follow-on new-card
+		// form keeps the filter for its own Cancel/"All cards"/back link and
+		// ActionURL, so a validation error on it re-renders with the filter
+		// too.
 		if !web.IsHTMX(r) {
-			http.Redirect(w, r, newCardFormURL(deck.ID, cardType, tags, true), http.StatusSeeOther)
+			http.Redirect(w, r, newCardFormURL(deck.ID, cardType, tags, q, tag, true), http.StatusSeeOther)
 			return
 		}
-		w.Header().Set("HX-Push-Url", newCardFormURL(deck.ID, cardType, tags, false))
-		next := a.newCardDetail(r, deck, "", cardType, "", "", "", tags, "", "")
+		w.Header().Set("HX-Push-Url", newCardFormURL(deck.ID, cardType, tags, q, tag, false))
+		next := a.newCardDetail(r, deck, "", cardType, "", "", "", tags, q, tag)
 		next.Notice = cardSavedNotice
 		a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, next)
 		return

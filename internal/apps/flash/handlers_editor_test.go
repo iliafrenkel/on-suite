@@ -665,6 +665,50 @@ func TestSaveAndAddAnotherWithoutJS(t *testing.T) {
 	}
 }
 
+// TestSaveAndAddAnotherKeepsTheFilterForTheNextForm guards the user
+// decision in #322/#329: from a filtered grid, "Save and add another" keeps
+// the filter for the follow-on new-card form's Cancel/"All cards" link and
+// its own ActionURL (so a validation error re-render keeps it too), while
+// the just-saved card and the final Save both stay unfiltered.
+func TestSaveAndAddAnotherKeepsTheFilterForTheNextForm(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new?tag=food", url.Values{
+		"card_type": {"basic"}, "front": {"four"}, "back": {"x"}, "tags": {"food"}, "next": {"new"},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("save and add another = %d; body: %s", rec.Code, rec.Body.String())
+	}
+
+	wantPush := "/flash/" + itoa(deck.ID) + "/cards/new?tag=food&tags=food&type=basic"
+	if got := rec.Header().Get("HX-Push-Url"); got != wantPush {
+		t.Errorf("HX-Push-Url = %q, want %q (filter kept, no saved=1)", got, wantPush)
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	form := doc.MustHave("#card-detail-new")
+	if action, _ := htmlassert.Attr(form, "action"); action != "/flash/"+itoa(deck.ID)+"/cards/new?tag=food" {
+		t.Errorf("next form action = %q, want the filter kept", action)
+	}
+	cancel := doc.QueryAll(`a[href="/flash/` + itoa(deck.ID) + `/cards/?tag=food"]`)
+	if len(cancel) == 0 {
+		t.Error("no Cancel/All cards link to the filtered grid")
+	}
+}
+
+// TestSaveAndAddAnotherWithoutJSKeepsTheFilter is the no-JS counterpart:
+// the redirect keeps saved=1 plus the filter.
+func TestSaveAndAddAnotherWithoutJSKeepsTheFilter(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	want := "/flash/" + itoa(deck.ID) + "/cards/new?saved=1&tag=food&tags=food&type=basic"
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new?tag=food", url.Values{
+		"card_type": {"basic"}, "front": {"four"}, "back": {"x"}, "tags": {"food"}, "next": {"new"},
+	}, want)
+}
+
 func TestNewCardEditorStructure(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
