@@ -79,7 +79,7 @@
 </div>{{end}}
 
 {{define "card-grid"}}<div id="card-grid" class="flash-card-grid">
-	<a class="flash-mini-card flash-mini-new" href="/flash/{{.Deck.ID}}/cards/new" hx-get="/flash/{{.Deck.ID}}/cards/new" hx-target="#deck-detail" hx-push-url="true">{{ticon "plus"}}New card</a>
+	<a class="flash-mini-card flash-mini-new" href="{{.NewCardURL}}" hx-get="{{.NewCardURL}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "plus"}}New card</a>
 	{{range .Items}}{{template "flash-mini-card" .}}{{end}}
 	{{if and (not .Items) (or .Query .Tag)}}<p class="flash-grid-empty dim">No cards match. <a href="{{.ClearURL}}" hx-get="{{.ClearURL}}" hx-target="#deck-detail" hx-push-url="true">Clear filters</a></p>{{end}}
 </div>{{end}}
@@ -94,8 +94,8 @@
 	<div class="notes-toolbar flash-deck-toolbar">
 		<a class="toolbar-btn flash-card-back-to-grid" href="{{.Opened.BackURL}}" hx-get="{{.Opened.BackURL}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "arrow-left"}}All cards</a>
 		<div class="notes-toolbar-actions">
-			<a class="toolbar-btn flash-card-edit" href="/flash/{{.Deck.ID}}/cards/edit/{{.Opened.Face.ID}}" hx-get="/flash/{{.Deck.ID}}/cards/edit/{{.Opened.Face.ID}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "edit"}}Edit card</a>
-			<form method="post" action="/flash/{{.Deck.ID}}/cards/{{.Opened.Face.ID}}/delete" hx-post="/flash/{{.Deck.ID}}/cards/{{.Opened.Face.ID}}/delete" hx-target="#deck-detail" hx-swap="innerHTML"
+			<a class="toolbar-btn flash-card-edit" href="{{.Opened.EditURL}}" hx-get="{{.Opened.EditURL}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "edit"}}Edit card</a>
+			<form method="post" action="{{.Opened.DeleteURL}}" hx-post="{{.Opened.DeleteURL}}" hx-target="#deck-detail" hx-swap="innerHTML"
 			      data-confirm="Delete this card? This can't be undone.">
 				<input type="hidden" name="{{csrfField}}" value="{{.Opened.CSRFToken}}">
 				<button type="submit" class="toolbar-btn danger">{{ticon "trash"}}Delete card</button>
