@@ -17,6 +17,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 // ID is the app id: the URL prefix, the migration namespace, and the prefix on
@@ -145,19 +147,21 @@ type Tree struct {
 	Root    []Subscription
 }
 
-// timeFmt is RFC3339 in UTC. Stored as TEXT because SQLite has no time type
-// and lexical order then matches chronological order, which the due index
-// depends on.
-const timeFmt = time.RFC3339Nano
+// formatTime writes db.TimeLayout: UTC with exactly nine fractional digits.
+// Stored as TEXT because SQLite has no time type, and fixed width is what
+// makes lexical order match chronological order even within one second
+// (#356) — which the due index, next_fetch_at <= ? and every ORDER BY
+// published_at depend on.
+func formatTime(t time.Time) string { return db.FormatTime(t) }
 
-func formatTime(t time.Time) string { return t.UTC().Format(timeFmt) }
-
+// parseTime reads a stored timestamp, or the zero time for one that does not
+// parse — callers treat a missing time and a garbled one alike.
 func parseTime(s string) time.Time {
-	t, err := time.Parse(timeFmt, s)
+	t, err := db.ParseTime(s)
 	if err != nil {
 		return time.Time{}
 	}
-	return t.UTC()
+	return t
 }
 
 // NormalizeFeedURL trims a feed URL and rejects anything that is not an
