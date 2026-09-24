@@ -2,6 +2,7 @@
 package flash_test
 
 import (
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -487,6 +488,125 @@ func TestUnfilteredCardFlowStaysUnfiltered(t *testing.T) {
 	if got := rec.Header().Get("HX-Push-Url"); got != "/flash/"+itoa(deck.ID)+"/cards/" {
 		t.Errorf("HX-Push-Url = %q, want no filter suffix", got)
 	}
+}
+
+// TestSavingANewCardFromAFilteredFormStaysUnfiltered guards the user
+// decision in #322: a new card is never filtered by the grid the user came
+// from (it may not even match it), so saving one opens it unfiltered, both
+// over HTMX and without JS.
+func TestSavingANewCardFromAFilteredFormStaysUnfiltered(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new?tag=food",
+		url.Values{"card_type": {"basic"}, "front": {"four"}, "back": {"x"}})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create card = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	wantPush := "/flash/" + itoa(deck.ID) + "/cards/4"
+	if got := rec.Header().Get("HX-Push-Url"); got != wantPush {
+		t.Errorf("HX-Push-Url = %q, want %q (no filter)", got, wantPush)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	assertNoFilterOnOpenedCard(t, doc)
+}
+
+func TestSavingANewCardFromAFilteredFormStaysUnfilteredWithoutJS(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	want := "/flash/" + itoa(deck.ID) + "/cards/4"
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new?tag=food",
+		url.Values{"card_type": {"basic"}, "front": {"four"}, "back": {"x"}}, want)
+
+	doc := s.Get(t, s.Alice, want)
+	assertNoFilterOnOpenedCard(t, doc)
+}
+
+// assertNoFilterOnOpenedCard checks that none of an opened card's next,
+// prev, back or edit links carry a ?q=/?tag= suffix.
+func assertNoFilterOnOpenedCard(t *testing.T, doc *htmlassert.Doc) {
+	t.Helper()
+	for _, sel := range []string{"a.flash-card-edit", "a.flash-card-back-to-grid", "a.flash-card-next", "a.flash-card-prev"} {
+		el := doc.Query(sel)
+		if el == nil {
+			continue
+		}
+		href, _ := htmlassert.Attr(el, "href")
+		if strings.Contains(href, "tag=") || strings.Contains(href, "q=") {
+			t.Errorf("%s href = %q, want no filter", sel, href)
+		}
+	}
+}
+
+// TestSaveEditKeepsFilterEncodedThroughMultipart guards #322's filter-carry
+// against special characters: q/tag values that contain quotes, "&", "#"
+// and non-ASCII must survive an edit save (sent as multipart/form-data, the
+// way the real editor posts) URL-encoded on the pushed URL, and properly
+// HTML-escaped wherever they're rendered as an href.
+func TestSaveEditKeepsFilterEncodedThroughMultipart(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"one"}, "back": {"x"}}, nil)
+
+	q := `o "x" & #é`
+	tag := "a&b c"
+	filter := url.Values{"q": {q}, "tag": {tag}}.Encode()
+	path := "/flash/" + itoa(deck.ID) + "/cards/1?" + filter
+
+	rec := postCardForm(t, s, s.Alice, path,
+		url.Values{"card_type": {"basic"}, "front": {"one"}, "back": {"y"}}, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save edit = %d; body: %s", rec.Code, rec.Body.String())
+	}
+
+	wantPush := "/flash/" + itoa(deck.ID) + "/cards/1?" + filter
+	if got := rec.Header().Get("HX-Push-Url"); got != wantPush {
+		t.Errorf("HX-Push-Url = %q, want %q", got, wantPush)
+	}
+
+	body := rec.Body.String()
+	// The raw HTML must escape "&" as an entity wherever the filter appears
+	// in an href (html/template's auto-escaping), or the "&tag=" separator
+	// between q and tag would silently break.
+	if !strings.Contains(body, "q=o&#43;%22x%22&#43;%26&#43;%23%C3%A9&amp;tag=a%26b&#43;c") {
+		t.Errorf("rendered hrefs don't contain the html-escaped encoded filter; body: %s", body)
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	back := doc.MustHave("a.flash-card-back-to-grid")
+	if href, _ := htmlassert.Attr(back, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/?"+filter {
+		t.Errorf("back-to-grid href = %q, want the filter kept encoded", href)
+	}
+	edit := doc.MustHave("a.flash-card-edit")
+	if href, _ := htmlassert.Attr(edit, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/edit/1?"+filter {
+		t.Errorf("edit href = %q, want the filter kept encoded", href)
+	}
+}
+
+// TestSaveEditKeepsFilterEncodedWithoutJS is the no-JS counterpart: the
+// redirect Location must carry the same URL-encoded filter.
+func TestSaveEditKeepsFilterEncodedWithoutJS(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"one"}, "back": {"x"}}, nil)
+
+	q := `o "x" & #é`
+	tag := "a&b c"
+	filter := url.Values{"q": {q}, "tag": {tag}}.Encode()
+	path := "/flash/" + itoa(deck.ID) + "/cards/1?" + filter
+
+	wantLocation := "/flash/" + itoa(deck.ID) + "/cards/1?" + filter
+	s.Submit(t, s.Alice, path,
+		url.Values{"card_type": {"basic"}, "front": {"one"}, "back": {"z"}}, wantLocation)
 }
 
 // TestOpenedCardShowsTagsOnce guards against the back face's plain tag pills
