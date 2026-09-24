@@ -76,34 +76,41 @@ func (st *Store) pendingShare(ctx context.Context, deckID, fromUserID, toUserID 
 		deckID, fromUserID, toUserID, ShareStatusPending))
 }
 
-// RevokeShare cancels one of fromUserID's own pending offers. Only a
-// pending row can be revoked — an already-adopted, declined, or
+// RevokeShare cancels one of fromUserID's own pending offers, scoped to
+// deckID: the route this comes from names both the deck and the share
+// (POST /{deckID}/share/{shareID}/revoke), and a share whose actual deck_id
+// doesn't match the URL's deckID is treated as not found — the {deckID}
+// segment isn't decorative, it's part of the identity being checked. Only
+// a pending row can be revoked — an already-adopted, declined, or
 // previously-revoked row returns ErrInvalid.
-func (st *Store) RevokeShare(ctx context.Context, fromUserID, shareID int64) error {
-	return st.resolveShare(ctx, shareID, fromUserID, "from_user_id", ShareStatusRevoked)
+func (st *Store) RevokeShare(ctx context.Context, fromUserID, deckID, shareID int64) error {
+	return st.resolveShare(ctx, shareID, fromUserID, "from_user_id", ShareStatusRevoked, &deckID)
 }
 
 // DeclineShare dismisses one of toUserID's own pending offers without
 // adopting it. A declined offer never blocks a later fresh ShareDeck call
 // from the same creator to the same recipient.
 func (st *Store) DeclineShare(ctx context.Context, toUserID, shareID int64) error {
-	return st.resolveShare(ctx, shareID, toUserID, "to_user_id", ShareStatusDeclined)
+	return st.resolveShare(ctx, shareID, toUserID, "to_user_id", ShareStatusDeclined, nil)
 }
 
 // resolveShare moves a pending row (owned by userID via ownerColumn, either
 // "from_user_id" or "to_user_id") to newStatus. It reports ErrNotFound if
-// the row doesn't exist or isn't userID's, and ErrInvalid if it exists and
-// is userID's but is no longer pending.
-func (st *Store) resolveShare(ctx context.Context, shareID, userID int64, ownerColumn, newStatus string) error {
-	var ownerID int64
+// the row doesn't exist, isn't userID's, or (when wantDeckID is non-nil)
+// belongs to a different deck than the caller named, and ErrInvalid if it
+// exists, is userID's, and is for the right deck but is no longer pending.
+func (st *Store) resolveShare(ctx context.Context, shareID, userID int64, ownerColumn, newStatus string, wantDeckID *int64) error {
+	var ownerID, deckID int64
 	err := st.db.QueryRowContext(ctx,
-		`SELECT `+ownerColumn+` FROM flash_shares WHERE id = ?`, shareID).Scan(&ownerID)
+		`SELECT `+ownerColumn+`, deck_id FROM flash_shares WHERE id = ?`, shareID).Scan(&ownerID, &deckID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return ErrNotFound
 	case err != nil:
 		return fmt.Errorf("flash: resolve share: %w", err)
 	case ownerID != userID:
+		return ErrNotFound
+	case wantDeckID != nil && deckID != *wantDeckID:
 		return ErrNotFound
 	}
 
@@ -167,6 +174,22 @@ type shareCardSource struct {
 	AudioHash *string
 }
 
+// AdoptResult is what AdoptShare did, so callers can word a notice ("N new
+// cards added to Y" vs. "Y is now in your decks") without a separate
+// lookup of the share it just resolved.
+type AdoptResult struct {
+	Deck Deck
+	// Merged is true when this offer was a re-share of a (deck, creator,
+	// recipient) triple already adopted earlier — cards went into that
+	// existing deck rather than a brand-new one.
+	Merged bool
+	// CardsCopied is how many source cards were actually copied: the full
+	// source deck's card count for a first-time adoption, or just the
+	// cards not already represented (by origin_card_id) for a merge —
+	// which can be 0 if nothing new was added since the last adoption.
+	CardsCopied int
+}
+
 // AdoptShare resolves one of toUserID's own pending offers (shareID). If no
 // earlier offer for the same (deck, creator, recipient) triple has ever been
 // adopted, this is a first-time adoption: a brand-new deck is created for
@@ -176,10 +199,10 @@ type shareCardSource struct {
 // there (by origin_card_id) — so cards and progress the recipient already
 // has are never touched. Either way, no FSRS review state is ever copied:
 // every copied card starts brand new in the recipient's review queue.
-func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck, error) {
+func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (AdoptResult, error) {
 	tx, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
-		return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+		return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -187,24 +210,25 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck,
 		`SELECT id, deck_id, from_user_id, to_user_id, status, adopted_deck_id, created_at, responded_at
 		 FROM flash_shares WHERE id = ?`, shareID))
 	if err != nil {
-		return Deck{}, err
+		return AdoptResult{}, err
 	}
 	if sh.ToUserID != toUserID {
-		return Deck{}, ErrNotFound
+		return AdoptResult{}, ErrNotFound
 	}
 	if sh.Status != ShareStatusPending {
-		return Deck{}, fmt.Errorf("%w: this share has already been resolved", ErrInvalid)
+		return AdoptResult{}, fmt.Errorf("%w: this share has already been resolved", ErrInvalid)
 	}
 
 	src, err := deckByIDIgnoringOwner(ctx, tx, sh.DeckID)
 	if err != nil {
-		return Deck{}, err
+		return AdoptResult{}, err
 	}
 
 	priorAdoptedDeckID, err := priorAdoptedDeck(ctx, tx, sh.DeckID, sh.FromUserID, sh.ToUserID)
 	if err != nil {
-		return Deck{}, err
+		return AdoptResult{}, err
 	}
+	merged := priorAdoptedDeckID != nil
 
 	var targetDeckID int64
 	if priorAdoptedDeckID != nil {
@@ -218,28 +242,29 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck,
 		).Scan(&targetDeckID)
 		if err != nil {
 			if isUniqueViolation(err) {
-				return Deck{}, fmt.Errorf("%w: you already have a deck named %q", ErrInvalid, src.Name)
+				return AdoptResult{}, fmt.Errorf("%w: you already have a deck named %q", ErrInvalid, src.Name)
 			}
-			return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+			return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
 		}
 	}
 
 	existingOrigins, err := originCardIDsInDeck(ctx, tx, targetDeckID)
 	if err != nil {
-		return Deck{}, err
+		return AdoptResult{}, err
 	}
 
 	sourceCards, err := cardsInDeckIgnoringOwner(ctx, tx, sh.DeckID)
 	if err != nil {
-		return Deck{}, err
+		return AdoptResult{}, err
 	}
+	cardsCopied := 0
 	for _, sc := range sourceCards {
 		if existingOrigins[sc.ID] {
 			continue
 		}
 		tags, err := tagsForCardIgnoringOwner(ctx, tx, sc.ID)
 		if err != nil {
-			return Deck{}, err
+			return AdoptResult{}, err
 		}
 
 		var newCardID int64
@@ -250,29 +275,51 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck,
 			targetDeckID, toUserID, sc.CardType, sc.Front, sc.Back, sc.Notes, formatTime(st.now()), sc.ImageHash, sc.AudioHash, sc.ID,
 		).Scan(&newCardID)
 		if err != nil {
-			return Deck{}, fmt.Errorf("flash: adopt share: copy card: %w", err)
+			return AdoptResult{}, fmt.Errorf("flash: adopt share: copy card: %w", err)
 		}
 		if err := upsertCardTags(ctx, tx, toUserID, newCardID, tags); err != nil {
-			return Deck{}, err
+			return AdoptResult{}, err
 		}
+		cardsCopied++
 	}
 
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE flash_shares SET status = ?, adopted_deck_id = ?, responded_at = ? WHERE id = ?`,
-		ShareStatusAdopted, targetDeckID, formatTime(st.now()), shareID); err != nil {
-		return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+	// The status guard here isn't reachable through this same function call —
+	// the pending check above already ruled out anything but a pending row —
+	// but it closes the same window resolveShare's UPDATE closes: two
+	// concurrent adopts of the same share racing between that check and this
+	// UPDATE. Without "AND status = 'pending'", the loser would still report
+	// success and silently duplicate the copied deck/cards; with it, the
+	// loser's UPDATE affects 0 rows and the whole transaction rolls back.
+	res, err := tx.ExecContext(ctx,
+		`UPDATE flash_shares SET status = ?, adopted_deck_id = ?, responded_at = ? WHERE id = ? AND status = ?`,
+		ShareStatusAdopted, targetDeckID, formatTime(st.now()), shareID, ShareStatusPending)
+	if err != nil {
+		return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
+	}
+	if n == 0 {
+		return AdoptResult{}, fmt.Errorf("%w: this share has already been resolved", ErrInvalid)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+		return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
 	}
-	return st.DeckByID(ctx, toUserID, targetDeckID)
+	d, err := st.DeckByID(ctx, toUserID, targetDeckID)
+	if err != nil {
+		return AdoptResult{}, err
+	}
+	return AdoptResult{Deck: d, Merged: merged, CardsCopied: cardsCopied}, nil
 }
 
-// deckByIDIgnoringOwner reads a deck regardless of who owns it — used only
-// inside AdoptShare, where the recipient legitimately needs to read the
-// source deck's name/description despite not owning it, because they hold a
-// valid pending share for it (checked by the caller before this is called).
+// deckByIDIgnoringOwner reads a deck regardless of who owns it — used inside
+// AdoptShare, where the recipient legitimately needs to read the source
+// deck's name/description despite not owning it, because they hold a valid
+// pending share for it (checked by the caller before this is called).
+// SharePreview needs the same unowned read for the same reason, but does it
+// with its own inline query rather than calling this helper.
 func deckByIDIgnoringOwner(ctx context.Context, tx *sql.Tx, id int64) (Deck, error) {
 	return scanDeck(tx.QueryRowContext(ctx,
 		`SELECT `+deckColumns+` FROM flash_decks WHERE id = ?`, id))
@@ -415,9 +462,9 @@ func (st *Store) SharesForDeck(ctx context.Context, fromUserID, deckID int64) ([
 }
 
 // ShareOffer is one pending share addressed to a recipient, enriched with
-// what the "shared with me" list needs to display: the source deck's name,
-// and — if a merge offer — how many source cards the recipient doesn't have
-// yet.
+// what a gift row and its preview pane need to display: the source deck's
+// name, and — if a merge offer — how many source cards the recipient doesn't
+// have yet.
 type ShareOffer struct {
 	Share
 	DeckName  string
@@ -430,8 +477,8 @@ type ShareOffer struct {
 	NewCardCount int
 }
 
-// SharesForRecipient lists every pending offer addressed to toUserID,
-// newest first — the recipient's "shared with me" list.
+// SharesForRecipient lists every pending offer addressed to toUserID, newest
+// first — the recipient's gift rows.
 func (st *Store) SharesForRecipient(ctx context.Context, toUserID int64) ([]ShareOffer, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`SELECT s.id, s.deck_id, s.from_user_id, s.to_user_id, s.status, s.adopted_deck_id, s.created_at, s.responded_at,

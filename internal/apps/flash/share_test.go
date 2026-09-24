@@ -92,15 +92,51 @@ func TestRevokeShareRequiresPendingAndOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := f.store.RevokeShare(ctx, f.bob.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
+	if err := f.store.RevokeShare(ctx, f.bob.ID, d.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
 		t.Errorf("revoke by non-owner: err = %v, want ErrNotFound", err)
 	}
-	if err := f.store.RevokeShare(ctx, f.alice.ID, sh.ID); err != nil {
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, sh.ID); err != nil {
 		t.Fatal(err)
 	}
 	// revoking again (no longer pending) fails
-	if err := f.store.RevokeShare(ctx, f.alice.ID, sh.ID); !errors.Is(err, flash.ErrInvalid) {
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, sh.ID); !errors.Is(err, flash.ErrInvalid) {
 		t.Errorf("re-revoke: err = %v, want ErrInvalid", err)
+	}
+}
+
+func TestRevokeShareRequiresMatchingDeckID(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := f.store.CreateDeck(ctx, f.alice.ID, "French", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Alice owns both decks and the share, but the share belongs to d, not
+	// other — revoking it via other's id must not succeed.
+	if err := f.store.RevokeShare(ctx, f.alice.ID, other.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
+		t.Errorf("revoke with mismatched deckID: err = %v, want ErrNotFound", err)
+	}
+
+	// The share is still pending.
+	shares, err := f.store.SharesForDeck(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shares) != 1 || shares[0].Status != flash.ShareStatusPending {
+		t.Fatalf("shares = %+v, want the share still pending", shares)
+	}
+
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, sh.ID); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -149,7 +185,7 @@ func TestDeleteDeckCascadesShares(t *testing.T) {
 	}
 	// the share row is gone: revoking it now reports ErrNotFound the same as
 	// a bad ID would
-	if err := f.store.RevokeShare(ctx, f.alice.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
 		t.Errorf("revoke after cascade delete: err = %v, want ErrNotFound", err)
 	}
 }
@@ -181,9 +217,16 @@ func TestAdoptShareFirstTimeCopiesCardsTagsAndMedia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	newDeck, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
 	if err != nil {
 		t.Fatal(err)
+	}
+	newDeck := result.Deck
+	if result.Merged {
+		t.Error("Merged = true, want false for a first-time adoption")
+	}
+	if result.CardsCopied != 1 {
+		t.Errorf("CardsCopied = %d, want 1", result.CardsCopied)
 	}
 
 	if newDeck.UserID != f.bob.ID {
@@ -222,7 +265,7 @@ func TestAdoptShareFirstTimeCopiesCardsTagsAndMedia(t *testing.T) {
 		t.Fatalf("tags = %+v, want one tag %q under bob's own account", tags, "greetings")
 	}
 
-	err = f.store.RevokeShare(ctx, f.alice.ID, sh.ID)
+	err = f.store.RevokeShare(ctx, f.alice.ID, d.ID, sh.ID)
 	if !errors.Is(err, flash.ErrInvalid) {
 		t.Errorf("revoking an already-adopted share: err = %v, want ErrInvalid", err)
 	}
@@ -248,10 +291,11 @@ func TestAdoptShareNeverCopiesReviewState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	newDeck, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	newDeck := result.Deck
 	cards, err := f.store.ListCards(ctx, f.bob.ID, newDeck.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -282,10 +326,11 @@ func TestAdoptShareMergeCopiesOnlyNewCards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstDeck, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID)
+	firstResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	firstDeck := firstResult.Deck
 	// bob reviews his copy of c1 before the merge, to prove merge leaves it alone
 	firstCards, err := f.store.ListCards(ctx, f.bob.ID, firstDeck.ID)
 	if err != nil {
@@ -305,9 +350,16 @@ func TestAdoptShareMergeCopiesOnlyNewCards(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mergedDeck, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID)
+	mergedResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID)
 	if err != nil {
 		t.Fatal(err)
+	}
+	mergedDeck := mergedResult.Deck
+	if !mergedResult.Merged {
+		t.Error("Merged = false, want true for a re-share of an already-adopted deck")
+	}
+	if mergedResult.CardsCopied != 1 {
+		t.Errorf("CardsCopied = %d, want 1 (only the newly added card c2)", mergedResult.CardsCopied)
 	}
 	if mergedDeck.ID != firstDeck.ID {
 		t.Fatalf("merge should target the existing adopted deck (%d), got a new deck %d", firstDeck.ID, mergedDeck.ID)
@@ -331,6 +383,99 @@ func TestAdoptShareMergeCopiesOnlyNewCards(t *testing.T) {
 	}
 	_ = c1
 	_ = c2
+}
+
+// TestAdoptShareResultReportsFirstTimeAdoption covers #348: AdoptShare's
+// result must say this was a first-time adoption (not a merge) and how many
+// cards were copied, so the handler can word its notice without a separate
+// pre-lookup.
+func TestAdoptShareResultReportsFirstTimeAdoption(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, front := range []string{"hola", "adios"} {
+		if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, front, "x", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Merged {
+		t.Error("Merged = true, want false for a first-time adoption")
+	}
+	if result.CardsCopied != 2 {
+		t.Errorf("CardsCopied = %d, want 2 (the source deck's full card count)", result.CardsCopied)
+	}
+	if result.Deck.Name != "Spanish" {
+		t.Errorf("Deck.Name = %q, want %q", result.Deck.Name, "Spanish")
+	}
+}
+
+// TestAdoptShareResultReportsMergeAndNewCardCount covers #348's merge case,
+// including the 0-new-cards edge: re-adopting after nothing new was added
+// still reports Merged=true with CardsCopied=0.
+func TestAdoptShareResultReportsMergeAndNewCardCount(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	sh1, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-share with one new card added: merge reports the new card copied.
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "adios", "goodbye", ""); err != nil {
+		t.Fatal(err)
+	}
+	sh2, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Merged {
+		t.Error("Merged = false, want true for a re-share of an already-adopted deck")
+	}
+	if result.CardsCopied != 1 {
+		t.Errorf("CardsCopied = %d, want 1", result.CardsCopied)
+	}
+
+	// Re-share again with nothing new added: the 0-new-cards case.
+	sh3, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err = f.store.AdoptShare(ctx, f.bob.ID, sh3.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Merged {
+		t.Error("Merged = false, want true")
+	}
+	if result.CardsCopied != 0 {
+		t.Errorf("CardsCopied = %d, want 0 (nothing new to copy)", result.CardsCopied)
+	}
 }
 
 func TestAdoptShareRejectsWrongRecipientAndDoubleAdopt(t *testing.T) {
@@ -368,10 +513,11 @@ func TestDeleteAdoptedDeckClearsShareBackReferenceButKeepsShare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	newDeck, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	newDeck := result.Deck
 
 	// Bob deletes his own adopted copy — this must succeed rather than
 	// tripping the adopted_deck_id -> flash_decks foreign key (migration
@@ -493,12 +639,63 @@ func TestAdoptShareCopiesDeckColor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	adopted, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if adopted.Color != "pink" {
-		t.Errorf("adopted deck Color = %q, want the source deck's pink", adopted.Color)
+	if result.Deck.Color != "pink" {
+		t.Errorf("adopted deck Color = %q, want the source deck's pink", result.Deck.Color)
+	}
+}
+
+// TestAdoptShareMergeKeepsAdoptersOwnColor covers #318: a merge only copies
+// new cards into the recipient's existing deck — it must never touch that
+// deck's own colour, even though a first-time adoption copies the source
+// deck's colour (see TestAdoptShareCopiesDeckColor).
+func TestAdoptShareMergeKeepsAdoptersOwnColor(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "pink"); err != nil {
+		t.Fatal(err)
+	}
+	sh1, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstResult.Deck.Color != "pink" {
+		t.Fatalf("setup: adopted deck Color = %q, want pink", firstResult.Deck.Color)
+	}
+
+	// Bob recolours his adopted deck.
+	if _, err := f.store.SetDeckColor(ctx, f.bob.ID, firstResult.Deck.ID, "teal"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Alice adds a card and re-shares; bob merges.
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "Mercury", "the first planet", ""); err != nil {
+		t.Fatal(err)
+	}
+	sh2, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mergedResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mergedResult.Merged {
+		t.Fatal("Merged = false, want true for a re-share of an already-adopted deck")
+	}
+	if mergedResult.Deck.Color != "teal" {
+		t.Errorf("merged deck Color = %q, want bob's own teal to survive the merge", mergedResult.Deck.Color)
 	}
 }
 

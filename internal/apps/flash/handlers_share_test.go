@@ -55,6 +55,42 @@ func TestShareDeckHandlerCreatesOfferForRecipient(t *testing.T) {
 	}
 }
 
+// TestShareDeckHandlerRejectsUnknownRecipient covers #304 bullet 3: a
+// tampered form naming a to_user_id that isn't a real account must 400
+// rather than creating an offer to nobody.
+func TestShareDeckHandlerRejectsUnknownRecipient(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/share",
+		url.Values{"to_user_id": {"999999"}})
+	if rec.Code != 400 {
+		t.Fatalf("share with unknown to_user_id: %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+
+	shares, err := s.Store.SharesForDeck(t.Context(), s.Alice.User.ID, deckID)
+	if err != nil || len(shares) != 0 {
+		t.Fatalf("shares after rejected share = %+v, err = %v, want none", shares, err)
+	}
+}
+
+// TestShareDeckHandlerNoJSRedirects covers #342: a no-JS POST must 303
+// redirect back to the deck rather than returning a bare HTML fragment, and
+// must still actually create the share, not just redirect as if it had.
+func TestShareDeckHandlerNoJSRedirects(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := strconv.FormatInt(deckID, 10)
+
+	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share",
+		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}}, "/flash/"+deckIDStr)
+
+	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
+	if err != nil || len(offers) != 1 || offers[0].DeckName != "Spanish" {
+		t.Fatalf("offers after no-JS share = %+v, err = %v, want one offer for Spanish", offers, err)
+	}
+}
+
 func TestShareDeckHandlerRejectsNonOwner(t *testing.T) {
 	s := newShareServer(t)
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")
@@ -92,6 +128,89 @@ func TestRevokeAndAdoptShareHandlers(t *testing.T) {
 	rec = s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/share/"+shareIDStr+"/revoke", url.Values{})
 	if rec.Code != 400 {
 		t.Fatalf("revoke adopted share: %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRevokeShareHandlerRequiresMatchingDeckID covers #304 bullet 1: the
+// {deckID} in the revoke route isn't decorative — a mismatched (but still
+// alice-owned) deckID must 404 rather than revoking a share that actually
+// belongs to a different deck.
+func TestRevokeShareHandlerRequiresMatchingDeckID(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	otherDeckID := createDeckHX(t, s, s.Alice, "French")
+	deckIDStr := strconv.FormatInt(deckID, 10)
+	otherDeckIDStr := strconv.FormatInt(otherDeckID, 10)
+	shareIDStr := shareToBob(t, s, deckID)
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+otherDeckIDStr+"/share/"+shareIDStr+"/revoke", url.Values{})
+	if rec.Code != 404 {
+		t.Fatalf("revoke with mismatched deckID: %d, want 404; body: %s", rec.Code, rec.Body.String())
+	}
+
+	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
+	if err != nil || len(offers) != 1 || offers[0].Status != flash.ShareStatusPending {
+		t.Fatalf("offers after mismatched revoke = %+v, err = %v, want the share still pending", offers, err)
+	}
+
+	// The real deckID still revokes it.
+	rec = s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/share/"+shareIDStr+"/revoke", url.Values{})
+	if rec.Code != 200 {
+		t.Fatalf("revoke with correct deckID: %d; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRevokeShareHandlerNoJSRedirects covers #342 for revoke.
+func TestRevokeShareHandlerNoJSRedirects(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := strconv.FormatInt(deckID, 10)
+	shareID, err := strconv.ParseInt(shareToBob(t, s, deckID), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share/"+strconv.FormatInt(shareID, 10)+"/revoke", url.Values{}, "/flash/"+deckIDStr)
+
+	shares, err := s.Store.SharesForDeck(t.Context(), s.Alice.User.ID, deckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got *flash.Share
+	for i := range shares {
+		if shares[i].ID == shareID {
+			got = &shares[i]
+		}
+	}
+	if got == nil || got.Status != flash.ShareStatusRevoked {
+		t.Fatalf("share after no-JS revoke = %+v, want status %q", got, flash.ShareStatusRevoked)
+	}
+}
+
+// TestDeclineShareHandlerNoJSRedirects covers #342 for decline.
+func TestDeclineShareHandlerNoJSRedirects(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	shareIDStr := shareToBob(t, s, deckID)
+
+	s.Submit(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {shareIDStr}}, "/flash/")
+
+	shareID, err := strconv.ParseInt(shareIDStr, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shares, err := s.Store.SharesForDeck(t.Context(), s.Alice.User.ID, deckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got *flash.Share
+	for i := range shares {
+		if shares[i].ID == shareID {
+			got = &shares[i]
+		}
+	}
+	if got == nil || got.Status != flash.ShareStatusDeclined {
+		t.Fatalf("share after no-JS decline = %+v, want status %q", got, flash.ShareStatusDeclined)
 	}
 }
 
@@ -155,6 +274,7 @@ func TestGiftPreviewPane(t *testing.T) {
 			url.Values{"card_type": {"basic"}, "front": {front}, "back": {"x"}})
 	}
 	shareID := shareToBob(t, s, deckID)
+	createDeckHX(t, s, s.Bob, "Bob's own deck") // another row, so the highlight has to pick the right one
 
 	doc := s.Get(t, s.Bob, "/flash/shared/"+shareID)
 	pane := doc.MustHave("#deck-detail .flash-gift")
@@ -174,7 +294,26 @@ func TestGiftPreviewPane(t *testing.T) {
 			t.Errorf("%s has an empty CSRF token", sel)
 		}
 	}
-	doc.MustHave(`#deck-list a.deck-row-active`) // the gift row is highlighted
+	// The gift row itself is the highlighted one, not bob's own deck row.
+	gift := doc.MustHave("#deck-list a.deck-row-gift")
+	class, _ := htmlassert.Attr(gift, "class")
+	if !containsClass(class, "deck-row-active") {
+		t.Errorf("gift row class = %q, want it to include deck-row-active", class)
+	}
+	if n := len(doc.QueryAll("#deck-list a.deck-row-active")); n != 1 {
+		t.Errorf("#deck-list has %d active rows, want exactly 1 (bob's own deck row must not also be highlighted)", n)
+	}
+}
+
+// containsClass reports whether class (a space-separated attribute value)
+// contains want as one of its space-separated tokens.
+func containsClass(class, want string) bool {
+	for _, c := range strings.Fields(class) {
+		if c == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGiftPreviewIsRecipientOnly(t *testing.T) {
@@ -207,10 +346,86 @@ func TestGiftRowLeavesTheListOnAdoptAndDecline(t *testing.T) {
 	shareID = shareToBob(t, s, deckID)
 	rec = s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareID}})
 	doc = htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#deck-list")
 	doc.MustNotHave("#deck-list .deck-row-gift")
 	notice := doc.MustHave("#deck-detail-view .flash-notice")
 	if !strings.Contains(htmlassert.Text(notice), "Spanish") {
 		t.Errorf("adopt notice = %q, want the deck name", htmlassert.Text(notice))
+	}
+}
+
+// TestAdoptNoticeWordingForFirstAdoptAndMerge covers a gap from Part A's
+// review: no test asserted the actual wording of AdoptResult's notice. A
+// first-time adopt must say the deck "is now in your decks"; a merge must
+// say how many new cards were added, singular or plural depending on count.
+func TestAdoptNoticeWordingForFirstAdoptAndMerge(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := strconv.FormatInt(deckID, 10)
+	shareID := shareToBob(t, s, deckID)
+
+	rec := s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareID}})
+	if rec.Code != 200 {
+		t.Fatalf("adopt: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	notice := htmlassert.Text(doc.MustHave("#deck-detail-view .flash-notice"))
+	if !strings.Contains(notice, "is now in your decks") {
+		t.Errorf("first adopt notice = %q, want it to say the deck is now in your decks", notice)
+	}
+
+	// Alice adds one card and re-shares; bob merges.
+	rec = s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"hola"}, "back": {"hello"}, "notes": {""}})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create card: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	mergeShareID := shareToBob(t, s, deckID)
+
+	rec = s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {mergeShareID}})
+	if rec.Code != 200 {
+		t.Fatalf("merge: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc = htmlassert.Parse(t, rec.Body.String())
+	notice = htmlassert.Text(doc.MustHave("#deck-detail-view .flash-notice"))
+	if !strings.Contains(notice, "1 new card added to") {
+		t.Errorf("merge notice = %q, want it to say 1 new card added to", notice)
+	}
+}
+
+// TestDeclineOneOfTwoGiftsLeavesTheOtherInTheOOBList covers #304 bullet 8:
+// the out-of-band #deck-list refresh after declining one gift must still
+// show every other still-pending gift, not just drop the whole gift section.
+func TestDeclineOneOfTwoGiftsLeavesTheOtherInTheOOBList(t *testing.T) {
+	s := newShareServer(t)
+	spanishID := createDeckHX(t, s, s.Alice, "Spanish")
+	frenchID := createDeckHX(t, s, s.Alice, "French")
+	spanishShareID := shareToBob(t, s, spanishID)
+	frenchShareID := shareToBob(t, s, frenchID)
+
+	rec := s.PostHX(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {spanishShareID}})
+	if rec.Code != 200 {
+		t.Fatalf("decline: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	list := doc.MustHave("#deck-list")
+	if _, ok := htmlassert.Attr(list, "hx-swap-oob"); !ok {
+		t.Error("#deck-list is not refreshed out of band on decline")
+	}
+
+	gifts := doc.QueryAll("#deck-list a.deck-row-gift")
+	if len(gifts) != 1 {
+		t.Fatalf("gift rows after decline = %d, want exactly 1 (French)", len(gifts))
+	}
+	text := htmlassert.Text(gifts[0])
+	if !strings.Contains(text, "French") {
+		t.Errorf("remaining gift row = %q, want French", text)
+	}
+	if strings.Contains(text, "Spanish") {
+		t.Errorf("remaining gift row = %q, should not mention the declined Spanish deck", text)
+	}
+	if href, _ := htmlassert.Attr(gifts[0], "href"); href != "/flash/shared/"+frenchShareID {
+		t.Errorf("remaining gift row href = %q, want the French share %q", href, "/flash/shared/"+frenchShareID)
 	}
 }
 

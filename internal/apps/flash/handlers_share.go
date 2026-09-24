@@ -10,7 +10,8 @@ import (
 )
 
 // shareIDFromPath parses the {shareID} wildcard, used by the creator's
-// revoke action, which operates on a share row nested under its deck.
+// revoke action, which operates on a share row nested under its deck, and by
+// giftPreview, where it names the recipient's own pending share directly.
 func (a *App) shareIDFromPath(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("shareID"), 10, 64)
 	if err != nil || id <= 0 {
@@ -50,12 +51,30 @@ func (a *App) shareDeck(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Status(w, r, http.StatusBadRequest)
 		return
 	}
+	// The store has no FK from flash_shares to the accounts table (and
+	// couldn't enforce auth even if it did), so a tampered to_user_id has to
+	// be caught here: reject anything that isn't one of the accounts this
+	// handler already has access to before it ever reaches the store.
+	_, byID, err := a.usernamesByID(r.Context())
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	if _, ok := byID[toUserID]; !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
 
 	if _, err := a.store.ShareDeck(r.Context(), userID, deckID, toUserID); err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	a.deps.Log.Info("deck shared", "app", ID, "user_id", userID, "deck_id", deckID, "to_user_id", toUserID)
+
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/flash/"+strconv.FormatInt(deckID, 10), http.StatusSeeOther)
+		return
+	}
 
 	d, err := a.store.DeckByID(r.Context(), userID, deckID)
 	if err != nil {
@@ -67,9 +86,7 @@ func (a *App) shareDeck(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	if web.IsHTMX(r) {
-		w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	}
+	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
 	view := a.viewDeckDetail(r, userID, d, recipients, shares)
 	view.ShareOpen = true
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
@@ -90,11 +107,16 @@ func (a *App) revokeShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.store.RevokeShare(r.Context(), userID, shareID); err != nil {
+	if err := a.store.RevokeShare(r.Context(), userID, deckID, shareID); err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	a.deps.Log.Info("share revoked", "app", ID, "user_id", userID, "share_id", shareID)
+
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/flash/"+strconv.FormatInt(deckID, 10), http.StatusSeeOther)
+		return
+	}
 
 	d, err := a.store.DeckByID(r.Context(), userID, deckID)
 	if err != nil {
@@ -106,9 +128,7 @@ func (a *App) revokeShareHandler(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	if web.IsHTMX(r) {
-		w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	}
+	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
 	view := a.viewDeckDetail(r, userID, d, recipients, shares)
 	view.ShareOpen = true
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
@@ -130,9 +150,12 @@ func (a *App) declineShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.deps.Log.Info("share declined", "app", ID, "user_id", userID, "share_id", shareID)
-	if web.IsHTMX(r) {
-		w.Header().Set("HX-Push-Url", "/flash/")
+
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, "/flash/", http.StatusSeeOther)
+		return
 	}
+	w.Header().Set("HX-Push-Url", "/flash/")
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, deckDetailView{})
 }
 
@@ -187,19 +210,12 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	wasMerge, newCards := false, 0
-	if offers, err := a.store.SharesForRecipient(r.Context(), userID); err == nil {
-		for _, o := range offers {
-			if o.ID == shareID {
-				wasMerge, newCards = o.PriorAdoptedDeckID != nil, o.NewCardCount
-			}
-		}
-	}
-	d, err := a.store.AdoptShare(r.Context(), userID, shareID)
+	result, err := a.store.AdoptShare(r.Context(), userID, shareID)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
+	d := result.Deck
 	a.deps.Log.Info("share adopted", "app", ID, "user_id", userID, "share_id", shareID, "deck_id", d.ID)
 
 	if !web.IsHTMX(r) {
@@ -214,8 +230,8 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	view := a.viewDeckDetail(r, userID, d, recipients, shares)
 	view.Notice = "“" + d.Name + "” is now in your decks."
-	if wasMerge {
-		view.Notice = fmt.Sprintf("%d new card%s added to “%s”.", newCards, plural(newCards), d.Name)
+	if result.Merged {
+		view.Notice = fmt.Sprintf("%d new card%s added to “%s”.", result.CardsCopied, plural(result.CardsCopied), d.Name)
 	}
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }
