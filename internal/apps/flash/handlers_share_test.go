@@ -75,7 +75,8 @@ func TestShareDeckHandlerRejectsUnknownRecipient(t *testing.T) {
 }
 
 // TestShareDeckHandlerNoJSRedirects covers #342: a no-JS POST must 303
-// redirect back to the deck rather than returning a bare HTML fragment.
+// redirect back to the deck rather than returning a bare HTML fragment, and
+// must still actually create the share, not just redirect as if it had.
 func TestShareDeckHandlerNoJSRedirects(t *testing.T) {
 	s := newShareServer(t)
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")
@@ -83,6 +84,11 @@ func TestShareDeckHandlerNoJSRedirects(t *testing.T) {
 
 	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share",
 		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}}, "/flash/"+deckIDStr)
+
+	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
+	if err != nil || len(offers) != 1 || offers[0].DeckName != "Spanish" {
+		t.Fatalf("offers after no-JS share = %+v, err = %v, want one offer for Spanish", offers, err)
+	}
 }
 
 func TestShareDeckHandlerRejectsNonOwner(t *testing.T) {
@@ -159,9 +165,26 @@ func TestRevokeShareHandlerNoJSRedirects(t *testing.T) {
 	s := newShareServer(t)
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")
 	deckIDStr := strconv.FormatInt(deckID, 10)
-	shareIDStr := shareToBob(t, s, deckID)
+	shareID, err := strconv.ParseInt(shareToBob(t, s, deckID), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share/"+shareIDStr+"/revoke", url.Values{}, "/flash/"+deckIDStr)
+	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share/"+strconv.FormatInt(shareID, 10)+"/revoke", url.Values{}, "/flash/"+deckIDStr)
+
+	shares, err := s.Store.SharesForDeck(t.Context(), s.Alice.User.ID, deckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got *flash.Share
+	for i := range shares {
+		if shares[i].ID == shareID {
+			got = &shares[i]
+		}
+	}
+	if got == nil || got.Status != flash.ShareStatusRevoked {
+		t.Fatalf("share after no-JS revoke = %+v, want status %q", got, flash.ShareStatusRevoked)
+	}
 }
 
 // TestDeclineShareHandlerNoJSRedirects covers #342 for decline.
@@ -171,6 +194,11 @@ func TestDeclineShareHandlerNoJSRedirects(t *testing.T) {
 	shareIDStr := shareToBob(t, s, deckID)
 
 	s.Submit(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {shareIDStr}}, "/flash/")
+
+	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
+	if err != nil || len(offers) != 0 {
+		t.Fatalf("offers after no-JS decline = %+v, err = %v, want none (declined offers aren't pending)", offers, err)
+	}
 }
 
 func TestDeclineShareHandler(t *testing.T) {
