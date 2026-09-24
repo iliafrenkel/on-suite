@@ -68,12 +68,23 @@ func buildChart(title string, days []DayCount, value func(DayCount) int) chartVi
 	return out
 }
 
-// statsView is the whole stats page.
+// statsView is the stats pane's data.
 type statsView struct {
-	Tiles   []statTile
-	Chart   chartView
-	Days    []DayCount
-	PerDeck []DeckLoad
+	Tiles []statTile
+	Chart chartView
+	Days  []DayCount
+	Rows  []deckLoadRow
+}
+
+// deckLoadRow is one deck's line on the stats pane.
+type deckLoadRow struct {
+	Deck        Deck
+	Mastered    int
+	Due         int
+	Reviews     int // reviews in the last 30 days
+	CardCount   int
+	MasteredPct int // Mastered / CardCount, for the SVG bar's width
+	Snoozed     bool
 }
 
 func (a *App) stats(w http.ResponseWriter, r *http.Request) {
@@ -115,6 +126,30 @@ func (a *App) stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sums, err := a.store.DeckSummaries(ctx, userID, now)
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	cardCounts := make(map[int64]int, len(sums))
+	reviewNow := make(map[int64]int, len(sums))
+	for _, s := range sums {
+		cardCounts[s.Deck.ID] = s.CardCount
+		reviewNow[s.Deck.ID] = s.ReviewNow
+	}
+	rows := make([]deckLoadRow, len(perDeck))
+	for i, l := range perDeck {
+		n := cardCounts[l.Deck.ID]
+		rows[i] = deckLoadRow{
+			// Due comes from DeckSummary.ReviewNow, not PerDeckLoad's own Due,
+			// so this row's badge matches the deck list's badge on the same
+			// screen — capped by the daily review budget (plus today's
+			// allowed new cards) and zeroed while the deck is snoozed.
+			Deck: l.Deck, Mastered: l.Mastered, Due: reviewNow[l.Deck.ID], Reviews: l.ReviewsLast30Days,
+			CardCount: n, MasteredPct: progressPercent(l.Mastered, n), Snoozed: l.Snoozed,
+		}
+	}
+
 	view := statsView{
 		Tiles: []statTile{
 			{Label: "Streak", Value: fmt.Sprintf("%d day(s)", streak)},
@@ -122,12 +157,9 @@ func (a *App) stats(w http.ResponseWriter, r *http.Request) {
 			{Label: "Cards mastered", Value: fmt.Sprintf("%d", mastered)},
 			{Label: "Cards due", Value: fmt.Sprintf("%d", due)},
 		},
-		Chart:   buildChart("Reviews per day", days, func(d DayCount) int { return d.Count }),
-		Days:    days,
-		PerDeck: perDeck,
+		Chart: buildChart("Reviews per day", days, func(d DayCount) int { return d.Count }),
+		Days:  days,
+		Rows:  rows,
 	}
-
-	page := a.deps.Page(r, "Stats")
-	page.Data = view
-	a.render(w, r, http.StatusOK, "flash/stats", page)
+	a.renderDeckIndex(w, r, userID, http.StatusOK, deckDetailView{Mode: deckModeStats, Stats: view})
 }

@@ -129,32 +129,35 @@ func TestStatsPageRendersConsistentNumbers(t *testing.T) {
 		t.Errorf("due tile = %q, want %q", got, "1")
 	}
 
-	// Per-deck table: rows come out sorted by name (Alpha, then Beta), each
-	// with its own Mastered/Due/Reviews(30 days) numbers.
-	cells := doc.QueryAll(".flash-per-deck-table tbody tr td")
-	if len(cells) != 8 {
-		t.Fatalf("len(cells) = %d, want 8 (2 rows x 4 columns)", len(cells))
-	}
-	want := []string{
-		"Alpha", "1", "0", "3", // mastered, not due, 3 reviews
-		"Beta", "0", "1", "1", // not mastered, due, 1 review
-	}
-	var got []string
-	for _, c := range cells {
-		got = append(got, htmlassert.Text(c))
-	}
-	for i, w := range want {
-		if got[i] != w {
-			t.Errorf("cell[%d] = %q, want %q (full row values: %v)", i, got[i], w, got)
+	// Per-deck rows: sorted by name (Alpha, then Beta), each with its own
+	// mastered / due / reviews-in-30-days numbers.
+	texts := func(sel string) []string {
+		var out []string
+		for _, n := range doc.QueryAll(sel) {
+			out = append(out, htmlassert.Text(n))
 		}
+		return out
+	}
+	if names := texts(".flash-load-row .flash-load-name"); strings.Join(names, ",") != "Alpha,Beta" {
+		t.Fatalf("row names = %v, want [Alpha Beta]", names)
+	}
+	if got := texts(".flash-load-row .flash-load-mastered"); strings.Join(got, ",") != "1,0" {
+		t.Errorf("mastered = %v, want [1 0]", got)
+	}
+	if got := texts(".flash-load-row .flash-load-due"); strings.Join(got, ",") != "all done,1 due" {
+		t.Errorf("due = %v, want [all done, 1 due]", got)
+	}
+	if got := texts(".flash-load-row .flash-load-reviews-count"); strings.Join(got, ",") != "3,1" {
+		t.Errorf("reviews = %v, want [3 1]", got)
 	}
 }
 
 // TestStatsPageMarksSnoozedDeckInPerDeckTable proves the per-deck table
-// gives some visible sign that a snoozed deck's Due count doesn't add up
-// against the account-wide "Cards due" tile the same way an active deck's
-// does (CardsDueToday excludes snoozed decks; PerDeckLoad's per-deck Due
-// deliberately does not).
+// gives some visible sign that a deck is snoozed: its row is marked "taking
+// a break" while an active deck's is not. It does not assert a due-count
+// value — the row's Due now comes from DeckSummary.ReviewNow, which is
+// zeroed for a snoozed deck just like the deck list's own badge, so there is
+// no divergence left to check here.
 func TestStatsPageMarksSnoozedDeckInPerDeckTable(t *testing.T) {
 	s := apptest.NewServer(t, flash.New(), flash.NewStore)
 	ctx := t.Context()
@@ -172,7 +175,7 @@ func TestStatsPageMarksSnoozedDeckInPerDeckTable(t *testing.T) {
 	}
 
 	doc := s.Get(t, s.Alice, "/flash/stats")
-	rows := doc.QueryAll(".flash-per-deck-table tbody tr")
+	rows := doc.QueryAll(".flash-load-row")
 	if len(rows) != 2 {
 		t.Fatalf("len(rows) = %d, want 2", len(rows))
 	}
@@ -187,10 +190,32 @@ func TestStatsPageMarksSnoozedDeckInPerDeckTable(t *testing.T) {
 			snoozedRow = text
 		}
 	}
-	if strings.Contains(activeRow, "snoozed") {
-		t.Errorf("active deck's row wrongly marked as snoozed: %q", activeRow)
+	if strings.Contains(activeRow, "taking a break") {
+		t.Errorf("active deck's row wrongly marked as taking a break: %q", activeRow)
 	}
-	if !strings.Contains(snoozedRow, "snoozed") {
-		t.Errorf("snoozed deck's row not marked as snoozed: %q", snoozedRow)
+	if !strings.Contains(snoozedRow, "taking a break") {
+		t.Errorf("snoozed deck's row not marked as taking a break: %q", snoozedRow)
+	}
+}
+
+func TestStatsRenderInsideTheHomeLayout(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/flash/stats")
+	doc.MustHave("#deck-list")
+	doc.MustHave("#deck-detail .flash-stats")
+	row := doc.MustHave(".flash-load-row")
+	if href, _ := htmlassert.Attr(row, "href"); href != "/flash/"+itoa(deck.ID) {
+		t.Errorf("stats row href = %q, want the deck", href)
+	}
+	if target, _ := htmlassert.Attr(row, "hx-target"); target != "#deck-detail" {
+		t.Errorf("stats row hx-target = %q", target)
+	}
+	btn := doc.MustHave(`.flash-home-toolbar a[href="/flash/stats"]`)
+	if target, _ := htmlassert.Attr(btn, "hx-target"); target != "#deck-detail" {
+		t.Errorf("toolbar Stats hx-target = %q, want the pane", target)
 	}
 }

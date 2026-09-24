@@ -3219,3 +3219,71 @@ input.flash-tag-entry:focus { outline: none; }
 .flash-break-banner form { margin: 0; }
 
 .flash-notice { margin-bottom: var(--s-4); background: var(--c-accent-bg); color: var(--c-accent); }
+
+/* ---- ON Flash: import and stats (UI overhaul U6) ------------------------ */
+
+.flash-import { max-width: var(--measure); }
+.flash-import-steps {
+	display: grid;
+	gap: var(--s-3);
+	margin: 0 0 var(--s-4);
+	padding: 0;
+	list-style: none;
+	counter-reset: flash-step;
+}
+.flash-import-steps li {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--s-1);
+	padding: var(--s-3) var(--s-4) var(--s-3) 3.25rem;
+	border-radius: 10px;
+	background: var(--c-bg-subtle);
+	counter-increment: flash-step;
+}
+.flash-import-steps li::before {
+	content: counter(flash-step);
+	position: absolute;
+	left: var(--s-3);
+	top: var(--s-3);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 50%;
+	background: var(--c-accent);
+	color: #fff;
+	font-weight: 600;
+	font-size: var(--fs-sm);
+}
+:root[data-theme="dark"] .flash-import-steps li::before { color: #10141a; }
+.flash-copy-prompt { margin-top: var(--s-2); }
+.flash-copy-prompt[hidden] { display: none; }
+.flash-import-prompt summary,
+.flash-import-format summary { cursor: pointer; color: var(--c-text-dim); font-size: var(--fs-sm); }
+.flash-import-prompt textarea { margin-top: var(--s-2); font-size: var(--fs-sm); }
+
+.flash-stats h1 { margin: 0 0 var(--s-4); }
+.flash-load-list { margin: 0; padding: 0; list-style: none; }
+.flash-load-row {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	min-height: 3.5rem;
+	padding: var(--s-2) var(--s-3);
+	margin-bottom: var(--s-1);
+	border-radius: 8px;
+	color: inherit;
+	text-decoration: none;
+}
+.flash-load-row:hover { background: var(--c-bg-subtle); }
+.flash-load-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.flash-load-name { font-weight: 500; }
+.flash-load-mastery { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-xs); color: var(--c-text-dim); }
+.flash-mastery-bar { width: 5rem; height: 6px; flex: none; }
+.flash-mastery-bar .track { fill: var(--c-bg-inset); }
+.flash-mastery-bar .fill { fill: var(--deck, var(--c-accent)); }
+.flash-load-due { font-size: var(--fs-xs); color: var(--c-text-dim); white-space: nowrap; }
+.flash-load-due.flash-due-badge { color: var(--c-accent-attention); }
