@@ -181,8 +181,16 @@ func (a *App) giftPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	isMerge := p.Offer.PriorAdoptedDeckID != nil
+	// A merge pane names the recipient's own adopted copy (which may have
+	// been auto-suffixed, #304), not the sender's source deck — that's the
+	// deck cards are actually being added to. A first-time offer keeps
+	// naming the source deck, since that's the deck being offered.
+	deckName := p.Deck.Name
+	if isMerge {
+		deckName = p.Offer.PriorAdoptedDeckName
+	}
 	gift := giftView{
-		ShareID: shareID, DeckName: p.Deck.Name, Description: p.Deck.Description, Color: p.Deck.Color,
+		ShareID: shareID, DeckName: deckName, Description: p.Deck.Description, Color: p.Deck.Color,
 		FromUsername: byID[p.Offer.FromUserID], IsMerge: isMerge,
 		// For a merge, CardCount is only the cards not yet adopted.
 		UpToDate:  isMerge && p.CardCount == 0,

@@ -762,3 +762,59 @@ func TestUpToDateReshareSaysSo(t *testing.T) {
 		t.Errorf("bob's cards = %d, err = %v, want 2 (nothing copied twice)", len(cards), err)
 	}
 }
+
+// TestMergeGiftPanesNameRecipientsCopy covers a follow-up to #304: once an
+// adopted copy has been auto-suffixed (bob already had his own "Spanish",
+// so alice's offer became "Spanish (from alice)"), both merge-pane variants
+// — new cards found, and up to date — must name bob's own copy, not
+// alice's source deck. A first-time offer keeps naming the source deck,
+// since that's the deck actually being offered.
+func TestMergeGiftPanesNameRecipientsCopy(t *testing.T) {
+	s := newShareServer(t)
+	// bob already has his own "Spanish", so his adopted copy of alice's
+	// deck collides and gets auto-suffixed to "Spanish (from alice)".
+	createDeckHX(t, s, s.Bob, "Spanish")
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareToBob(t, s, deckID)}})
+
+	decks, err := s.Store.ListDecks(t.Context(), s.Bob.User.ID)
+	if err != nil || len(decks) != 2 {
+		t.Fatalf("bob's decks = %+v, err = %v, want 2", decks, err)
+	}
+	var adoptedName string
+	for _, d := range decks {
+		if d.Name != "Spanish" {
+			adoptedName = d.Name
+		}
+	}
+	if adoptedName != "Spanish (from alice)" {
+		t.Fatalf("adopted copy name = %q, want %q", adoptedName, "Spanish (from alice)")
+	}
+
+	// Alice adds a card and re-shares: the merge pane must name bob's own
+	// adopted copy, not alice's source "Spanish".
+	rec := s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"hola"}, "back": {"x"}, "notes": {""}})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create card: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	withNew := shareToBob(t, s, deckID)
+	pane := s.Get(t, s.Bob, "/flash/shared/"+withNew)
+	text := htmlassert.Text(pane.MustHave("#deck-detail .flash-gift"))
+	if !strings.Contains(text, "alice added 1 new card to") || !strings.Contains(text, "Spanish (from alice)") {
+		t.Errorf("merge gift pane = %q, want it to name bob's own copy %q", text, adoptedName)
+	}
+	if got := htmlassert.Text(pane.MustHave("#deck-detail .flash-gift h1")); got != "Spanish (from alice)" {
+		t.Errorf("merge gift pane heading = %q, want the recipient's own copy name %q", got, adoptedName)
+	}
+
+	// Adopt it, then re-share with nothing new: the up-to-date pane must
+	// also name bob's own copy.
+	s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {withNew}})
+	upToDate := shareToBob(t, s, deckID)
+	pane = s.Get(t, s.Bob, "/flash/shared/"+upToDate)
+	text = htmlassert.Text(pane.MustHave("#deck-detail .flash-gift"))
+	if !strings.Contains(text, "You already have every card in Spanish (from alice)") {
+		t.Errorf("up-to-date gift pane = %q, want it to name bob's own copy %q", text, adoptedName)
+	}
+}

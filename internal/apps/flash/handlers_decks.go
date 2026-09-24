@@ -488,8 +488,14 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 	gifts := make([]giftRow, len(offers))
 	for i, o := range offers {
 		isMerge := o.PriorAdoptedDeckID != nil
+		// A merge offer names the recipient's own adopted copy (which may
+		// have been auto-suffixed, #304), not alice's source deck.
+		name := o.DeckName
+		if isMerge {
+			name = o.PriorAdoptedDeckName
+		}
 		gifts[i] = giftRow{
-			ShareID: o.ID, DeckName: o.DeckName, DeckColor: o.DeckColor, FromUsername: o.FromUsername,
+			ShareID: o.ID, DeckName: name, DeckColor: o.DeckColor, FromUsername: o.FromUsername,
 			IsMerge: isMerge, NewCardCount: o.NewCardCount, UpToDate: isMerge && o.NewCardCount == 0,
 		}
 	}

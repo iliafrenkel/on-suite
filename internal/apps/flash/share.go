@@ -550,6 +550,13 @@ type ShareOffer struct {
 	// non-nil for a merge offer (an earlier offer for the same triple was
 	// already adopted into that deck).
 	PriorAdoptedDeckID *int64
+	// PriorAdoptedDeckName is the recipient's own name for that prior
+	// adopted deck (which may differ from DeckName if it was auto-suffixed
+	// on adoption, e.g. "Spanish (from alice)", #304). Meaningful only when
+	// PriorAdoptedDeckID is non-nil. The gift row and gift preview pane for
+	// a merge offer name this deck, not the source deck, since it's the
+	// recipient's own copy being added to.
+	PriorAdoptedDeckName string
 	// NewCardCount is meaningful only when PriorAdoptedDeckID is non-nil.
 	NewCardCount int
 }
@@ -624,9 +631,27 @@ func (st *Store) SharesForRecipient(ctx context.Context, toUserID int64) ([]Shar
 			return nil, err
 		}
 		out[i].NewCardCount = n
+		name, err := st.deckNameByID(ctx, *out[i].PriorAdoptedDeckID)
+		if err != nil {
+			return nil, err
+		}
+		out[i].PriorAdoptedDeckName = name
 	}
 
 	return out, nil
+}
+
+// deckNameByID reads just a deck's name, regardless of owner — used by
+// SharesForRecipient to name a merge offer's prior adopted deck (the
+// recipient's own copy), which may differ from the source deck's name if
+// it was auto-suffixed on adoption (#304).
+func (st *Store) deckNameByID(ctx context.Context, id int64) (string, error) {
+	var name string
+	err := st.db.QueryRowContext(ctx, `SELECT name FROM flash_decks WHERE id = ?`, id).Scan(&name)
+	if err != nil {
+		return "", fmt.Errorf("flash: deck name by id: %w", err)
+	}
+	return name, nil
 }
 
 // newCardCount counts source deck cards not yet represented (by
