@@ -496,3 +496,85 @@ func TestReviewAllShowsTheMostOverdueCardFirst(t *testing.T) {
 		t.Errorf("count = %q, want 1 of 3", got)
 	}
 }
+
+func TestGradingWithoutHTMXRedirectsBackToTheReview(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "uno", "one", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "dos", "two", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Scoped to one deck: back to that deck's review page.
+	s.Submit(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID),
+		url.Values{"card_id": {itoa(first.ID)}, "rating": {"3"}},
+		"/flash/review/"+itoa(deck.ID)+"?undo="+itoa(first.ID))
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, first.ID); err != nil || !reviewed {
+		t.Fatalf("after a no-JS grade: reviewed = %v (err %v), want graded", reviewed, err)
+	}
+
+	// Review all: back to Review all.
+	s.Submit(t, s.Alice, "/flash/review/grade",
+		url.Values{"card_id": {itoa(second.ID)}, "rating": {"3"}},
+		"/flash/review?undo="+itoa(second.ID))
+}
+
+func TestReviewOffersUndoFromTheRedirect(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Submit(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID),
+		url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}},
+		"/flash/review/"+itoa(deck.ID)+"?undo="+itoa(card.ID))
+
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID)+"?undo="+itoa(card.ID))
+	doc.MustHave(".flash-undo-btn")
+	id := doc.MustHave(".flash-undo input[name=card_id]")
+	if v, _ := htmlassert.Attr(id, "value"); v != itoa(card.ID) {
+		t.Errorf("undo card_id = %q, want %s", v, itoa(card.ID))
+	}
+	form := doc.MustHave(".flash-review form.flash-undo")
+	if action, _ := htmlassert.Attr(form, "action"); action != "/flash/review/undo?deck="+itoa(deck.ID) {
+		t.Errorf("undo action = %q, want it to keep the deck scope", action)
+	}
+}
+
+func TestUndoWithoutHTMXRedirectsBackToTheReview(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
+
+	s.Submit(t, s.Alice, "/flash/review/undo?deck="+itoa(deck.ID),
+		url.Values{"card_id": {itoa(card.ID)}}, "/flash/review/"+itoa(deck.ID))
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	doc.MustHave(".flash-review-card") // the card is back
+	doc.MustNotHave(".flash-undo-btn") // and the undo slot is spent
+}
+
+func TestReviewIgnoresAMalformedUndoParam(t *testing.T) {
+	s := newServer(t)
+	for _, v := range []string{"abc", "0", "-3", ""} {
+		doc := s.Get(t, s.Alice, "/flash/review?undo="+url.QueryEscape(v))
+		doc.MustNotHave(".flash-undo-btn")
+	}
+}

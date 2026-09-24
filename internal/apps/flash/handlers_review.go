@@ -32,6 +32,26 @@ func deckScopeString(deckID *int64) string {
 	return strconv.FormatInt(*deckID, 10)
 }
 
+// reviewPath is the review page for a scope: one deck's, or Review all's.
+func reviewPath(deck *Deck) string {
+	if deck == nil {
+		return "/flash/review"
+	}
+	return "/flash/review/" + strconv.FormatInt(deck.ID, 10)
+}
+
+// undoFromQuery reads the ?undo= card id a no-JS grade redirects with, so
+// the page it lands on still offers Undo. Anything but a positive id is
+// ignored: the value only decides whether an Undo button renders, and the
+// undo route re-checks the card's owner and undo slot itself.
+func undoFromQuery(r *http.Request) int64 {
+	id, err := strconv.ParseInt(r.URL.Query().Get("undo"), 10, 64)
+	if err != nil || id <= 0 {
+		return 0
+	}
+	return id
+}
+
 // reviewScope resolves the optional ?deck= scope to the deck it names — nil
 // means every deck. A malformed id, or a deck that isn't userID's, writes a
 // 404 and returns false; grade and undo call it before touching anything,
@@ -111,7 +131,7 @@ func (a *App) review(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.renderReview(w, r, userID, deck, http.StatusOK, 0)
+	a.renderReview(w, r, userID, deck, http.StatusOK, undoFromQuery(r))
 }
 
 // deckReview backs GET /review/{deckID}: always scoped to the deck named in
@@ -130,7 +150,7 @@ func (a *App) deckReview(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderReview(w, r, userID, &d, http.StatusOK, 0)
+	a.renderReview(w, r, userID, &d, http.StatusOK, undoFromQuery(r))
 }
 
 // renderReview draws the review screen for deck (nil = every deck). The
@@ -262,6 +282,13 @@ func (a *App) gradeCardHandler(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	if !web.IsHTMX(r) {
+		// POST-redirect-GET, like every other Flash form: refreshing the
+		// page after a no-JS grade must not grade again. ?undo= keeps the
+		// Undo button that the HTMX response would have shown.
+		http.Redirect(w, r, reviewPath(deck)+"?undo="+strconv.FormatInt(cardID, 10), http.StatusSeeOther)
+		return
+	}
 	a.renderReview(w, r, userID, deck, http.StatusOK, cardID)
 }
 
@@ -286,6 +313,10 @@ func (a *App) undoGradeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if !undone {
 		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	if !web.IsHTMX(r) {
+		http.Redirect(w, r, reviewPath(deck), http.StatusSeeOther)
 		return
 	}
 	a.renderReview(w, r, userID, deck, http.StatusOK, 0)
