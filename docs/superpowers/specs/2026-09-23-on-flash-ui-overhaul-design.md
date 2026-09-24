@@ -406,13 +406,19 @@ existing methods would require N+1 calls.
   pane:
   - First-time offer: "Name shared this deck with you", name, description,
     card count, the first four cards as mini cards, and **Add to my decks**
-    (primary) / **No thanks**.
+    (primary) / **No thanks**. The name shown is the source deck's — that's
+    the deck actually being offered.
   - Merge offer: "Name added N new cards to *Deck*", with **Add the new
-    cards** / **No thanks**. The gift row's badge reads "+N".
+    cards** / **No thanks**. The gift row's badge reads "+N". *Deck* here is
+    the recipient's own already-adopted copy, not the sender's source deck —
+    if that copy was auto-suffixed on first adoption (e.g. "Spanish (from
+    alice)"), the merge row and pane use that name, since it's the deck
+    cards are actually being added to.
   - Merge offer with nothing new (the recipient already has every card):
     the gift row has no badge, and the pane says "You already have every
-    card in *Deck*" with a single **Got it**. Got it adopts the offer, which
-    copies nothing, so it leaves the list. (#346)
+    card in *Deck*" with a single **Got it**, again naming the recipient's
+    own adopted copy. Got it adopts the offer, which copies nothing, so it
+    leaves the list. (#346)
   - Buttons post to the existing adopt/decline routes. After adopting, the
     pane opens the (new or merged) deck with a notice: "“*Planets*” is now
     in your decks", "N new cards added to “*Planets*”", or, after Got it,
