@@ -92,12 +92,54 @@ func ensureMediaURL(ctx context.Context, exec dbExecutor, kind, sourceURL string
 // content's own hash, and returns that hash. Safe to call repeatedly for
 // identical bytes: a second call is a no-op (INSERT OR IGNORE), so
 // uploading the same file twice reuses one row.
+//
+// The row it leaves is attached to nothing, so the next PurgeOrphanMedia
+// may delete it. The card form uses AttachCardUpload, which stores and
+// attaches in one transaction. This is kept for tests that seed media.
 func (st *Store) SaveMediaUpload(ctx context.Context, kind, contentType string, data []byte, now time.Time) (string, error) {
+	return saveMediaUpload(ctx, st.db, kind, contentType, data, now)
+}
+
+func saveMediaUpload(ctx context.Context, exec dbExecutor, kind, contentType string, data []byte, now time.Time) (string, error) {
 	hash := contentHash(data)
-	if _, err := st.db.ExecContext(ctx,
+	if _, err := exec.ExecContext(ctx,
 		`INSERT OR IGNORE INTO flash_media (hash, kind, content_type, bytes, fetched_at) VALUES (?, ?, ?, ?, ?)`,
 		hash, kind, contentType, data, formatTime(now)); err != nil {
 		return "", fmt.Errorf("flash: save media upload: %w", err)
+	}
+	return hash, nil
+}
+
+// AttachCardUpload stores an uploaded file and points one of userID's own
+// card's image or audio column at it, in one transaction, and returns the
+// file's hash.
+//
+// The single transaction is what keeps PurgeOrphanMedia safe (#302.5): as
+// two statements, a purge landing between them deleted the just-stored
+// row — or an orphan with the same bytes, which INSERT OR IGNORE had left
+// in place — and the attach then failed its foreign key. SQLite runs one
+// write transaction at a time (and flash has one connection), so the purge
+// now runs wholly before this, where the INSERT re-creates anything it
+// deleted, or wholly after, when the card already uses the row.
+//
+// kind must be MediaKindImage or MediaKindAudio (else ErrInvalid); a card
+// that isn't userID's is ErrNotFound. Either way nothing is stored.
+func (st *Store) AttachCardUpload(ctx context.Context, userID, deckID, cardID int64, kind, contentType string, data []byte) (string, error) {
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("flash: attach upload: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	hash, err := saveMediaUpload(ctx, tx, kind, contentType, data, st.now())
+	if err != nil {
+		return "", err
+	}
+	if err := setCardMedia(ctx, tx, userID, deckID, cardID, kind, &hash); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("flash: attach upload: %w", err)
 	}
 	return hash, nil
 }
@@ -133,6 +175,13 @@ func (st *Store) SaveMediaFailure(ctx context.Context, hash, msg string, now tim
 // other, so this is an independent implementation). A row shared by
 // reference with an adopted copy stays as long as any card, anyone's, uses
 // it (#302.5).
+//
+// It needs no grace period for a file that is still being attached: every
+// path that creates a row attaches it in the same transaction
+// (AttachCardUpload for the card form, ImportDeck for import-time URLs),
+// and AdoptShare creates none — it copies hashes from cards that exist, and
+// so are in use, inside its own transaction. EnsureMediaURL and
+// SaveMediaUpload store without attaching; only tests call them.
 //
 // SQLite does not give the space back to the filesystem on DELETE: the
 // freed pages go on the database's freelist and later writes reuse them.

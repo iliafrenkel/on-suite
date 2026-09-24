@@ -233,7 +233,8 @@ func readUpload(w http.ResponseWriter, r *http.Request, kind, field string, maxB
 
 // saveCardUploads applies checked uploads to a card that now exists: a new
 // file of a kind always wins over that kind's Remove flag (#328) — Remove
-// only takes effect when no new file came in for that kind.
+// only takes effect when no new file came in for that kind. Each new file
+// is stored and attached in one transaction (AttachCardUpload).
 func (a *App) saveCardUploads(ctx context.Context, userID, deckID, cardID int64, u cardUploads) error {
 	for _, m := range []struct {
 		kind   string
@@ -245,11 +246,9 @@ func (a *App) saveCardUploads(ctx context.Context, userID, deckID, cardID int64,
 	} {
 		switch {
 		case m.up != nil:
-			hash, err := a.store.SaveMediaUpload(ctx, m.up.Kind, m.up.ContentType, m.up.Data, a.store.now())
-			if err != nil {
-				return err
-			}
-			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, &hash); err != nil {
+			// One transaction for store + attach, so the daily orphan purge
+			// can never delete the file in between (#302.5).
+			if _, err := a.store.AttachCardUpload(ctx, userID, deckID, cardID, m.kind, m.up.ContentType, m.up.Data); err != nil {
 				return err
 			}
 		case m.remove:
