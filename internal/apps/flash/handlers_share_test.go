@@ -165,26 +165,74 @@ func TestRevokeShareHandlerNoJSRedirects(t *testing.T) {
 	s := newShareServer(t)
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")
 	deckIDStr := strconv.FormatInt(deckID, 10)
-	shareID, err := strconv.ParseInt(shareToBob(t, s, deckID), 10, 64)
-	if err != nil {
-		t.Fatal(err)
+	shareID := shareToBob(t, s, deckID)
+
+	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share/"+shareID+"/revoke", url.Values{}, "/flash/"+deckIDStr)
+
+	// The offer is gone from bob's side and, its only row now revoked, bob
+	// is no longer in alice's "Shared with" list (#304).
+	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
+	if err != nil || len(offers) != 0 {
+		t.Fatalf("bob's offers after no-JS revoke = %+v, err = %v, want none", offers, err)
 	}
-
-	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share/"+strconv.FormatInt(shareID, 10)+"/revoke", url.Values{}, "/flash/"+deckIDStr)
-
 	shares, err := s.Store.SharesForDeck(t.Context(), s.Alice.User.ID, deckID)
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || len(shares) != 0 {
+		t.Fatalf("Shared with after no-JS revoke = %+v, err = %v, want nobody", shares, err)
 	}
-	var got *flash.Share
-	for i := range shares {
-		if shares[i].ID == shareID {
-			got = &shares[i]
-		}
+}
+
+// TestSharedWithListShowsOneRowPerRecipient covers #304 bullet 2 through
+// the real templates: bob gets one row whatever his history, it reads his
+// latest status, and Revoke targets the offer that is actually pending.
+func TestSharedWithListShowsOneRowPerRecipient(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := itoa(deckID)
+
+	// Declined, then offered again: one row, waiting, Revoke on the new offer.
+	first := shareToBob(t, s, deckID)
+	s.PostHX(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {first}})
+	again := shareToBob(t, s, deckID)
+
+	doc := s.Get(t, s.Alice, "/flash/"+deckIDStr)
+	rows := doc.QueryAll(".flash-share-list li")
+	if len(rows) != 1 {
+		t.Fatalf("Shared with has %d rows, want 1 for bob", len(rows))
 	}
-	if got == nil || got.Status != flash.ShareStatusRevoked {
-		t.Fatalf("share after no-JS revoke = %+v, want status %q", got, flash.ShareStatusRevoked)
+	if text := htmlassert.Text(rows[0]); !strings.Contains(text, "bob") || !strings.Contains(text, "waiting") || strings.Contains(text, "said no thanks") {
+		t.Errorf("bob's row = %q, want bob, waiting, and no old decline", text)
 	}
+	doc.MustHave(`.flash-share-list form[action="/flash/` + deckIDStr + `/share/` + again + `/revoke"]`)
+
+	// Bob adds it: still one row, now added, no Revoke.
+	s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {again}})
+	doc = s.Get(t, s.Alice, "/flash/"+deckIDStr)
+	rows = doc.QueryAll(".flash-share-list li")
+	if len(rows) != 1 || !strings.Contains(htmlassert.Text(rows[0]), "added") {
+		t.Fatalf("Shared with after adopt = %d rows, want 1 reading added", len(rows))
+	}
+	doc.MustNotHave(".flash-share-list form")
+
+	// A re-share replaces it with waiting; revoking that falls back to added.
+	third := shareToBob(t, s, deckID)
+	doc = s.Get(t, s.Alice, "/flash/"+deckIDStr)
+	rows = doc.QueryAll(".flash-share-list li")
+	if len(rows) != 1 || !strings.Contains(htmlassert.Text(rows[0]), "waiting") {
+		t.Fatalf("Shared with after re-share = %d rows, want 1 reading waiting", len(rows))
+	}
+	rec := s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/share/"+third+"/revoke", url.Values{})
+	if rec.Code != 200 {
+		t.Fatalf("revoke: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc = htmlassert.Parse(t, rec.Body.String())
+	rows = doc.QueryAll(".flash-share-list li")
+	if len(rows) != 1 {
+		t.Fatalf("Shared with after revoke has %d rows, want 1", len(rows))
+	}
+	if text := htmlassert.Text(rows[0]); !strings.Contains(text, "added") || strings.Contains(text, "waiting") {
+		t.Errorf("bob's row after revoke = %q, want it back to added", text)
+	}
+	doc.MustNotHave(".flash-share-list form")
 }
 
 // TestDeclineShareHandlerNoJSRedirects covers #342 for decline.

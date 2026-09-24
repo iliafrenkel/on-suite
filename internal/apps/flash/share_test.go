@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
+	"github.com/iliafrenkel/on-suite/internal/apptest"
+	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 )
 
 func TestShareDeckCreatesPendingShare(t *testing.T) {
@@ -549,15 +551,44 @@ func TestDeleteAdoptedDeckClearsShareBackReferenceButKeepsShare(t *testing.T) {
 	}
 }
 
-func TestSharesForDeckListsAllOffersNewestFirst(t *testing.T) {
+// TestSharesForDeckShowsEachRecipientsLatestStatus covers #304 bullet 2:
+// the creator's "Shared with" list has one row per recipient — their
+// latest share that wasn't revoked — newest first. A revoke falls back to
+// the person's last real answer; someone whose only offers were revoked
+// isn't listed at all.
+func TestSharesForDeckShowsEachRecipientsLatestStatus(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
+	// One fixed clock: every row gets the same created_at, so "latest" and
+	// the list order below come from the id tiebreak alone.
+	f.store.SetClock(func() time.Time { return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC) })
+	carol, err := auth.NewStore(f.db).CreateUser(ctx, "carol", apptest.PasswordHash, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+
+	// Bob says no thanks, then gets offered again.
+	first, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.DeclineShare(ctx, f.bob.ID, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	again, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Carol's only offer is revoked.
+	c1, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, carol.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, c1.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -565,8 +596,42 @@ func TestSharesForDeckListsAllOffersNewestFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(shares) != 1 || shares[0].ID != sh.ID {
-		t.Fatalf("shares = %+v, want [%+v]", shares, sh)
+	if len(shares) != 1 || shares[0].ID != again.ID || shares[0].Status != flash.ShareStatusPending {
+		t.Fatalf("shares = %+v, want just bob's re-offer (id %d), pending — his decline replaced, carol's revoked offer hidden", shares, again.ID)
+	}
+
+	// Carol adopts a fresh offer; bob's re-offer is revoked, so he falls
+	// back to his last real answer.
+	c2, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, carol.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.AdoptShare(ctx, carol.ID, c2.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, again.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	shares, err = f.store.SharesForDeck(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type row struct {
+		id     int64
+		to     int64
+		status string
+	}
+	var got []row
+	for _, sh := range shares {
+		got = append(got, row{sh.ID, sh.ToUserID, sh.Status})
+	}
+	want := []row{
+		{c2.ID, carol.ID, flash.ShareStatusAdopted},     // newer row first
+		{first.ID, f.bob.ID, flash.ShareStatusDeclined}, // revoke fell back to the decline
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("shares = %+v, want %+v", got, want)
 	}
 
 	if _, err := f.store.SharesForDeck(ctx, f.bob.ID, d.ID); !errors.Is(err, flash.ErrNotFound) {

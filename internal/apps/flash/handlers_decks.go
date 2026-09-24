@@ -231,9 +231,10 @@ type deckIndexView struct {
 	TotalDue int // sum of every deck's ReviewNow: the "Review all" count
 }
 
-// shareWithUsername is one row of the creator's "Shared with" list: a
-// Share plus the recipient's username, resolved via a.deps.Users since
-// Share itself only carries a bare user ID.
+// shareWithUsername is one row of the creator's "Shared with" list: one
+// recipient's latest non-revoked Share (see SharesForDeck) plus their
+// username, resolved via a.deps.Users since Share itself only carries a
+// bare user ID.
 type shareWithUsername struct {
 	Share
 	ToUsername  string
@@ -317,9 +318,9 @@ func offersWithUsernames(offers []ShareOffer, byID map[int64]string) []shareOffe
 }
 
 // shareContext loads everything the deck detail view's Share section
-// needs: every other account on the instance (for the dropdown) and this
-// deck's own share offers, each paired with its recipient's username (for
-// the "Shared with" list).
+// needs: every other account on the instance (for the dropdown) and the
+// "Shared with" list (one row per recipient, see SharesForDeck), each row
+// paired with its recipient's username.
 func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Account, []shareWithUsername, error) {
 	accounts, byID, err := a.usernamesByID(ctx)
 	if err != nil {

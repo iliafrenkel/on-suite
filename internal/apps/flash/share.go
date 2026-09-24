@@ -433,18 +433,30 @@ func priorAdoptedDeck(ctx context.Context, tx *sql.Tx, deckID, fromUserID, toUse
 	return &v, nil
 }
 
-// SharesForDeck lists every share offer (any status) fromUserID has made
-// for one of their own decks, newest first — the creator's "Shared with"
-// list.
+// SharesForDeck is the creator's "Shared with" list for one of their own
+// decks (UI overhaul spec §6, #304): one row per recipient, that person's
+// latest share that wasn't revoked, newest first. A revoke cancels an
+// offer rather than being an answer, so revoked rows are skipped, and a
+// revoked re-offer leaves the person showing their last real answer
+// ("added" / "said no thanks"). Someone whose only offers were all revoked
+// isn't listed. "Latest" is created_at DESC, id DESC, so rows with equal
+// timestamps still resolve the same way every time. ShareDeck never creates
+// a second pending row for the same triple, so a pending row is always its
+// recipient's latest one. That makes a waiting row's ID the pending share
+// Revoke has to target.
 func (st *Store) SharesForDeck(ctx context.Context, fromUserID, deckID int64) ([]Share, error) {
 	if _, err := st.DeckByID(ctx, fromUserID, deckID); err != nil {
 		return nil, err
 	}
 	rows, err := st.db.QueryContext(ctx,
 		`SELECT id, deck_id, from_user_id, to_user_id, status, adopted_deck_id, created_at, responded_at
-		 FROM flash_shares
-		 WHERE deck_id = ? AND from_user_id = ?
-		 ORDER BY created_at DESC, id DESC`, deckID, fromUserID)
+		   FROM (SELECT id, deck_id, from_user_id, to_user_id, status, adopted_deck_id, created_at, responded_at,
+		                ROW_NUMBER() OVER (PARTITION BY to_user_id ORDER BY created_at DESC, id DESC) AS rn
+		           FROM flash_shares
+		          WHERE deck_id = ? AND from_user_id = ? AND status <> ?)
+		  WHERE rn = 1
+		  ORDER BY created_at DESC, id DESC`,
+		deckID, fromUserID, ShareStatusRevoked)
 	if err != nil {
 		return nil, fmt.Errorf("flash: shares for deck: %w", err)
 	}
