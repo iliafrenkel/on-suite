@@ -220,13 +220,6 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 
 	// "media" is a literal single segment, the same non-ambiguity shape as
 	// "new"/"review"/"import" alongside the wildcard single-segment routes
-	// above.
-	//
-	// There used to be a second, per-card upload route here
-	// (POST /{deckID}/cards/{cardID}/media) with its own raised body cap.
-	// It was removed (#327): no UI has called it since media started
-	// traveling in the create/update card form itself (UI overhaul U3),
-	// which is why cardFormMaxBytes above already carries the raised cap
-	// those two routes need.
+	// above. (The per-card upload route once here was removed as dead in #327.)
 	r.HandleFunc("GET /media/{hash}", a.media)
 }
