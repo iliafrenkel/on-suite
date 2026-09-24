@@ -23,9 +23,9 @@ shape, adapted for Flash's per-card (not per-article-HTML) attachment model.
   the URL and its hash, doing no network I/O. The actual fetch happens the
   first time a browser requests the serving route.
 - Size caps: 5MB per image, 10MB per audio clip.
-- No orphan-cleanup job in F4 — a `flash_media` row can outlive every card
-  that referenced it (after a delete or a replace); cleaning those up is a
-  follow-up, not core scope.
+- No orphan-cleanup job in F4 — a `flash_media` row could outlive every
+  card that referenced it (after a delete or a replace). Added later: see
+  "Orphan cleanup" below (#302).
 
 ## Architecture
 
@@ -92,7 +92,16 @@ the serving route, not as a rejected import.
 `GET /flash/media/{hash}` mirrors Reader's `GET /img/{hash}`:
 
 1. Validate `hash` is 64 lowercase-hex characters before any DB lookup.
-2. Look up the `flash_media` row. Not found → 404.
+2. Look up the `flash_media` row, **but only if one of the viewer's own
+   cards uses it** as its image or its sound (`MediaForUser`: `EXISTS
+   (SELECT 1 FROM flash_cards WHERE user_id = ? AND (image_hash = hash OR
+   audio_hash = hash))`). Otherwise → 404, the same response as a hash that
+   doesn't exist, so the route never confirms what another account has
+   attached. The table is a cache shared across accounts, and it holds
+   files people uploaded from their own disks, not just public images.
+   Adopting a shared deck copies its hashes into the recipient's own
+   cards, so they can see its media from then on. A pending gift's preview
+   draws no media. (#302.4)
 3. If `bytes` is already populated, serve it directly: `Cache-Control:
    private, max-age=86400`, `ETag` = the hash, `X-Content-Type-Options:
    nosniff`, conditional `304` on a matching `If-None-Match`.
@@ -140,8 +149,42 @@ form with optional `image` and/or `audio` file parts and an optional
 - The file's bytes are hashed (SHA-256) and stored as a `flash_media` row
   with `bytes` populated immediately, `content_type` set from the sniff,
   and `source_url` left `NULL` — it never needs a lazy fetch.
-- The card's `image_hash`/`audio_hash` is then set to that hash, or
-  cleared to `NULL` on a remove request.
+- The card's `image_hash`/`audio_hash` is then set to that hash, in the
+  **same transaction** as the insert (`AttachCardUpload`), or cleared to
+  `NULL` on a remove request. The single transaction is what lets the
+  orphan purge run without a grace period (below).
+
+## Orphan cleanup
+
+A daily job, **purge orphan media**, calls `PurgeOrphanMedia`: one
+`DELETE FROM flash_media WHERE NOT EXISTS (…)` over rows that no card's
+`image_hash` or `audio_hash` names, whoever owns the card. It mirrors
+Reader's `PurgeOrphanImages`. There is no refcount, no admin button, and
+the admin page's job list shows when it last ran. Migration
+`0011_card_media_indexes` adds partial indexes on both columns. The
+purge, the serving route's ownership check and SQLite's own foreign-key
+check on each deleted row all use them. (#302.5)
+
+- **No grace period, because nothing is stored unattached.** Every path
+  that creates a row attaches it in the same transaction: card-form uploads
+  (`AttachCardUpload`) and import-time URLs (`ImportDeck`). Adoption
+  creates no rows. It copies hashes from source cards it reads inside its
+  own transaction, and those cards keep the rows in use. SQLite runs one
+  write transaction at a time, so the single-statement purge lands wholly
+  before an attach, where the attach's `INSERT OR IGNORE` re-creates
+  anything it deleted, or wholly after one. A timestamp-based grace period
+  would not have worked anyway. URL rows have `fetched_at` NULL until first
+  viewed, and `INSERT OR IGNORE` leaves an old orphan's timestamp alone
+  when the same file comes back.
+- A row shared by reference with an adopted copy lives as long as any card
+  uses it.
+- SQLite does not shrink the file on `DELETE`. Freed pages go on the
+  freelist and are reused by later writes. Like Reader, the job runs no
+  `VACUUM`. Snapshots are compact regardless, because they use `VACUUM
+  INTO`.
+- A browser that already has a file cached (`private, max-age=86400`) may
+  keep showing it for up to a day after it's purged or stops being the
+  viewer's.
 
 ## Testing
 
@@ -164,7 +207,7 @@ form with optional `image` and/or `audio` file parts and an optional
 
 ## Open items deferred to later
 
-- Orphan-media cleanup (Reader's `PurgeOrphanImages` equivalent).
+- ~~Orphan-media cleanup~~: done, see "Orphan cleanup" (#302).
 - Attaching media by URL after import (only upload is supported
   post-import in F4).
 - Multiple images/audio clips per card, or per-kind galleries.

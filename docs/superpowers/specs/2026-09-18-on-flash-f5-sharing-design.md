@@ -30,7 +30,11 @@ shared view.
   is no live/linked view of the creator's deck from the recipient's side.
 - Media (`image_hash`/`audio_hash`) is carried over by reference only — the
   content-addressed `flash_media` row is shared as-is, never re-fetched or
-  duplicated, since it's immutable and keyed by hash.
+  duplicated, since it's immutable and keyed by hash. Because the hashes
+  land on the recipient's own cards, the media route (which serves a hash
+  only to someone whose own card uses it) serves them the files from the
+  moment they adopt, not before. The row outlives the sharer's card for as
+  long as the copy uses it (F4 spec, "Orphan cleanup"; #302).
 - Re-sharing (creator adds cards, shares again) produces a second offer the
   recipient can merge — only genuinely new cards are added to their
   existing copy; cards and progress they already have are untouched.
