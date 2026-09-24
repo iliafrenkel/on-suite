@@ -713,6 +713,11 @@ func (a *App) deleteDeck(w http.ResponseWriter, r *http.Request) {
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, deckDetailView{})
 }
 
+// maxSnoozeDays caps a break at a year. The pane only offers a week or a
+// month; the cap stops a hand-edited form from pushing snoozed_until to an
+// absurd (or overflowed) date.
+const maxSnoozeDays = 365
+
 func (a *App) snoozeDeck(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -723,7 +728,7 @@ func (a *App) snoozeDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	days, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("days")))
-	if err != nil || days <= 0 {
+	if err != nil || days <= 0 || days > maxSnoozeDays {
 		a.deps.Errors.Status(w, r, http.StatusBadRequest)
 		return
 	}

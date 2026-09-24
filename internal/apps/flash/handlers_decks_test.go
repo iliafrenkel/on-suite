@@ -493,3 +493,48 @@ func TestSnoozedDeckShowsABreakBanner(t *testing.T) {
 	edit := s.Get(t, s.Alice, "/flash/edit/"+itoa(deck.ID))
 	edit.MustHave(`form[action="/flash/` + itoa(deck.ID) + `/unsnooze"]`)
 }
+
+func TestSnoozeDaysMustBeBetweenOneAndAYear(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "/flash/" + itoa(deck.ID) + "/snooze"
+
+	for _, days := range []string{"", "abc", "0", "-1", "366", "100000", "9223372036854775807", "99999999999999999999"} {
+		t.Run("rejects "+days, func(t *testing.T) {
+			rec := s.Post(t, s.Alice, path, url.Values{"days": {days}})
+			if rec.Code != 400 {
+				t.Errorf("snooze days=%q = %d, want 400", days, rec.Code)
+			}
+			d, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if d.SnoozedUntil != nil {
+				t.Errorf("days=%q was rejected but the deck is snoozed until %v", days, d.SnoozedUntil)
+			}
+		})
+	}
+
+	before := time.Now().UTC()
+	s.Submit(t, s.Alice, path, url.Values{"days": {"365"}}, "/flash/"+itoa(deck.ID))
+	after := time.Now().UTC()
+
+	d, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.SnoozedUntil == nil {
+		t.Error("365 days: deck is not snoozed")
+	} else {
+		// The snoozed time should be approximately 365 days in the future
+		// from when the request was made (within a few seconds).
+		minExpected := before.AddDate(0, 0, 365)
+		maxExpected := after.AddDate(0, 0, 365)
+		if d.SnoozedUntil.Before(minExpected) || d.SnoozedUntil.After(maxExpected) {
+			t.Errorf("365 days: snoozed until %v, want between %v and %v", d.SnoozedUntil, minExpected, maxExpected)
+		}
+	}
+}
