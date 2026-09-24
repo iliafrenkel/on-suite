@@ -61,10 +61,33 @@ func TestMediaIsServedOnlyToSomeoneWhoseCardUsesIt(t *testing.T) {
 	if notYours.Body.String() != missing.Body.String() {
 		t.Error("someone else's media must get the same 404 body as a hash that doesn't exist")
 	}
-	for _, h := range []string{"ETag", "Cache-Control", "X-Content-Type-Options"} {
+	for _, h := range []string{"ETag", "Cache-Control", "X-Content-Type-Options", "Content-Type", "Content-Length"} {
 		if got := notYours.Header().Get(h); got != missing.Header().Get(h) {
 			t.Errorf("header %s = %q for someone else's media, %q for a missing hash", h, got, missing.Header().Get(h))
 		}
+	}
+}
+
+// TestMediaConditionalRequestFromNonOwnerIsNotFound covers #302.4's
+// conditional-GET corner: bob learning alice's ETag (say, from a shared
+// screen) and replaying it in If-None-Match must not turn the 404 he'd
+// otherwise get into a 304 — a 304 would confirm the hash exists and is
+// alice's, exactly the leak the plain 404 is meant to prevent.
+func TestMediaConditionalRequestFromNonOwnerIsNotFound(t *testing.T) {
+	s := newServer(t)
+	_, _, path := aliceCardWithImage(t, s)
+
+	ownReq := httptest.NewRequest(http.MethodGet, path, nil)
+	etag := s.Do(t, s.Alice, ownReq).Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("alice's own GET returned no ETag")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("If-None-Match", etag)
+	rec := s.Do(t, s.Bob, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("bob, If-None-Match: alice's etag = %d, want 404", rec.Code)
 	}
 }
 
