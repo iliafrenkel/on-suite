@@ -714,7 +714,7 @@ func TestDueQueueOrdersReviewsByDueDateAcrossDecks(t *testing.T) {
 	// The older deck's card is ten days overdue, so it goes first even though
 	// the newer deck is listed first; new cards still come after every review.
 	if got, want := queueIDs(queue), []int64{overdue.ID, recent.ID, fresh.ID}; !slices.Equal(got, want) {
-		t.Errorf("DueQueue order = %v, want %v (overdue, recent, fresh)", got, want)
+		t.Fatalf("DueQueue order = %v, want %v (overdue, recent, fresh)", got, want)
 	}
 	if queue[0].DueAt.IsZero() || !queue[2].DueAt.IsZero() {
 		t.Errorf("DueAt: review = %v, new = %v; want set for a review, zero for a new card", queue[0].DueAt, queue[2].DueAt)
@@ -799,6 +799,7 @@ func qSettings(t *testing.T, f *fixture, deckID int64, newPerDay int, reviewsPer
 func TestQueueFrontAgreesWithDueQueue(t *testing.T) {
 	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	one := 1
+	two := 2
 	cases := []struct {
 		name     string
 		setup    func(t *testing.T, f *fixture) *int64 // returns the scope; nil = every deck
@@ -875,6 +876,35 @@ func TestQueueFrontAgreesWithDueQueue(t *testing.T) {
 			qCard(t, f, newer.ID, "new")
 			return nil
 		}, "review", 2},
+		{"partial review budget caps at reviewsPerDay", func(t *testing.T, f *fixture) *int64 {
+			d := qDeck(t, f, "A")
+			qSettings(t, f, d.ID, 5, &two)
+			mostOverdue := qCard(t, f, d.ID, "most-overdue")
+			mid := qCard(t, f, d.ID, "mid")
+			leastOverdue := qCard(t, f, d.ID, "least-overdue")
+			qGrade(t, f, mostOverdue.ID, flash.RatingAgain, now.AddDate(0, 0, -10))
+			qGrade(t, f, mid.ID, flash.RatingAgain, now.AddDate(0, 0, -5))
+			qGrade(t, f, leastOverdue.ID, flash.RatingAgain, now.AddDate(0, 0, -1))
+			return &d.ID
+		}, "most-overdue", 2},
+		{"cross-deck due-date tie", func(t *testing.T, f *fixture) *int64 {
+			older := qDeck(t, f, "Older")
+			newer := qDeck(t, f, "Newer")
+			a := qCard(t, f, older.ID, "a")
+			b := qCard(t, f, newer.ID, "b")
+			past := now.AddDate(0, 0, -2)
+			qGrade(t, f, a.ID, flash.RatingAgain, past)
+			qGrade(t, f, b.ID, flash.RatingAgain, past)
+			// Guard that the tie really exists before trusting the head below.
+			q, err := f.store.DueQueue(context.Background(), f.alice.ID, nil, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(q) != 2 || !q[0].DueAt.Equal(q[1].DueAt) {
+				t.Fatalf("setup: want two reviews due at the same instant, got %+v", q)
+			}
+			return nil
+		}, "b", 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -177,9 +177,6 @@ func TestGradingScopedToSomeoneElsesDeckIs404(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The card grades fine (it's Alice's own), but re-rendering the queue
-	// scoped to ?deck=<bob's deck> must 404, not 500, since that deck isn't
-	// Alice's.
 	// The card is Alice's own, but the ?deck= scope is Bob's deck: that must
 	// 404 before anything is graded, not grade first and then fail to
 	// re-render.
@@ -419,9 +416,13 @@ func TestReviewWithNothingToDoHasNoCelebration(t *testing.T) {
 }
 
 func TestReviewOfASnoozedDeckSaysItIsOnABreak(t *testing.T) {
+	// s.Store.SetClock has no effect here: the app under test builds its own
+	// Store via NewStore(deps.DB) (see flash.go's App.Mount), so this test
+	// works off the real wall clock instead, like
+	// TestSnoozeDaysMustBeBetweenOneAndAYear.
 	s := newServer(t)
-	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
-	s.Store.SetClock(func() time.Time { return now })
+	now := time.Now().UTC()
+	until := now.AddDate(0, 0, 7)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
 	if err != nil {
 		t.Fatal(err)
@@ -429,14 +430,15 @@ func TestReviewOfASnoozedDeckSaysItIsOnABreak(t *testing.T) {
 	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, now.AddDate(0, 0, 7)); err != nil {
+	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, until); err != nil {
 		t.Fatal(err)
 	}
 
 	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
 	brk := doc.MustHave(".flash-review-break")
-	if text := htmlassert.Text(brk); !strings.Contains(text, "Taking a break until 1 Oct") {
-		t.Errorf("break panel = %q, want it to say until 1 Oct", text)
+	wantUntil := "Taking a break until " + until.Format("2 Jan") + "."
+	if text := htmlassert.Text(brk); !strings.Contains(text, wantUntil) {
+		t.Errorf("break panel = %q, want it to contain %q", text, wantUntil)
 	}
 	end := doc.MustHave(`.flash-review-break form[action="/flash/` + itoa(deck.ID) + `/unsnooze"]`)
 	if got := htmlassert.Text(end); !strings.Contains(got, "End break") {
@@ -444,6 +446,11 @@ func TestReviewOfASnoozedDeckSaysItIsOnABreak(t *testing.T) {
 	}
 	doc.MustNotHave(".flash-review-summary")
 	doc.MustNotHave(".flash-review-card")
+
+	// The review page also shows the break panel when the deck is scoped
+	// via ?deck= instead of the /flash/review/{id} path.
+	scoped := s.Get(t, s.Alice, "/flash/review?deck="+itoa(deck.ID))
+	scoped.MustHave(".flash-review-break")
 
 	// Review all is unaffected: a snoozed deck is simply left out there.
 	all := s.Get(t, s.Alice, "/flash/review")
@@ -458,9 +465,11 @@ func TestReviewOfASnoozedDeckSaysItIsOnABreak(t *testing.T) {
 }
 
 func TestReviewAllShowsTheMostOverdueCardFirst(t *testing.T) {
+	// s.Store.SetClock has no effect here (see the note on
+	// TestReviewOfASnoozedDeckSaysItIsOnABreak above), so this uses the real
+	// wall clock and anchors every card relative to it.
 	s := newServer(t)
-	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
-	s.Store.SetClock(func() time.Time { return now })
+	now := time.Now().UTC()
 	older, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Older", "")
 	if err != nil {
 		t.Fatal(err)
