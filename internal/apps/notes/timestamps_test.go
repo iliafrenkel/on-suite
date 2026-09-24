@@ -186,6 +186,19 @@ func TestFixedWidthMigrationIsIdempotent(t *testing.T) {
 		t.Fatalf("Apply: %v", err)
 	}
 
+	// The garbage row is left alone by the first run.
+	var garbageCreated, garbageUpdated, garbageArchived string
+	if err := handle.QueryRowContext(ctx,
+		`SELECT created_at, updated_at, archived_at FROM notes_nodes WHERE id = 100`).Scan(
+		&garbageCreated, &garbageUpdated, &garbageArchived); err != nil {
+		t.Fatal(err)
+	}
+	for name, got := range map[string]string{"created_at": garbageCreated, "updated_at": garbageUpdated, "archived_at": garbageArchived} {
+		if got != "not-a-timestamp" {
+			t.Errorf("garbage %s after the first run = %q, want unchanged", name, got)
+		}
+	}
+
 	snapshot := func() map[string]string {
 		rows := map[string]string{}
 		add := func(col string) {
@@ -201,6 +214,9 @@ func TestFixedWidthMigrationIsIdempotent(t *testing.T) {
 					t.Fatal(err)
 				}
 				rows[col+"#"+strconv.FormatInt(k, 10)] = val.String + "|" + strconv.FormatBool(val.Valid)
+			}
+			if err := r.Err(); err != nil {
+				t.Fatal(err)
 			}
 		}
 		add("created_at")

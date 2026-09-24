@@ -236,13 +236,28 @@ func TestFixedWidthMigrationIsIdempotent(t *testing.T) {
 		t.Fatalf("Apply: %v", err)
 	}
 
+	// The garbage feed is left alone by the first run.
+	var garbageLastFetch, garbageNextFetch string
+	if err := handle.QueryRowContext(ctx,
+		`SELECT last_fetch_at, next_fetch_at FROM reader_feeds WHERE id = 100`).Scan(&garbageLastFetch, &garbageNextFetch); err != nil {
+		t.Fatal(err)
+	}
+	if garbageLastFetch != "not-a-timestamp" {
+		t.Errorf("garbage last_fetch_at after the first run = %q, want unchanged", garbageLastFetch)
+	}
+	if garbageNextFetch != "not-a-timestamp" {
+		t.Errorf("garbage next_fetch_at after the first run = %q, want unchanged", garbageNextFetch)
+	}
+
 	snapshot := func() map[string]string {
 		rows := map[string]string{}
-		// keyExpr is a SQL expression identifying the row by its real
-		// primary key: url_hash and (user_id, item_id) are WITHOUT
-		// ROWID-style keys here even where the table itself has a rowid, so
-		// snapshotting by rowid would not reliably track the same logical
-		// row.
+		// keyExpr identifies each row by its real primary key: reader_feeds,
+		// reader_subs and reader_items use their ordinary integer id;
+		// reader_images and reader_feed_icons use url_hash; and
+		// reader_item_state (a WITHOUT ROWID table) uses its (user_id,
+		// item_id) composite key. url_hash and (user_id, item_id) are the
+		// logical keys for those tables regardless of rowid, so snapshotting
+		// by anything else would not reliably track the same logical row.
 		add := func(table, keyExpr, col string) {
 			r, err := handle.QueryContext(ctx, `SELECT `+keyExpr+` AS k, `+col+` FROM `+table+` ORDER BY k`)
 			if err != nil {
@@ -256,6 +271,9 @@ func TestFixedWidthMigrationIsIdempotent(t *testing.T) {
 					t.Fatal(err)
 				}
 				rows[table+"."+col+"#"+k] = val.String + "|" + strconv.FormatBool(val.Valid)
+			}
+			if err := r.Err(); err != nil {
+				t.Fatal(err)
 			}
 		}
 		add("reader_feeds", "id", "last_fetch_at")
