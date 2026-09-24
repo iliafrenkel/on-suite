@@ -162,14 +162,21 @@
 
 	// initDropZone lets a file be dropped onto the zone's label, and shows
 	// the chosen file's name (the CSP's img-src 'self' rules out a blob:
-	// thumbnail).
+	// thumbnail). A newly chosen file always wins over that kind's Remove
+	// checkbox on the server (#328), so unticking it here too keeps what
+	// the checkbox shows in sync with what will actually happen — a
+	// convenience only, never relied on for correctness (the server enforces
+	// the rule regardless of JS).
 	function initDropZone(zone) {
 		var input = zone.querySelector("input[type=file]");
 		var label = zone.querySelector(".flash-drop-file");
+		var field = zone.closest(".flash-drop-field");
+		var removeBox = field && field.querySelector(".flash-drop-remove input[type=checkbox]");
 		if (!input) return;
 		function show() {
 			if (label) label.textContent = input.files.length ? input.files[0].name : "";
 			zone.classList.toggle("flash-drop-chosen", input.files.length > 0);
+			if (removeBox && input.files.length) removeBox.checked = false;
 		}
 		zone.addEventListener("dragover", function (e) {
 			e.preventDefault();

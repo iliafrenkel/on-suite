@@ -174,16 +174,18 @@ func readCardUploads(w http.ResponseWriter, r *http.Request) (cardUploads, strin
 		RemoveImage: r.PostFormValue("remove_image") != "",
 		RemoveAudio: r.PostFormValue("remove_audio") != "",
 	}
+	// A newly chosen file always wins over Remove for its own kind (#328):
+	// read every file part unconditionally, whether or not that kind's
+	// Remove flag is set, so a new file is neither dropped nor lets a bad
+	// file slip past validation just because Remove happened to be ticked.
+	// saveCardUploads is what actually applies Remove only when no new file
+	// came in for that kind.
 	var msg string
-	if !u.RemoveImage {
-		if u.Image, msg = readUpload(w, r, MediaKindImage, "image", MaxImageFetchBytes); msg != "" {
-			return cardUploads{}, msg
-		}
+	if u.Image, msg = readUpload(w, r, MediaKindImage, "image", MaxImageFetchBytes); msg != "" {
+		return cardUploads{}, msg
 	}
-	if !u.RemoveAudio {
-		if u.Audio, msg = readUpload(w, r, MediaKindAudio, "audio", MaxAudioFetchBytes); msg != "" {
-			return cardUploads{}, msg
-		}
+	if u.Audio, msg = readUpload(w, r, MediaKindAudio, "audio", MaxAudioFetchBytes); msg != "" {
+		return cardUploads{}, msg
 	}
 	return u, ""
 }
@@ -216,9 +218,9 @@ func readUpload(w http.ResponseWriter, r *http.Request, kind, field string, maxB
 	return &pendingUpload{Kind: kind, ContentType: ct, Data: data}, ""
 }
 
-// saveCardUploads applies checked uploads to a card that now exists:
-// removals first win over a new file of the same kind (the form offers
-// either, not both).
+// saveCardUploads applies checked uploads to a card that now exists: a new
+// file of a kind always wins over that kind's Remove flag (#328) — Remove
+// only takes effect when no new file came in for that kind.
 func (a *App) saveCardUploads(ctx context.Context, userID, deckID, cardID int64, u cardUploads) error {
 	for _, m := range []struct {
 		kind   string
@@ -229,16 +231,16 @@ func (a *App) saveCardUploads(ctx context.Context, userID, deckID, cardID int64,
 		{MediaKindAudio, u.RemoveAudio, u.Audio},
 	} {
 		switch {
-		case m.remove:
-			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, nil); err != nil {
-				return err
-			}
 		case m.up != nil:
 			hash, err := a.store.SaveMediaUpload(ctx, m.up.Kind, m.up.ContentType, m.up.Data, a.store.now())
 			if err != nil {
 				return err
 			}
 			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, &hash); err != nil {
+				return err
+			}
+		case m.remove:
+			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, nil); err != nil {
 				return err
 			}
 		}

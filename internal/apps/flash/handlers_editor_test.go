@@ -240,6 +240,96 @@ func TestUpdateCardCanRemoveItsImage(t *testing.T) {
 	}
 }
 
+// onePNG2 is a second, distinct valid PNG fixture (a different final byte),
+// so a test can tell "the image changed" apart from "the image stayed the
+// same" by comparing hashes.
+var onePNG2 = []byte{
+	0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+	0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x53,
+}
+
+// TestNewImageWinsOverRemoveFlag is the regression test for #328: a card
+// form used to silently drop a newly chosen file whenever its Remove
+// checkbox was ticked (readCardUploads skipped reading that field
+// entirely), even though the two controls are not mutually exclusive in
+// the UI — flash.js only unticks Remove when a file is chosen, it does not
+// prevent both being present in one submission (e.g. a no-JS submission,
+// or a race with the checkbox). The rule is: a newly uploaded file always
+// wins over Remove for that kind.
+func TestNewImageWinsOverRemoveFlag(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": onePNG})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d", rec.Code)
+	}
+	original, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}, "remove_image": {"1"}},
+		map[string][]byte{"image": onePNG2})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	updated, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ImageHash == nil {
+		t.Fatal("a new image sent alongside remove_image should still be attached")
+	}
+	if *updated.ImageHash == *original.ImageHash {
+		t.Error("the card's image was not replaced by the new file")
+	}
+}
+
+// TestBadNewImageStillValidatesWithRemoveTicked is the other half of #328:
+// remove must not silently swallow a bad new file. A bad file sent
+// alongside remove_image is still checked, and still produces the normal
+// validation error, leaving the card's existing image untouched.
+func TestBadNewImageStillValidatesWithRemoveTicked(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": onePNG})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d", rec.Code)
+	}
+	original, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}, "remove_image": {"1"}},
+		map[string][]byte{"image": []byte("<html>not an image</html>")})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bad image over HTMX = %d, want 200 with the form re-rendered", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#card-detail-edit .notice-error")
+
+	unchanged, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.ImageHash == nil || *unchanged.ImageHash != *original.ImageHash {
+		t.Error("a rejected new image (even with remove ticked) must leave the existing image untouched")
+	}
+}
+
 func TestClozeCardIgnoresAStaleBack(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Geography", "")
