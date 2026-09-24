@@ -269,9 +269,9 @@ type shareOfferWithUsername struct {
 // usernamesByID loads every account on the instance and returns it two
 // ways: the full list, and a lookup from account id to username. shareContext
 // (the creator's "Shared with" list and the Share dropdown's recipients),
-// buildDeckIndex (the recipient's pending gift rows), shareDeck (validating
-// a share's to_user_id), and giftPreview (a gift's "From" username) all need
-// this same lookup.
+// buildDeckIndex (the recipient's pending gift rows and, for the open deck,
+// the inline Share section), shareDeck (validating a share's to_user_id),
+// and giftPreview (a gift's "From" username) all need this same lookup.
 func (a *App) usernamesByID(ctx context.Context) ([]auth.Account, map[int64]string, error) {
 	accounts, err := a.deps.Users.ListAccounts(ctx)
 	if err != nil {
@@ -446,9 +446,9 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 	}
 
 	// The account map is only needed to enrich offers or shares with
-	// usernames, and ListAccounts is a full-table scan — so it's fetched at
-	// most once per render, and only when one of the two actually has rows
-	// to enrich.
+	// usernames, and ListAccounts runs a per-account session-count subquery
+	// for every row — so it's fetched at most once per render, and only
+	// when one of the two actually has rows to enrich.
 	var offers []shareOfferWithUsername
 	if len(rawOffers) > 0 || needShareContext {
 		accounts, byID, err := a.usernamesByID(ctx)
