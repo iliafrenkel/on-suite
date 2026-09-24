@@ -302,9 +302,9 @@ func TestParseImportMarkdownWithImageAndAudioURLs(t *testing.T) {
 // ParseImport, so the in-app documentation can never quietly drift out of
 // sync with what the parser actually accepts.
 func TestImportMarkdownExampleParses(t *testing.T) {
-	d, err := ParseImport(ImportMarkdownExample, "markdown")
+	d, err := ParseImport(importMarkdownExample, "markdown")
 	if err != nil {
-		t.Fatalf("ParseImport(ImportMarkdownExample): %v", err)
+		t.Fatalf("ParseImport(importMarkdownExample): %v", err)
 	}
 	if d.Name != "Deck name" {
 		t.Errorf("deck name = %q, want %q", d.Name, "Deck name")
