@@ -359,10 +359,16 @@ func cardBasePath(deckID int64) string {
 const cardSavedNotice = "Card saved. Add the next one."
 
 // newCardFormURL is the new-card form pre-filled for the next card after
-// "Save and add another" without JavaScript: same type, same tags, and the
-// saved notice.
-func newCardFormURL(deckID int64, cardType, tags string) string {
-	v := url.Values{"saved": {"1"}, "type": {cardType}}
+// "Save and add another": same type, same tags. saved adds the "Card
+// saved" notice (saved=1) — the no-JS redirect wants it (a fresh page load
+// has nothing else to show it happened), but the HTMX push-url must leave
+// it out: the fragment response already carries the notice, and reloading
+// that pushed URL later should not repeat it.
+func newCardFormURL(deckID int64, cardType, tags string, saved bool) string {
+	v := url.Values{"type": {cardType}}
+	if saved {
+		v.Set("saved", "1")
+	}
 	if tags != "" {
 		v.Set("tags", tags)
 	}
@@ -454,10 +460,10 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 
 	if r.PostFormValue("next") == "new" {
 		if !web.IsHTMX(r) {
-			http.Redirect(w, r, newCardFormURL(deck.ID, cardType, tags), http.StatusSeeOther)
+			http.Redirect(w, r, newCardFormURL(deck.ID, cardType, tags, true), http.StatusSeeOther)
 			return
 		}
-		w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+"new")
+		w.Header().Set("HX-Push-Url", newCardFormURL(deck.ID, cardType, tags, false))
 		next := a.newCardDetail(r, deck, "", cardType, "", "", "", tags, "", "")
 		next.Notice = cardSavedNotice
 		a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, next)

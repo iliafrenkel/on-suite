@@ -624,7 +624,9 @@ func TestSaveAndAddAnotherOverHTMX(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("save and add another = %d; body: %s", rec.Code, rec.Body.String())
 	}
-	if got := rec.Header().Get("HX-Push-Url"); got != "/flash/"+itoa(deck.ID)+"/cards/new" {
+	// The pushed URL carries the type and carried-over tags (but not
+	// saved=1) so a reload keeps them and doesn't repeat "Card saved".
+	if got := rec.Header().Get("HX-Push-Url"); got != "/flash/"+itoa(deck.ID)+"/cards/new?tags=food&type=basic" {
 		t.Errorf("HX-Push-Url = %q", got)
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
