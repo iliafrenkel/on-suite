@@ -1,5 +1,10 @@
 package flash
 
+import (
+	"context"
+	"time"
+)
+
 // AllowPrivateFetchesForTest lets this app's HTTP client reach loopback, so
 // handler tests can point it at an httptest origin. Production never calls
 // it; the real guard is what TestDefaultMediaClientRefusesPrivateAddresses
@@ -24,3 +29,23 @@ const (
 	MaxMediaFetchAttemptsForTest = maxMediaFetchAttempts
 	MediaRetryBackoffForTest     = mediaRetryBackoff
 )
+
+// DeckSummariesPerDeckForTest is the reference DeckSummaries is checked
+// against: ListDecks, then the single-deck path (deckSummary, the one
+// QueueFront uses for a one-deck scope) once per deck. The batched
+// DeckSummaries must return exactly this.
+func (st *Store) DeckSummariesPerDeckForTest(ctx context.Context, userID int64, now time.Time) ([]DeckSummary, error) {
+	decks, err := st.ListDecks(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]DeckSummary, 0, len(decks))
+	for _, d := range decks {
+		s, err := st.deckSummary(ctx, userID, d, now)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
