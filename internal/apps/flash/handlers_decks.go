@@ -200,6 +200,7 @@ type giftRow struct {
 	FromUsername string
 	IsMerge      bool // the recipient already has this deck; only new cards come
 	NewCardCount int
+	UpToDate     bool // a merge with 0 new cards: the row shows no badge (#346)
 }
 
 // giftView is the pane for one gift.
@@ -210,9 +211,13 @@ type giftView struct {
 	Color        string
 	FromUsername string
 	IsMerge      bool
-	CardCount    int
-	Samples      []cardGridItem
-	CSRFToken    string
+	// UpToDate is a merge with 0 new cards (#346): the pane says the
+	// recipient already has every card and offers only Got it, which
+	// adopts the offer so it leaves the list.
+	UpToDate  bool
+	CardCount int
+	Samples   []cardGridItem
+	CSRFToken string
 }
 
 type deckListFragment struct {
@@ -482,9 +487,10 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 
 	gifts := make([]giftRow, len(offers))
 	for i, o := range offers {
+		isMerge := o.PriorAdoptedDeckID != nil
 		gifts[i] = giftRow{
 			ShareID: o.ID, DeckName: o.DeckName, DeckColor: o.DeckColor, FromUsername: o.FromUsername,
-			IsMerge: o.PriorAdoptedDeckID != nil, NewCardCount: o.NewCardCount,
+			IsMerge: isMerge, NewCardCount: o.NewCardCount, UpToDate: isMerge && o.NewCardCount == 0,
 		}
 	}
 

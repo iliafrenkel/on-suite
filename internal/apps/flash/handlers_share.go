@@ -180,9 +180,12 @@ func (a *App) giftPreview(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
+	isMerge := p.Offer.PriorAdoptedDeckID != nil
 	gift := giftView{
 		ShareID: shareID, DeckName: p.Deck.Name, Description: p.Deck.Description, Color: p.Deck.Color,
-		FromUsername: byID[p.Offer.FromUserID], IsMerge: p.Offer.PriorAdoptedDeckID != nil,
+		FromUsername: byID[p.Offer.FromUserID], IsMerge: isMerge,
+		// For a merge, CardCount is only the cards not yet adopted.
+		UpToDate:  isMerge && p.CardCount == 0,
 		CardCount: p.CardCount, CSRFToken: web.CSRFToken(r.Context()),
 	}
 	for _, c := range p.Samples {
@@ -237,9 +240,14 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := a.viewDeckDetail(r, userID, d, recipients, shares)
-	view.Notice = "“" + d.Name + "” is now in your decks."
-	if result.Merged {
+	switch {
+	case result.Merged && result.CardsCopied == 0:
+		// Got it on an up-to-date re-share (#346): nothing was copied.
+		view.Notice = "“" + d.Name + "” is already up to date."
+	case result.Merged:
 		view.Notice = fmt.Sprintf("%d new card%s added to “%s”.", result.CardsCopied, plural(result.CardsCopied), d.Name)
+	default:
+		view.Notice = "“" + d.Name + "” is now in your decks."
 	}
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }

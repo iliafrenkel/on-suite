@@ -1001,3 +1001,66 @@ func TestAdoptShareRenameWithoutASharerName(t *testing.T) {
 		t.Errorf("name = %q, want %q", result.Deck.Name, "Spanish (shared)")
 	}
 }
+
+// TestSharePreviewOfAnEmptyDeck covers #346's first-share edge case: a
+// deck with no cards previews as 0 cards with no samples.
+func TestSharePreviewOfAnEmptyDeck(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Empty", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := f.store.SharePreview(ctx, f.bob.ID, sh.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Offer.PriorAdoptedDeckID != nil || p.CardCount != 0 || len(p.Samples) != 0 {
+		t.Errorf("preview = %+v, want a first-time offer of 0 cards and no samples", p)
+	}
+}
+
+// TestUpToDateMergeOfferCountsZero covers #346's merge edge case: a
+// re-share with nothing new since the last adoption is still a merge offer,
+// with 0 new cards and no samples.
+func TestUpToDateMergeOfferCountsZero(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	again, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	offers, err := f.store.SharesForRecipient(ctx, f.bob.ID)
+	if err != nil || len(offers) != 1 {
+		t.Fatalf("offers = %+v, err = %v", offers, err)
+	}
+	if offers[0].PriorAdoptedDeckID == nil || offers[0].NewCardCount != 0 {
+		t.Errorf("offer = %+v, want a merge offer with NewCardCount 0", offers[0])
+	}
+	p, err := f.store.SharePreview(ctx, f.bob.ID, again.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Offer.PriorAdoptedDeckID == nil || p.CardCount != 0 || len(p.Samples) != 0 {
+		t.Errorf("preview = %+v, want a merge of 0 cards and no samples", p)
+	}
+}

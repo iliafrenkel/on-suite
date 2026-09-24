@@ -668,3 +668,97 @@ func TestAdoptRenamesOnNameCollision(t *testing.T) {
 		t.Errorf("bob's decks = %+v, want Spanish and Spanish (from alice)", decks)
 	}
 }
+
+// TestGiftPreviewOfAnEmptyDeck covers #346's first-share edge case through
+// the template: "0 cards", no "A few of the cards" section, and the normal
+// first-time buttons and badge.
+func TestGiftPreviewOfAnEmptyDeck(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Empty")
+	shareID := shareToBob(t, s, deckID)
+
+	doc := s.Get(t, s.Bob, "/flash/shared/"+shareID)
+	text := htmlassert.Text(doc.MustHave("#deck-detail .flash-gift"))
+	if !strings.Contains(text, "alice shared this deck with you") || !strings.Contains(text, "0 cards") {
+		t.Errorf("gift pane = %q, want the first-time wording and 0 cards", text)
+	}
+	if strings.Contains(text, "A few of the cards") {
+		t.Errorf("gift pane = %q, should not offer samples of an empty deck", text)
+	}
+	doc.MustNotHave(".flash-gift .flash-section-title")
+	doc.MustNotHave(".flash-gift .flash-mini-card")
+	if n := len(doc.QueryAll(".flash-gift-actions button")); n != 2 {
+		t.Errorf("gift pane has %d buttons, want Add to my decks and No thanks", n)
+	}
+	if got := htmlassert.Text(doc.MustHave("#deck-list .flash-gift-badge")); got != "new" {
+		t.Errorf("gift badge = %q, want new", got)
+	}
+}
+
+// TestUpToDateReshareSaysSo covers #346's merge edge case: a re-share with
+// no new cards has no "+0" badge, a pane that says you already have every
+// card with a single Got it, and an "already up to date" notice.
+func TestUpToDateReshareSaysSo(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := itoa(deckID)
+	addCard := func(front string) {
+		t.Helper()
+		rec := s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/cards/new",
+			url.Values{"card_type": {"basic"}, "front": {front}, "back": {"x"}, "notes": {""}})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create card: %d; body: %s", rec.Code, rec.Body.String())
+		}
+	}
+	addCard("hola")
+	s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareToBob(t, s, deckID)}})
+
+	// A merge with something new still shows its count.
+	addCard("adios")
+	withNew := shareToBob(t, s, deckID)
+	if got := htmlassert.Text(s.Get(t, s.Bob, "/flash/").MustHave("#deck-list .flash-gift-badge")); got != "+1" {
+		t.Errorf("merge badge = %q, want +1", got)
+	}
+	s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {withNew}})
+
+	// Nothing new since: the gift row is there, with no badge…
+	upToDate := shareToBob(t, s, deckID)
+	list := s.Get(t, s.Bob, "/flash/")
+	list.MustHave("#deck-list a.deck-row-gift")
+	list.MustNotHave("#deck-list .flash-gift-badge")
+
+	// …the pane says so, with Got it as its only button…
+	pane := s.Get(t, s.Bob, "/flash/shared/"+upToDate)
+	text := htmlassert.Text(pane.MustHave("#deck-detail .flash-gift"))
+	if !strings.Contains(text, "You already have every card in Spanish") {
+		t.Errorf("gift pane = %q, want it to say you already have every card in Spanish", text)
+	}
+	if strings.Contains(text, "0 new card") {
+		t.Errorf("gift pane = %q, should not count 0 new cards", text)
+	}
+	buttons := pane.QueryAll(".flash-gift-actions button")
+	if len(buttons) != 1 || htmlassert.Text(buttons[0]) != "Got it" {
+		t.Errorf("gift pane buttons = %d, want just Got it", len(buttons))
+	}
+	pane.MustHave(`.flash-gift-actions form[action="/flash/shared/adopt"]`)
+	pane.MustNotHave(`.flash-gift-actions form[action="/flash/shared/decline"]`)
+
+	// …and Got it resolves the offer with an "already up to date" notice.
+	rec := s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {upToDate}})
+	if rec.Code != 200 {
+		t.Fatalf("got it: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(doc.MustHave("#deck-detail-view .flash-notice")); got != "“Spanish” is already up to date." {
+		t.Errorf("notice = %q", got)
+	}
+	doc.MustNotHave("#deck-list .deck-row-gift")
+	decks, err := s.Store.ListDecks(t.Context(), s.Bob.User.ID)
+	if err != nil || len(decks) != 1 {
+		t.Fatalf("bob's decks = %+v, err = %v, want the one copy", decks, err)
+	}
+	cards, err := s.Store.ListCards(t.Context(), s.Bob.User.ID, decks[0].ID)
+	if err != nil || len(cards) != 2 {
+		t.Errorf("bob's cards = %d, err = %v, want 2 (nothing copied twice)", len(cards), err)
+	}
+}

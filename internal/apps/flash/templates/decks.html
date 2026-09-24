@@ -216,7 +216,7 @@
 				<span class="deck-row-name">{{.DeckName}}</span>
 				<span class="deck-row-status">From {{.FromUsername}}</span>
 			</span>
-			<span class="flash-gift-badge">{{if .IsMerge}}+{{.NewCardCount}}{{else}}new{{end}}</span>
+			{{if not .UpToDate}}<span class="flash-gift-badge">{{if .IsMerge}}+{{.NewCardCount}}{{else}}new{{end}}</span>{{end}}
 		</a>
 	</li>
 	{{end}}
