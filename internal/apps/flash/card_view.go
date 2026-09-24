@@ -125,11 +125,10 @@ type cardGridView struct {
 
 // openedCardView is the right pane in "card" mode.
 type openedCardView struct {
-	Deck       Deck
-	Face       cardFace
-	BackURL    string // the grid, with the filter kept
-	PrevURL    string // "" at the start of the filtered order
-	NextURL    string // "" at the end
-	CSRFToken  string
-	MediaError string
+	Deck      Deck
+	Face      cardFace
+	BackURL   string // the grid, with the filter kept
+	PrevURL   string // "" at the start of the filtered order
+	NextURL   string // "" at the end
+	CSRFToken string
 }

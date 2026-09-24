@@ -68,7 +68,6 @@ type cardDetailView struct {
 	NotesValue    string
 	TagsValue     string
 	Error         string
-	MediaError    string
 	Notice        string // a success message above the form ("Card saved…")
 
 	// ImageMediaURL/AudioMediaURL are the card's current media, shown by
@@ -105,15 +104,6 @@ func (a *App) viewCardDetail(r *http.Request, d Deck, c Card) cardDetailView {
 	return cardDetailView{
 		Mode: cardModeView, Deck: d, Card: c, CSRFToken: web.CSRFToken(r.Context()),
 	}
-}
-
-// viewCardDetailWithMediaError is viewCardDetail plus an error message from
-// a failed media upload, so the card page can show both the card and why
-// the attachment attempt just failed.
-func (a *App) viewCardDetailWithMediaError(r *http.Request, userID int64, d Deck, c Card, errMsg string) cardDetailView {
-	v := a.viewCardDetail(r, d, c)
-	v.MediaError = errMsg
-	return v
 }
 
 func (a *App) newCardDetail(r *http.Request, d Deck, errMsg, cardType, front, back, notes, tags string) cardDetailView {
@@ -232,7 +222,6 @@ func (a *App) cardPaneDetail(r *http.Request, userID int64, deck Deck, cd cardDe
 		if err != nil {
 			return deckDetailView{}, err
 		}
-		opened.MediaError = cd.MediaError
 		detail.Mode, detail.Opened = deckModeCard, opened
 	default:
 		grid, _, _, err := a.cardGrid(r.Context(), userID, deck, "", "")

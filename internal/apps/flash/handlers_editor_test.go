@@ -108,6 +108,89 @@ func TestCreateCardWithNearMaxImageAndAudioSucceeds(t *testing.T) {
 	}
 }
 
+// TestCreateCardRequiresCSRF and the two tests below were moved from
+// handlers_media_test.go's now-removed uploadCardMedia route (#327): that
+// route was dead (no UI has called it since media started traveling in the
+// create/update card form, U3), but its protections — CSRF, an oversized
+// file, and a request over the platform's global 1MB body cap — need to
+// keep being exercised on the route that actually carries media today.
+func TestCreateCardRequiresCSRF(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httpPost(t, "/flash/"+itoa(deck.ID)+"/cards/new", url.Values{"card_type": {"basic"}, "front": {"a"}, "back": {"b"}})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("create card without CSRF = %d, want 403", rec.Code)
+	}
+}
+
+// TestCreateCardWithOversizedImageIsRejected is
+// TestUploadCardImageRejectsOversizedFile, moved to the card-form route.
+func TestCreateCardWithOversizedImageIsRejected(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// One byte over the per-field image cap (MaxImageFetchBytes = 5MB), but
+	// still under cardFormMaxBytes, so this request reaches the app's own
+	// per-field size check in readUpload rather than being rejected earlier
+	// by the platform layer.
+	oversized := make([]byte, flash.MaxImageFetchBytes+1)
+	copy(oversized, onePNG)
+
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": oversized})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("oversized image over HTMX = %d, want 200 with a notice-error fragment", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#card-detail-new .notice-error")
+
+	if cards, _ := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID); len(cards) != 0 {
+		t.Errorf("a rejected oversized upload still created %d card(s)", len(cards))
+	}
+}
+
+// TestCreateCardWithImageOverGlobalCapSucceeds is
+// TestUploadCardImageOverGlobalCapSucceeds, moved to the card-form route:
+// the regression test for the platform's global 1MB body cap
+// (web.DefaultMaxBodyBytes) running ahead of this route's own raised
+// cardFormMaxBytes cap. A ~2MB file sits strictly between the two, so it
+// only succeeds once the route's own body-limit override (flash.go's
+// Mount) is in effect. The card-form route previously had no test for
+// this at all (#330/#327).
+func TestCreateCardWithImageOverGlobalCapSucceeds(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const size = 2 << 20
+	big := make([]byte, size)
+	copy(big, onePNG)
+
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": big})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create with a ~2MB image = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	cards, err := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil || len(cards) != 1 {
+		t.Fatalf("ListCards = %v, %v", cards, err)
+	}
+	if cards[0].ImageHash == nil {
+		t.Fatal("ImageHash is nil after a ~2MB upload that should have succeeded")
+	}
+}
+
 func TestCreateCardWithBadImageKeepsTheFormAndCreatesNothing(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")

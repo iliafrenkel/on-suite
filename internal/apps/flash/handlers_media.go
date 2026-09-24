@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-
-	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
 // mediaCacheControl is private because the response is only meaningful to a
@@ -131,57 +129,6 @@ func (a *App) writeMedia(w http.ResponseWriter, r *http.Request, m Media) {
 	if _, err := w.Write(m.Bytes); err != nil {
 		a.deps.Log.Info("flash writing media failed", "error", err)
 	}
-}
-
-// uploadCardMedia attaches or removes one of userID's own card's media
-// attachments, via a multipart form with optional "image"/"audio" file
-// parts and optional "remove_image"/"remove_audio" flags. A validation
-// failure (oversized file, wrong content type) re-renders the card at 400
-// with the error shown, the same pattern every other flash form uses —
-// not a generic error page, since the user is watching this happen.
-// The same form fields are accepted by the card create/update routes (UI overhaul U3), which is why the checking lives in readCardUploads.
-func (a *App) uploadCardMedia(w http.ResponseWriter, r *http.Request) {
-	userID, ok := a.userID(w, r)
-	if !ok {
-		return
-	}
-	deck, ok := a.cardDeck(w, r, userID)
-	if !ok {
-		return
-	}
-	cardID, ok := a.cardIDFromPath(w, r)
-	if !ok {
-		return
-	}
-	c, err := a.store.CardByID(r.Context(), userID, deck.ID, cardID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-
-	uploads, errMsg := readCardUploads(w, r)
-	if errMsg != "" {
-		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest,
-			a.viewCardDetailWithMediaError(r, userID, deck, c, errMsg))
-		return
-	}
-	if err := a.saveCardUploads(r.Context(), userID, deck.ID, cardID, uploads); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-
-	updated, err := a.store.CardByID(r.Context(), userID, deck.ID, cardID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-
-	if !web.IsHTMX(r) {
-		http.Redirect(w, r, cardBasePath(deck.ID)+strconv.FormatInt(cardID, 10), http.StatusSeeOther)
-		return
-	}
-	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+strconv.FormatInt(cardID, 10))
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, deck, updated))
 }
 
 // pendingUpload is one checked, not-yet-saved media file from a card form.
