@@ -195,9 +195,22 @@ func TestDeclineShareHandlerNoJSRedirects(t *testing.T) {
 
 	s.Submit(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {shareIDStr}}, "/flash/")
 
-	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
-	if err != nil || len(offers) != 0 {
-		t.Fatalf("offers after no-JS decline = %+v, err = %v, want none (declined offers aren't pending)", offers, err)
+	shareID, err := strconv.ParseInt(shareIDStr, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shares, err := s.Store.SharesForDeck(t.Context(), s.Alice.User.ID, deckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got *flash.Share
+	for i := range shares {
+		if shares[i].ID == shareID {
+			got = &shares[i]
+		}
+	}
+	if got == nil || got.Status != flash.ShareStatusDeclined {
+		t.Fatalf("share after no-JS decline = %+v, want status %q", got, flash.ShareStatusDeclined)
 	}
 }
 
@@ -286,6 +299,9 @@ func TestGiftPreviewPane(t *testing.T) {
 	class, _ := htmlassert.Attr(gift, "class")
 	if !containsClass(class, "deck-row-active") {
 		t.Errorf("gift row class = %q, want it to include deck-row-active", class)
+	}
+	if n := len(doc.QueryAll("#deck-list a.deck-row-active")); n != 1 {
+		t.Errorf("#deck-list has %d active rows, want exactly 1 (bob's own deck row must not also be highlighted)", n)
 	}
 }
 
