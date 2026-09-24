@@ -74,6 +74,17 @@ func TestShareDeckHandlerRejectsUnknownRecipient(t *testing.T) {
 	}
 }
 
+// TestShareDeckHandlerNoJSRedirects covers #342: a no-JS POST must 303
+// redirect back to the deck rather than returning a bare HTML fragment.
+func TestShareDeckHandlerNoJSRedirects(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := strconv.FormatInt(deckID, 10)
+
+	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share",
+		url.Values{"to_user_id": {strconv.FormatInt(s.Bob.User.ID, 10)}}, "/flash/"+deckIDStr)
+}
+
 func TestShareDeckHandlerRejectsNonOwner(t *testing.T) {
 	s := newShareServer(t)
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")
@@ -141,6 +152,25 @@ func TestRevokeShareHandlerRequiresMatchingDeckID(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("revoke with correct deckID: %d; body: %s", rec.Code, rec.Body.String())
 	}
+}
+
+// TestRevokeShareHandlerNoJSRedirects covers #342 for revoke.
+func TestRevokeShareHandlerNoJSRedirects(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := strconv.FormatInt(deckID, 10)
+	shareIDStr := shareToBob(t, s, deckID)
+
+	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share/"+shareIDStr+"/revoke", url.Values{}, "/flash/"+deckIDStr)
+}
+
+// TestDeclineShareHandlerNoJSRedirects covers #342 for decline.
+func TestDeclineShareHandlerNoJSRedirects(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	shareIDStr := shareToBob(t, s, deckID)
+
+	s.Submit(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {shareIDStr}}, "/flash/")
 }
 
 func TestDeclineShareHandler(t *testing.T) {
