@@ -310,6 +310,45 @@ func TestGiftRowLeavesTheListOnAdoptAndDecline(t *testing.T) {
 	}
 }
 
+// TestAdoptNoticeWordingForFirstAdoptAndMerge covers a gap from Part A's
+// review: no test asserted the actual wording of AdoptResult's notice. A
+// first-time adopt must say the deck "is now in your decks"; a merge must
+// say how many new cards were added, singular or plural depending on count.
+func TestAdoptNoticeWordingForFirstAdoptAndMerge(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := strconv.FormatInt(deckID, 10)
+	shareID := shareToBob(t, s, deckID)
+
+	rec := s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareID}})
+	if rec.Code != 200 {
+		t.Fatalf("adopt: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	notice := htmlassert.Text(doc.MustHave("#deck-detail-view .flash-notice"))
+	if !strings.Contains(notice, "is now in your decks") {
+		t.Errorf("first adopt notice = %q, want it to say the deck is now in your decks", notice)
+	}
+
+	// Alice adds one card and re-shares; bob merges.
+	rec = s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"hola"}, "back": {"hello"}, "notes": {""}})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create card: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	mergeShareID := shareToBob(t, s, deckID)
+
+	rec = s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {mergeShareID}})
+	if rec.Code != 200 {
+		t.Fatalf("merge: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc = htmlassert.Parse(t, rec.Body.String())
+	notice = htmlassert.Text(doc.MustHave("#deck-detail-view .flash-notice"))
+	if !strings.Contains(notice, "1 new card added to") {
+		t.Errorf("merge notice = %q, want it to say 1 new card added to", notice)
+	}
+}
+
 // TestDeclineOneOfTwoGiftsLeavesTheOtherInTheOOBList covers #304 bullet 8:
 // the out-of-band #deck-list refresh after declining one gift must still
 // show every other still-pending gift, not just drop the whole gift section.
