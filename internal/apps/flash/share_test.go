@@ -92,15 +92,51 @@ func TestRevokeShareRequiresPendingAndOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := f.store.RevokeShare(ctx, f.bob.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
+	if err := f.store.RevokeShare(ctx, f.bob.ID, d.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
 		t.Errorf("revoke by non-owner: err = %v, want ErrNotFound", err)
 	}
-	if err := f.store.RevokeShare(ctx, f.alice.ID, sh.ID); err != nil {
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, sh.ID); err != nil {
 		t.Fatal(err)
 	}
 	// revoking again (no longer pending) fails
-	if err := f.store.RevokeShare(ctx, f.alice.ID, sh.ID); !errors.Is(err, flash.ErrInvalid) {
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, sh.ID); !errors.Is(err, flash.ErrInvalid) {
 		t.Errorf("re-revoke: err = %v, want ErrInvalid", err)
+	}
+}
+
+func TestRevokeShareRequiresMatchingDeckID(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := f.store.CreateDeck(ctx, f.alice.ID, "French", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Alice owns both decks and the share, but the share belongs to d, not
+	// other — revoking it via other's id must not succeed.
+	if err := f.store.RevokeShare(ctx, f.alice.ID, other.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
+		t.Errorf("revoke with mismatched deckID: err = %v, want ErrNotFound", err)
+	}
+
+	// The share is still pending.
+	shares, err := f.store.SharesForDeck(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shares) != 1 || shares[0].Status != flash.ShareStatusPending {
+		t.Fatalf("shares = %+v, want the share still pending", shares)
+	}
+
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, sh.ID); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -149,7 +185,7 @@ func TestDeleteDeckCascadesShares(t *testing.T) {
 	}
 	// the share row is gone: revoking it now reports ErrNotFound the same as
 	// a bad ID would
-	if err := f.store.RevokeShare(ctx, f.alice.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
 		t.Errorf("revoke after cascade delete: err = %v, want ErrNotFound", err)
 	}
 }
@@ -222,7 +258,7 @@ func TestAdoptShareFirstTimeCopiesCardsTagsAndMedia(t *testing.T) {
 		t.Fatalf("tags = %+v, want one tag %q under bob's own account", tags, "greetings")
 	}
 
-	err = f.store.RevokeShare(ctx, f.alice.ID, sh.ID)
+	err = f.store.RevokeShare(ctx, f.alice.ID, d.ID, sh.ID)
 	if !errors.Is(err, flash.ErrInvalid) {
 		t.Errorf("revoking an already-adopted share: err = %v, want ErrInvalid", err)
 	}

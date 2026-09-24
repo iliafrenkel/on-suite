@@ -76,34 +76,41 @@ func (st *Store) pendingShare(ctx context.Context, deckID, fromUserID, toUserID 
 		deckID, fromUserID, toUserID, ShareStatusPending))
 }
 
-// RevokeShare cancels one of fromUserID's own pending offers. Only a
-// pending row can be revoked — an already-adopted, declined, or
+// RevokeShare cancels one of fromUserID's own pending offers, scoped to
+// deckID: the route this comes from names both the deck and the share
+// (POST /{deckID}/share/{shareID}/revoke), and a share whose actual deck_id
+// doesn't match the URL's deckID is treated as not found — the {deckID}
+// segment isn't decorative, it's part of the identity being checked. Only
+// a pending row can be revoked — an already-adopted, declined, or
 // previously-revoked row returns ErrInvalid.
-func (st *Store) RevokeShare(ctx context.Context, fromUserID, shareID int64) error {
-	return st.resolveShare(ctx, shareID, fromUserID, "from_user_id", ShareStatusRevoked)
+func (st *Store) RevokeShare(ctx context.Context, fromUserID, deckID, shareID int64) error {
+	return st.resolveShare(ctx, shareID, fromUserID, "from_user_id", ShareStatusRevoked, &deckID)
 }
 
 // DeclineShare dismisses one of toUserID's own pending offers without
 // adopting it. A declined offer never blocks a later fresh ShareDeck call
 // from the same creator to the same recipient.
 func (st *Store) DeclineShare(ctx context.Context, toUserID, shareID int64) error {
-	return st.resolveShare(ctx, shareID, toUserID, "to_user_id", ShareStatusDeclined)
+	return st.resolveShare(ctx, shareID, toUserID, "to_user_id", ShareStatusDeclined, nil)
 }
 
 // resolveShare moves a pending row (owned by userID via ownerColumn, either
 // "from_user_id" or "to_user_id") to newStatus. It reports ErrNotFound if
-// the row doesn't exist or isn't userID's, and ErrInvalid if it exists and
-// is userID's but is no longer pending.
-func (st *Store) resolveShare(ctx context.Context, shareID, userID int64, ownerColumn, newStatus string) error {
-	var ownerID int64
+// the row doesn't exist, isn't userID's, or (when wantDeckID is non-nil)
+// belongs to a different deck than the caller named, and ErrInvalid if it
+// exists, is userID's, and is for the right deck but is no longer pending.
+func (st *Store) resolveShare(ctx context.Context, shareID, userID int64, ownerColumn, newStatus string, wantDeckID *int64) error {
+	var ownerID, deckID int64
 	err := st.db.QueryRowContext(ctx,
-		`SELECT `+ownerColumn+` FROM flash_shares WHERE id = ?`, shareID).Scan(&ownerID)
+		`SELECT `+ownerColumn+`, deck_id FROM flash_shares WHERE id = ?`, shareID).Scan(&ownerID, &deckID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return ErrNotFound
 	case err != nil:
 		return fmt.Errorf("flash: resolve share: %w", err)
 	case ownerID != userID:
+		return ErrNotFound
+	case wantDeckID != nil && deckID != *wantDeckID:
 		return ErrNotFound
 	}
 

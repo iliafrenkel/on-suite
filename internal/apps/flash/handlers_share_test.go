@@ -95,6 +95,35 @@ func TestRevokeAndAdoptShareHandlers(t *testing.T) {
 	}
 }
 
+// TestRevokeShareHandlerRequiresMatchingDeckID covers #304 bullet 1: the
+// {deckID} in the revoke route isn't decorative — a mismatched (but still
+// alice-owned) deckID must 404 rather than revoking a share that actually
+// belongs to a different deck.
+func TestRevokeShareHandlerRequiresMatchingDeckID(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	otherDeckID := createDeckHX(t, s, s.Alice, "French")
+	deckIDStr := strconv.FormatInt(deckID, 10)
+	otherDeckIDStr := strconv.FormatInt(otherDeckID, 10)
+	shareIDStr := shareToBob(t, s, deckID)
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+otherDeckIDStr+"/share/"+shareIDStr+"/revoke", url.Values{})
+	if rec.Code != 404 {
+		t.Fatalf("revoke with mismatched deckID: %d, want 404; body: %s", rec.Code, rec.Body.String())
+	}
+
+	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
+	if err != nil || len(offers) != 1 || offers[0].Status != flash.ShareStatusPending {
+		t.Fatalf("offers after mismatched revoke = %+v, err = %v, want the share still pending", offers, err)
+	}
+
+	// The real deckID still revokes it.
+	rec = s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/share/"+shareIDStr+"/revoke", url.Values{})
+	if rec.Code != 200 {
+		t.Fatalf("revoke with correct deckID: %d; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestDeclineShareHandler(t *testing.T) {
 	s := newShareServer(t)
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")

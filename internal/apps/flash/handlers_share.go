@@ -90,7 +90,7 @@ func (a *App) revokeShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.store.RevokeShare(r.Context(), userID, shareID); err != nil {
+	if err := a.store.RevokeShare(r.Context(), userID, deckID, shareID); err != nil {
 		a.fail(w, r, err)
 		return
 	}
