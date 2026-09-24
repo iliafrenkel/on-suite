@@ -233,6 +233,7 @@ func TestGiftPreviewPane(t *testing.T) {
 			url.Values{"card_type": {"basic"}, "front": {front}, "back": {"x"}})
 	}
 	shareID := shareToBob(t, s, deckID)
+	createDeckHX(t, s, s.Bob, "Bob's own deck") // another row, so the highlight has to pick the right one
 
 	doc := s.Get(t, s.Bob, "/flash/shared/"+shareID)
 	pane := doc.MustHave("#deck-detail .flash-gift")
@@ -252,7 +253,23 @@ func TestGiftPreviewPane(t *testing.T) {
 			t.Errorf("%s has an empty CSRF token", sel)
 		}
 	}
-	doc.MustHave(`#deck-list a.deck-row-active`) // the gift row is highlighted
+	// The gift row itself is the highlighted one, not bob's own deck row.
+	gift := doc.MustHave("#deck-list a.deck-row-gift")
+	class, _ := htmlassert.Attr(gift, "class")
+	if !containsClass(class, "deck-row-active") {
+		t.Errorf("gift row class = %q, want it to include deck-row-active", class)
+	}
+}
+
+// containsClass reports whether class (a space-separated attribute value)
+// contains want as one of its space-separated tokens.
+func containsClass(class, want string) bool {
+	for _, c := range strings.Fields(class) {
+		if c == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGiftPreviewIsRecipientOnly(t *testing.T) {
@@ -285,6 +302,7 @@ func TestGiftRowLeavesTheListOnAdoptAndDecline(t *testing.T) {
 	shareID = shareToBob(t, s, deckID)
 	rec = s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareID}})
 	doc = htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#deck-list")
 	doc.MustNotHave("#deck-list .deck-row-gift")
 	notice := doc.MustHave("#deck-detail-view .flash-notice")
 	if !strings.Contains(htmlassert.Text(notice), "Spanish") {
