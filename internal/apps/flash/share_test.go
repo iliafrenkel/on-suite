@@ -648,6 +648,57 @@ func TestAdoptShareCopiesDeckColor(t *testing.T) {
 	}
 }
 
+// TestAdoptShareMergeKeepsAdoptersOwnColor covers #318: a merge only copies
+// new cards into the recipient's existing deck — it must never touch that
+// deck's own colour, even though a first-time adoption copies the source
+// deck's colour (see TestAdoptShareCopiesDeckColor).
+func TestAdoptShareMergeKeepsAdoptersOwnColor(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "pink"); err != nil {
+		t.Fatal(err)
+	}
+	sh1, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstResult.Deck.Color != "pink" {
+		t.Fatalf("setup: adopted deck Color = %q, want pink", firstResult.Deck.Color)
+	}
+
+	// Bob recolours his adopted deck.
+	if _, err := f.store.SetDeckColor(ctx, f.bob.ID, firstResult.Deck.ID, "teal"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Alice adds a card and re-shares; bob merges.
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "Mercury", "the first planet", ""); err != nil {
+		t.Fatal(err)
+	}
+	sh2, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mergedResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mergedResult.Merged {
+		t.Fatal("Merged = false, want true for a re-share of an already-adopted deck")
+	}
+	if mergedResult.Deck.Color != "teal" {
+		t.Errorf("merged deck Color = %q, want bob's own teal to survive the merge", mergedResult.Deck.Color)
+	}
+}
+
 func TestSharesForRecipientCarriesDeckColor(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
