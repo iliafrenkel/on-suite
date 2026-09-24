@@ -100,6 +100,7 @@ type Option func(*config)
 
 type config struct {
 	secure bool
+	db     *sql.DB
 }
 
 // WithSecureCookies makes the stack behave as it would behind a real TLS
@@ -109,6 +110,17 @@ type config struct {
 // what every other test in this harness wants.
 func WithSecureCookies() Option {
 	return func(c *config) { c.secure = true }
+}
+
+// WithDatabase hands NewServer an already-open database handle instead of
+// having it call db.Open itself — for a test that needs to see what runs
+// against it, for example one wrapping db.DSN's own connection in a
+// statement-counting driver.Driver to assert exactly how many times a query
+// runs for a given request. Migrations, the fixture accounts and everything
+// else happen exactly as they otherwise would; only where the handle comes
+// from changes. The caller owns handle's lifetime, including closing it.
+func WithDatabase(handle *sql.DB) Option {
+	return func(c *config) { c.db = handle }
 }
 
 // NewServer builds a Server for one app. newStore turns the opened database
@@ -123,11 +135,15 @@ func NewServer[S any](t *testing.T, a app.App, newStore func(*sql.DB) S, opts ..
 		opt(&cfg)
 	}
 
-	handle, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
+	handle := cfg.db
+	if handle == nil {
+		var err error
+		handle, err = db.Open(filepath.Join(t.TempDir(), "test.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = handle.Close() })
 	}
-	t.Cleanup(func() { _ = handle.Close() })
 
 	registry, err := app.NewRegistry(a)
 	if err != nil {
