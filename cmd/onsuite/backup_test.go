@@ -99,7 +99,7 @@ func TestBackupCmdSweepsExpiredSessions(t *testing.T) {
 	if err := handle.QueryRow("SELECT id FROM users LIMIT 1").Scan(&userID); err != nil {
 		t.Fatal(err)
 	}
-	expiredAt := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano)
+	expiredAt := db.FormatTime(time.Now().Add(-time.Hour))
 	if _, err := handle.Exec(
 		`INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
 		"expired-session", userID, expiredAt, expiredAt,
