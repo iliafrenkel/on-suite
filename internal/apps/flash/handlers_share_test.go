@@ -292,6 +292,42 @@ func TestGiftRowLeavesTheListOnAdoptAndDecline(t *testing.T) {
 	}
 }
 
+// TestDeclineOneOfTwoGiftsLeavesTheOtherInTheOOBList covers #304 bullet 8:
+// the out-of-band #deck-list refresh after declining one gift must still
+// show every other still-pending gift, not just drop the whole gift section.
+func TestDeclineOneOfTwoGiftsLeavesTheOtherInTheOOBList(t *testing.T) {
+	s := newShareServer(t)
+	spanishID := createDeckHX(t, s, s.Alice, "Spanish")
+	frenchID := createDeckHX(t, s, s.Alice, "French")
+	spanishShareID := shareToBob(t, s, spanishID)
+	frenchShareID := shareToBob(t, s, frenchID)
+
+	rec := s.PostHX(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {spanishShareID}})
+	if rec.Code != 200 {
+		t.Fatalf("decline: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	list := doc.MustHave("#deck-list")
+	if _, ok := htmlassert.Attr(list, "hx-swap-oob"); !ok {
+		t.Error("#deck-list is not refreshed out of band on decline")
+	}
+
+	gifts := doc.QueryAll("#deck-list a.deck-row-gift")
+	if len(gifts) != 1 {
+		t.Fatalf("gift rows after decline = %d, want exactly 1 (French)", len(gifts))
+	}
+	text := htmlassert.Text(gifts[0])
+	if !strings.Contains(text, "French") {
+		t.Errorf("remaining gift row = %q, want French", text)
+	}
+	if strings.Contains(text, "Spanish") {
+		t.Errorf("remaining gift row = %q, should not mention the declined Spanish deck", text)
+	}
+	if href, _ := htmlassert.Attr(gifts[0], "href"); href != "/flash/shared/"+frenchShareID {
+		t.Errorf("remaining gift row href = %q, want the French share %q", href, "/flash/shared/"+frenchShareID)
+	}
+}
+
 // TestFullShareCycleThroughHTTP covers finding #5: it drives a full
 // share -> adopt -> re-share -> merge cycle entirely through the HTTP
 // layer (the real POST routes), rather than calling the store methods
