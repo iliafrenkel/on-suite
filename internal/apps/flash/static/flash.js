@@ -265,6 +265,10 @@
 
 	document.addEventListener("keydown", function (e) {
 		if (e.metaKey || e.ctrlKey || e.altKey) return;
+		// A focused <audio>/<video> element's own controls (e.g. Space for
+		// play/pause) must win over our shortcuts, or Space both reveals the
+		// review answer and preventDefault()s the player's native toggle.
+		if (e.target.closest && e.target.closest("audio, video")) return;
 		// The flip checkbox is an <input>, but Space on it should still flip
 		// — natively, which is why Space returns here before isTyping and
 		// before our own Space handling (doing both would flip twice). Only
