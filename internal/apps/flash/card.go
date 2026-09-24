@@ -176,9 +176,17 @@ const (
 
 // SetCardMedia sets or clears one of userID's own card's media hashes. hash
 // of nil clears the attachment (e.g. a "remove image" request). It does not
-// validate that hash names a real flash_media row — callers (ImportDeck, the
-// upload handler) create that row first.
+// validate that hash names a real flash_media row — the foreign key does,
+// and callers that create the row (ImportDeck, AttachCardUpload) do it in
+// the same transaction as the attach, so PurgeOrphanMedia can never delete
+// the row in between (#302.5).
 func (st *Store) SetCardMedia(ctx context.Context, userID, deckID, cardID int64, kind string, hash *string) error {
+	return setCardMedia(ctx, st.db, userID, deckID, cardID, kind, hash)
+}
+
+// setCardMedia is SetCardMedia against either the handle or a caller's open
+// transaction (see dbExecutor).
+func setCardMedia(ctx context.Context, exec dbExecutor, userID, deckID, cardID int64, kind string, hash *string) error {
 	var column string
 	switch kind {
 	case MediaKindImage:
@@ -188,7 +196,7 @@ func (st *Store) SetCardMedia(ctx context.Context, userID, deckID, cardID int64,
 	default:
 		return fmt.Errorf("%w: %q is not a media kind I know", ErrInvalid, kind)
 	}
-	res, err := st.db.ExecContext(ctx,
+	res, err := exec.ExecContext(ctx,
 		`UPDATE flash_cards SET `+column+` = ? WHERE id = ? AND deck_id = ? AND user_id = ?`,
 		hash, cardID, deckID, userID)
 	if err != nil {

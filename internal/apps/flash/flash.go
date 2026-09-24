@@ -2,13 +2,19 @@
 package flash
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"net/http"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
+
+// ON Flash owns background work (the daily media purge). Checked at compile
+// time, as internal/apps/reader does for its own optional capabilities.
+var _ app.Scheduler = (*App)(nil)
 
 //go:embed templates/*.html
 var templateFiles embed.FS
@@ -45,6 +51,32 @@ type App struct {
 
 // New returns the app for registration.
 func New() *App { return &App{} }
+
+// mediaPurgeTick is daily, like internal/apps/reader's purgeTick: orphaned
+// media is housekeeping, not something anybody is waiting on.
+const mediaPurgeTick = 24 * time.Hour
+
+// Jobs implements app.Scheduler. RegisterJobs runs after Mount, so the
+// store this closure reads is already built by the time the job first runs.
+func (a *App) Jobs(deps app.Deps) []app.Job {
+	return []app.Job{
+		{
+			Name:        "purge orphan media",
+			Description: "Deletes cached card images and sounds that no card uses any more.",
+			Every:       mediaPurgeTick,
+			Run: func(ctx context.Context) error {
+				n, err := a.store.PurgeOrphanMedia(ctx)
+				if err != nil {
+					return err
+				}
+				if n > 0 {
+					a.deps.Log.Info("flash purged orphan media", "count", n)
+				}
+				return nil
+			},
+		},
+	}
+}
 
 func (a *App) Meta() app.Meta {
 	return app.Meta{

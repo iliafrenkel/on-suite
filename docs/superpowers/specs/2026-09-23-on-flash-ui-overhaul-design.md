@@ -175,7 +175,7 @@ attributes, each a no-op when its elements are absent:
 
 | Feature | Phase | No-JS fallback |
 |---|---|---|
-| Review shortcuts: Space flip, 1–4 grade, U undo, Esc stop | U4 (existing keys move here in U1) | buttons |
+| Review shortcuts: Space flip, 1–4 grade, U undo, Esc stop (while an audio player has focus, its own keys — Space, Enter, arrows, Home/End — go to the player, #302) | U4 (existing keys move here in U1) | buttons |
 | Card viewer shortcuts: ← → prev/next, Space flip, E edit | U2 | links |
 | Make blank button (the type toggle itself is CSS-only, via `:has()`) | U3 | type the markers by hand |
 | Make blank (wrap selection as `{{cN::…}}`) | U3 | type the markers |

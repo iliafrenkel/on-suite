@@ -263,8 +263,15 @@
 	document.addEventListener("htmx:load", function (e) { enhance(e.target); });
 	enhance(document);
 
+	var mediaKeys = new Set([" ", "Enter", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"]);
 	document.addEventListener("keydown", function (e) {
 		if (e.metaKey || e.ctrlKey || e.altKey) return;
+		// A focused <audio>/<video> element's own controls (Space/Enter for
+		// play/pause, arrows and Home/End to seek) must win over our
+		// shortcuts, or Space both reveals the review answer and
+		// preventDefault()s the player's native toggle. Other keys (grades,
+		// U to undo) still work while the player has focus.
+		if (e.target.closest && e.target.closest("audio, video") && mediaKeys.has(e.key)) return;
 		// The flip checkbox is an <input>, but Space on it should still flip
 		// — natively, which is why Space returns here before isTyping and
 		// before our own Space handling (doing both would flip twice). Only

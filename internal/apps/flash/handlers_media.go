@@ -43,8 +43,16 @@ const (
 // a URL — the only way a hash resolves is if ImportDeck or an upload
 // recorded it, so there is no input here that makes this fetch something
 // else.
+//
+// It serves a hash only to someone whose own card uses it (#302.4):
+// flash_media is a content-addressed cache shared across accounts, and it
+// holds files people picked off their own disks, not just public images.
+// Someone else's file, one no card uses and one that doesn't exist all get
+// the same 404. A recipient sees a shared deck's media once they adopt it,
+// because adoption copies the hashes into their own cards.
 func (a *App) media(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.userID(w, r); !ok {
+	userID, ok := a.userID(w, r)
+	if !ok {
 		return
 	}
 	hash := r.PathValue("hash")
@@ -53,7 +61,7 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, err := a.store.MediaByHash(r.Context(), hash)
+	m, err := a.store.MediaForUser(r.Context(), userID, hash)
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -64,8 +72,8 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 	}
 	if m.SourceURL == "" {
 		// A row with no bytes and no source URL is a data-integrity
-		// impossibility given how rows are created (EnsureMediaURL always
-		// sets source_url; SaveMediaUpload always sets bytes) — there is
+		// impossibility given how rows are created (import's ensureMediaURL
+		// always sets source_url; AttachCardUpload always sets bytes) — there is
 		// nothing to fetch either way, so treat it the same as not found.
 		a.deps.Errors.Status(w, r, http.StatusNotFound)
 		return
@@ -233,7 +241,8 @@ func readUpload(w http.ResponseWriter, r *http.Request, kind, field string, maxB
 
 // saveCardUploads applies checked uploads to a card that now exists: a new
 // file of a kind always wins over that kind's Remove flag (#328) — Remove
-// only takes effect when no new file came in for that kind.
+// only takes effect when no new file came in for that kind. Each new file
+// is stored and attached in one transaction (AttachCardUpload).
 func (a *App) saveCardUploads(ctx context.Context, userID, deckID, cardID int64, u cardUploads) error {
 	for _, m := range []struct {
 		kind   string
@@ -245,11 +254,9 @@ func (a *App) saveCardUploads(ctx context.Context, userID, deckID, cardID int64,
 	} {
 		switch {
 		case m.up != nil:
-			hash, err := a.store.SaveMediaUpload(ctx, m.up.Kind, m.up.ContentType, m.up.Data, a.store.now())
-			if err != nil {
-				return err
-			}
-			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, &hash); err != nil {
+			// One transaction for store + attach, so the daily orphan purge
+			// can never delete the file in between (#302.5).
+			if _, err := a.store.AttachCardUpload(ctx, userID, deckID, cardID, m.kind, m.up.ContentType, m.up.Data); err != nil {
 				return err
 			}
 		case m.remove:
