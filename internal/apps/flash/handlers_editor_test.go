@@ -330,6 +330,111 @@ func TestBadNewImageStillValidatesWithRemoveTicked(t *testing.T) {
 	}
 }
 
+// oneMP3 is the smallest thing http.DetectContentType calls audio/mpeg (an
+// "ID3" tag header) — contentTypeMatchesKind needs a sniffed "audio/…"
+// content type, and DetectContentType sniffs "OggS" as "application/ogg"
+// rather than "audio/ogg", so ID3 is the fixture that actually validates.
+var oneMP3 = []byte("ID3\x03\x00\x00\x00\x00\x00\x00")
+
+// TestUpdateCardWithBadImageLeavesTheCardUnchanged is #331's first gap: a
+// bad image upload on updateCard must not touch the card's stored fields —
+// uploadErr is checked before store.UpdateCard is ever called, so the
+// text/tags typed in the same, otherwise-valid submission never reach the
+// database.
+func TestUpdateCardWithBadImageLeavesTheCardUnchanged(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}, "notes": {"a note"}},
+		nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d", rec.Code)
+	}
+
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1",
+		url.Values{"card_type": {"basic"}, "front": {"dog"}, "back": {"perro"}, "notes": {"a different note"}},
+		map[string][]byte{"image": []byte("<html>not an image</html>")})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bad image over HTMX = %d, want 200 with the form re-rendered", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#card-detail-edit .notice-error")
+
+	c, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Front != "cat" || c.Back != "gato" || c.Notes != "a note" {
+		t.Errorf("card fields changed despite the rejected upload: Front=%q Back=%q Notes=%q", c.Front, c.Back, c.Notes)
+	}
+}
+
+// TestCreateCardWithAudioInOneForm is #331's second gap: audio has never
+// had its own test through the unified card form (only image has), and it
+// needs different, audio-sniffable bytes.
+func TestCreateCardWithAudioInOneForm(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Music", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"forte"}, "back": {"loud"}},
+		map[string][]byte{"audio": oneMP3})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	cards, err := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil || len(cards) != 1 {
+		t.Fatalf("ListCards = %v, %v", cards, err)
+	}
+	if cards[0].AudioHash == nil {
+		t.Error("the audio sent with the card form was not attached")
+	}
+}
+
+// TestNewAudioWinsOverRemoveFlag is #331's third gap (the audio half of
+// #328/TestNewImageWinsOverRemoveFlag above): cheap to add since it is the
+// same rule, just for the other kind.
+func TestNewAudioWinsOverRemoveFlag(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Music", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"forte"}, "back": {"loud"}},
+		map[string][]byte{"audio": oneMP3})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d", rec.Code)
+	}
+	original, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newAudio := append([]byte("ID3\x04"), oneMP3...)
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1",
+		url.Values{"card_type": {"basic"}, "front": {"forte"}, "back": {"loud"}, "remove_audio": {"1"}},
+		map[string][]byte{"audio": newAudio})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	updated, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.AudioHash == nil {
+		t.Fatal("a new audio file sent alongside remove_audio should still be attached")
+	}
+	if *updated.AudioHash == *original.AudioHash {
+		t.Error("the card's audio was not replaced by the new file")
+	}
+}
+
 func TestClozeCardIgnoresAStaleBack(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Geography", "")
