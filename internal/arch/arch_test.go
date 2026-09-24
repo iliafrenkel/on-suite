@@ -367,6 +367,17 @@ func TestFSRSIsContained(t *testing.T) {
 // (which accepts both widths) and the two places that keep a user-visible
 // text as it always was. A new use is either storage, which should call
 // db.FormatTime, or a display decision that belongs on this list.
+//
+// Besides the time.RFC3339/RFC3339Nano selector, this also flags a Go string
+// literal that spells out an RFC 3339 time-of-day-plus-zone layout directly —
+// e.g. "2006-01-02T15:04:05Z07:00" or "...05.999999999Z07:00" — by looking
+// for "15:04:05" together with "Z07:00" in the same literal, so a hand-rolled
+// layout string can't quietly reintroduce the same bug. A display layout like
+// "2006-01-02 15:04 MST" has neither the seconds field nor "Z07:00" and does
+// not match. This does not attempt to catch the layout built through an
+// aliased or dot import of "time" (e.g. `. "time"` making a bare `RFC3339`
+// identifier) — matching existing arch-test style, which also only checks
+// the plain `time.` selector form.
 func TestRFC3339IsContained(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -394,12 +405,25 @@ func TestRFC3339IsContained(t *testing.T) {
 		}
 		found := false
 		ast.Inspect(f, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectorExpr)
-			if !ok || (sel.Sel.Name != "RFC3339" && sel.Sel.Name != "RFC3339Nano") {
-				return true
-			}
-			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "time" {
-				found = true
+			switch v := n.(type) {
+			case *ast.SelectorExpr:
+				if v.Sel.Name != "RFC3339" && v.Sel.Name != "RFC3339Nano" {
+					return true
+				}
+				if pkg, ok := v.X.(*ast.Ident); ok && pkg.Name == "time" {
+					found = true
+				}
+			case *ast.BasicLit:
+				if v.Kind != token.STRING {
+					return true
+				}
+				s, err := strconv.Unquote(v.Value)
+				if err != nil {
+					return true
+				}
+				if strings.Contains(s, "15:04:05") && strings.Contains(s, "Z07:00") {
+					found = true
+				}
 			}
 			return true
 		})
@@ -416,7 +440,7 @@ func TestRFC3339IsContained(t *testing.T) {
 	want := []string{
 		"internal/apps/reader/export.go",    // backup text unchanged by #356
 		"internal/platform/admin/format.go", // admin page text unchanged by #356
-		"internal/platform/db/timefmt.go",   // ParseTime reads both widths
+		"internal/platform/db/timefmt.go",   // ParseTime reads both widths; also defines TimeLayout itself
 	}
 	if !slices.Equal(users, want) {
 		t.Errorf("time.RFC3339/RFC3339Nano used in %v, want only %v", users, want)
