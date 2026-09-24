@@ -238,7 +238,7 @@ func TestDailyReviewCountsZeroFillsEveryDay(t *testing.T) {
 	}
 }
 
-func TestPerDeckLoadAggregatesAcrossDecks(t *testing.T) {
+func TestReviewsPerDeckCountsEachDeckSeparately(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	deckA, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
@@ -261,115 +261,51 @@ func TestPerDeckLoadAggregatesAcrossDecks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loads, err := f.store.PerDeckLoad(ctx, f.alice.ID, now)
+	reviews, err := f.store.ReviewsPerDeck(ctx, f.alice.ID, now.AddDate(0, 0, -29))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loads) != 2 {
-		t.Fatalf("len(loads) = %d, want 2", len(loads))
+	if reviews[deckA.ID] != 1 {
+		t.Errorf("Spanish reviews = %d, want 1", reviews[deckA.ID])
 	}
-	var spanish, french flash.DeckLoad
-	for _, l := range loads {
-		if l.Deck.ID == deckA.ID {
-			spanish = l
-		}
-		if l.Deck.ID == deckB.ID {
-			french = l
-		}
-	}
-	if spanish.ReviewsLast30Days != 1 {
-		t.Errorf("spanish.ReviewsLast30Days = %d, want 1", spanish.ReviewsLast30Days)
-	}
-	if french.ReviewsLast30Days != 0 {
-		t.Errorf("french.ReviewsLast30Days = %d, want 0", french.ReviewsLast30Days)
-	}
-	// cardA has been graded once and is still in "learning" (a single Good
-	// grade doesn't graduate it), and its due_at is in the future, so
-	// neither Mastered nor Due should count it yet.
-	if spanish.Mastered != 0 {
-		t.Errorf("spanish.Mastered = %d, want 0", spanish.Mastered)
-	}
-	if spanish.Due != 0 {
-		t.Errorf("spanish.Due = %d, want 0", spanish.Due)
-	}
-	if french.Mastered != 0 {
-		t.Errorf("french.Mastered = %d, want 0", french.Mastered)
-	}
-	if french.Due != 0 {
-		t.Errorf("french.Due = %d, want 0", french.Due)
+	if n, ok := reviews[deckB.ID]; ok {
+		t.Errorf("French has an entry (%d) with no reviews, want none", n)
 	}
 }
 
-func TestPerDeckLoadSortsByName(t *testing.T) {
+func TestReviewsPerDeckKeepsToTheWindowAndTheOwner(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	// Create decks in an order that is neither alphabetical nor its own
-	// reverse, so a bug that returns creation order (ListDecks' own,
-	// newest-first order) or reverses it would both be caught.
-	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Zebra", ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Apple", ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Mango", ""); err != nil {
-		t.Fatal(err)
-	}
-
-	loads, err := f.store.PerDeckLoad(ctx, f.alice.ID, time.Now())
+	now := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loads) != 3 {
-		t.Fatalf("len(loads) = %d, want 3", len(loads))
+	bobs, err := f.store.CreateDeck(ctx, f.bob.ID, "Bob's", "")
+	if err != nil {
+		t.Fatal(err)
 	}
-	var names []string
-	for _, l := range loads {
-		names = append(names, l.Deck.Name)
-	}
-	want := []string{"Apple", "Mango", "Zebra"}
-	for i, n := range want {
-		if names[i] != n {
-			t.Errorf("names = %v, want %v", names, want)
-			break
+	grade := func(owner, deckID int64, at time.Time) {
+		t.Helper()
+		c, err := f.store.CreateCard(ctx, owner, deckID, flash.CardTypeBasic, "f", "b", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.store.GradeCard(ctx, owner, c.ID, flash.RatingGood, at); err != nil {
+			t.Fatal(err)
 		}
 	}
-}
+	grade(f.alice.ID, deck.ID, now)                    // today: in
+	grade(f.alice.ID, deck.ID, now.AddDate(0, 0, -29)) // first day of the window: in
+	grade(f.alice.ID, deck.ID, now.AddDate(0, 0, -30)) // the day before: out
+	grade(f.bob.ID, bobs.ID, now)                      // someone else's deck
 
-func TestPerDeckLoadMarksSnoozedDecks(t *testing.T) {
-	f := newFixture(t)
-	ctx := context.Background()
-	active, err := f.store.CreateDeck(ctx, f.alice.ID, "Active", "")
+	reviews, err := f.store.ReviewsPerDeck(ctx, f.alice.ID, now.AddDate(0, 0, -29))
 	if err != nil {
 		t.Fatal(err)
 	}
-	snoozed, err := f.store.CreateDeck(ctx, f.alice.ID, "Snoozed", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
-	if _, err := f.store.SnoozeDeck(ctx, f.alice.ID, snoozed.ID, now.AddDate(0, 0, 1)); err != nil {
-		t.Fatal(err)
-	}
-
-	loads, err := f.store.PerDeckLoad(ctx, f.alice.ID, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var gotActive, gotSnoozed flash.DeckLoad
-	for _, l := range loads {
-		if l.Deck.ID == active.ID {
-			gotActive = l
-		}
-		if l.Deck.ID == snoozed.ID {
-			gotSnoozed = l
-		}
-	}
-	if gotActive.Snoozed {
-		t.Error("active deck reported as Snoozed")
-	}
-	if !gotSnoozed.Snoozed {
-		t.Error("snoozed deck not reported as Snoozed")
+	if len(reviews) != 1 || reviews[deck.ID] != 2 {
+		t.Errorf("reviews = %v, want only Spanish with 2", reviews)
 	}
 }
 

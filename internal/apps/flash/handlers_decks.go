@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
@@ -137,6 +138,11 @@ type deckDetailView struct {
 
 	NewCardsPerDayValue string
 	ReviewsPerDayValue  string
+
+	// preload carries data the handler has already fetched for its own
+	// pane, so buildDeckIndex does not query it again. Templates never see
+	// it.
+	preload deckIndexPreload
 
 	PayloadValue    string
 	FormatValue     string
@@ -427,6 +433,19 @@ func (a *App) deckIndex(w http.ResponseWriter, r *http.Request) {
 	a.renderDeckIndex(w, r, userID, http.StatusOK, detail)
 }
 
+// deckIndexPreload is what a handler may hand buildDeckIndex so it can skip
+// a query it would otherwise run. Every field is optional; the zero value
+// preloads nothing.
+type deckIndexPreload struct {
+	// summaries is DeckSummaries(userID, now) as the handler loaded it,
+	// valid only when haveSummaries is set (a user with no decks has an
+	// empty slice, which is still a valid preload). buildDeckIndex then
+	// uses this now too, so the list agrees with the handler's pane.
+	summaries     []DeckSummary
+	now           time.Time
+	haveSummaries bool
+}
+
 // buildDeckIndex assembles the home screen's whole view model — list,
 // pane, toolbar count, gift offers — for both the full-page and HTMX paths,
 // so the two can never compute any of it differently. oob marks the list
@@ -434,9 +453,14 @@ func (a *App) deckIndex(w http.ResponseWriter, r *http.Request) {
 func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailView, oob bool) (deckIndexView, error) {
 	ctx := r.Context()
 	now := a.store.now()
-	sums, err := a.store.DeckSummaries(ctx, userID, now)
-	if err != nil {
-		return deckIndexView{}, err
+	sums := detail.preload.summaries
+	if detail.preload.haveSummaries {
+		now = detail.preload.now
+	} else {
+		var err error
+		if sums, err = a.store.DeckSummaries(ctx, userID, now); err != nil {
+			return deckIndexView{}, err
+		}
 	}
 	rawOffers, err := a.store.SharesForRecipient(ctx, userID)
 	if err != nil {

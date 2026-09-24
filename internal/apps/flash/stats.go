@@ -4,7 +4,6 @@ package flash
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 )
 
@@ -154,61 +153,38 @@ func (st *Store) DailyReviewCounts(ctx context.Context, userID int64, days int, 
 	return out, nil
 }
 
-// DeckLoad is one deck's numbers for the per-deck breakdown table.
-type DeckLoad struct {
-	Deck              Deck
-	Mastered          int
-	Due               int
-	ReviewsLast30Days int
-	// Snoozed is precomputed from Deck.IsSnoozed(now) at PerDeckLoad time,
-	// since html/template cannot call a method with an argument like now
-	// on an arbitrary struct value.
-	Snoozed bool
-}
-
-// PerDeckLoad returns one DeckLoad per deck userID owns, sorted by deck
-// name — the design spec calls for the per-deck table to be "sorted by
-// name," unlike ListDecks' own newest-first order.
-func (st *Store) PerDeckLoad(ctx context.Context, userID int64, now time.Time) ([]DeckLoad, error) {
-	decks, err := st.ListDecks(ctx, userID)
+// ReviewsPerDeck returns, per deck userID owns, how many cards were graded
+// (new + review) on every day from since (inclusive) on — the stats page's
+// "reviews in 30 days" figure. A deck with no reviews in the window has no
+// entry. One query for every deck: it walks userID's decks and range-seeks
+// each one's (user_id, deck_id, day) primary key; CROSS JOIN fixes that
+// join order, where filtering flash_review_counts by user_id alone would
+// read every day the user has ever reviewed.
+func (st *Store) ReviewsPerDeck(ctx context.Context, userID int64, since time.Time) (map[int64]int, error) {
+	rows, err := st.db.QueryContext(ctx, `
+		SELECT r.deck_id, sum(r.new_count + r.review_count)
+		  FROM flash_decks d
+		 CROSS JOIN flash_review_counts r
+		    ON r.user_id = d.user_id AND r.deck_id = d.id AND r.day >= ?
+		 WHERE d.user_id = ?
+		 GROUP BY r.deck_id`,
+		formatDay(since), userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("flash: reviews per deck: %w", err)
 	}
-	since := formatDay(now.AddDate(0, 0, -29))
+	defer func() { _ = rows.Close() }()
 
-	out := make([]DeckLoad, 0, len(decks))
-	for _, d := range decks {
-		load := DeckLoad{Deck: d, Snoozed: d.IsSnoozed(now)}
-
-		if err := st.db.QueryRowContext(ctx, `
-            SELECT count(*) FROM flash_card_state cs
-              JOIN flash_cards c ON c.id = cs.card_id
-             WHERE cs.user_id = ? AND c.deck_id = ? AND cs.state = 'review'`,
-			userID, d.ID).Scan(&load.Mastered); err != nil {
-			return nil, fmt.Errorf("flash: per-deck load: mastered: %w", err)
+	out := map[int64]int{}
+	for rows.Next() {
+		var deckID int64
+		var n int
+		if err := rows.Scan(&deckID, &n); err != nil {
+			return nil, fmt.Errorf("flash: reviews per deck: %w", err)
 		}
-
-		if err := st.db.QueryRowContext(ctx, `
-            SELECT count(*) FROM flash_card_state cs
-              JOIN flash_cards c ON c.id = cs.card_id
-             WHERE cs.user_id = ? AND c.deck_id = ? AND cs.due_at <= ?`,
-			userID, d.ID, formatTime(now)).Scan(&load.Due); err != nil {
-			return nil, fmt.Errorf("flash: per-deck load: due: %w", err)
-		}
-
-		var reviews *int
-		if err := st.db.QueryRowContext(ctx, `
-            SELECT sum(new_count + review_count) FROM flash_review_counts
-             WHERE user_id = ? AND deck_id = ? AND day >= ?`,
-			userID, d.ID, since).Scan(&reviews); err != nil {
-			return nil, fmt.Errorf("flash: per-deck load: reviews: %w", err)
-		}
-		if reviews != nil {
-			load.ReviewsLast30Days = *reviews
-		}
-
-		out = append(out, load)
+		out[deckID] = n
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Deck.Name < out[j].Deck.Name })
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("flash: reviews per deck: %w", err)
+	}
 	return out, nil
 }
