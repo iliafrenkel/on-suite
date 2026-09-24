@@ -452,11 +452,12 @@ type deckIndexPreload struct {
 // for an out-of-band swap (every fragment response sets it).
 func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailView, oob bool) (deckIndexView, error) {
 	ctx := r.Context()
-	now := a.store.now()
+	var now time.Time
 	sums := detail.preload.summaries
 	if detail.preload.haveSummaries {
 		now = detail.preload.now
 	} else {
+		now = a.store.now()
 		var err error
 		if sums, err = a.store.DeckSummaries(ctx, userID, now); err != nil {
 			return deckIndexView{}, err

@@ -25,6 +25,13 @@ import (
 // no review limit next to one with a limit, and decks with and without
 // counters for today (plus a counter from yesterday that must not count,
 // and another user's deck that must not leak in).
+//
+// The reference, DeckSummariesPerDeckForTest, calls deckSummary per deck —
+// the same summarise the batched path also ends in — so this test cross-
+// checks the batched SQL against the single-deck queries. It does not by
+// itself prove the budget arithmetic is right; TestDeckSummariesAgreeWithDueQueue
+// (deck_summary_test.go) checks that independently, against DueQueue rather
+// than against summarise.
 func TestDeckSummariesMatchPerDeckReference(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -251,6 +258,11 @@ var (
 // newCountingFixture is newFixture over a connection that counts every
 // statement it runs. The counter is process-wide, so tests using it must
 // not run in parallel.
+//
+// It otherwise duplicates newFixture (fixture.go) rather than sharing it,
+// since the whole point here is the non-standard driver name — but the DSN
+// itself comes from db.DSN, the same pragmas Open uses in production, so it
+// can't drift out of sync with them (see db.DSN's own comment).
 func newCountingFixture(t *testing.T) (*fixture, *atomic.Int64) {
 	t.Helper()
 	ctx := context.Background()
@@ -264,7 +276,7 @@ func newCountingFixture(t *testing.T) (*fixture, *atomic.Int64) {
 	})
 
 	path := filepath.Join(t.TempDir(), "test.db")
-	handle, err := sql.Open("sqlite-counting", "file:"+path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
+	handle, err := sql.Open("sqlite-counting", db.DSN(path))
 	if err != nil {
 		t.Fatal(err)
 	}
