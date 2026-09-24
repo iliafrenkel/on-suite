@@ -17,6 +17,17 @@ import (
 // source produces a different hash and therefore a different path.
 const mediaCacheControl = "private, max-age=86400"
 
+// tooLargeMessage is shown when a card form's whole body exceeds
+// cardFormMaxBytes (#330) — the request is too large to have been read at
+// all, as opposed to one field being individually oversized (readUpload's
+// own per-field message below). It reuses web.TooLargeMessage, the exact
+// copy web.Errors' own http.StatusRequestEntityTooLarge page shows, rather
+// than a hand-copied duplicate, so the two can't drift and show the same
+// wording regardless of which layer catches the oversized request — the
+// platform's own CSRF/body-cap layer (internal/platform/web/csrf.go) or
+// this app's own readCardUploads below.
+const tooLargeMessage = web.TooLargeMessage
+
 // maxMediaFetchAttempts and mediaRetryBackoff mirror
 // internal/apps/reader's own maxImageFetchAttempts/imageRetryBackoff: give up
 // permanently after 3 consecutive failures, otherwise wait an hour between
@@ -123,57 +134,6 @@ func (a *App) writeMedia(w http.ResponseWriter, r *http.Request, m Media) {
 	}
 }
 
-// uploadCardMedia attaches or removes one of userID's own card's media
-// attachments, via a multipart form with optional "image"/"audio" file
-// parts and optional "remove_image"/"remove_audio" flags. A validation
-// failure (oversized file, wrong content type) re-renders the card at 400
-// with the error shown, the same pattern every other flash form uses —
-// not a generic error page, since the user is watching this happen.
-// The same form fields are accepted by the card create/update routes (UI overhaul U3), which is why the checking lives in readCardUploads.
-func (a *App) uploadCardMedia(w http.ResponseWriter, r *http.Request) {
-	userID, ok := a.userID(w, r)
-	if !ok {
-		return
-	}
-	deck, ok := a.cardDeck(w, r, userID)
-	if !ok {
-		return
-	}
-	cardID, ok := a.cardIDFromPath(w, r)
-	if !ok {
-		return
-	}
-	c, err := a.store.CardByID(r.Context(), userID, deck.ID, cardID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-
-	uploads, errMsg := readCardUploads(w, r)
-	if errMsg != "" {
-		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest,
-			a.viewCardDetailWithMediaError(r, userID, deck, c, errMsg))
-		return
-	}
-	if err := a.saveCardUploads(r.Context(), userID, deck.ID, cardID, uploads); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-
-	updated, err := a.store.CardByID(r.Context(), userID, deck.ID, cardID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-
-	if !web.IsHTMX(r) {
-		http.Redirect(w, r, cardBasePath(deck.ID)+strconv.FormatInt(cardID, 10), http.StatusSeeOther)
-		return
-	}
-	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+strconv.FormatInt(cardID, 10))
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, deck, updated))
-}
-
 // pendingUpload is one checked, not-yet-saved media file from a card form.
 type pendingUpload struct {
 	Kind        string // MediaKindImage or MediaKindAudio
@@ -198,11 +158,18 @@ func readCardUploads(w http.ResponseWriter, r *http.Request) (cardUploads, strin
 	// ParseMultipartForm's argument is only a maxMemory hint, not a hard cap
 	// on bytes read: without an outer limit it would read the entire body
 	// (spilling to a temp file) before any size check below runs. The
-	// budget covers one image plus one audio part in the same request.
-	r.Body = http.MaxBytesReader(w, r.Body, MaxImageFetchBytes+MaxAudioFetchBytes)
+	// budget covers one image plus one audio part in the same request, plus
+	// cardFormMaxBytes's own allowance for the form's text fields and
+	// multipart overhead (#330) — the same constant the route's own body
+	// limit in flash.go's Mount uses, so the two stay in sync.
+	r.Body = http.MaxBytesReader(w, r.Body, cardFormMaxBytes)
 	// A text-only or remove-only form may arrive urlencoded; ErrNotMultipart
 	// is expected then — ParseMultipartForm still fills r.PostForm.
 	if err := r.ParseMultipartForm(MaxAudioFetchBytes); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return cardUploads{}, tooLargeMessage
+		}
 		return cardUploads{}, "That upload could not be read."
 	}
 
@@ -210,16 +177,18 @@ func readCardUploads(w http.ResponseWriter, r *http.Request) (cardUploads, strin
 		RemoveImage: r.PostFormValue("remove_image") != "",
 		RemoveAudio: r.PostFormValue("remove_audio") != "",
 	}
+	// A newly chosen file always wins over Remove for its own kind (#328):
+	// read every file part unconditionally, whether or not that kind's
+	// Remove flag is set, so a new file is neither dropped nor lets a bad
+	// file slip past validation just because Remove happened to be ticked.
+	// saveCardUploads is what actually applies Remove only when no new file
+	// came in for that kind.
 	var msg string
-	if !u.RemoveImage {
-		if u.Image, msg = readUpload(w, r, MediaKindImage, "image", MaxImageFetchBytes); msg != "" {
-			return cardUploads{}, msg
-		}
+	if u.Image, msg = readUpload(w, r, MediaKindImage, "image", MaxImageFetchBytes); msg != "" {
+		return cardUploads{}, msg
 	}
-	if !u.RemoveAudio {
-		if u.Audio, msg = readUpload(w, r, MediaKindAudio, "audio", MaxAudioFetchBytes); msg != "" {
-			return cardUploads{}, msg
-		}
+	if u.Audio, msg = readUpload(w, r, MediaKindAudio, "audio", MaxAudioFetchBytes); msg != "" {
+		return cardUploads{}, msg
 	}
 	return u, ""
 }
@@ -230,7 +199,17 @@ func readCardUploads(w http.ResponseWriter, r *http.Request) (cardUploads, strin
 func readUpload(w http.ResponseWriter, r *http.Request, kind, field string, maxBytes int64) (*pendingUpload, string) {
 	file, header, err := r.FormFile(field)
 	if err != nil {
-		return nil, ""
+		// http.ErrMissingFile (no part with this name — a file input left
+		// untouched) and http.ErrNotMultipart (a text-only or remove-only
+		// submission, which readCardUploads already tolerates on
+		// ParseMultipartForm) both mean "no file", not a problem worth
+		// reporting. Any other error — the part's underlying temp file
+		// could not be opened, say — is a real read failure and must not
+		// be treated the same as "nothing was submitted" (#302.2).
+		if errors.Is(err, http.ErrMissingFile) || errors.Is(err, http.ErrNotMultipart) {
+			return nil, ""
+		}
+		return nil, "That upload could not be read."
 	}
 	defer func() { _ = file.Close() }()
 	if header.Size == 0 {
@@ -252,9 +231,9 @@ func readUpload(w http.ResponseWriter, r *http.Request, kind, field string, maxB
 	return &pendingUpload{Kind: kind, ContentType: ct, Data: data}, ""
 }
 
-// saveCardUploads applies checked uploads to a card that now exists:
-// removals first win over a new file of the same kind (the form offers
-// either, not both).
+// saveCardUploads applies checked uploads to a card that now exists: a new
+// file of a kind always wins over that kind's Remove flag (#328) — Remove
+// only takes effect when no new file came in for that kind.
 func (a *App) saveCardUploads(ctx context.Context, userID, deckID, cardID int64, u cardUploads) error {
 	for _, m := range []struct {
 		kind   string
@@ -265,16 +244,16 @@ func (a *App) saveCardUploads(ctx context.Context, userID, deckID, cardID int64,
 		{MediaKindAudio, u.RemoveAudio, u.Audio},
 	} {
 		switch {
-		case m.remove:
-			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, nil); err != nil {
-				return err
-			}
 		case m.up != nil:
 			hash, err := a.store.SaveMediaUpload(ctx, m.up.Kind, m.up.ContentType, m.up.Data, a.store.now())
 			if err != nil {
 				return err
 			}
 			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, &hash); err != nil {
+				return err
+			}
+		case m.remove:
+			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, nil); err != nil {
 				return err
 			}
 		}

@@ -321,6 +321,60 @@ func TestCSRFRejectsAMissingMultipartToken(t *testing.T) {
 	}
 }
 
+// TestCSRFRespondsTooLargeWhenTheFormTokenReadHitsTheBodyCap is the
+// regression test for #330's CSRF half: a no-JS multipart form (the only
+// path that reads the token from the body — see formToken) whose body
+// exceeds the route's own body-size cap used to surface as a generic 403
+// "Not allowed", because formToken's ParseMultipartForm failed with
+// *http.MaxBytesError and verify() could not tell that apart from a forged
+// or missing token. It must now answer 413 with the platform's own "too
+// large" copy instead, and must never reach the handler.
+func TestCSRFRespondsTooLargeWhenTheFormTokenReadHitsTheBodyCap(t *testing.T) {
+	e, _ := testErrors(t)
+	c := web.NewCSRF(false, e)
+
+	var handlerRan bool
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handlerRan = true })
+	// The same composition Stack uses: an outer body-size cap ahead of CSRF
+	// (see middleware.go's limitBodyForStack), here small enough that an
+	// ordinary multipart submission already exceeds it.
+	h := web.LimitBody(64)(c.Middleware(inner))
+
+	// Issue a token over an unrelated, unbounded request first.
+	tokenRec := httptest.NewRecorder()
+	c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})).
+		ServeHTTP(tokenRec, httptest.NewRequest("GET", "/", nil))
+	token := cookieFrom(t, tokenRec, web.CSRFCookieName).Value
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField(web.CSRFFormField, token); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteField("padding", strings.Repeat("x", 200)); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("POST", "/", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: web.CSRFCookieName, Value: token})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", rec.Code)
+	}
+	if handlerRan {
+		t.Error("the handler ran despite the over-cap body")
+	}
+	if !strings.Contains(rec.Body.String(), web.TooLargeMessage) {
+		t.Errorf("body = %q, want it to contain %q", rec.Body.String(), web.TooLargeMessage)
+	}
+}
+
 // TestCSRFMultipartParsingLeavesTheHandlersOwnFieldsReadable mirrors
 // TestCSRFFormParsingDoesNotConsumeTheBody for multipart: the handler
 // must still see its own form fields and its uploaded file after the

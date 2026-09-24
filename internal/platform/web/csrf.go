@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"mime"
 	"net/http"
@@ -58,11 +59,27 @@ func (c *CSRF) Middleware(next http.Handler) http.Handler {
 			token = fresh
 		}
 
-		if !safeMethod(r.Method) && !c.verify(r, token) {
-			// Deliberately vague: a mismatch is either an attack or a stale
-			// tab, and neither is helped by detail.
-			c.errs.Status(w, r, http.StatusForbidden)
-			return
+		if !safeMethod(r.Method) {
+			ok, err := c.verify(r, token)
+			// A no-JS multipart form (the only path that reads the token
+			// from the body rather than a header) hitting the route's own
+			// body cap while formToken's own ParseMultipartForm is looking
+			// for the token is not an attack: it is a real "too large"
+			// request that happened to fail here first, before the
+			// handler's own size check ever ran. Surfacing that as a
+			// generic 403 would be actively misleading (#330). Any other
+			// verify failure keeps the deliberately vague 403: a mismatch is
+			// either an attack or a stale tab, and neither is helped by
+			// detail.
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				c.errs.Status(w, r, http.StatusRequestEntityTooLarge)
+				return
+			}
+			if !ok {
+				c.errs.Status(w, r, http.StatusForbidden)
+				return
+			}
 		}
 
 		next.ServeHTTP(w, r.WithContext(WithCSRFToken(r.Context(), token)))
@@ -88,20 +105,27 @@ func (c *CSRF) Rotate(w http.ResponseWriter) (string, error) {
 }
 
 // verify compares the token the browser sent deliberately with the one it
-// sent automatically.
-func (c *CSRF) verify(r *http.Request, cookieToken string) bool {
+// sent automatically. A non-nil error is always a *http.MaxBytesError from
+// reading the form for the token (see formToken) — never a reason by itself
+// to treat the request as forged — and the caller decides what to do with
+// it; ok is only meaningful when err is nil.
+func (c *CSRF) verify(r *http.Request, cookieToken string) (bool, error) {
 	if cookieToken == "" {
-		return false
+		return false, nil
 	}
 
 	sent := r.Header.Get(CSRFHeader)
 	if sent == "" {
-		sent = formToken(r)
+		var err error
+		sent, err = formToken(r)
+		if err != nil {
+			return false, err
+		}
 	}
 	if sent == "" {
-		return false
+		return false, nil
 	}
-	return subtle.ConstantTimeCompare([]byte(sent), []byte(cookieToken)) == 1
+	return subtle.ConstantTimeCompare([]byte(sent), []byte(cookieToken)) == 1, nil
 }
 
 // formToken reads the CSRF field from the request body, for the one kind
@@ -119,18 +143,32 @@ func (c *CSRF) verify(r *http.Request, cookieToken string) bool {
 // Both calls cache into r.Form/r.PostForm (and, for multipart,
 // r.MultipartForm), so the handler that runs afterwards reads that same
 // cache rather than triggering a second read of the body.
-func formToken(r *http.Request) string {
+//
+// A *http.MaxBytesError from ParseMultipartForm is returned rather than
+// swallowed: the request's own route may have a body-size cap smaller than
+// this read's own DefaultMaxBodyBytes ceiling (ON Flash's card form does,
+// via web.LimitBody(cardFormMaxBytes) run ahead of the mux — see
+// middleware.go's limitBodyForStack), in which case the outer, tighter
+// http.MaxBytesReader is what actually errors here, before the handler ever
+// gets a chance to report "too large" itself (#330). Any other parse error
+// still means only "no token found" — the same as before this distinction
+// existed.
+func formToken(r *http.Request) (string, error) {
 	ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if ct == "multipart/form-data" {
 		if err := r.ParseMultipartForm(DefaultMaxBodyBytes); err != nil {
-			return ""
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				return "", err
+			}
+			return "", nil
 		}
-		return r.PostFormValue(CSRFFormField)
+		return r.PostFormValue(CSRFFormField), nil
 	}
 	if err := r.ParseForm(); err != nil {
-		return ""
+		return "", nil
 	}
-	return r.PostFormValue(CSRFFormField)
+	return r.PostFormValue(CSRFFormField), nil
 }
 
 func safeMethod(method string) bool {

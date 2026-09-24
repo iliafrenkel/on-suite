@@ -102,7 +102,6 @@
 			</form>
 		</div>
 	</div>
-	{{with .Opened.MediaError}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
 	<div class="flash-viewer">
 		{{if .Opened.PrevURL}}<a class="flash-nav-btn flash-card-prev" href="{{.Opened.PrevURL}}" hx-get="{{.Opened.PrevURL}}" hx-target="#deck-detail" hx-push-url="true" aria-label="Previous card">‹</a>{{else}}<span class="flash-nav-btn flash-nav-btn-empty" aria-hidden="true"></span>{{end}}
 		<div class="flash-viewer-card">

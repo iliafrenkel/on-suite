@@ -23,9 +23,16 @@ var scriptFiles embed.FS
 const mediaFetchConcurrency = 4
 
 // cardFormMaxBytes is the body budget for the card create/update forms,
-// which carry an optional image and sound file since UI overhaul U3 — the
-// same budget as the media upload route below.
-const cardFormMaxBytes = MaxImageFetchBytes + MaxAudioFetchBytes
+// which carry an optional image and sound file since UI overhaul U3.
+// MaxImageFetchBytes+MaxAudioFetchBytes alone covers only the two files'
+// bytes: a request with a full-size image and a full-size audio file
+// already uses the entire budget on file content, leaving nothing for the
+// form's text fields (front/back/notes/tags) or multipart encoding
+// overhead (per-part boundaries and headers) — every such request would
+// fail even though every part is individually within its own cap (#330).
+// The extra 1 MiB is a generous allowance for that overhead; readCardUploads
+// uses the same constant for its own MaxBytesReader so the two stay in sync.
+const cardFormMaxBytes = MaxImageFetchBytes + MaxAudioFetchBytes + 1<<20
 
 // App is ON Flash. It is constructed before the platform exists, in the
 // registration slice in main, and receives everything it needs in Mount.
@@ -132,11 +139,10 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	// each in its final literal, so it can't collide with them.
 	// POST /{deckID}/share/{shareID}/revoke is 4 segments
 	// (wildcard-literal-wildcard-literal) — the same shape as
-	// /{deckID}/cards/{cardID}/delete and /{deckID}/cards/{cardID}/media
-	// below, differing only in its second literal ("share" vs "cards"),
-	// which is what actually guarantees no ambiguity between same-shape
-	// patterns (see the review-route comment above for the fuller version
-	// of this reasoning).
+	// /{deckID}/cards/{cardID}/delete above, differing only in its second
+	// literal ("share" vs "cards"), which is what actually guarantees no
+	// ambiguity between same-shape patterns (see the review-route comment
+	// above for the fuller version of this reasoning).
 	//
 	// The recipient's two actions take the share id from the POST body
 	// (share_id), not the URL path, for the same reason review's grade/undo
@@ -214,38 +220,6 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 
 	// "media" is a literal single segment, the same non-ambiguity shape as
 	// "new"/"review"/"import" alongside the wildcard single-segment routes
-	// above. The upload route is 4 segments (wildcard, literal, wildcard,
-	// literal) — the same shape as the existing
-	// POST /{deckID}/cards/{cardID}/delete, differing only in its final
-	// literal ("media" vs "delete"), which is what actually guarantees no
-	// ambiguity between the two: a literal-vs-literal mismatch at any one
-	// position makes overlap impossible regardless of how the remaining
-	// positions compare (see the review-route comment above for the fuller
-	// version of this reasoning).
-	//
-	// The upload route overrides the platform's global 1MB body cap
-	// (web.DefaultMaxBodyBytes, applied to every route by the shared
-	// middleware stack) with a budget big enough for one image and one
-	// audio file in the same multipart request — the same
-	// MaxImageFetchBytes+MaxAudioFetchBytes budget uploadCardMedia's own
-	// http.MaxBytesReader wrap already uses internally, so the two caps
-	// agree. Per csrf.go's own doc comment on DefaultMaxBodyBytes, wrapping
-	// one route like this is exactly how an app is meant to need more.
-	//
-	// Wrapping the handler alone is not enough to actually raise the cap:
-	// Stack's own LimitBody(DefaultMaxBodyBytes) runs ahead of the mux, so
-	// it has already wrapped r.Body in a 1MB http.MaxBytesReader before
-	// this route (or CSRF's own body parsing, upstream of every handler)
-	// ever runs — and nesting a bigger MaxBytesReader inside a smaller one
-	// cannot loosen it; the first, smaller one still errors once its own
-	// count is exceeded. web.RegisterBodyLimit records the same exception
-	// against the exact pattern this route registers below, so Stack's mux-
-	// aware LimitBody can apply it before CSRF or this handler ever see the
-	// body. See app.Router.RegisterBodyLimit's doc comment for the full
-	// mechanism.
-	r.RegisterBodyLimit("POST /{deckID}/cards/{cardID}/media", MaxImageFetchBytes+MaxAudioFetchBytes)
-
+	// above. (The per-card upload route once here was removed as dead in #327.)
 	r.HandleFunc("GET /media/{hash}", a.media)
-	r.Handle("POST /{deckID}/cards/{cardID}/media",
-		web.LimitBody(MaxImageFetchBytes+MaxAudioFetchBytes)(http.HandlerFunc(a.uploadCardMedia)))
 }

@@ -164,6 +164,24 @@ func TestImportPaneHasTheThreeStepsAndThePrompt(t *testing.T) {
 	doc.MustHave(`textarea[name=payload]`)
 }
 
+// TestImportPaneHasAHandwrittenMarkdownExample is #302.6: the pane must
+// document the Markdown Image:/Audio: import keys in-app, not just in a
+// spec file nobody using the app will ever read.
+func TestImportPaneHasAHandwrittenMarkdownExample(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/flash/import")
+	doc.MustHave("details.flash-import-help")
+	summary := doc.MustHave("details.flash-import-help summary")
+	if got := htmlassert.Text(summary); got != "Writing it by hand?" {
+		t.Errorf("summary = %q", got)
+	}
+	example := doc.MustHave("details.flash-import-help pre code")
+	got := htmlassert.Text(example)
+	if !strings.Contains(got, "Image:") || !strings.Contains(got, "Audio:") {
+		t.Errorf("example does not mention Image:/Audio: keys: %q", got)
+	}
+}
+
 func TestImportSuccessShowsANotice(t *testing.T) {
 	s := newServer(t)
 	payload := `{"deck":{"name":"Planets"},"cards":[{"type":"basic","front":"Mars","back":"red"},{"type":"basic","front":"Earth","back":"home"}]}`

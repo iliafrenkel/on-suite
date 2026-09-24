@@ -23,6 +23,13 @@ func NewErrors(r *render.Renderer, log *slog.Logger) *Errors {
 	return &Errors{render: r, log: log}
 }
 
+// TooLargeMessage is the copy shown for a request rejected as too large —
+// exported so a handler that detects its own oversized upload independently
+// of this package's own http.StatusRequestEntityTooLarge page (ON Flash's
+// card form, for one: see handlers_media.go's tooLargeMessage) can show the
+// same wording rather than a hand-copied duplicate that could drift.
+const TooLargeMessage = "That was larger than the limit."
+
 // titles keeps user-facing wording in one place. Anything not listed gets a
 // generic message, which is deliberate: an error page is not the place to
 // explain the internals.
@@ -32,7 +39,7 @@ var titles = map[int]struct{ title, message string }{
 	http.StatusForbidden:             {"Not allowed", "You do not have access to that."},
 	http.StatusNotFound:              {"Not found", "There is nothing at that address."},
 	http.StatusMethodNotAllowed:      {"Not allowed", "That method is not supported here."},
-	http.StatusRequestEntityTooLarge: {"Too large", "That was larger than the limit."},
+	http.StatusRequestEntityTooLarge: {"Too large", TooLargeMessage},
 	http.StatusTooManyRequests:       {"Slow down", "Too many attempts. Try again shortly."},
 	http.StatusInternalServerError:   {"Something broke", "An unexpected error occurred. It has been logged."},
 }

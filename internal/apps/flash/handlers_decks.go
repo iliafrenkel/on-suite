@@ -138,9 +138,10 @@ type deckDetailView struct {
 	NewCardsPerDayValue string
 	ReviewsPerDayValue  string
 
-	PayloadValue string
-	FormatValue  string
-	ImportPrompt string // the AI prompt shown in the import pane
+	PayloadValue    string
+	FormatValue     string
+	ImportPrompt    string // the AI prompt shown in the import pane
+	MarkdownExample string // the "Writing it by hand?" worked example (#302.6)
 
 	// Card modes. Grid is set for "cards", Opened for "card", CardForm for
 	// "card-new" and "card-edit".

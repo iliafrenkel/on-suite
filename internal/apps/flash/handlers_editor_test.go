@@ -71,6 +71,282 @@ func TestCreateCardWithImageInOneForm(t *testing.T) {
 	}
 }
 
+// TestCreateCardWithNearMaxImageAndAudioSucceeds is the regression test for
+// #330: cardFormMaxBytes used to be exactly
+// MaxImageFetchBytes+MaxAudioFetchBytes, with no allowance for the form's
+// text fields or multipart encoding overhead (per-part boundaries and
+// headers). A request carrying a full-size image and a full-size audio
+// file — each individually within its own per-field cap — already
+// consumes the entire old budget on file bytes alone, so the multipart
+// overhead and text fields pushed the total over the old cap and the
+// request failed even though every part was individually valid. The new
+// cap adds a 1 MiB allowance for exactly that overhead.
+func TestCreateCardWithNearMaxImageAndAudioSucceeds(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	image := make([]byte, flash.MaxImageFetchBytes)
+	copy(image, onePNG)
+	audio := make([]byte, flash.MaxAudioFetchBytes)
+	copy(audio, []byte("ID3"))
+
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}, "notes": {"a note"}, "tags": {"animals, pets"}},
+		map[string][]byte{"image": image, "audio": audio})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create with near-max image+audio = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	cards, err := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil || len(cards) != 1 {
+		t.Fatalf("ListCards = %v, %v", cards, err)
+	}
+	if cards[0].ImageHash == nil || cards[0].AudioHash == nil {
+		t.Error("both the image and the audio sent with the card form should be attached")
+	}
+}
+
+// TestCreateCardRequiresCSRF and the two tests below were moved from
+// handlers_media_test.go's now-removed uploadCardMedia route (#327): that
+// route was dead (no UI has called it since media started traveling in the
+// create/update card form, U3), but its protections — CSRF, an oversized
+// file, and a request over the platform's global 1MB body cap — need to
+// keep being exercised on the route that actually carries media today.
+func TestCreateCardRequiresCSRF(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httpPost(t, "/flash/"+itoa(deck.ID)+"/cards/new", url.Values{"card_type": {"basic"}, "front": {"a"}, "back": {"b"}})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("create card without CSRF = %d, want 403", rec.Code)
+	}
+}
+
+// TestCreateCardOverBodyCapWithNoJSGetsA413NotA403 is the regression test
+// for #330's no-JS-specific edge: a plain (JavaScript-off) card-form
+// submission carries the CSRF token in the form field, which the platform's
+// CSRF middleware can only find by calling r.ParseMultipartForm on the
+// request body (see web/csrf.go's formToken). When the body is over this
+// route's own cardFormMaxBytes cap, that parse used to fail with
+// *http.MaxBytesError, formToken returned "", and CSRF verification failed
+// exactly like a forged or missing token would — surfacing as a generic 403
+// "Not allowed" instead of a "too large" error. It must now answer 413 with
+// the platform's own friendly copy, before ever reaching this app's own
+// readCardUploads size checks.
+//
+// postCardForm always puts the token in the form field, never the
+// X-CSRF-Token header (see its own doc comment) — the no-JS path this test
+// targets — even though it also sets HX-Request for other tests' benefit.
+func TestCreateCardOverBodyCapWithNoJSGetsA413NotA403(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Comfortably over cardFormMaxBytes (MaxImageFetchBytes+MaxAudioFetchBytes
+	// +1MiB = 16MiB), so the platform's own registered body-limit override
+	// for this route rejects the body before any per-field check runs.
+	oversized := make([]byte, flash.MaxImageFetchBytes+flash.MaxAudioFetchBytes+(2<<20))
+	copy(oversized, onePNG)
+
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": oversized})
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("over-cap no-JS create = %d, want 413; body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), web.TooLargeMessage) {
+		t.Errorf("body = %q, want it to contain %q", rec.Body.String(), web.TooLargeMessage)
+	}
+	if cards, _ := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID); len(cards) != 0 {
+		t.Errorf("a rejected over-cap request still created %d card(s)", len(cards))
+	}
+}
+
+// postCardFormHTMXHeaderToken submits a card form as multipart/form-data the
+// way HTMX itself always actually does in this app (base.html's
+// hx-headers sends the CSRF token as the X-CSRF-Token header on every
+// request, including multipart ones) — unlike postCardForm above, which
+// puts the token in the form field to exercise the no-JS path. It carries
+// no CSRF form field at all, so a test using it exercises the header-only
+// verification path cleanly.
+func postCardFormHTMXHeaderToken(t *testing.T, s *apptest.Server[*flash.Store], sess *apptest.Session, path string, fields url.Values, files map[string][]byte) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	for name, values := range fields {
+		for _, v := range values {
+			if err := mw.WriteField(name, v); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for name, data := range files {
+		part, err := mw.CreateFormFile(name, name+".bin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set(web.CSRFHeader, s.CSRFToken(t, sess))
+	return s.Do(t, sess, req)
+}
+
+// TestCreateCardOverBodyCapOverHTMXGetsTheFriendlyMessage is the HTMX
+// counterpart to TestCreateCardOverBodyCapWithNoJSGetsA413NotA403: a real
+// HTMX request carries its CSRF token in the X-CSRF-Token header (see
+// postCardFormHTMXHeaderToken), so CSRF verification never touches the
+// body — the request sails past CSRF and hits this app's own
+// readCardUploads, whose ParseMultipartForm(*http.MaxBytesError) branch is
+// what must show tooLargeMessage (#330's handler-level half, as opposed to
+// the platform-level half the no-JS test above covers). This is the gap
+// #331 flagged: postCardForm's token-in-form-field shape meant no existing
+// test actually exercised the header-only HTMX path for this case.
+func TestCreateCardOverBodyCapOverHTMXGetsTheFriendlyMessage(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oversized := make([]byte, flash.MaxImageFetchBytes+flash.MaxAudioFetchBytes+(2<<20))
+	copy(oversized, onePNG)
+
+	rec := postCardFormHTMXHeaderToken(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": oversized})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("over-cap create over HTMX = %d, want 200 with a notice-error fragment; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	notice := doc.MustHave("#card-detail-new .notice-error")
+	if got := htmlassert.Text(notice); got != web.TooLargeMessage {
+		t.Errorf("notice = %q, want %q", got, web.TooLargeMessage)
+	}
+	if cards, _ := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID); len(cards) != 0 {
+		t.Errorf("a rejected over-cap request still created %d card(s)", len(cards))
+	}
+}
+
+// TestCreateCardWithOversizedImageIsRejected is
+// TestUploadCardImageRejectsOversizedFile, moved to the card-form route.
+func TestCreateCardWithOversizedImageIsRejected(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// One byte over the per-field image cap (MaxImageFetchBytes = 5MB), but
+	// still under cardFormMaxBytes, so this request reaches the app's own
+	// per-field size check in readUpload rather than being rejected earlier
+	// by the platform layer.
+	oversized := make([]byte, flash.MaxImageFetchBytes+1)
+	copy(oversized, onePNG)
+
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": oversized})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("oversized image over HTMX = %d, want 200 with a notice-error fragment", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	notice := doc.MustHave("#card-detail-new .notice-error")
+	if got := htmlassert.Text(notice); !strings.Contains(got, "larger than the 5MB limit") {
+		t.Errorf("notice = %q, want it to mention the 5MB limit", got)
+	}
+
+	if cards, _ := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID); len(cards) != 0 {
+		t.Errorf("a rejected oversized upload still created %d card(s)", len(cards))
+	}
+}
+
+// TestCreateCardWithImageOverGlobalCapSucceeds is
+// TestUploadCardImageOverGlobalCapSucceeds, moved to the card-form route:
+// the regression test for the platform's global 1MB body cap
+// (web.DefaultMaxBodyBytes) running ahead of this route's own raised
+// cardFormMaxBytes cap. A ~2MB file sits strictly between the two, so it
+// only succeeds once the route's own body-limit override (flash.go's
+// Mount) is in effect. The card-form route previously had no test for
+// this at all (#330/#327).
+func TestCreateCardWithImageOverGlobalCapSucceeds(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const size = 2 << 20
+	big := make([]byte, size)
+	copy(big, onePNG)
+
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": big})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create with a ~2MB image = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	cards, err := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil || len(cards) != 1 {
+		t.Fatalf("ListCards = %v, %v", cards, err)
+	}
+	if cards[0].ImageHash == nil {
+		t.Fatal("ImageHash is nil after a ~2MB upload that should have succeeded")
+	}
+}
+
+// TestUpdateCardWithImageOverGlobalCapSucceeds is the update-route
+// counterpart to TestCreateCardWithImageOverGlobalCapSucceeds: the update
+// route (POST /{deckID}/cards/{cardID}) has its own RegisterBodyLimit /
+// LimitBody(cardFormMaxBytes) override in flash.go's Mount, separate from
+// the create route's, and nothing exercised it before this. A ~2MB file
+// sits strictly between the platform's global 1MB cap and cardFormMaxBytes,
+// so it only succeeds once the update route's own override is in effect.
+func TestUpdateCardWithImageOverGlobalCapSucceeds(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}}, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d; body: %s", rec.Code, rec.Body.String())
+	}
+
+	const size = 2 << 20
+	big := make([]byte, size)
+	copy(big, onePNG)
+
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": big})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update with a ~2MB image = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	c, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ImageHash == nil {
+		t.Fatal("ImageHash is nil after a ~2MB update upload that should have succeeded")
+	}
+}
+
 func TestCreateCardWithBadImageKeepsTheFormAndCreatesNothing(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
@@ -117,6 +393,201 @@ func TestUpdateCardCanRemoveItsImage(t *testing.T) {
 	}
 	if c.ImageHash != nil {
 		t.Error("remove_image on the edit form did not remove the image")
+	}
+}
+
+// onePNG2 is a second, distinct valid PNG fixture (a different final byte),
+// so a test can tell "the image changed" apart from "the image stayed the
+// same" by comparing hashes.
+var onePNG2 = []byte{
+	0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+	0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x53,
+}
+
+// TestNewImageWinsOverRemoveFlag is the regression test for #328: a card
+// form used to silently drop a newly chosen file whenever its Remove
+// checkbox was ticked (readCardUploads skipped reading that field
+// entirely), even though the two controls are not mutually exclusive in
+// the UI — flash.js only unticks Remove when a file is chosen, it does not
+// prevent both being present in one submission (e.g. a no-JS submission,
+// or a race with the checkbox). The rule is: a newly uploaded file always
+// wins over Remove for that kind.
+func TestNewImageWinsOverRemoveFlag(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": onePNG})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d", rec.Code)
+	}
+	original, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}, "remove_image": {"1"}},
+		map[string][]byte{"image": onePNG2})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	updated, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ImageHash == nil {
+		t.Fatal("a new image sent alongside remove_image should still be attached")
+	}
+	if *updated.ImageHash == *original.ImageHash {
+		t.Error("the card's image was not replaced by the new file")
+	}
+}
+
+// TestBadNewImageStillValidatesWithRemoveTicked is the other half of #328:
+// remove must not silently swallow a bad new file. A bad file sent
+// alongside remove_image is still checked, and still produces the normal
+// validation error, leaving the card's existing image untouched.
+func TestBadNewImageStillValidatesWithRemoveTicked(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}},
+		map[string][]byte{"image": onePNG})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d", rec.Code)
+	}
+	original, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}, "remove_image": {"1"}},
+		map[string][]byte{"image": []byte("<html>not an image</html>")})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bad image over HTMX = %d, want 200 with the form re-rendered", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#card-detail-edit .notice-error")
+
+	unchanged, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.ImageHash == nil || *unchanged.ImageHash != *original.ImageHash {
+		t.Error("a rejected new image (even with remove ticked) must leave the existing image untouched")
+	}
+}
+
+// oneMP3 is the smallest thing http.DetectContentType calls audio/mpeg (an
+// "ID3" tag header) — contentTypeMatchesKind needs a sniffed "audio/…"
+// content type, and DetectContentType sniffs "OggS" as "application/ogg"
+// rather than "audio/ogg", so ID3 is the fixture that actually validates.
+var oneMP3 = []byte("ID3\x03\x00\x00\x00\x00\x00\x00")
+
+// TestUpdateCardWithBadImageLeavesTheCardUnchanged is #331's first gap: a
+// bad image upload on updateCard must not touch the card's stored fields —
+// uploadErr is checked before store.UpdateCard is ever called, so the
+// text/tags typed in the same, otherwise-valid submission never reach the
+// database.
+func TestUpdateCardWithBadImageLeavesTheCardUnchanged(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"cat"}, "back": {"gato"}, "notes": {"a note"}},
+		nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d", rec.Code)
+	}
+
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1",
+		url.Values{"card_type": {"basic"}, "front": {"dog"}, "back": {"perro"}, "notes": {"a different note"}},
+		map[string][]byte{"image": []byte("<html>not an image</html>")})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bad image over HTMX = %d, want 200 with the form re-rendered", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("#card-detail-edit .notice-error")
+
+	c, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Front != "cat" || c.Back != "gato" || c.Notes != "a note" {
+		t.Errorf("card fields changed despite the rejected upload: Front=%q Back=%q Notes=%q", c.Front, c.Back, c.Notes)
+	}
+}
+
+// TestCreateCardWithAudioInOneForm is #331's second gap: audio has never
+// had its own test through the unified card form (only image has), and it
+// needs different, audio-sniffable bytes.
+func TestCreateCardWithAudioInOneForm(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Music", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"forte"}, "back": {"loud"}},
+		map[string][]byte{"audio": oneMP3})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	cards, err := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil || len(cards) != 1 {
+		t.Fatalf("ListCards = %v, %v", cards, err)
+	}
+	if cards[0].AudioHash == nil {
+		t.Error("the audio sent with the card form was not attached")
+	}
+}
+
+// TestNewAudioWinsOverRemoveFlag is #331's third gap (the audio half of
+// #328/TestNewImageWinsOverRemoveFlag above): cheap to add since it is the
+// same rule, just for the other kind.
+func TestNewAudioWinsOverRemoveFlag(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Music", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"forte"}, "back": {"loud"}},
+		map[string][]byte{"audio": oneMP3})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d", rec.Code)
+	}
+	original, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newAudio := append([]byte("ID3\x04"), oneMP3...)
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/1",
+		url.Values{"card_type": {"basic"}, "front": {"forte"}, "back": {"loud"}, "remove_audio": {"1"}},
+		map[string][]byte{"audio": newAudio})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	updated, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.AudioHash == nil {
+		t.Fatal("a new audio file sent alongside remove_audio should still be attached")
+	}
+	if *updated.AudioHash == *original.AudioHash {
+		t.Error("the card's audio was not replaced by the new file")
 	}
 }
 

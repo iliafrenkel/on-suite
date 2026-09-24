@@ -3264,8 +3264,17 @@ input.flash-tag-entry:focus { outline: none; }
 .flash-copy-prompt { margin-top: var(--s-2); }
 .flash-copy-prompt[hidden] { display: none; }
 .flash-import-prompt summary,
-.flash-import-format summary { cursor: pointer; color: var(--c-text-dim); font-size: var(--fs-sm); }
+.flash-import-format summary,
+.flash-import-help summary { cursor: pointer; color: var(--c-text-dim); font-size: var(--fs-sm); }
 .flash-import-prompt textarea { margin-top: var(--s-2); font-size: var(--fs-sm); }
+.flash-import-help p { margin: var(--s-2) 0; }
+.flash-import-help pre {
+	margin: 0;
+	padding: var(--s-2) var(--s-3);
+	background: var(--c-bg-inset);
+	border-radius: 8px;
+	overflow-x: auto;
+}
 
 .flash-stats h1 { margin: 0 0 var(--s-4); }
 .flash-load-list { margin: 0; padding: 0; list-style: none; }
