@@ -7,7 +7,7 @@
 	<div class="flash-deck-hero">
 		{{template "flash-stack" (dict "Size" "lg")}}
 		<div class="flash-deck-hero-text">
-			<p class="flash-gift-from">{{if .IsMerge}}{{.FromUsername}} added {{.CardCount}} new card{{if ne .CardCount 1}}s{{end}} to{{else}}{{.FromUsername}} shared this deck with you{{end}}</p>
+			<p class="flash-gift-from">{{if .UpToDate}}You already have every card in{{else if .IsMerge}}{{.FromUsername}} added {{.CardCount}} new card{{if ne .CardCount 1}}s{{end}} to{{else}}{{.FromUsername}} shared this deck with you{{end}}</p>
 			<h1>{{.DeckName}}</h1>
 			{{with .Description}}<p class="dim">{{.}}</p>{{end}}
 			{{if not .IsMerge}}<p class="faint">{{.CardCount}} card{{if ne .CardCount 1}}s{{end}}</p>{{end}}
@@ -15,13 +15,15 @@
 				<form method="post" action="/flash/shared/adopt" hx-post="/flash/shared/adopt" hx-target="#deck-detail" hx-swap="innerHTML">
 					<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 					<input type="hidden" name="share_id" value="{{.ShareID}}">
-					<button type="submit" class="flash-big-btn flash-big-btn-primary">{{ticon "plus"}}{{if .IsMerge}}Add the new cards{{else}}Add to my decks{{end}}</button>
+					<button type="submit" class="flash-big-btn flash-big-btn-primary">{{if .UpToDate}}Got it{{else}}{{ticon "plus"}}{{if .IsMerge}}Add the new cards{{else}}Add to my decks{{end}}{{end}}</button>
 				</form>
+				{{if not .UpToDate}}
 				<form method="post" action="/flash/shared/decline" hx-post="/flash/shared/decline" hx-target="#deck-detail" hx-swap="innerHTML">
 					<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
 					<input type="hidden" name="share_id" value="{{.ShareID}}">
 					<button type="submit" class="flash-big-btn">No thanks</button>
 				</form>
+				{{end}}
 			</div>
 		</div>
 	</div>

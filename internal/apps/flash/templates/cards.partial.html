@@ -28,7 +28,7 @@
 				</form>
 				{{if .SharedWith}}
 				<ul class="flash-share-list">
-					{{range .SharedWith}}{{if ne .Status "revoked"}}
+					{{range .SharedWith}}
 					<li>
 						<span>{{.ToUsername}}</span>
 						<span class="flash-status-pill flash-status-{{.Status}}">{{.StatusLabel}}</span>
@@ -39,7 +39,7 @@
 						</form>
 						{{end}}
 					</li>
-					{{end}}{{end}}
+					{{end}}
 				</ul>
 				{{end}}
 			</div>

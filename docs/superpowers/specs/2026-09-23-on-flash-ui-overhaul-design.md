@@ -386,10 +386,18 @@ existing methods would require N+1 calls.
 
 - **Share popover**: the deck toolbar's Share button is a `<details>`
   disclosure (the same no-JS mechanism as the Notes shortcuts menu) whose
-  panel has a person picker + Share button, and the existing shares for the
-  deck, each with a status pill ("waiting" / "added") and Revoke while
-  pending. Hidden entirely when there is no other account to share with.
-  After a share or revoke, the pane re-renders with the popover open.
+  panel has a person picker + Share button, and a "Shared with" list with
+  **one row per person**. Each row has a status pill for their latest offer
+  ("waiting" / "added" / "said no thanks"), and Revoke while waiting.
+  Hidden entirely when there is no other account to share with. After a
+  share or revoke, the pane re-renders with the popover open.
+  - A re-share replaces the person's row with "waiting".
+  - A revoke cancels an offer; it isn't an answer. Revoked offers are
+    ignored, so revoking a re-offer puts the row back to the person's last
+    real answer, and someone whose offers were all revoked isn't listed.
+  - "Latest" is `created_at DESC, id DESC`, computed in SQL
+    (`SharesForDeck`). At most one offer per person is ever pending, so a
+    waiting row is always the pending offer Revoke acts on. (#304)
 - **Gift decks**: every pending offer (`SharesForRecipient`) is shown at the
   top of the deck list as a gift row — a dashed-outline stack in the source
   deck's colour, the deck name, and "From Name". Clicking it loads a new
@@ -398,12 +406,29 @@ existing methods would require N+1 calls.
   pane:
   - First-time offer: "Name shared this deck with you", name, description,
     card count, the first four cards as mini cards, and **Add to my decks**
-    (primary) / **No thanks**.
+    (primary) / **No thanks**. The name shown is the source deck's — that's
+    the deck actually being offered.
   - Merge offer: "Name added N new cards to *Deck*", with **Add the new
-    cards** / **No thanks**.
+    cards** / **No thanks**. The gift row's badge reads "+N". *Deck* here is
+    the recipient's own already-adopted copy, not the sender's source deck —
+    if that copy was auto-suffixed on first adoption (e.g. "Spanish (from
+    alice)"), the merge row and pane use that name, since it's the deck
+    cards are actually being added to.
+  - Merge offer with nothing new (the recipient already has every card):
+    the gift row has no badge, and the pane says "You already have every
+    card in *Deck*" with a single **Got it**, again naming the recipient's
+    own adopted copy. Got it adopts the offer, which copies nothing, so it
+    leaves the list. (#346)
   - Buttons post to the existing adopt/decline routes. After adopting, the
-    pane opens the (new or merged) deck with a notice ("*Planets* added to
-    your decks"); after declining, the pane shows the default state.
+    pane opens the (new or merged) deck with a notice: "“*Planets*” is now
+    in your decks", "N new cards added to “*Planets*”", or, after Got it,
+    "“*Planets*” is already up to date". After declining, the pane shows the
+    default state.
+  - Adding a first-time offer never fails over a name the recipient
+    already uses. The copy is named "Spanish (from alice)", or "Spanish
+    (from alice) (2)", "(3)"… if that's taken too. Only the base name is
+    shortened, so the result stays within the 120-character name limit. A
+    later merge finds the copy by id, whatever it's called by then. (#304)
   - Reading the sample cards needs a new store method that reads cards from
     the share's source deck **only** after verifying the share is pending
     and addressed to the caller (the existing `…IgnoringOwner` helpers read

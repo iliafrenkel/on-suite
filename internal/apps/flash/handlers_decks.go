@@ -200,6 +200,7 @@ type giftRow struct {
 	FromUsername string
 	IsMerge      bool // the recipient already has this deck; only new cards come
 	NewCardCount int
+	UpToDate     bool // a merge with 0 new cards: the row shows no badge (#346)
 }
 
 // giftView is the pane for one gift.
@@ -210,9 +211,13 @@ type giftView struct {
 	Color        string
 	FromUsername string
 	IsMerge      bool
-	CardCount    int
-	Samples      []cardGridItem
-	CSRFToken    string
+	// UpToDate is a merge with 0 new cards (#346): the pane says the
+	// recipient already has every card and offers only Got it, which
+	// adopts the offer so it leaves the list.
+	UpToDate  bool
+	CardCount int
+	Samples   []cardGridItem
+	CSRFToken string
 }
 
 type deckListFragment struct {
@@ -231,9 +236,10 @@ type deckIndexView struct {
 	TotalDue int // sum of every deck's ReviewNow: the "Review all" count
 }
 
-// shareWithUsername is one row of the creator's "Shared with" list: a
-// Share plus the recipient's username, resolved via a.deps.Users since
-// Share itself only carries a bare user ID.
+// shareWithUsername is one row of the creator's "Shared with" list: one
+// recipient's latest non-revoked Share (see SharesForDeck) plus their
+// username, resolved via a.deps.Users since Share itself only carries a
+// bare user ID.
 type shareWithUsername struct {
 	Share
 	ToUsername  string
@@ -317,9 +323,9 @@ func offersWithUsernames(offers []ShareOffer, byID map[int64]string) []shareOffe
 }
 
 // shareContext loads everything the deck detail view's Share section
-// needs: every other account on the instance (for the dropdown) and this
-// deck's own share offers, each paired with its recipient's username (for
-// the "Shared with" list).
+// needs: every other account on the instance (for the dropdown) and the
+// "Shared with" list (one row per recipient, see SharesForDeck), each row
+// paired with its recipient's username.
 func (a *App) shareContext(ctx context.Context, userID, deckID int64) ([]auth.Account, []shareWithUsername, error) {
 	accounts, byID, err := a.usernamesByID(ctx)
 	if err != nil {
@@ -481,9 +487,16 @@ func (a *App) buildDeckIndex(r *http.Request, userID int64, detail deckDetailVie
 
 	gifts := make([]giftRow, len(offers))
 	for i, o := range offers {
+		isMerge := o.PriorAdoptedDeckID != nil
+		// A merge offer names the recipient's own adopted copy (which may
+		// have been auto-suffixed, #304), not alice's source deck.
+		name := o.DeckName
+		if isMerge {
+			name = o.PriorAdoptedDeckName
+		}
 		gifts[i] = giftRow{
-			ShareID: o.ID, DeckName: o.DeckName, DeckColor: o.DeckColor, FromUsername: o.FromUsername,
-			IsMerge: o.PriorAdoptedDeckID != nil, NewCardCount: o.NewCardCount,
+			ShareID: o.ID, DeckName: name, DeckColor: o.DeckColor, FromUsername: o.FromUsername,
+			IsMerge: isMerge, NewCardCount: o.NewCardCount, UpToDate: isMerge && o.NewCardCount == 0,
 		}
 	}
 

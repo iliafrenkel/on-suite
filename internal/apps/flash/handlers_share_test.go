@@ -165,26 +165,74 @@ func TestRevokeShareHandlerNoJSRedirects(t *testing.T) {
 	s := newShareServer(t)
 	deckID := createDeckHX(t, s, s.Alice, "Spanish")
 	deckIDStr := strconv.FormatInt(deckID, 10)
-	shareID, err := strconv.ParseInt(shareToBob(t, s, deckID), 10, 64)
-	if err != nil {
-		t.Fatal(err)
+	shareID := shareToBob(t, s, deckID)
+
+	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share/"+shareID+"/revoke", url.Values{}, "/flash/"+deckIDStr)
+
+	// The offer is gone from bob's side and, its only row now revoked, bob
+	// is no longer in alice's "Shared with" list (#304).
+	offers, err := s.Store.SharesForRecipient(t.Context(), s.Bob.User.ID)
+	if err != nil || len(offers) != 0 {
+		t.Fatalf("bob's offers after no-JS revoke = %+v, err = %v, want none", offers, err)
 	}
-
-	s.Submit(t, s.Alice, "/flash/"+deckIDStr+"/share/"+strconv.FormatInt(shareID, 10)+"/revoke", url.Values{}, "/flash/"+deckIDStr)
-
 	shares, err := s.Store.SharesForDeck(t.Context(), s.Alice.User.ID, deckID)
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || len(shares) != 0 {
+		t.Fatalf("Shared with after no-JS revoke = %+v, err = %v, want nobody", shares, err)
 	}
-	var got *flash.Share
-	for i := range shares {
-		if shares[i].ID == shareID {
-			got = &shares[i]
-		}
+}
+
+// TestSharedWithListShowsOneRowPerRecipient covers #304 bullet 2 through
+// the real templates: bob gets one row whatever his history, it reads his
+// latest status, and Revoke targets the offer that is actually pending.
+func TestSharedWithListShowsOneRowPerRecipient(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := itoa(deckID)
+
+	// Declined, then offered again: one row, waiting, Revoke on the new offer.
+	first := shareToBob(t, s, deckID)
+	s.PostHX(t, s.Bob, "/flash/shared/decline", url.Values{"share_id": {first}})
+	again := shareToBob(t, s, deckID)
+
+	doc := s.Get(t, s.Alice, "/flash/"+deckIDStr)
+	rows := doc.QueryAll(".flash-share-list li")
+	if len(rows) != 1 {
+		t.Fatalf("Shared with has %d rows, want 1 for bob", len(rows))
 	}
-	if got == nil || got.Status != flash.ShareStatusRevoked {
-		t.Fatalf("share after no-JS revoke = %+v, want status %q", got, flash.ShareStatusRevoked)
+	if text := htmlassert.Text(rows[0]); !strings.Contains(text, "bob") || !strings.Contains(text, "waiting") || strings.Contains(text, "said no thanks") {
+		t.Errorf("bob's row = %q, want bob, waiting, and no old decline", text)
 	}
+	doc.MustHave(`.flash-share-list form[action="/flash/` + deckIDStr + `/share/` + again + `/revoke"]`)
+
+	// Bob adds it: still one row, now added, no Revoke.
+	s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {again}})
+	doc = s.Get(t, s.Alice, "/flash/"+deckIDStr)
+	rows = doc.QueryAll(".flash-share-list li")
+	if len(rows) != 1 || !strings.Contains(htmlassert.Text(rows[0]), "added") {
+		t.Fatalf("Shared with after adopt = %d rows, want 1 reading added", len(rows))
+	}
+	doc.MustNotHave(".flash-share-list form")
+
+	// A re-share replaces it with waiting; revoking that falls back to added.
+	third := shareToBob(t, s, deckID)
+	doc = s.Get(t, s.Alice, "/flash/"+deckIDStr)
+	rows = doc.QueryAll(".flash-share-list li")
+	if len(rows) != 1 || !strings.Contains(htmlassert.Text(rows[0]), "waiting") {
+		t.Fatalf("Shared with after re-share = %d rows, want 1 reading waiting", len(rows))
+	}
+	rec := s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/share/"+third+"/revoke", url.Values{})
+	if rec.Code != 200 {
+		t.Fatalf("revoke: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc = htmlassert.Parse(t, rec.Body.String())
+	rows = doc.QueryAll(".flash-share-list li")
+	if len(rows) != 1 {
+		t.Fatalf("Shared with after revoke has %d rows, want 1", len(rows))
+	}
+	if text := htmlassert.Text(rows[0]); !strings.Contains(text, "added") || strings.Contains(text, "waiting") {
+		t.Errorf("bob's row after revoke = %q, want it back to added", text)
+	}
+	doc.MustNotHave(".flash-share-list form")
 }
 
 // TestDeclineShareHandlerNoJSRedirects covers #342 for decline.
@@ -583,5 +631,190 @@ func TestShareAndRevokeFromCardsModeSyncURL(t *testing.T) {
 	}
 	if got := rec.Header().Get("HX-Push-Url"); got != wantURL {
 		t.Errorf("revoke HX-Push-Url = %q, want %q to match the deck-view pane it renders", got, wantURL)
+	}
+}
+
+// TestAdoptRenamesOnNameCollision covers #304 bullet 5 through HTTP: the
+// click used to 400 (which HTMX doesn't swap, so nothing happened). Now it
+// adds the deck under a suffixed name and the notice uses that name.
+func TestAdoptRenamesOnNameCollision(t *testing.T) {
+	s := newShareServer(t)
+	aliceDeck := createDeckHX(t, s, s.Alice, "Spanish")
+	createDeckHX(t, s, s.Bob, "Spanish")
+	shareID := shareToBob(t, s, aliceDeck)
+
+	rec := s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareID}})
+	if rec.Code != 200 {
+		t.Fatalf("adopt with a name collision: %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(doc.MustHave("#deck-detail-view .flash-notice")); got != "“Spanish (from alice)” is now in your decks." {
+		t.Errorf("notice = %q", got)
+	}
+	if got := htmlassert.Text(doc.MustHave("#deck-detail-view h1")); got != "Spanish (from alice)" {
+		t.Errorf("deck heading = %q", got)
+	}
+	doc.MustNotHave("#deck-list .deck-row-gift")
+
+	decks, err := s.Store.ListDecks(t.Context(), s.Bob.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, d := range decks {
+		got[d.Name] = true
+	}
+	if len(decks) != 2 || !got["Spanish"] || !got["Spanish (from alice)"] {
+		t.Errorf("bob's decks = %+v, want Spanish and Spanish (from alice)", decks)
+	}
+}
+
+// TestGiftPreviewOfAnEmptyDeck covers #346's first-share edge case through
+// the template: "0 cards", no "A few of the cards" section, and the normal
+// first-time buttons and badge.
+func TestGiftPreviewOfAnEmptyDeck(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Empty")
+	shareID := shareToBob(t, s, deckID)
+
+	doc := s.Get(t, s.Bob, "/flash/shared/"+shareID)
+	text := htmlassert.Text(doc.MustHave("#deck-detail .flash-gift"))
+	if !strings.Contains(text, "alice shared this deck with you") || !strings.Contains(text, "0 cards") {
+		t.Errorf("gift pane = %q, want the first-time wording and 0 cards", text)
+	}
+	if strings.Contains(text, "A few of the cards") {
+		t.Errorf("gift pane = %q, should not offer samples of an empty deck", text)
+	}
+	doc.MustNotHave(".flash-gift .flash-section-title")
+	doc.MustNotHave(".flash-gift .flash-mini-card")
+	if n := len(doc.QueryAll(".flash-gift-actions button")); n != 2 {
+		t.Errorf("gift pane has %d buttons, want Add to my decks and No thanks", n)
+	}
+	if got := htmlassert.Text(doc.MustHave("#deck-list .flash-gift-badge")); got != "new" {
+		t.Errorf("gift badge = %q, want new", got)
+	}
+}
+
+// TestUpToDateReshareSaysSo covers #346's merge edge case: a re-share with
+// no new cards has no "+0" badge, a pane that says you already have every
+// card with a single Got it, and an "already up to date" notice.
+func TestUpToDateReshareSaysSo(t *testing.T) {
+	s := newShareServer(t)
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	deckIDStr := itoa(deckID)
+	addCard := func(front string) {
+		t.Helper()
+		rec := s.PostHX(t, s.Alice, "/flash/"+deckIDStr+"/cards/new",
+			url.Values{"card_type": {"basic"}, "front": {front}, "back": {"x"}, "notes": {""}})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create card: %d; body: %s", rec.Code, rec.Body.String())
+		}
+	}
+	addCard("hola")
+	s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareToBob(t, s, deckID)}})
+
+	// A merge with something new still shows its count.
+	addCard("adios")
+	withNew := shareToBob(t, s, deckID)
+	if got := htmlassert.Text(s.Get(t, s.Bob, "/flash/").MustHave("#deck-list .flash-gift-badge")); got != "+1" {
+		t.Errorf("merge badge = %q, want +1", got)
+	}
+	s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {withNew}})
+
+	// Nothing new since: the gift row is there, with no badge…
+	upToDate := shareToBob(t, s, deckID)
+	list := s.Get(t, s.Bob, "/flash/")
+	list.MustHave("#deck-list a.deck-row-gift")
+	list.MustNotHave("#deck-list .flash-gift-badge")
+
+	// …the pane says so, with Got it as its only button…
+	pane := s.Get(t, s.Bob, "/flash/shared/"+upToDate)
+	text := htmlassert.Text(pane.MustHave("#deck-detail .flash-gift"))
+	if !strings.Contains(text, "You already have every card in Spanish") {
+		t.Errorf("gift pane = %q, want it to say you already have every card in Spanish", text)
+	}
+	if strings.Contains(text, "0 new card") {
+		t.Errorf("gift pane = %q, should not count 0 new cards", text)
+	}
+	buttons := pane.QueryAll(".flash-gift-actions button")
+	if len(buttons) != 1 || htmlassert.Text(buttons[0]) != "Got it" {
+		t.Errorf("gift pane buttons = %d, want just Got it", len(buttons))
+	}
+	pane.MustHave(`.flash-gift-actions form[action="/flash/shared/adopt"]`)
+	pane.MustNotHave(`.flash-gift-actions form[action="/flash/shared/decline"]`)
+
+	// …and Got it resolves the offer with an "already up to date" notice.
+	rec := s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {upToDate}})
+	if rec.Code != 200 {
+		t.Fatalf("got it: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(doc.MustHave("#deck-detail-view .flash-notice")); got != "“Spanish” is already up to date." {
+		t.Errorf("notice = %q", got)
+	}
+	doc.MustNotHave("#deck-list .deck-row-gift")
+	decks, err := s.Store.ListDecks(t.Context(), s.Bob.User.ID)
+	if err != nil || len(decks) != 1 {
+		t.Fatalf("bob's decks = %+v, err = %v, want the one copy", decks, err)
+	}
+	cards, err := s.Store.ListCards(t.Context(), s.Bob.User.ID, decks[0].ID)
+	if err != nil || len(cards) != 2 {
+		t.Errorf("bob's cards = %d, err = %v, want 2 (nothing copied twice)", len(cards), err)
+	}
+}
+
+// TestMergeGiftPanesNameRecipientsCopy covers a follow-up to #304: once an
+// adopted copy has been auto-suffixed (bob already had his own "Spanish",
+// so alice's offer became "Spanish (from alice)"), both merge-pane variants
+// — new cards found, and up to date — must name bob's own copy, not
+// alice's source deck. A first-time offer keeps naming the source deck,
+// since that's the deck actually being offered.
+func TestMergeGiftPanesNameRecipientsCopy(t *testing.T) {
+	s := newShareServer(t)
+	// bob already has his own "Spanish", so his adopted copy of alice's
+	// deck collides and gets auto-suffixed to "Spanish (from alice)".
+	createDeckHX(t, s, s.Bob, "Spanish")
+	deckID := createDeckHX(t, s, s.Alice, "Spanish")
+	s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {shareToBob(t, s, deckID)}})
+
+	decks, err := s.Store.ListDecks(t.Context(), s.Bob.User.ID)
+	if err != nil || len(decks) != 2 {
+		t.Fatalf("bob's decks = %+v, err = %v, want 2", decks, err)
+	}
+	var adoptedName string
+	for _, d := range decks {
+		if d.Name != "Spanish" {
+			adoptedName = d.Name
+		}
+	}
+	if adoptedName != "Spanish (from alice)" {
+		t.Fatalf("adopted copy name = %q, want %q", adoptedName, "Spanish (from alice)")
+	}
+
+	// Alice adds a card and re-shares: the merge pane must name bob's own
+	// adopted copy, not alice's source "Spanish".
+	rec := s.PostHX(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"hola"}, "back": {"x"}, "notes": {""}})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create card: %d; body: %s", rec.Code, rec.Body.String())
+	}
+	withNew := shareToBob(t, s, deckID)
+	pane := s.Get(t, s.Bob, "/flash/shared/"+withNew)
+	text := htmlassert.Text(pane.MustHave("#deck-detail .flash-gift"))
+	if !strings.Contains(text, "alice added 1 new card to") || !strings.Contains(text, "Spanish (from alice)") {
+		t.Errorf("merge gift pane = %q, want it to name bob's own copy %q", text, adoptedName)
+	}
+	if got := htmlassert.Text(pane.MustHave("#deck-detail .flash-gift h1")); got != "Spanish (from alice)" {
+		t.Errorf("merge gift pane heading = %q, want the recipient's own copy name %q", got, adoptedName)
+	}
+
+	// Adopt it, then re-share with nothing new: the up-to-date pane must
+	// also name bob's own copy.
+	s.PostHX(t, s.Bob, "/flash/shared/adopt", url.Values{"share_id": {withNew}})
+	upToDate := shareToBob(t, s, deckID)
+	pane = s.Get(t, s.Bob, "/flash/shared/"+upToDate)
+	text = htmlassert.Text(pane.MustHave("#deck-detail .flash-gift"))
+	if !strings.Contains(text, "You already have every card in Spanish (from alice)") {
+		t.Errorf("up-to-date gift pane = %q, want it to name bob's own copy %q", text, adoptedName)
 	}
 }

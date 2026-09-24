@@ -5,10 +5,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
+	"github.com/iliafrenkel/on-suite/internal/apptest"
+	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 )
 
 func TestShareDeckCreatesPendingShare(t *testing.T) {
@@ -217,7 +221,7 @@ func TestAdoptShareFirstTimeCopiesCardsTagsAndMedia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +295,7 @@ func TestAdoptShareNeverCopiesReviewState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +330,7 @@ func TestAdoptShareMergeCopiesOnlyNewCards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID)
+	firstResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +354,7 @@ func TestAdoptShareMergeCopiesOnlyNewCards(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mergedResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID)
+	mergedResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +410,7 @@ func TestAdoptShareResultReportsFirstTimeAdoption(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,7 +442,7 @@ func TestAdoptShareResultReportsMergeAndNewCardCount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID); err != nil {
+	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -450,7 +454,7 @@ func TestAdoptShareResultReportsMergeAndNewCardCount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID)
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +470,7 @@ func TestAdoptShareResultReportsMergeAndNewCardCount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = f.store.AdoptShare(ctx, f.bob.ID, sh3.ID)
+	result, err = f.store.AdoptShare(ctx, f.bob.ID, sh3.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -490,13 +494,13 @@ func TestAdoptShareRejectsWrongRecipientAndDoubleAdopt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := f.store.AdoptShare(ctx, f.alice.ID, sh.ID); !errors.Is(err, flash.ErrNotFound) {
+	if _, err := f.store.AdoptShare(ctx, f.alice.ID, sh.ID, nil); !errors.Is(err, flash.ErrNotFound) {
 		t.Errorf("adopt by non-recipient: err = %v, want ErrNotFound", err)
 	}
-	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID); err != nil {
+	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID); !errors.Is(err, flash.ErrInvalid) {
+	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil); !errors.Is(err, flash.ErrInvalid) {
 		t.Errorf("double adopt: err = %v, want ErrInvalid", err)
 	}
 }
@@ -513,7 +517,7 @@ func TestDeleteAdoptedDeckClearsShareBackReferenceButKeepsShare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -549,15 +553,44 @@ func TestDeleteAdoptedDeckClearsShareBackReferenceButKeepsShare(t *testing.T) {
 	}
 }
 
-func TestSharesForDeckListsAllOffersNewestFirst(t *testing.T) {
+// TestSharesForDeckShowsEachRecipientsLatestStatus covers #304 bullet 2:
+// the creator's "Shared with" list has one row per recipient — their
+// latest share that wasn't revoked — newest first. A revoke falls back to
+// the person's last real answer; someone whose only offers were revoked
+// isn't listed at all.
+func TestSharesForDeckShowsEachRecipientsLatestStatus(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
+	// One fixed clock: every row gets the same created_at, so "latest" and
+	// the list order below come from the id tiebreak alone.
+	f.store.SetClock(func() time.Time { return time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC) })
+	carol, err := auth.NewStore(f.db).CreateUser(ctx, "carol", apptest.PasswordHash, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+
+	// Bob says no thanks, then gets offered again.
+	first, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.DeclineShare(ctx, f.bob.ID, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	again, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Carol's only offer is revoked.
+	c1, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, carol.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, c1.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -565,8 +598,42 @@ func TestSharesForDeckListsAllOffersNewestFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(shares) != 1 || shares[0].ID != sh.ID {
-		t.Fatalf("shares = %+v, want [%+v]", shares, sh)
+	if len(shares) != 1 || shares[0].ID != again.ID || shares[0].Status != flash.ShareStatusPending {
+		t.Fatalf("shares = %+v, want just bob's re-offer (id %d), pending — his decline replaced, carol's revoked offer hidden", shares, again.ID)
+	}
+
+	// Carol adopts a fresh offer; bob's re-offer is revoked, so he falls
+	// back to his last real answer.
+	c2, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, carol.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.AdoptShare(ctx, carol.ID, c2.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.RevokeShare(ctx, f.alice.ID, d.ID, again.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	shares, err = f.store.SharesForDeck(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type row struct {
+		id     int64
+		to     int64
+		status string
+	}
+	var got []row
+	for _, sh := range shares {
+		got = append(got, row{sh.ID, sh.ToUserID, sh.Status})
+	}
+	want := []row{
+		{c2.ID, carol.ID, flash.ShareStatusAdopted},     // newer row first
+		{first.ID, f.bob.ID, flash.ShareStatusDeclined}, // revoke fell back to the decline
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("shares = %+v, want %+v", got, want)
 	}
 
 	if _, err := f.store.SharesForDeck(ctx, f.bob.ID, d.ID); !errors.Is(err, flash.ErrNotFound) {
@@ -600,7 +667,7 @@ func TestSharesForRecipientDistinguishesFirstOfferFromMerge(t *testing.T) {
 		t.Errorf("DeckName = %q, want %q", offers[0].DeckName, "Spanish")
 	}
 
-	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID); err != nil {
+	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "adios", "goodbye", ""); err != nil {
@@ -639,7 +706,7 @@ func TestAdoptShareCopiesDeckColor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID)
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -666,7 +733,7 @@ func TestAdoptShareMergeKeepsAdoptersOwnColor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID)
+	firstResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh1.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -687,7 +754,7 @@ func TestAdoptShareMergeKeepsAdoptersOwnColor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mergedResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID)
+	mergedResult, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -795,7 +862,7 @@ func TestSharePreviewOfAMergeCountsOnlyNewCards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID); err != nil {
+	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, front := range []string{"Venus", "Earth"} {
@@ -818,5 +885,182 @@ func TestSharePreviewOfAMergeCountsOnlyNewCards(t *testing.T) {
 		if c.Front == "Mercury" {
 			t.Errorf("merge samples include the already-adopted card: %+v", p.Samples)
 		}
+	}
+}
+
+// TestAdoptShareRenamesOnNameCollision covers #304 bullet 5: adopting a
+// deck whose name the recipient already uses never fails. The copy takes
+// the first free "(from alice)" name, and a later re-share still merges
+// into that renamed copy, because the merge finds it by id, not name.
+func TestAdoptShareRenamesOnNameCollision(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	names := map[int64]string{f.alice.ID: "alice", f.bob.ID: "bob"}
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"Spanish", "Spanish (from alice)"} {
+		if _, err := f.store.CreateDeck(ctx, f.bob.ID, name, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, names)
+	if err != nil {
+		t.Fatalf("adopt with a name collision: %v", err)
+	}
+	if first.Merged || first.CardsCopied != 1 {
+		t.Errorf("result = %+v, want a first-time adoption of 1 card", first)
+	}
+	if first.Deck.Name != "Spanish (from alice) (2)" {
+		t.Errorf("adopted deck name = %q, want %q", first.Deck.Name, "Spanish (from alice) (2)")
+	}
+
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "adios", "goodbye", ""); err != nil {
+		t.Fatal(err)
+	}
+	sh2, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	merged, err := f.store.AdoptShare(ctx, f.bob.ID, sh2.ID, names)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !merged.Merged || merged.Deck.ID != first.Deck.ID || merged.CardsCopied != 1 {
+		t.Errorf("re-share result = %+v, want a merge of 1 card into deck %d", merged, first.Deck.ID)
+	}
+	if merged.Deck.Name != "Spanish (from alice) (2)" {
+		t.Errorf("merged deck name = %q, want the renamed copy untouched", merged.Deck.Name)
+	}
+	decks, err := f.store.ListDecks(ctx, f.bob.ID)
+	if err != nil || len(decks) != 3 {
+		t.Fatalf("bob's decks = %+v, err = %v, want his two plus one copy", decks, err)
+	}
+}
+
+// TestAdoptShareRenameStaysWithinTheNameLimit: a max-length name that
+// collides still produces a valid deck name.
+func TestAdoptShareRenameStaysWithinTheNameLimit(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	long := strings.Repeat("é", flash.MaxDeckNameRunes)
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, long, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateDeck(ctx, f.bob.ID, long, ""); err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, map[int64]string{f.alice.ID: "alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := result.Deck.Name
+	if n := utf8.RuneCountInString(name); n != flash.MaxDeckNameRunes || !strings.HasSuffix(name, " (from alice)") {
+		t.Errorf("name = %q (%d runes), want %d runes ending in (from alice)", name, n, flash.MaxDeckNameRunes)
+	}
+	if err := flash.ValidateDeck(name, ""); err != nil {
+		t.Errorf("renamed deck fails ValidateDeck: %v", err)
+	}
+}
+
+// TestAdoptShareRenameWithoutASharerName: with no username to hand (a nil
+// map), the suffix falls back to "(shared)" rather than "(from )".
+func TestAdoptShareRenameWithoutASharerName(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateDeck(ctx, f.bob.ID, "Spanish", ""); err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Deck.Name != "Spanish (shared)" {
+		t.Errorf("name = %q, want %q", result.Deck.Name, "Spanish (shared)")
+	}
+}
+
+// TestSharePreviewOfAnEmptyDeck covers #346's first-share edge case: a
+// deck with no cards previews as 0 cards with no samples.
+func TestSharePreviewOfAnEmptyDeck(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Empty", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := f.store.SharePreview(ctx, f.bob.ID, sh.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Offer.PriorAdoptedDeckID != nil || p.CardCount != 0 || len(p.Samples) != 0 {
+		t.Errorf("preview = %+v, want a first-time offer of 0 cards and no samples", p)
+	}
+}
+
+// TestUpToDateMergeOfferCountsZero covers #346's merge edge case: a
+// re-share with nothing new since the last adoption is still a merge offer,
+// with 0 new cards and no samples.
+func TestUpToDateMergeOfferCountsZero(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.AdoptShare(ctx, f.bob.ID, sh.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	again, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	offers, err := f.store.SharesForRecipient(ctx, f.bob.ID)
+	if err != nil || len(offers) != 1 {
+		t.Fatalf("offers = %+v, err = %v", offers, err)
+	}
+	if offers[0].PriorAdoptedDeckID == nil || offers[0].NewCardCount != 0 {
+		t.Errorf("offer = %+v, want a merge offer with NewCardCount 0", offers[0])
+	}
+	p, err := f.store.SharePreview(ctx, f.bob.ID, again.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Offer.PriorAdoptedDeckID == nil || p.CardCount != 0 || len(p.Samples) != 0 {
+		t.Errorf("preview = %+v, want a merge of 0 cards and no samples", p)
 	}
 }
