@@ -13,7 +13,7 @@ type Middleware func(http.Handler) http.Handler
 
 // bodyLimitOverrides holds per-route exceptions to DefaultMaxBodyBytes,
 // keyed by the exact registered ServeMux pattern (e.g.
-// "POST /flash/{deckID}/cards/{cardID}/media", including the method).
+// "POST /flash/{deckID}/cards/new", including the method).
 //
 // This exists because Stack's LimitBody(DefaultMaxBodyBytes) runs ahead of
 // the mux — outside any single app's registration — so by the time a route
@@ -34,7 +34,7 @@ var (
 
 // RegisterBodyLimit raises the platform's default body-size cap for one
 // exact route, identified by its full registered pattern including method
-// (e.g. "POST /flash/{deckID}/cards/{cardID}/media", the same string
+// (e.g. "POST /flash/{deckID}/cards/new", the same string
 // app.Router.Handle/HandleFunc register on the mux). Call it from an app's
 // Mount, once, for any route whose legitimate uploads exceed
 // DefaultMaxBodyBytes — see that constant's doc comment for why this needs
