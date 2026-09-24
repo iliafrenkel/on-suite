@@ -18,7 +18,22 @@ import (
 // file (ParseMultipartForm's memory limit of 0 forces every file part to
 // disk) and then deleting that temp file before FormFile ever opens it —
 // the same failure mode a full disk or a concurrent cleanup would produce.
+//
+// The spill directory is a private one set via TMPDIR (t.Setenv), not the
+// shared os.TempDir(): scanning the real system temp directory for a
+// filename fragment was racy under `go test ./... -race -count=1`, since
+// other tests and even other packages running in parallel can spill their
+// own multipart-* files into the same directory at the same time. TMPDIR
+// only takes effect for a fresh call to os.TempDir() — set it before
+// ParseMultipartForm runs, since that is what os.CreateTemp (via
+// mime/multipart) consults.
+//
+// t.Setenv forbids t.Parallel on this test, which is fine: it is the only
+// test in this file.
 func TestReadUploadTreatsARealFormFileErrorAsAFailure(t *testing.T) {
+	spillDir := t.TempDir()
+	t.Setenv("TMPDIR", spillDir)
+
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
 	part, err := mw.CreateFormFile("image", "cat.png")
@@ -32,16 +47,6 @@ func TestReadUploadTreatsARealFormFileErrorAsAFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tmpDir := t.TempDir()
-	before, err := os.ReadDir(os.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	seen := map[string]bool{}
-	for _, e := range before {
-		seen[e.Name()] = true
-	}
-
 	r := httptest.NewRequest("POST", "/", &body)
 	r.Header.Set("Content-Type", mw.FormDataContentType())
 	// A 0-byte memory limit forces the file part to spill straight to a
@@ -50,21 +55,26 @@ func TestReadUploadTreatsARealFormFileErrorAsAFailure(t *testing.T) {
 		t.Fatalf("ParseMultipartForm: %v", err)
 	}
 
-	after, err := os.ReadDir(os.TempDir())
+	entries, err := os.ReadDir(spillDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var spilled string
-	for _, e := range after {
-		if !seen[e.Name()] && strings.Contains(e.Name(), "multipart") {
-			spilled = filepath.Join(os.TempDir(), e.Name())
+	for _, e := range entries {
+		if strings.Contains(e.Name(), "multipart") {
+			spilled = filepath.Join(spillDir, e.Name())
+			break
 		}
 	}
 	if spilled == "" {
-		t.Skip("the multipart part did not spill to a temp file on this platform/Go version; cannot reproduce a real FormFile error")
+		// Go is pinned by go.mod (see AGENTS.md), so this platform/version
+		// combination is fixed for this repository: a missing spill file
+		// means mime/multipart's disk-spill behavior changed underneath
+		// this test's assumption, not a one-off environment fluke, and
+		// deserves a hard failure rather than a silent skip.
+		t.Fatal("the multipart part did not spill to a temp file in TMPDIR; the disk-spill assumption this test relies on broke")
 	}
-	defer func() { _ = os.Remove(spilled) }() // no-op if the test already removed it
-	if err := os.Rename(spilled, filepath.Join(tmpDir, "moved-out-from-under-it")); err != nil {
+	if err := os.Rename(spilled, filepath.Join(spillDir, "moved-out-from-under-it")); err != nil {
 		t.Fatal(err)
 	}
 
