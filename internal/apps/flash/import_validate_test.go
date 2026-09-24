@@ -297,6 +297,36 @@ func TestParseImportMarkdownWithImageAndAudioURLs(t *testing.T) {
 	}
 }
 
+// TestImportMarkdownExampleParses feeds the exact example text shown in
+// the import pane's "Writing it by hand?" details block (#302.6) to
+// ParseImport, so the in-app documentation can never quietly drift out of
+// sync with what the parser actually accepts.
+func TestImportMarkdownExampleParses(t *testing.T) {
+	d, err := ParseImport(ImportMarkdownExample, "markdown")
+	if err != nil {
+		t.Fatalf("ParseImport(ImportMarkdownExample): %v", err)
+	}
+	if d.Name != "Deck name" {
+		t.Errorf("deck name = %q, want %q", d.Name, "Deck name")
+	}
+	if len(d.Cards) != 1 {
+		t.Fatalf("len(Cards) = %d, want 1", len(d.Cards))
+	}
+	c := d.Cards[0]
+	if c.Front != "Question" || c.Back != "Answer" {
+		t.Errorf("Front/Back = %q/%q, want %q/%q", c.Front, c.Back, "Question", "Answer")
+	}
+	if want := []string{"tag-one", "tag-two"}; len(c.Tags) != 2 || c.Tags[0] != want[0] || c.Tags[1] != want[1] {
+		t.Errorf("Tags = %v, want %v", c.Tags, want)
+	}
+	if c.ImageURL != "https://example.com/picture.jpg" {
+		t.Errorf("ImageURL = %q", c.ImageURL)
+	}
+	if c.AudioURL != "https://example.com/sound.mp3" {
+		t.Errorf("AudioURL = %q", c.AudioURL)
+	}
+}
+
 func TestParseImportMarkdownRejectsBadMediaURL(t *testing.T) {
 	payload := "# D\n\n## Card\nFront: Q\nBack: A\nImage: not-a-url\n"
 	_, err := ParseImport(payload, "markdown")

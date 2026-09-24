@@ -36,6 +36,12 @@
 		<textarea id="import-payload" name="payload" rows="12" placeholder='{"deck": {"name": "…"}, "cards": […]}' required>{{.PayloadValue}}</textarea>
 	</div>
 
+	<details class="flash-import-help">
+		<summary>Writing it by hand?</summary>
+		<p class="dim">Skip the AI and write the Markdown yourself. Each card is a <code>## Card</code> block; <code>Image:</code> and <code>Audio:</code> are optional and take a direct link to a picture or sound file.</p>
+		<pre><code>{{.MarkdownExample}}</code></pre>
+	</details>
+
 	<details class="flash-import-format"{{if and .FormatValue (ne .FormatValue "auto")}} open{{end}}>
 		<summary>Choose format (usually not needed)</summary>
 		<div class="field">

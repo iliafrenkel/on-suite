@@ -16,7 +16,8 @@ func (a *App) importDeckDetail(r *http.Request, errMsg, payload, format string) 
 	}
 	return deckDetailView{
 		Mode: deckModeImport, PayloadValue: payload, FormatValue: format, ImportPrompt: importPrompt,
-		Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
+		MarkdownExample: ImportMarkdownExample,
+		Error:           errMsg, CSRFToken: web.CSRFToken(r.Context()),
 	}
 }
 
