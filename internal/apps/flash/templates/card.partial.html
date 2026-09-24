@@ -6,8 +6,10 @@
        FlipID — a unique id for the flip checkbox
        Hint   — optional line under the question ("Tap the card to flip it")
        Corner — optional word for the front's corner ("new")
-       Static — true leaves the tag links out of the extras (the review
-                page has no deck pane for them to open in)
+       Static — true for the review screen, which has no deck pane for tag
+                links to open in: tags render as plain pills on the back
+                face instead of as links below it. Either way, tags show
+                once per screen.
      It emits three siblings: the visually-hidden checkbox, the card (the
      checkbox's <label>), and the extras. The flip is pure CSS on
      .flash-flip:checked, so a caller may put more `.flash-flip:checked ~`
@@ -26,7 +28,7 @@
 		<span class="flash-card-face flash-card-back">
 			<span class="flash-card-text">{{.Face.Answer}}</span>
 			{{with .Face.Notes}}<span class="flash-card-notes">{{.}}</span>{{end}}
-			{{with .Face.Tags}}<span class="flash-card-tags">{{range .}}<span class="flash-pill">{{.Name}}</span>{{end}}</span>{{end}}
+			{{if $.Static}}{{with .Face.Tags}}<span class="flash-card-tags">{{range .}}<span class="flash-pill">{{.Name}}</span>{{end}}</span>{{end}}{{end}}
 		</span>
 	</span>
 </label>

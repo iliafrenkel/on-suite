@@ -489,6 +489,31 @@ func TestUnfilteredCardFlowStaysUnfiltered(t *testing.T) {
 	}
 }
 
+// TestOpenedCardShowsTagsOnce guards against the back face's plain tag pills
+// duplicating the clickable tag links already shown below the card: an
+// opened card (not Static) should show the tags exactly once, as links.
+func TestOpenedCardShowsTagsOnce(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetCardTags(t.Context(), s.Alice.User.ID, c.ID, []string{"greetings"}); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/"+itoa(c.ID))
+	doc.MustNotHave(".flash-card-back .flash-pill")
+	link := doc.MustHave(".flash-tag-links a.flash-pill")
+	if got := htmlassert.Text(link); got != "greetings" {
+		t.Errorf("tag link text = %q, want greetings", got)
+	}
+}
+
 func TestDeckPaneCardsButtonSwapsThePane(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
