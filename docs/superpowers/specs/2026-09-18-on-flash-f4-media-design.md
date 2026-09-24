@@ -96,8 +96,11 @@ the serving route, not as a rejected import.
    cards uses it** as its image or its sound (`MediaForUser`: `EXISTS
    (SELECT 1 FROM flash_cards WHERE user_id = ? AND (image_hash = hash OR
    audio_hash = hash))`). Otherwise → 404, the same response as a hash that
-   doesn't exist, so the route never confirms what another account has
-   attached. The table is a cache shared across accounts, and it holds
+   doesn't exist, so the route never serves or confirms another account's
+   uploaded files. (A URL-imported image is a weaker case: someone who
+   already knows the URL and imports it themselves may notice from timing
+   or a skipped fetch that it was cached before — accepted, since they
+   already know the URL.) The table is a cache shared across accounts, and it holds
    files people uploaded from their own disks, not just public images.
    Adopting a shared deck copies its hashes into the recipient's own
    cards, so they can see its media from then on. A pending gift's preview
