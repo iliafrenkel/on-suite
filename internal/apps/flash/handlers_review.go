@@ -163,7 +163,16 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 	if deck != nil {
 		deckID = &deck.ID
 	}
-	front, err := a.store.QueueFront(ctx, userID, deckID, now)
+	// deck is already loaded and ownership-checked when it is non-nil, so
+	// the single-deck path uses queueFrontForDeck to avoid sending it
+	// through DeckByID a second time (#333).
+	var front QueueFront
+	var err error
+	if deck != nil {
+		front, err = a.store.queueFrontForDeck(ctx, userID, *deck, now)
+	} else {
+		front, err = a.store.QueueFront(ctx, userID, nil, now)
+	}
 	if err != nil {
 		a.fail(w, r, err)
 		return

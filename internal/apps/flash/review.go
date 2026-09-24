@@ -458,12 +458,32 @@ func (st *Store) QueueFront(ctx context.Context, userID int64, deckID *int64, no
 	if err != nil {
 		return QueueFront{}, err
 	}
+	return st.queueFrontFromSummaries(ctx, userID, sums, now)
+}
 
+// queueFrontForDeck is QueueFront's single-deck path for a caller that has
+// already loaded (and ownership-checked) d itself — the review handlers'
+// renderReview (#333), which would otherwise send d through DeckByID a
+// second time via queueFrontSummaries. Exported QueueFront still does its
+// own DeckByID (via queueFrontSummaries) for callers, such as its own
+// tests, that only have a deck id.
+func (st *Store) queueFrontForDeck(ctx context.Context, userID int64, d Deck, now time.Time) (QueueFront, error) {
+	sums, err := st.queueFrontSummariesForDeck(ctx, userID, d, now)
+	if err != nil {
+		return QueueFront{}, err
+	}
+	return st.queueFrontFromSummaries(ctx, userID, sums, now)
+}
+
+// queueFrontFromSummaries is QueueFront's merge logic once it has its
+// scope's DeckSummary rows, shared by QueueFront and queueFrontForDeck.
+func (st *Store) queueFrontFromSummaries(ctx context.Context, userID int64, sums []DeckSummary, now time.Time) (QueueFront, error) {
 	var front QueueFront
 	heads := make([][]QueueCard, len(sums))
 	for i, s := range sums {
 		front.Remaining += s.ReviewNow
 		if s.DueToday > 0 {
+			var err error
 			if heads[i], err = st.dueReviewCards(ctx, userID, s.Deck, now, 1); err != nil {
 				return QueueFront{}, err
 			}
@@ -490,24 +510,17 @@ func (st *Store) QueueFront(ctx context.Context, userID int64, deckID *int64, no
 }
 
 // queueFrontSummaries is the DeckSummary of every deck in DueQueue's scope,
-// in dueQueueDecks' order. A one-deck scope takes the single-deck path; the
-// all-decks scope takes DeckSummaries' fixed three queries and drops the
-// snoozed decks, the same rule dueQueueDecks applies.
+// in dueQueueDecks' order. A one-deck scope loads and ownership-checks it
+// (queueFrontSummariesForDeck takes over from there); the all-decks scope
+// takes DeckSummaries' fixed three queries and drops the snoozed decks, the
+// same rule dueQueueDecks applies.
 func (st *Store) queueFrontSummaries(ctx context.Context, userID int64, deckID *int64, now time.Time) ([]DeckSummary, error) {
 	if deckID != nil {
-		decks, err := st.dueQueueDecks(ctx, userID, deckID, now)
+		d, err := st.DeckByID(ctx, userID, *deckID)
 		if err != nil {
 			return nil, err
 		}
-		out := make([]DeckSummary, 0, len(decks))
-		for _, d := range decks {
-			s, err := st.deckSummary(ctx, userID, d, now)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, s)
-		}
-		return out, nil
+		return st.queueFrontSummariesForDeck(ctx, userID, d, now)
 	}
 
 	all, err := st.DeckSummaries(ctx, userID, now)
@@ -521,6 +534,21 @@ func (st *Store) queueFrontSummaries(ctx context.Context, userID int64, deckID *
 		}
 	}
 	return out, nil
+}
+
+// queueFrontSummariesForDeck is queueFrontSummaries' single-deck path, given
+// a deck the caller already has: a snoozed deck contributes nothing (the
+// same rule dueQueueDecks applies for DueQueue's own single-deck path),
+// otherwise its one DeckSummary.
+func (st *Store) queueFrontSummariesForDeck(ctx context.Context, userID int64, d Deck, now time.Time) ([]DeckSummary, error) {
+	if d.IsSnoozed(now) {
+		return nil, nil
+	}
+	s, err := st.deckSummary(ctx, userID, d, now)
+	if err != nil {
+		return nil, err
+	}
+	return []DeckSummary{s}, nil
 }
 
 // dueQueueDecks resolves which decks DueQueue should consider: the one

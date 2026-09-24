@@ -90,6 +90,11 @@ func newQueryCountingServer(t *testing.T, substr string) (*apptest.Server[*flash
 // flash request might run — nothing else selects from "users u".
 const listAccountsSubstring = "FROM users u"
 
+// deckByIDSubstring is the one clause unique to Store.DeckByID's own query
+// (deck.go) — ListDecks selects "WHERE user_id = ?" instead, so this can't
+// double-count that.
+const deckByIDSubstring = "FROM flash_decks WHERE id = ?"
+
 // TestShareDeckHandlerListsAccountsOnce pins #359: shareDeck used to run
 // ListAccounts up to 3 times — validating to_user_id, shareContext for the
 // re-rendered pane, and again inside buildDeckIndex to enrich the sharer's
@@ -147,5 +152,26 @@ func TestAdoptShareHandlerListsAccountsOnce(t *testing.T) {
 	}
 	if got := n.Load(); got != 1 {
 		t.Errorf("adoptShareHandler ran ListAccounts %d times, want 1", got)
+	}
+}
+
+// TestDeckReviewLooksUpTheDeckOnce pins #333: GET /review/{deckID} used to
+// look the deck up twice — once in the handler, again inside QueueFront's
+// single-deck path — because the scoped path re-fetched it by id instead of
+// reusing the one the handler already had (see queueFrontForDeck).
+func TestDeckReviewLooksUpTheDeckOnce(t *testing.T) {
+	s, n := newQueryCountingServer(t, deckByIDSubstring)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	n.Store(0)
+
+	s.Get(t, s.Alice, "/flash/review/"+strconv.FormatInt(deck.ID, 10))
+	if got := n.Load(); got != 1 {
+		t.Errorf("GET /review/{deckID} ran DeckByID %d times, want 1", got)
 	}
 }
