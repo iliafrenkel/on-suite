@@ -18,7 +18,9 @@
 -- either 'Z' straight after the seconds or '.', one to eight digits and
 -- 'Z'. NULLs, values already 30 wide, and anything unexpected (an offset
 -- other than Z, a stray non-digit) are left alone, so running this twice
--- changes nothing, and db.ParseTime still reads whatever it skipped.
+-- changes nothing. It skips anything not in the old writer's shape, and
+-- db.ParseTime still reads every well-formed RFC 3339 value it skipped
+-- (garbage stays garbage).
 --
 -- schema_migrations is created by db.Apply before any migration runs, so
 -- its applied_at is rewritten here too. The row recording this migration is
