@@ -200,19 +200,12 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	wasMerge, newCards := false, 0
-	if offers, err := a.store.SharesForRecipient(r.Context(), userID); err == nil {
-		for _, o := range offers {
-			if o.ID == shareID {
-				wasMerge, newCards = o.PriorAdoptedDeckID != nil, o.NewCardCount
-			}
-		}
-	}
-	d, err := a.store.AdoptShare(r.Context(), userID, shareID)
+	result, err := a.store.AdoptShare(r.Context(), userID, shareID)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
+	d := result.Deck
 	a.deps.Log.Info("share adopted", "app", ID, "user_id", userID, "share_id", shareID, "deck_id", d.ID)
 
 	if !web.IsHTMX(r) {
@@ -227,8 +220,8 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	view := a.viewDeckDetail(r, userID, d, recipients, shares)
 	view.Notice = "“" + d.Name + "” is now in your decks."
-	if wasMerge {
-		view.Notice = fmt.Sprintf("%d new card%s added to “%s”.", newCards, plural(newCards), d.Name)
+	if result.Merged {
+		view.Notice = fmt.Sprintf("%d new card%s added to “%s”.", result.CardsCopied, plural(result.CardsCopied), d.Name)
 	}
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }

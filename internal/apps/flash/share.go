@@ -174,6 +174,22 @@ type shareCardSource struct {
 	AudioHash *string
 }
 
+// AdoptResult is what AdoptShare did, so callers can word a notice ("N new
+// cards added to Y" vs. "Y is now in your decks") without a separate
+// lookup of the share it just resolved.
+type AdoptResult struct {
+	Deck Deck
+	// Merged is true when this offer was a re-share of a (deck, creator,
+	// recipient) triple already adopted earlier — cards went into that
+	// existing deck rather than a brand-new one.
+	Merged bool
+	// CardsCopied is how many source cards were actually copied: the full
+	// source deck's card count for a first-time adoption, or just the
+	// cards not already represented (by origin_card_id) for a merge —
+	// which can be 0 if nothing new was added since the last adoption.
+	CardsCopied int
+}
+
 // AdoptShare resolves one of toUserID's own pending offers (shareID). If no
 // earlier offer for the same (deck, creator, recipient) triple has ever been
 // adopted, this is a first-time adoption: a brand-new deck is created for
@@ -183,10 +199,10 @@ type shareCardSource struct {
 // there (by origin_card_id) — so cards and progress the recipient already
 // has are never touched. Either way, no FSRS review state is ever copied:
 // every copied card starts brand new in the recipient's review queue.
-func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck, error) {
+func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (AdoptResult, error) {
 	tx, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
-		return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+		return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -194,24 +210,25 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck,
 		`SELECT id, deck_id, from_user_id, to_user_id, status, adopted_deck_id, created_at, responded_at
 		 FROM flash_shares WHERE id = ?`, shareID))
 	if err != nil {
-		return Deck{}, err
+		return AdoptResult{}, err
 	}
 	if sh.ToUserID != toUserID {
-		return Deck{}, ErrNotFound
+		return AdoptResult{}, ErrNotFound
 	}
 	if sh.Status != ShareStatusPending {
-		return Deck{}, fmt.Errorf("%w: this share has already been resolved", ErrInvalid)
+		return AdoptResult{}, fmt.Errorf("%w: this share has already been resolved", ErrInvalid)
 	}
 
 	src, err := deckByIDIgnoringOwner(ctx, tx, sh.DeckID)
 	if err != nil {
-		return Deck{}, err
+		return AdoptResult{}, err
 	}
 
 	priorAdoptedDeckID, err := priorAdoptedDeck(ctx, tx, sh.DeckID, sh.FromUserID, sh.ToUserID)
 	if err != nil {
-		return Deck{}, err
+		return AdoptResult{}, err
 	}
+	merged := priorAdoptedDeckID != nil
 
 	var targetDeckID int64
 	if priorAdoptedDeckID != nil {
@@ -225,28 +242,29 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck,
 		).Scan(&targetDeckID)
 		if err != nil {
 			if isUniqueViolation(err) {
-				return Deck{}, fmt.Errorf("%w: you already have a deck named %q", ErrInvalid, src.Name)
+				return AdoptResult{}, fmt.Errorf("%w: you already have a deck named %q", ErrInvalid, src.Name)
 			}
-			return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+			return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
 		}
 	}
 
 	existingOrigins, err := originCardIDsInDeck(ctx, tx, targetDeckID)
 	if err != nil {
-		return Deck{}, err
+		return AdoptResult{}, err
 	}
 
 	sourceCards, err := cardsInDeckIgnoringOwner(ctx, tx, sh.DeckID)
 	if err != nil {
-		return Deck{}, err
+		return AdoptResult{}, err
 	}
+	cardsCopied := 0
 	for _, sc := range sourceCards {
 		if existingOrigins[sc.ID] {
 			continue
 		}
 		tags, err := tagsForCardIgnoringOwner(ctx, tx, sc.ID)
 		if err != nil {
-			return Deck{}, err
+			return AdoptResult{}, err
 		}
 
 		var newCardID int64
@@ -257,11 +275,12 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck,
 			targetDeckID, toUserID, sc.CardType, sc.Front, sc.Back, sc.Notes, formatTime(st.now()), sc.ImageHash, sc.AudioHash, sc.ID,
 		).Scan(&newCardID)
 		if err != nil {
-			return Deck{}, fmt.Errorf("flash: adopt share: copy card: %w", err)
+			return AdoptResult{}, fmt.Errorf("flash: adopt share: copy card: %w", err)
 		}
 		if err := upsertCardTags(ctx, tx, toUserID, newCardID, tags); err != nil {
-			return Deck{}, err
+			return AdoptResult{}, err
 		}
+		cardsCopied++
 	}
 
 	// The status guard here isn't reachable through this same function call —
@@ -275,20 +294,24 @@ func (st *Store) AdoptShare(ctx context.Context, toUserID, shareID int64) (Deck,
 		`UPDATE flash_shares SET status = ?, adopted_deck_id = ?, responded_at = ? WHERE id = ? AND status = ?`,
 		ShareStatusAdopted, targetDeckID, formatTime(st.now()), shareID, ShareStatusPending)
 	if err != nil {
-		return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+		return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+		return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
 	}
 	if n == 0 {
-		return Deck{}, fmt.Errorf("%w: this share has already been resolved", ErrInvalid)
+		return AdoptResult{}, fmt.Errorf("%w: this share has already been resolved", ErrInvalid)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return Deck{}, fmt.Errorf("flash: adopt share: %w", err)
+		return AdoptResult{}, fmt.Errorf("flash: adopt share: %w", err)
 	}
-	return st.DeckByID(ctx, toUserID, targetDeckID)
+	d, err := st.DeckByID(ctx, toUserID, targetDeckID)
+	if err != nil {
+		return AdoptResult{}, err
+	}
+	return AdoptResult{Deck: d, Merged: merged, CardsCopied: cardsCopied}, nil
 }
 
 // deckByIDIgnoringOwner reads a deck regardless of who owns it — used only
