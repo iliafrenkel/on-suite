@@ -216,9 +216,11 @@ func TestFixedWidthMigrationMatchesFormatTime(t *testing.T) {
 	}
 }
 
-// TestFixedWidthMigrationIsIdempotentAndLeavesOddValuesAlone: running the
-// same SQL again changes nothing, and values RFC3339Nano in UTC never
-// produced are skipped rather than mangled.
+// TestFixedWidthMigrationIsIdempotentAndLeavesOddValuesAlone runs the
+// platform:0002 migration SQL a second time (RowsAffected only reflects the
+// last statement in a multi-statement Exec, so it can't tell us this on its
+// own) and checks every rewritten column, plus the odd/garbage values seeded
+// alongside them, comes out identical both times.
 func TestFixedWidthMigrationIsIdempotentAndLeavesOddValuesAlone(t *testing.T) {
 	handle, ms := openPlatformThrough(t, "0001")
 	ctx := context.Background()
@@ -245,30 +247,75 @@ func TestFixedWidthMigrationIsIdempotentAndLeavesOddValuesAlone(t *testing.T) {
 		t.Fatalf("Apply: %v", err)
 	}
 
+	// The odd/garbage values are left alone by the first run, on both
+	// rewritten columns of the row they were seeded into.
 	for i, v := range odd {
-		var got string
+		var created, expires string
 		if err := handle.QueryRowContext(ctx,
-			`SELECT expires_at FROM sessions WHERE id = ?`, "o"+strconv.Itoa(i)).Scan(&got); err != nil {
+			`SELECT created_at, expires_at FROM sessions WHERE id = ?`, "o"+strconv.Itoa(i)).Scan(&created, &expires); err != nil {
 			t.Fatal(err)
 		}
-		if got != v {
-			t.Errorf("odd value %q was rewritten to %q", v, got)
+		if created != v {
+			t.Errorf("odd value %q: created_at was rewritten to %q", v, created)
 		}
-	}
-
-	res, err := handle.ExecContext(ctx, migrationSQL(t, ms, "0002"))
-	if err != nil {
-		t.Fatalf("second run: %v", err)
-	}
-	if n, err := res.RowsAffected(); err != nil || n != 0 {
-		t.Errorf("second run's last UPDATE touched %d rows (err %v), want 0", n, err)
+		if expires != v {
+			t.Errorf("odd value %q: expires_at was rewritten to %q", v, expires)
+		}
 	}
 	var created string
 	if err := handle.QueryRowContext(ctx, `SELECT created_at FROM users WHERE id = 1`).Scan(&created); err != nil {
 		t.Fatal(err)
 	}
 	if created != "2026-09-25T12:00:05.500000000Z" {
-		t.Errorf("created_at after a second run = %q", created)
+		t.Errorf("created_at after the first run = %q", created)
+	}
+
+	// Snapshot every rewritten platform column, keyed by its real primary
+	// key, re-run the migration SQL directly, and compare: a RowsAffected
+	// check on a multi-statement Exec only reports the last UPDATE, so it
+	// can't tell us the earlier ones stayed put too.
+	snapshot := func() map[string]string {
+		rows := map[string]string{}
+		add := func(table, key, col string) {
+			r, err := handle.QueryContext(ctx, `SELECT `+key+`, `+col+` FROM `+table+` ORDER BY `+key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			for r.Next() {
+				var k string
+				var val sql.NullString
+				if err := r.Scan(&k, &val); err != nil {
+					t.Fatal(err)
+				}
+				rows[table+"."+col+"#"+k] = val.String + "|" + strconv.FormatBool(val.Valid)
+			}
+			if err := r.Err(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		add("users", "id", "created_at")
+		add("sessions", "id", "created_at")
+		add("sessions", "id", "expires_at")
+		add("schema_migrations", "key", "applied_at")
+		return rows
+	}
+
+	before := snapshot()
+
+	// Re-run platform:0002's SQL directly, a second time.
+	if _, err := handle.ExecContext(ctx, migrationSQL(t, ms, "0002")); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+
+	after := snapshot()
+	if len(before) != len(after) {
+		t.Fatalf("snapshot sizes differ: before=%d after=%d", len(before), len(after))
+	}
+	for k, v := range before {
+		if after[k] != v {
+			t.Errorf("%s changed on second run: before=%q after=%q", k, v, after[k])
+		}
 	}
 }
 
