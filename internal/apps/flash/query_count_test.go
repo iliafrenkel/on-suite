@@ -90,10 +90,13 @@ func newQueryCountingServer(t *testing.T, substr string) (*apptest.Server[*flash
 // flash request might run — nothing else selects from "users u".
 const listAccountsSubstring = "FROM users u"
 
-// deckByIDSubstring is the one clause unique to Store.DeckByID's own query
-// (deck.go) — ListDecks selects "WHERE user_id = ?" instead, so this can't
-// double-count that.
-const deckByIDSubstring = "FROM flash_decks WHERE id = ?"
+// deckByIDSubstring is the clause unique to Store.DeckByID's own query
+// (deck.go): "WHERE id = ? AND user_id = ?" alone isn't enough since
+// DeleteDeck's DELETE statement has the same clause, and "FROM flash_decks
+// WHERE id = ?" alone isn't enough since share.go has several SELECTs with
+// that clause but no "AND user_id = ?". Leading with deck.go's deckColumns
+// list pins it to DeckByID's SELECT specifically.
+const deckByIDSubstring = "id, user_id, name, description, created_at, new_cards_per_day, reviews_per_day, snoozed_until, color FROM flash_decks WHERE id = ? AND user_id = ?"
 
 // TestShareDeckHandlerListsAccountsOnce pins #359: shareDeck used to run
 // ListAccounts up to 3 times — validating to_user_id, shareContext for the

@@ -280,8 +280,9 @@ type shareOfferWithUsername struct {
 }
 
 // usernamesByID loads every account on the instance and returns it two
-// ways: the full list, and a lookup from account id to username. shareContext
-// (the creator's "Shared with" list and the Share dropdown's recipients),
+// ways: the full list, and a lookup from account id to username.
+// shareContextWithAccounts (the creator's "Shared with" list and the Share
+// dropdown's recipients),
 // buildDeckIndex (the recipient's pending gift rows and, for the open deck,
 // the inline Share section), shareDeck (validating a share's to_user_id),
 // and giftPreview (a gift's "From" username) all need this same lookup.
@@ -333,8 +334,8 @@ func offersWithUsernames(offers []ShareOffer, byID map[int64]string) []shareOffe
 // deck shares into the deck detail view's Share section: every other
 // account (for the dropdown) and the "Shared with" list (one row per
 // recipient), each row paired with its recipient's username. It is the one
-// place shareContext and buildDeckIndex's own needShareContext branch both
-// compose this, so they can't drift apart.
+// place shareContextWithAccounts and buildDeckIndex's own needShareContext
+// branch both compose this, so they can't drift apart.
 func composeShareContext(accounts []auth.Account, byID map[int64]string, userID int64, shares []Share) ([]auth.Account, []shareWithUsername) {
 	return otherAccounts(accounts, userID), sharesWithUsernames(shares, byID)
 }
@@ -365,12 +366,22 @@ func (a *App) shareContextWithAccounts(ctx context.Context, userID, deckID int64
 // alongside the list and any pending gifts) does not run ListAccounts again
 // to enrich them — the fix for #359.
 func (a *App) viewDeckDetailWithShareContext(r *http.Request, userID int64, d Deck) (deckDetailView, error) {
-	ctx := r.Context()
-	accounts, byID, err := a.usernamesByID(ctx)
+	accounts, byID, err := a.usernamesByID(r.Context())
 	if err != nil {
 		return deckDetailView{}, err
 	}
-	recipients, shares, err := a.shareContextWithAccounts(ctx, userID, d.ID, accounts, byID)
+	return a.viewDeckDetailWithAccounts(r, userID, d, accounts, byID)
+}
+
+// viewDeckDetailWithAccounts is viewDeckDetailWithShareContext's second
+// half: share context, then view, then preload — given an account list and
+// byID map the caller has already loaded (via usernamesByID), so this does
+// not run ListAccounts itself. shareDeck and adopt each have their own
+// reason to load accounts up front (validating a share recipient, naming a
+// re-shared copy after its sharer) and hand that same load in here rather
+// than repeating this tail themselves.
+func (a *App) viewDeckDetailWithAccounts(r *http.Request, userID int64, d Deck, accounts []auth.Account, byID map[int64]string) (deckDetailView, error) {
+	recipients, shares, err := a.shareContextWithAccounts(r.Context(), userID, d.ID, accounts, byID)
 	if err != nil {
 		return deckDetailView{}, err
 	}
@@ -489,8 +500,8 @@ type deckIndexPreload struct {
 // withAccountsPreload returns detail with accounts/byID attached to its
 // preload, for a handler that has already called usernamesByID for its own
 // purposes (validating a share recipient, resolving a sharer's username,
-// building its own shareContext) and wants buildDeckIndex to reuse the same
-// load rather than running ListAccounts again.
+// building its own shareContextWithAccounts) and wants buildDeckIndex to
+// reuse the same load rather than running ListAccounts again.
 func withAccountsPreload(detail deckDetailView, accounts []auth.Account, byID map[int64]string) deckDetailView {
 	detail.preload.accounts, detail.preload.byID, detail.preload.haveAccounts = accounts, byID, true
 	return detail

@@ -85,13 +85,12 @@ func (a *App) shareDeck(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	recipients, shares, err := a.shareContextWithAccounts(r.Context(), userID, deckID, accounts, byID)
+	view, err := a.viewDeckDetailWithAccounts(r, userID, d, accounts, byID)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	view := withAccountsPreload(a.viewDeckDetail(r, userID, d, recipients, shares), accounts, byID)
 	view.ShareOpen = true
 	a.renderDeckDetailWithList(w, r, userID, http.StatusOK, view)
 }
@@ -251,12 +250,11 @@ func (a *App) adoptShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", "/flash/"+strconv.FormatInt(d.ID, 10))
-	recipients, shares, err := a.shareContextWithAccounts(r.Context(), userID, d.ID, accounts, byID)
+	view, err := a.viewDeckDetailWithAccounts(r, userID, d, accounts, byID)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	view := withAccountsPreload(a.viewDeckDetail(r, userID, d, recipients, shares), accounts, byID)
 	switch {
 	case result.Merged && result.CardsCopied == 0:
 		// Got it on an up-to-date re-share (#346): nothing was copied.
