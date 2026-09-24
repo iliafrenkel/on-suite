@@ -125,3 +125,31 @@ func (st *Store) SaveMediaFailure(ctx context.Context, hash, msg string, now tim
 	}
 	return nil
 }
+
+// PurgeOrphanMedia deletes cached images and sounds that no card uses any
+// more: what is left behind by a replaced or removed attachment, a deleted
+// card or deck, or a deleted account. It is one statement, mirroring
+// internal/apps/reader's own PurgeOrphanImages (apps never import each
+// other, so this is an independent implementation). A row shared by
+// reference with an adopted copy stays as long as any card, anyone's, uses
+// it (#302.5).
+//
+// SQLite does not give the space back to the filesystem on DELETE: the
+// freed pages go on the database's freelist and later writes reuse them.
+// Like Reader, this runs no VACUUM; snapshots are compact anyway, because
+// they are taken with VACUUM INTO (internal/platform/db).
+func (st *Store) PurgeOrphanMedia(ctx context.Context) (int, error) {
+	res, err := st.db.ExecContext(ctx, `
+		DELETE FROM flash_media
+		 WHERE NOT EXISTS (SELECT 1 FROM flash_cards c
+		                    WHERE c.image_hash = flash_media.hash
+		                       OR c.audio_hash = flash_media.hash)`)
+	if err != nil {
+		return 0, fmt.Errorf("flash: purge orphan media: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("flash: purge orphan media: %w", err)
+	}
+	return int(n), nil
+}
