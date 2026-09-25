@@ -2705,8 +2705,11 @@ a.flash-pill:hover { color: var(--c-text); border-color: var(--c-border-firm); }
 	height: 5px;
 	background: var(--deck, var(--c-border-firm));
 }
-.flash-mini-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgb(0 0 0 / 0.08); }
-.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
+/* Only the linked case (cards grid, tag page) is clickable — the gift
+   preview's sample cards render as plain <span>s and must not look
+   interactive (#344). */
+a.flash-mini-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgb(0 0 0 / 0.08); }
+a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 .flash-mini-text {
 	display: -webkit-box;
 	-webkit-line-clamp: 3;
@@ -2841,7 +2844,7 @@ a.flash-pill:hover { color: var(--c-text); border-color: var(--c-border-firm); }
 	.flash-flip:checked + .flash-card .flash-card-back { opacity: 1; }
 	.flash-flip:checked + .flash-card .flash-card-front { opacity: 0; }
 	.flash-mini-card { transition: none; }
-	.flash-mini-card:hover { transform: none; }
+	a.flash-mini-card:hover { transform: none; }
 }
 
 /* ---- ON Flash: card editor (UI overhaul U3) ----------------------------- */
