@@ -209,14 +209,20 @@ func TestUpdateDeckRejectsDuplicateNameLeavingDeckUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.UpdateDeck(ctx, f.alice.ID, created.ID, "Taken", "new description", "purple", 5, nil); !errors.Is(err, flash.ErrInvalid) {
+	reviews := 30
+	created, err = f.store.UpdateDeck(ctx, f.alice.ID, created.ID, created.Name, created.Description, created.Color, 5, &reviews)
+	if err != nil {
+		t.Fatalf("setting a non-default pace: %v", err)
+	}
+	if _, err := f.store.UpdateDeck(ctx, f.alice.ID, created.ID, "Taken", "new description", "purple", 15, nil); !errors.Is(err, flash.ErrInvalid) {
 		t.Fatalf("UpdateDeck with a duplicate name err = %v, want ErrInvalid", err)
 	}
 	unchanged, err := f.store.DeckByID(ctx, f.alice.ID, created.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if unchanged.Name != "Original" || unchanged.Description != "old description" || unchanged.Color != flash.DefaultDeckColor {
+	if unchanged.Name != "Original" || unchanged.Description != "old description" || unchanged.Color != flash.DefaultDeckColor ||
+		unchanged.NewCardsPerDay != 5 || unchanged.ReviewsPerDay == nil || *unchanged.ReviewsPerDay != 30 {
 		t.Errorf("a rejected duplicate-name update changed the deck: %+v", unchanged)
 	}
 }
@@ -405,22 +411,15 @@ func TestValidateDeck(t *testing.T) {
 	}
 }
 
-func TestNewDeckIsTealByDefault(t *testing.T) {
+// TestCreateDeckRejectsEmptyColor documents the store's behaviour when
+// called with no colour at all: it's just another unknown colour, rejected
+// the same way "chartreuse" is. Defaulting to teal is the handler's job
+// (see TestCreateDeckWithoutColorIsTeal), not the store's.
+func TestCreateDeckRejectsEmptyColor(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d.Color != flash.DefaultDeckColor {
-		t.Errorf("CreateDeck Color = %q, want %q", d.Color, flash.DefaultDeckColor)
-	}
-	got, err := f.store.DeckByID(ctx, f.alice.ID, d.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Color != flash.DefaultDeckColor {
-		t.Errorf("DeckByID Color = %q, want %q", got.Color, flash.DefaultDeckColor)
+	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", ""); !errors.Is(err, flash.ErrInvalid) {
+		t.Errorf("CreateDeck with an empty colour err = %v, want ErrInvalid", err)
 	}
 }
 

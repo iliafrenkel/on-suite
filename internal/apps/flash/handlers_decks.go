@@ -701,7 +701,7 @@ func (a *App) editDeckForm(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseDeckSettings turns the edit form's two pace fields into
-// UpdateDeckSettings' arguments. An empty reviewsPerDayStr means unlimited.
+// UpdateDeck's pace arguments. An empty reviewsPerDayStr means unlimited.
 func parseDeckSettings(newCardsPerDayStr, reviewsPerDayStr string) (int, *int, error) {
 	newCardsPerDay, err := strconv.Atoi(strings.TrimSpace(newCardsPerDayStr))
 	if err != nil {

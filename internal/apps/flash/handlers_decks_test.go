@@ -83,7 +83,7 @@ func TestDeleteDeckRequiresCSRFAndPOST(t *testing.T) {
 	}
 }
 
-func TestUpdateDeckSettingsOverHTTP(t *testing.T) {
+func TestUpdateDeckPaceOverHTTP(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
@@ -106,7 +106,7 @@ func TestUpdateDeckSettingsOverHTTP(t *testing.T) {
 	}
 }
 
-func TestUpdateDeckSettingsRejectsNegativeOverHTTP(t *testing.T) {
+func TestUpdateDeckPaceRejectsNegativeOverHTTP(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
@@ -121,7 +121,7 @@ func TestUpdateDeckSettingsRejectsNegativeOverHTTP(t *testing.T) {
 	}
 }
 
-func TestUpdateDeckSettingsRejectsNegativeWithoutPartiallyWriting(t *testing.T) {
+func TestUpdateDeckPaceRejectsNegativeWithoutPartiallyWriting(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
