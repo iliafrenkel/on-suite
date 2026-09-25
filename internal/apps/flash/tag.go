@@ -115,13 +115,19 @@ func (st *Store) cardOwnerCheck(ctx context.Context, userID, cardID int64) (int6
 }
 
 // cardOwner is cardOwnerCheck on any dbExecutor, so GradeCard and
-// UndoLastGrade can run it inside their own transactions (#294).
+// UndoLastGrade can run it inside their own transactions (#294). Only
+// sql.ErrNoRows means "not found" — anything else (a cancelled context, a
+// connection failure, a scan error) is a real error and must not be
+// reported as a 404 (#288).
 func cardOwner(ctx context.Context, exec dbExecutor, userID, cardID int64) (int64, error) {
 	var deckID int64
 	err := exec.QueryRowContext(ctx,
 		`SELECT deck_id FROM flash_cards WHERE id = ? AND user_id = ?`, cardID, userID).Scan(&deckID)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("flash: card owner: %w", err)
 	}
 	return deckID, nil
 }
