@@ -3016,6 +3016,7 @@ input.flash-tag-entry:focus { outline: none; }
 	--flash-grade-hard-bg:  #412402; --flash-grade-hard-text:  #FAC775;
 	--flash-grade-good-bg:  #04342C; --flash-grade-good-text:  #9FE1CB;
 	--flash-grade-easy-bg:  #042C53; --flash-grade-easy-text:  #B5D4F4;
+	--flash-grade-hover: 1.3;
 }
 
 .flash-review { max-width: 40rem; margin: 0 auto; }
@@ -3092,11 +3093,17 @@ input.flash-tag-entry:focus { outline: none; }
 	font-weight: 600;
 	cursor: pointer;
 }
-.flash-grade-again { border-color: var(--flash-grade-again); background: var(--flash-grade-again-bg); color: var(--flash-grade-again-text); }
-.flash-grade-hard  { border-color: var(--flash-grade-hard);  background: var(--flash-grade-hard-bg);  color: var(--flash-grade-hard-text); }
-.flash-grade-good  { border-color: var(--flash-grade-good);  background: var(--flash-grade-good-bg);  color: var(--flash-grade-good-text); }
-.flash-grade-easy  { border-color: var(--flash-grade-easy);  background: var(--flash-grade-easy-bg);  color: var(--flash-grade-easy-text); }
-.flash-grade:hover { filter: brightness(0.97); }
+/* Two classes (0,2,0) so these outrank the generic button:hover background
+   (0,1,1) — otherwise hovering a grade swaps its colour for the neutral
+   button hover in both themes (#337). */
+.flash-grade.flash-grade-again { border-color: var(--flash-grade-again); background: var(--flash-grade-again-bg); color: var(--flash-grade-again-text); }
+.flash-grade.flash-grade-hard  { border-color: var(--flash-grade-hard);  background: var(--flash-grade-hard-bg);  color: var(--flash-grade-hard-text); }
+.flash-grade.flash-grade-good  { border-color: var(--flash-grade-good);  background: var(--flash-grade-good-bg);  color: var(--flash-grade-good-text); }
+.flash-grade.flash-grade-easy  { border-color: var(--flash-grade-easy);  background: var(--flash-grade-easy-bg);  color: var(--flash-grade-easy-text); }
+/* Hover keeps each grade's own colour and nudges it: darker on the pale
+   light-theme fills, lighter on the deep dark-theme ones (a darken there
+   is invisible). */
+.flash-grade:hover { filter: brightness(var(--flash-grade-hover, 0.94)); }
 .flash-grade:focus-visible { outline: var(--ring); outline-offset: 2px; }
 
 .flash-undo { display: flex; justify-content: center; margin-top: var(--s-4); }
