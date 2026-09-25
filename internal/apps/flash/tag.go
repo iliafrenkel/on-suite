@@ -111,8 +111,14 @@ func upsertCardTags(ctx context.Context, tx *sql.Tx, userID, cardID int64, names
 // cardOwnerCheck confirms cardID belongs to userID, returning its deck id.
 // A thin wrapper so tag methods do not need CardByID's full column list.
 func (st *Store) cardOwnerCheck(ctx context.Context, userID, cardID int64) (int64, error) {
+	return cardOwner(ctx, st.db, userID, cardID)
+}
+
+// cardOwner is cardOwnerCheck on any dbExecutor, so GradeCard and
+// UndoLastGrade can run it inside their own transactions (#294).
+func cardOwner(ctx context.Context, exec dbExecutor, userID, cardID int64) (int64, error) {
 	var deckID int64
-	err := st.db.QueryRowContext(ctx,
+	err := exec.QueryRowContext(ctx,
 		`SELECT deck_id FROM flash_cards WHERE id = ? AND user_id = ?`, cardID, userID).Scan(&deckID)
 	if err != nil {
 		return 0, ErrNotFound
