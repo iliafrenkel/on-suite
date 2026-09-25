@@ -182,6 +182,47 @@ func TestImportPaneHasAHandwrittenMarkdownExample(t *testing.T) {
 	}
 }
 
+// TestImportedCardNotesAndTagsRenderAfterImport is #300 item 6: prior
+// coverage stopped at the deck name, with notes/tags only checked at the
+// store level. Import a card with notes and tags, then open it and assert
+// both the notes text and the tag link actually render.
+func TestImportedCardNotesAndTagsRenderAfterImport(t *testing.T) {
+	s := newServer(t)
+	payload := `{
+		"deck": {"name": "Imported with extras"},
+		"cards": [{"type": "basic", "front": "Q", "back": "A", "notes": "a helpful note", "tags": ["travel"]}]
+	}`
+	rec := s.Post(t, s.Alice, "/flash/import", url.Values{"payload": {payload}, "format": {"json"}})
+	if rec.Code != 303 {
+		t.Fatalf("POST /flash/import (json) = %d, want 303", rec.Code)
+	}
+
+	decks, err := s.Store.ListDecks(t.Context(), s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decks) != 1 {
+		t.Fatalf("len(decks) = %d, want 1", len(decks))
+	}
+	cards, err := s.Store.ListCards(t.Context(), s.Alice.User.ID, decks[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 {
+		t.Fatalf("len(cards) = %d, want 1", len(cards))
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(decks[0].ID)+"/cards/"+itoa(cards[0].ID))
+	back := doc.MustHave(".flash-card-back")
+	if got := htmlassert.Text(back); !strings.Contains(got, "a helpful note") {
+		t.Errorf("card back = %q, want it to contain the imported notes", got)
+	}
+	tagLink := doc.MustHave(".flash-tag-links a.flash-pill")
+	if got := htmlassert.Text(tagLink); got != "travel" {
+		t.Errorf("tag link text = %q, want travel", got)
+	}
+}
+
 func TestImportSuccessShowsANotice(t *testing.T) {
 	s := newServer(t)
 	payload := `{"deck":{"name":"Planets"},"cards":[{"type":"basic","front":"Mars","back":"red"},{"type":"basic","front":"Earth","back":"home"}]}`
