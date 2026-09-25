@@ -235,6 +235,25 @@ func TestSnoozeDeckRequiresCSRF(t *testing.T) {
 	}
 }
 
+// TestUnsnoozeDeckRequiresCSRF mirrors TestSnoozeDeckRequiresCSRF: the two
+// routes share the shape (POST /flash/{deckID}/unsnooze vs. .../snooze) but,
+// before #295, only /snooze had a dedicated CSRF-403 test.
+func TestUnsnoozeDeckRequiresCSRF(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, time.Now().Add(7*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	req := httpPost(t, "/flash/"+itoa(deck.ID)+"/unsnooze", url.Values{})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != 403 {
+		t.Errorf("unsnooze without CSRF = %d, want 403", rec.Code)
+	}
+}
+
 func TestCreateDeckWithColor(t *testing.T) {
 	s := newServer(t)
 	s.Submit(t, s.Alice, "/flash/new", url.Values{"name": {"Planets"}, "description": {""}, "color": {"purple"}}, "/flash/1")

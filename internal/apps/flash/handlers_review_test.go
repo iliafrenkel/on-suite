@@ -88,6 +88,27 @@ func TestGradingRequiresCSRF(t *testing.T) {
 	}
 }
 
+// TestUndoRequiresCSRF mirrors TestGradingRequiresCSRF: before #295, only
+// the grade path had a dedicated CSRF-403 test for POST /flash/review/undo.
+func TestUndoRequiresCSRF(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.PostHX(t, s.Alice, "/flash/review/grade", url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
+
+	req := httpPost(t, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != 403 {
+		t.Errorf("undo without CSRF = %d, want 403", rec.Code)
+	}
+}
+
 func TestGradingRejectsAnInvalidRating(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
@@ -117,6 +138,26 @@ func TestGradingSomeoneElsesCardIs404(t *testing.T) {
 	rec := s.PostHX(t, s.Bob, "/flash/review/grade", url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
 	if rec.Code != 404 {
 		t.Errorf("grading someone else's card = %d, want 404", rec.Code)
+	}
+}
+
+// TestUndoSomeoneElsesCardIs404 mirrors TestGradingSomeoneElsesCardIs404:
+// before #295, only the grade path had a cross-user-404 test.
+func TestUndoSomeoneElsesCardIs404(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "alice's", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.PostHX(t, s.Alice, "/flash/review/grade", url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
+
+	rec := s.PostHX(t, s.Bob, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
+	if rec.Code != 404 {
+		t.Errorf("undoing someone else's card = %d, want 404", rec.Code)
 	}
 }
 
@@ -190,6 +231,9 @@ func TestGradingScopedToSomeoneElsesDeckIs404(t *testing.T) {
 	}
 }
 
+// TestReviewPageScopedToSomeoneElsesDeckIs404 guards that GET /flash/review
+// is wired to the shared reviewScope helper (which grade and undo also use
+// since #333/#355), not a separate ownership check of its own — see #295.
 func TestReviewPageScopedToSomeoneElsesDeckIs404(t *testing.T) {
 	s := newServer(t)
 	bobDeck, err := s.Store.CreateDeck(t.Context(), s.Bob.User.ID, "bob's", "", flash.DefaultDeckColor)
