@@ -12,7 +12,7 @@ import (
 func TestStreakCountsConsecutiveDaysAndStopsAtAGap(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestStreakCountsConsecutiveDaysAndStopsAtAGap(t *testing.T) {
 func TestStreakDoesNotBreakBeforeTodaysReview(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestStreakIsZeroWithNoReviewsEver(t *testing.T) {
 func TestRetentionRateComputesFromRatingCounters(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestRetentionRateIsZeroWithNoReviewsInWindow(t *testing.T) {
 func TestCardsMasteredCountsOnlyReviewStateForThatUser(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestCardsMasteredCountsOnlyReviewStateForThatUser(t *testing.T) {
 func TestDailyReviewCountsZeroFillsEveryDay(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,11 +241,11 @@ func TestDailyReviewCountsZeroFillsEveryDay(t *testing.T) {
 func TestReviewsPerDeckCountsEachDeckSeparately(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deckA, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deckA, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	deckB, err := f.store.CreateDeck(ctx, f.alice.ID, "French", "")
+	deckB, err := f.store.CreateDeck(ctx, f.alice.ID, "French", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,11 +277,11 @@ func TestReviewsPerDeckKeepsToTheWindowAndTheOwner(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bobs, err := f.store.CreateDeck(ctx, f.bob.ID, "Bob's", "")
+	bobs, err := f.store.CreateDeck(ctx, f.bob.ID, "Bob's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func TestReviewsPerDeckKeepsToTheWindowAndTheOwner(t *testing.T) {
 func TestCardsDueTodayExcludesSnoozedDecksAndNeverReviewedCards(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,14 +365,12 @@ func TestCardsDueTodayExcludesSnoozedDecksAndNeverReviewedCards(t *testing.T) {
 func TestCardsDueTodayIsUncappedUnlikeDueQueue(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
 	limit := 1
-	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, deck.ID, deck.NewCardsPerDay, &limit); err != nil {
-		t.Fatal(err)
-	}
+	setDeckPace(t, f.store, f.alice.ID, deck.ID, deck.NewCardsPerDay, &limit)
 
 	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
 	var cardIDs []int64

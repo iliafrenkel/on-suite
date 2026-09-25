@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 )
 
@@ -110,7 +111,7 @@ func TestImportMalformedWritesNothing(t *testing.T) {
 // handlers_import.go's post-ImportDeck errors.Is(err, ErrInvalid) branch.
 func TestImportDuplicateNameOverHTTPWritesNothingAndPreservesInput(t *testing.T) {
 	s := newServer(t)
-	if _, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Existing", ""); err != nil {
+	if _, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Existing", "", flash.DefaultDeckColor); err != nil {
 		t.Fatal(err)
 	}
 

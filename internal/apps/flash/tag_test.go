@@ -51,7 +51,7 @@ func tagNames(tags []flash.Tag) []string {
 func TestSetAndFetchCardTags(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestSetAndFetchCardTags(t *testing.T) {
 func TestSetCardTagsRejectsSomeoneElsesCard(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,11 +103,11 @@ func TestSetCardTagsRejectsSomeoneElsesCard(t *testing.T) {
 func TestCardsByTagIsCrossDeckAndOwnerScoped(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deckA, err := f.store.CreateDeck(ctx, f.alice.ID, "A", "")
+	deckA, err := f.store.CreateDeck(ctx, f.alice.ID, "A", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	deckB, err := f.store.CreateDeck(ctx, f.alice.ID, "B", "")
+	deckB, err := f.store.CreateDeck(ctx, f.alice.ID, "B", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func equalStrings(a, b []string) bool {
 func TestCardTagsInDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}

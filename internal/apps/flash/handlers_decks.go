@@ -655,15 +655,7 @@ func (a *App) createDeck(w http.ResponseWriter, r *http.Request) {
 		a.renderDeckIndex(w, r, userID, http.StatusBadRequest, a.newDeckDetail(r, userMessage(err), name, description, color))
 	}
 
-	if err := ValidateDeck(name, description); err != nil {
-		reject(err)
-		return
-	}
-	if !ValidDeckColor(color) {
-		reject(fmt.Errorf("%w: pick one of the colours shown", ErrInvalid))
-		return
-	}
-	d, err := a.store.CreateDeck(r.Context(), userID, name, description)
+	d, err := a.store.CreateDeck(r.Context(), userID, name, description, color)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
 			reject(err)
@@ -671,12 +663,6 @@ func (a *App) createDeck(w http.ResponseWriter, r *http.Request) {
 		}
 		a.deps.Errors.Internal(w, r, err)
 		return
-	}
-	if color != d.Color {
-		if d, err = a.store.SetDeckColor(r.Context(), userID, d.ID, color); err != nil {
-			a.fail(w, r, err)
-			return
-		}
 	}
 
 	if !web.IsHTMX(r) {
@@ -715,7 +701,7 @@ func (a *App) editDeckForm(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseDeckSettings turns the edit form's two pace fields into
-// UpdateDeckSettings' arguments. An empty reviewsPerDayStr means unlimited.
+// UpdateDeck's pace arguments. An empty reviewsPerDayStr means unlimited.
 func parseDeckSettings(newCardsPerDayStr, reviewsPerDayStr string) (int, *int, error) {
 	newCardsPerDay, err := strconv.Atoi(strings.TrimSpace(newCardsPerDayStr))
 	if err != nil {
@@ -755,53 +741,25 @@ func (a *App) updateDeck(w http.ResponseWriter, r *http.Request) {
 	newCardsPerDayStr := r.PostFormValue("new_cards_per_day")
 	reviewsPerDayStr := r.PostFormValue("reviews_per_day")
 
-	if err := ValidateDeck(name, description); err != nil {
+	reject := func(err error) {
 		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
 			a.editDeckDetail(r, d, userMessage(err), name, description, color, newCardsPerDayStr, reviewsPerDayStr))
-		return
 	}
+
 	newCardsPerDay, reviewsPerDay, err := parseDeckSettings(newCardsPerDayStr, reviewsPerDayStr)
 	if err != nil {
-		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-			a.editDeckDetail(r, d, userMessage(err), name, description, color, newCardsPerDayStr, reviewsPerDayStr))
-		return
-	}
-	if err := ValidateDeckSettings(newCardsPerDay, reviewsPerDay); err != nil {
-		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-			a.editDeckDetail(r, d, userMessage(err), name, description, color, newCardsPerDayStr, reviewsPerDayStr))
-		return
-	}
-	if !ValidDeckColor(color) {
-		a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-			a.editDeckDetail(r, d, "Pick one of the colours shown.", name, description, d.Color, newCardsPerDayStr, reviewsPerDayStr))
+		reject(err)
 		return
 	}
 
-	_, err = a.store.UpdateDeck(r.Context(), userID, id, name, description)
+	updated, err := a.store.UpdateDeck(r.Context(), userID, id, name, description, color, newCardsPerDay, reviewsPerDay)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
-			a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-				a.editDeckDetail(r, d, userMessage(err), name, description, color, newCardsPerDayStr, reviewsPerDayStr))
+			reject(err)
 			return
 		}
 		a.fail(w, r, err)
 		return
-	}
-	updated, err := a.store.UpdateDeckSettings(r.Context(), userID, id, newCardsPerDay, reviewsPerDay)
-	if err != nil {
-		if errors.Is(err, ErrInvalid) {
-			a.renderDeckIndex(w, r, userID, http.StatusBadRequest,
-				a.editDeckDetail(r, d, userMessage(err), name, description, color, newCardsPerDayStr, reviewsPerDayStr))
-			return
-		}
-		a.fail(w, r, err)
-		return
-	}
-	if updated.Color != color {
-		if updated, err = a.store.SetDeckColor(r.Context(), userID, id, color); err != nil {
-			a.fail(w, r, err)
-			return
-		}
 	}
 
 	if !web.IsHTMX(r) {

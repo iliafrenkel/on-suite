@@ -164,7 +164,7 @@ func TestAdoptShareHandlerListsAccountsOnce(t *testing.T) {
 // reusing the one the handler already had (see queueFrontForDeck).
 func TestDeckReviewLooksUpTheDeckOnce(t *testing.T) {
 	s, n := newQueryCountingServer(t, deckByIDSubstring)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}

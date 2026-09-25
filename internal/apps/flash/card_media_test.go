@@ -12,7 +12,7 @@ func TestNewCardHasNoMedia(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestSetCardMediaSetsAndClears(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestSetCardMediaRejectsUnknownKind(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestSetCardMediaOnSomeoneElsesCardIs404(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,7 @@ import (
 func TestCardStateIsUnreviewedForANeverGradedCard(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestCardStateIsUnreviewedForANeverGradedCard(t *testing.T) {
 func TestCardStateRejectsSomeoneElsesCard(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestCardStateRejectsSomeoneElsesCard(t *testing.T) {
 func TestGradeCardCreatesStateOnFirstReview(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestGradeCardCreatesStateOnFirstReview(t *testing.T) {
 func TestGradeCardRejectsSomeoneElsesCard(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestGradeCardRejectsSomeoneElsesCard(t *testing.T) {
 func TestUndoLastGradeRestoresPreviousSchedule(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestUndoLastGradeRestoresPreviousSchedule(t *testing.T) {
 func TestUndoLastGradeIsANoOpWhenNothingToUndo(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestUndoLastGradeIsANoOpWhenNothingToUndo(t *testing.T) {
 func TestUndoLastGradeOnlyUndoesTheMostRecentGrade(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestUndoLastGradeOnlyUndoesTheMostRecentGrade(t *testing.T) {
 func TestGradeCardTracksDailyCounts(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestGradeCardTracksDailyCounts(t *testing.T) {
 func TestUndoLastGradeDecrementsTheRightDailyCounter(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestUndoLastGradeDecrementsTheRightDailyCounter(t *testing.T) {
 func TestUndoLastGradeDecrementsTheGradeDaysCounterAcrossMidnight(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func TestUndoLastGradeDecrementsTheGradeDaysCounterAcrossMidnight(t *testing.T) 
 func TestDueQueueReturnsReviewsBeforeNewCards(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +336,7 @@ func TestDueQueueReturnsReviewsBeforeNewCards(t *testing.T) {
 func TestDueQueueExcludesNotYetDueCards(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,13 +364,11 @@ func TestDueQueueExcludesNotYetDueCards(t *testing.T) {
 func TestDueQueueRespectsNewCardsPerDay(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, deck.ID, 1, nil); err != nil {
-		t.Fatal(err)
-	}
+	setDeckPace(t, f.store, f.alice.ID, deck.ID, 1, nil)
 	if _, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "x", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -391,14 +389,12 @@ func TestDueQueueRespectsNewCardsPerDay(t *testing.T) {
 func TestDueQueueRespectsReviewsPerDay(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
 	limit := 1
-	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, deck.ID, 0, &limit); err != nil {
-		t.Fatal(err)
-	}
+	setDeckPace(t, f.store, f.alice.ID, deck.ID, 0, &limit)
 	past := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 	cardA, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "x", "")
@@ -428,7 +424,7 @@ func TestDueQueueRespectsReviewsPerDay(t *testing.T) {
 func TestDueQueueExcludesSnoozedDecks(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,11 +459,11 @@ func TestDueQueueExcludesSnoozedDecks(t *testing.T) {
 func TestDueQueueScopedToOneDeckIgnoresOtherDecks(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deckA, err := f.store.CreateDeck(ctx, f.alice.ID, "A", "")
+	deckA, err := f.store.CreateDeck(ctx, f.alice.ID, "A", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	deckB, err := f.store.CreateDeck(ctx, f.alice.ID, "B", "")
+	deckB, err := f.store.CreateDeck(ctx, f.alice.ID, "B", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -490,7 +486,7 @@ func TestDueQueueScopedToOneDeckIgnoresOtherDecks(t *testing.T) {
 func TestDueQueueIsOwnerScoped(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -521,7 +517,7 @@ func ratingCount(t *testing.T, f *fixture, userID, deckID int64, day time.Time, 
 func TestGradeCardBumpsTheMatchingRatingCounter(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -547,7 +543,7 @@ func TestGradeCardBumpsTheMatchingRatingCounter(t *testing.T) {
 func TestUndoLastGradeDecrementsTheMatchingRatingCounter(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -579,7 +575,7 @@ func TestUndoLastGradeDecrementsTheMatchingRatingCounter(t *testing.T) {
 func TestBumpDailyCountsFloorsRatingColumnAtZero(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -621,11 +617,11 @@ func TestTodayTally(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
-	a, err := f.store.CreateDeck(ctx, f.alice.ID, "A", "")
+	a, err := f.store.CreateDeck(ctx, f.alice.ID, "A", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := f.store.CreateDeck(ctx, f.alice.ID, "B", "")
+	b, err := f.store.CreateDeck(ctx, f.alice.ID, "B", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -680,11 +676,11 @@ func TestDueQueueOrdersReviewsByDueDateAcrossDecks(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
-	older, err := f.store.CreateDeck(ctx, f.alice.ID, "Older", "")
+	older, err := f.store.CreateDeck(ctx, f.alice.ID, "Older", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newer, err := f.store.CreateDeck(ctx, f.alice.ID, "Newer", "") // listed first by ListDecks
+	newer, err := f.store.CreateDeck(ctx, f.alice.ID, "Newer", "", flash.DefaultDeckColor) // listed first by ListDecks
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -726,11 +722,11 @@ func TestDueQueueBreaksDueDateTiesByDeckOrder(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	past := now.AddDate(0, 0, -2)
-	older, err := f.store.CreateDeck(ctx, f.alice.ID, "Older", "")
+	older, err := f.store.CreateDeck(ctx, f.alice.ID, "Older", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newer, err := f.store.CreateDeck(ctx, f.alice.ID, "Newer", "")
+	newer, err := f.store.CreateDeck(ctx, f.alice.ID, "Newer", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -763,7 +759,7 @@ func TestDueQueueBreaksDueDateTiesByDeckOrder(t *testing.T) {
 // queueFixture helpers keep TestQueueFrontAgreesWithDueQueue's cases short.
 func qDeck(t *testing.T, f *fixture, name string) flash.Deck {
 	t.Helper()
-	d, err := f.store.CreateDeck(context.Background(), f.alice.ID, name, "")
+	d, err := f.store.CreateDeck(context.Background(), f.alice.ID, name, "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -788,9 +784,7 @@ func qGrade(t *testing.T, f *fixture, cardID int64, rating int, at time.Time) {
 
 func qSettings(t *testing.T, f *fixture, deckID int64, newPerDay int, reviewsPerDay *int) {
 	t.Helper()
-	if _, err := f.store.UpdateDeckSettings(context.Background(), f.alice.ID, deckID, newPerDay, reviewsPerDay); err != nil {
-		t.Fatal(err)
-	}
+	setDeckPace(t, f.store, f.alice.ID, deckID, newPerDay, reviewsPerDay)
 }
 
 // TestQueueFrontAgreesWithDueQueue pins the review screen's shortcut to the

@@ -47,7 +47,7 @@ func TestMediaPurgeJobRunsAgainstTheAppsOwnStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deck, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}

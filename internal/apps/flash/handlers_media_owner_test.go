@@ -19,7 +19,7 @@ import (
 func aliceCardWithImage(t *testing.T, s *apptest.Server[*flash.Store]) (flash.Deck, flash.Card, string) {
 	t.Helper()
 	ctx := t.Context()
-	deck, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestAdoptedDeckMediaIsServedToTheRecipient(t *testing.T) {
 // /flash/media/ URL, and it serves.
 func TestEveryMediaURLTheOwnerIsShownIsServed(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}

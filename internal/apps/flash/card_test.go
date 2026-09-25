@@ -13,7 +13,7 @@ import (
 func TestCreateAndFetchCard(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestCreateCardRejectsUnknownDeck(t *testing.T) {
 func TestCreateCardRejectsSomeoneElsesDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,11 +87,11 @@ func TestValidateCard(t *testing.T) {
 func TestListCardsIsScopedToItsDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deckA, err := f.store.CreateDeck(ctx, f.alice.ID, "A", "")
+	deckA, err := f.store.CreateDeck(ctx, f.alice.ID, "A", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	deckB, err := f.store.CreateDeck(ctx, f.alice.ID, "B", "")
+	deckB, err := f.store.CreateDeck(ctx, f.alice.ID, "B", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestListCardsIsScopedToItsDeck(t *testing.T) {
 func TestCardOwnerScoping(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestUpdateCard(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "test", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "test", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestUpdateCardRejectsSomeoneElsesDeck(t *testing.T) {
 	ctx := context.Background()
 
 	// Create deck and card as alice
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestUpdateCardRejectsInvalidInput(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "test", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "test", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestUpdateCardRejectsInvalidInput(t *testing.T) {
 func TestDeletingADeckRemovesItsCards(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "doomed", "")
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "doomed", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ func TestCardStatuses(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
