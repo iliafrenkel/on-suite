@@ -58,8 +58,8 @@
 
 {{define "review-break"}}
 {{with .Break}}
-<div class="flash-review-break" role="status">
-    <h1>This deck is taking a break</h1>
+<div class="flash-review-break">
+    <h2>This deck is taking a break</h2>
     <div class="flash-break-banner">
         <span>Taking a break until {{.Until}}.</span>
         {{/* A plain POST, deliberately without hx-post: unsnooze's HTMX
@@ -78,10 +78,10 @@
 
 {{define "review-summary"}}
 {{with .Summary}}
-<div class="flash-review-summary" role="status">
+<div class="flash-review-summary">
 	{{if .Reviewed}}
 	<div class="flash-celebrate" aria-hidden="true">{{range $.CelebrationColors}}<span class="deck-c-{{.}}"></span>{{end}}</div>
-	<h1>Nice work!</h1>
+	<h2>Nice work!</h2>
 	<p class="flash-summary-lead">You reviewed {{.Reviewed}} card{{if ne .Reviewed 1}}s{{end}} today.</p>
 	{{if .Segments}}
 	<svg class="flash-breakdown" viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="{{.Legend}}">
@@ -91,7 +91,7 @@
 	{{end}}
 	{{if ge .Streak 2}}<p class="flash-streak">🔥 {{.Streak}} days in a row</p>{{end}}
 	{{else}}
-	<h1>Nothing to review right now</h1>
+	<h2>Nothing to review right now</h2>
 	<p class="dim">New cards and reviews come back over time. Check again later.</p>
 	{{end}}
 	{{if .NextURL}}
@@ -103,7 +103,26 @@
 {{end}}
 {{end}}
 
+{{/* review-announce is the persistent live region: outside #review-body so
+     an HTMX swap of the card/break/summary panel never removes it, since a
+     region that already exists in the DOM before its text changes is what
+     screen readers reliably announce — a freshly-swapped-in
+     role="status"/aria-live panel is not (#334). The full page renders it
+     empty to avoid announcing on load; every grade/undo fragment response
+     resends it out of band (innerHTML only, so the element itself, and its
+     role/aria-live, survive) with a short status message. */}}
+{{define "review-announce"}}<p id="review-announce" class="visually-hidden" role="status" aria-live="polite"{{if .OOB}} hx-swap-oob="innerHTML"{{end}}>{{.Message}}</p>{{end}}
+
+{{/* review-body-oob is the HTMX fragment grade/undo return: the swapped
+     panel plus the live region's out-of-band update. */}}
+{{define "review-body-oob"}}{{template "review-body" .}}{{template "review-announce" (dict "Message" .Announce "OOB" true)}}{{end}}
+
 {{define "content"}}
+{{/* The one steady, visually-hidden heading for the whole screen — present
+     in every state (card, break, summary) so the page always has exactly
+     one <h1>, whatever #review-body currently shows (#334). */}}
+<h1 class="visually-hidden">{{.Data.ScopeName}}</h1>
+{{template "review-announce" (dict "Message" "" "OOB" false)}}
 <div id="review-body">
 	{{template "review-body" .Data}}
 </div>

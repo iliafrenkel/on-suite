@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/html"
+
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
@@ -355,11 +357,19 @@ func TestDeckListShowsColorAndDueBadge(t *testing.T) {
 	doc.MustHave(`#deck-list a.deck-row`)
 	doc.MustHave(`#deck-list .deck-c-blue`)
 	badge := doc.MustHave(`#deck-list .flash-due-badge`)
-	if got := htmlassert.Text(badge); got != "2" {
-		t.Errorf("due badge = %q, want 2", got)
+	if got := htmlassert.Text(badge); got != "2 to review" {
+		t.Errorf("due badge accessible text = %q, want %q", got, "2 to review")
 	}
+	if badge.FirstChild == nil || badge.FirstChild.Type != html.TextNode || strings.TrimSpace(badge.FirstChild.Data) != "2" {
+		t.Errorf("due badge visible text = %q, want %q", htmlassert.Text(badge), "2")
+	}
+	badgeHidden := doc.MustHave(`#deck-list .flash-due-badge .visually-hidden`)
+	if got := htmlassert.Text(badgeHidden); got != "to review" {
+		t.Errorf("due badge hidden text = %q, want %q", got, "to review")
+	}
+
 	reviewAll := doc.MustHave(`#flash-review-all`)
-	if !strings.Contains(htmlassert.Text(reviewAll), "2") {
+	if !strings.Contains(htmlassert.Text(reviewAll), "2 to review in all decks") {
 		t.Errorf("Review all = %q, want it to show the 2 cards due", htmlassert.Text(reviewAll))
 	}
 }
