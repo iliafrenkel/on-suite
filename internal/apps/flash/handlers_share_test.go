@@ -348,6 +348,9 @@ func TestGiftPreviewPane(t *testing.T) {
 	if !containsClass(class, "deck-row-active") {
 		t.Errorf("gift row class = %q, want it to include deck-row-active", class)
 	}
+	if v, ok := htmlassert.Attr(gift, "aria-current"); !ok || v != "true" {
+		t.Errorf("gift row aria-current = %q, %v, want \"true\", true", v, ok)
+	}
 	if n := len(doc.QueryAll("#deck-list a.deck-row-active")); n != 1 {
 		t.Errorf("#deck-list has %d active rows, want exactly 1 (bob's own deck row must not also be highlighted)", n)
 	}
