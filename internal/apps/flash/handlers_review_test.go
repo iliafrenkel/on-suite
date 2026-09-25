@@ -245,6 +245,32 @@ func TestFlashScriptIsServed(t *testing.T) {
 	}
 }
 
+// TestReviewCardShowsTagsAsBackFacePills guards the Static side of #324's
+// fix: the review screen has no deck pane for tag links to open in, so a
+// tagged card's tags must still render as plain back-face pills there, and
+// never as the clickable links the opened-card view uses instead.
+func TestReviewCardShowsTagsAsBackFacePills(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetCardTags(t.Context(), s.Alice.User.ID, c.ID, []string{"greetings"}); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	pill := doc.MustHave("#review-card .flash-card-back .flash-pill")
+	if got := htmlassert.Text(pill); got != "greetings" {
+		t.Errorf("back-face pill text = %q, want greetings", got)
+	}
+	doc.MustNotHave("#review-card .flash-tag-links")
+}
+
 func TestReviewCardFlipsAndGradesWithFriendlyLabels(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")

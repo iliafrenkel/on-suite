@@ -63,6 +63,28 @@ func cardURL(deckID, cardID int64, q, tag string) string {
 	return cardBasePath(deckID) + strconv.FormatInt(cardID, 10) + filterQuery(q, tag)
 }
 
+// cardEditURL is a card's edit form, carrying the grid's filter so the Edit
+// link, the E key (which clicks it) and the form's own Cancel/Back-to-the-
+// card link all keep it.
+func cardEditURL(deckID, cardID int64, q, tag string) string {
+	return cardBasePath(deckID) + "edit/" + strconv.FormatInt(cardID, 10) + filterQuery(q, tag)
+}
+
+// cardDeleteURL is a card's delete form action, carrying the filter so
+// deleteCard, which reads it back off the action URL, returns to the
+// filtered grid rather than an unfiltered one.
+func cardDeleteURL(deckID, cardID int64, q, tag string) string {
+	return cardBasePath(deckID) + strconv.FormatInt(cardID, 10) + "/delete" + filterQuery(q, tag)
+}
+
+// newCardURL is the new-card form for deck deckID. The new card itself is
+// never filtered (a new card may not match the filter the user is
+// browsing), but the URL still carries q/tag so the form's Cancel and "All
+// cards" links know to return to that filtered grid.
+func newCardURL(deckID int64, q, tag string) string {
+	return cardBasePath(deckID) + "new" + filterQuery(q, tag)
+}
+
 // filterCards keeps the cards matching q (a case-insensitive substring of
 // front, back or notes) and tag (one of the card's tags, compared the way
 // tag names are stored). Empty q or tag means no filter on that part.
@@ -119,6 +141,7 @@ type cardGridView struct {
 	Pills          []tagPill
 	Items          []cardGridItem
 	ClearURL       string // the unfiltered grid
+	NewCardURL     string // the new-card form, carrying the filter for its Cancel link
 	AllDecksTagURL string // the cross-deck tag page, when Tag is set
 	OOB            bool   // set on the live-search fragment, for the pills' out-of-band copy
 }
@@ -128,6 +151,8 @@ type openedCardView struct {
 	Deck      Deck
 	Face      cardFace
 	BackURL   string // the grid, with the filter kept
+	EditURL   string // the edit form, with the filter kept
+	DeleteURL string // the delete form's action, with the filter kept
 	PrevURL   string // "" at the start of the filtered order
 	NextURL   string // "" at the end
 	CSRFToken string

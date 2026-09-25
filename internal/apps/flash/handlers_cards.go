@@ -62,6 +62,14 @@ type cardDetailView struct {
 	Card      Card
 	CSRFToken string
 
+	// Query/Tag are the grid filter this form was reached through (both
+	// empty when unfiltered). ActionURL/CancelURL already carry it, in the
+	// same "precompute the href in Go" style as tagChip.Href.
+	Query     string
+	Tag       string
+	ActionURL string
+	CancelURL string
+
 	CardTypeValue string
 	FrontValue    string
 	BackValue     string
@@ -100,23 +108,33 @@ func tagFilterURL(name string) string {
 	return "/flash/tags/" + url.PathEscape(name)
 }
 
-func (a *App) viewCardDetail(r *http.Request, d Deck, c Card) cardDetailView {
+func (a *App) viewCardDetail(r *http.Request, d Deck, c Card, q, tag string) cardDetailView {
 	return cardDetailView{
-		Mode: cardModeView, Deck: d, Card: c, CSRFToken: web.CSRFToken(r.Context()),
+		Mode: cardModeView, Deck: d, Card: c, Query: q, Tag: tag, CSRFToken: web.CSRFToken(r.Context()),
 	}
 }
 
-func (a *App) newCardDetail(r *http.Request, d Deck, errMsg, cardType, front, back, notes, tags string) cardDetailView {
+// newCardDetail is the new-card form. q/tag are the filter the user came
+// from (the grid's "New card" tile, if any) — the new card itself is not
+// filtered, but Cancel/"All cards" need to know where to return to.
+func (a *App) newCardDetail(r *http.Request, d Deck, errMsg, cardType, front, back, notes, tags, q, tag string) cardDetailView {
 	return cardDetailView{
 		Mode: cardModeNew, Deck: d, CardTypeValue: cardType, FrontValue: front, BackValue: back, NotesValue: notes,
-		TagsValue: tags, Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
+		TagsValue: tags, Error: errMsg, Query: q, Tag: tag,
+		ActionURL: newCardURL(d.ID, q, tag), CancelURL: cardsURL(d.ID, q, tag),
+		CSRFToken: web.CSRFToken(r.Context()),
 	}
 }
 
-func (a *App) editCardDetail(r *http.Request, d Deck, c Card, errMsg, cardType, front, back, notes, tags string) cardDetailView {
+func (a *App) editCardDetail(r *http.Request, d Deck, c Card, errMsg, cardType, front, back, notes, tags, q, tag string) cardDetailView {
+	// Saving an edit returns to the same opened card, so Cancel/Back-to-the-
+	// card and the form's own action both point at it.
+	href := cardURL(d.ID, c.ID, q, tag)
 	return cardDetailView{
 		Mode: cardModeEdit, Deck: d, Card: c, CardTypeValue: cardType, FrontValue: front, BackValue: back, NotesValue: notes,
-		TagsValue: tags, Error: errMsg, CSRFToken: web.CSRFToken(r.Context()),
+		TagsValue: tags, Error: errMsg, Query: q, Tag: tag,
+		ActionURL: href, CancelURL: href,
+		CSRFToken:     web.CSRFToken(r.Context()),
 		ImageMediaURL: mediaURL(c.ImageHash), AudioMediaURL: mediaURL(c.AudioHash),
 	}
 }
@@ -127,25 +145,35 @@ func cardFilterFromQuery(r *http.Request) (q, tag string) {
 	return strings.TrimSpace(v.Get("q")), normalizeTagName(v.Get("tag"))
 }
 
-// cardGrid builds the cards pane for one deck, filtered by q and tag. It
-// also returns the filtered cards and the deck's tag map, which openedCard
-// needs for previous/next and the card's own tags.
-func (a *App) cardGrid(ctx context.Context, userID int64, deck Deck, q, tag string) (cardGridView, []Card, map[int64][]string, error) {
+// loadFilteredCards is the data step shared by cardGrid and openedCard: a
+// deck's cards filtered by q and tag, plus the deck's tag map (needed for
+// filtering and for a card's own tags). It does none of the extra work
+// (status lookup, view assembly) that only the grid itself needs, so
+// opening one card doesn't pay for building the whole grid.
+func (a *App) loadFilteredCards(ctx context.Context, userID int64, deck Deck, q, tag string) (filtered []Card, tags map[int64][]string, err error) {
 	cards, err := a.store.ListCards(ctx, userID, deck.ID)
 	if err != nil {
-		return cardGridView{}, nil, nil, err
+		return nil, nil, err
 	}
-	tags, err := a.store.CardTagsInDeck(ctx, userID, deck.ID)
+	tags, err = a.store.CardTagsInDeck(ctx, userID, deck.ID)
 	if err != nil {
-		return cardGridView{}, nil, nil, err
+		return nil, nil, err
+	}
+	return filterCards(cards, tags, q, tag), tags, nil
+}
+
+// cardGrid builds the cards pane for one deck, filtered by q and tag.
+func (a *App) cardGrid(ctx context.Context, userID int64, deck Deck, q, tag string) (cardGridView, error) {
+	filtered, tags, err := a.loadFilteredCards(ctx, userID, deck, q, tag)
+	if err != nil {
+		return cardGridView{}, err
 	}
 	statuses, err := a.store.CardStatuses(ctx, userID, deck.ID, a.store.now())
 	if err != nil {
-		return cardGridView{}, nil, nil, err
+		return cardGridView{}, err
 	}
-	filtered := filterCards(cards, tags, q, tag)
 
-	view := cardGridView{Deck: deck, Query: q, Tag: tag, ClearURL: cardsURL(deck.ID, "", "")}
+	view := cardGridView{Deck: deck, Query: q, Tag: tag, ClearURL: cardsURL(deck.ID, "", ""), NewCardURL: newCardURL(deck.ID, q, tag)}
 	for _, c := range filtered {
 		view.Items = append(view.Items, cardGridItem{
 			Face:   newCardFace(c, deck, tags[c.ID]),
@@ -175,7 +203,7 @@ func (a *App) cardGrid(ctx context.Context, userID int64, deck Deck, q, tag stri
 	if tag != "" {
 		view.AllDecksTagURL = tagFilterURL(tag)
 	}
-	return view, filtered, tags, nil
+	return view, nil
 }
 
 // openedCard builds the pane for one card opened from the grid. Previous
@@ -183,7 +211,7 @@ func (a *App) cardGrid(ctx context.Context, userID int64, deck Deck, q, tag stri
 // not in it (the filter changed, or no filter applies to it), both are
 // empty.
 func (a *App) openedCard(ctx context.Context, r *http.Request, userID int64, deck Deck, c Card, q, tag string) (openedCardView, error) {
-	_, filtered, tags, err := a.cardGrid(ctx, userID, deck, q, tag)
+	filtered, tags, err := a.loadFilteredCards(ctx, userID, deck, q, tag)
 	if err != nil {
 		return openedCardView{}, err
 	}
@@ -191,6 +219,8 @@ func (a *App) openedCard(ctx context.Context, r *http.Request, userID int64, dec
 		Deck:      deck,
 		Face:      newCardFace(c, deck, tags[c.ID]),
 		BackURL:   cardsURL(deck.ID, q, tag),
+		EditURL:   cardEditURL(deck.ID, c.ID, q, tag),
+		DeleteURL: cardDeleteURL(deck.ID, c.ID, q, tag),
 		CSRFToken: web.CSRFToken(r.Context()),
 	}
 	for i, fc := range filtered {
@@ -218,13 +248,13 @@ func (a *App) cardPaneDetail(r *http.Request, userID int64, deck Deck, cd cardDe
 	case cardModeEdit:
 		detail.Mode, detail.CardForm = deckModeCardEdit, cd
 	case cardModeView:
-		opened, err := a.openedCard(r.Context(), r, userID, deck, cd.Card, "", "")
+		opened, err := a.openedCard(r.Context(), r, userID, deck, cd.Card, cd.Query, cd.Tag)
 		if err != nil {
 			return deckDetailView{}, err
 		}
 		detail.Mode, detail.Opened = deckModeCard, opened
 	default:
-		grid, _, _, err := a.cardGrid(r.Context(), userID, deck, "", "")
+		grid, err := a.cardGrid(r.Context(), userID, deck, cd.Query, cd.Tag)
 		if err != nil {
 			return deckDetailView{}, err
 		}
@@ -269,7 +299,7 @@ func (a *App) cardIndex(w http.ResponseWriter, r *http.Request) {
 	detail := deckDetailView{Deck: deck, CSRFToken: web.CSRFToken(r.Context())}
 
 	if r.PathValue("cardID") == "" {
-		grid, _, _, err := a.cardGrid(r.Context(), userID, deck, q, tag)
+		grid, err := a.cardGrid(r.Context(), userID, deck, q, tag)
 		if err != nil {
 			a.deps.Errors.Internal(w, r, err)
 			return
@@ -311,7 +341,7 @@ func (a *App) cardGridFragment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q, tag := cardFilterFromQuery(r)
-	grid, _, _, err := a.cardGrid(r.Context(), userID, deck, q, tag)
+	grid, err := a.cardGrid(r.Context(), userID, deck, q, tag)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
@@ -332,12 +362,26 @@ func cardBasePath(deckID int64) string {
 const cardSavedNotice = "Card saved. Add the next one."
 
 // newCardFormURL is the new-card form pre-filled for the next card after
-// "Save and add another" without JavaScript: same type, same tags, and the
-// saved notice.
-func newCardFormURL(deckID int64, cardType, tags string) string {
-	v := url.Values{"saved": {"1"}, "type": {cardType}}
+// "Save and add another": same type, same tags, and the grid filter the
+// user came from (if any), so its Cancel/"All cards"/back link still return
+// to the filtered grid. saved adds the "Card saved" notice (saved=1) — the
+// no-JS redirect wants it (a fresh page load has nothing else to show it
+// happened), but the HTMX push-url must leave it out: the fragment response
+// already carries the notice, and reloading that pushed URL later should
+// not repeat it.
+func newCardFormURL(deckID int64, cardType, tags, q, tag string, saved bool) string {
+	v := url.Values{"type": {cardType}}
+	if saved {
+		v.Set("saved", "1")
+	}
 	if tags != "" {
 		v.Set("tags", tags)
+	}
+	if q != "" {
+		v.Set("q", q)
+	}
+	if tag != "" {
+		v.Set("tag", tag)
 	}
 	return cardBasePath(deckID) + "new?" + v.Encode()
 }
@@ -351,13 +395,14 @@ func (a *App) newCardForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	q := r.URL.Query()
-	cardType := q.Get("type")
+	qv := r.URL.Query()
+	cardType := qv.Get("type")
 	if !isKnownCardType(cardType) {
 		cardType = CardTypeBasic
 	}
-	detail := a.newCardDetail(r, deck, "", cardType, "", "", "", q.Get("tags"))
-	if q.Get("saved") != "" {
+	q, tag := cardFilterFromQuery(r)
+	detail := a.newCardDetail(r, deck, "", cardType, "", "", "", qv.Get("tags"), q, tag)
+	if qv.Get("saved") != "" {
 		detail.Notice = cardSavedNotice
 	}
 	a.renderCardIndex(w, r, userID, deck, http.StatusOK, detail)
@@ -385,8 +430,12 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 		// before switching type is not part of the card.
 		back = ""
 	}
+	// The form's own action carries the filter the user came from (if any),
+	// so a validation error re-renders the same form with Cancel still
+	// pointing at the right grid.
+	q, tag := cardFilterFromQuery(r)
 	reject := func(msg string) {
-		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, msg, cardType, front, back, notes, tags))
+		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.newCardDetail(r, deck, msg, cardType, front, back, notes, tags, q, tag))
 	}
 
 	if uploadErr != "" {
@@ -421,12 +470,17 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.PostFormValue("next") == "new" {
+		// The saved card itself and the final Save both stay unfiltered (the
+		// new card may not match the filter), but the follow-on new-card
+		// form keeps the filter for its own Cancel/"All cards"/back link and
+		// ActionURL, so a validation error on it re-renders with the filter
+		// too.
 		if !web.IsHTMX(r) {
-			http.Redirect(w, r, newCardFormURL(deck.ID, cardType, tags), http.StatusSeeOther)
+			http.Redirect(w, r, newCardFormURL(deck.ID, cardType, tags, q, tag, true), http.StatusSeeOther)
 			return
 		}
-		w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+"new")
-		next := a.newCardDetail(r, deck, "", cardType, "", "", "", tags)
+		w.Header().Set("HX-Push-Url", newCardFormURL(deck.ID, cardType, tags, q, tag, false))
+		next := a.newCardDetail(r, deck, "", cardType, "", "", "", tags, q, tag)
 		next.Notice = cardSavedNotice
 		a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, next)
 		return
@@ -442,7 +496,7 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, a.viewCardDetail(r, deck, saved))
+	a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, a.viewCardDetail(r, deck, saved, "", ""))
 }
 
 func (a *App) editCardForm(w http.ResponseWriter, r *http.Request) {
@@ -468,7 +522,8 @@ func (a *App) editCardForm(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderCardIndex(w, r, userID, deck, http.StatusOK, a.editCardDetail(r, deck, c, "", c.CardType, c.Front, c.Back, c.Notes, joinTagNames(tags)))
+	q, tag := cardFilterFromQuery(r)
+	a.renderCardIndex(w, r, userID, deck, http.StatusOK, a.editCardDetail(r, deck, c, "", c.CardType, c.Front, c.Back, c.Notes, joinTagNames(tags), q, tag))
 }
 
 // joinTagNames renders a card's tags back into the same comma-separated
@@ -513,24 +568,27 @@ func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
 		// before switching type is not part of the card.
 		back = ""
 	}
+	// The edit form's action carries the filter the user came from, so a
+	// validation error re-renders the same form with it kept.
+	q, tag := cardFilterFromQuery(r)
 
 	if uploadErr != "" {
-		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, uploadErr, cardType, front, back, notes, tags))
+		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, uploadErr, cardType, front, back, notes, tags, q, tag))
 		return
 	}
 	tagList := parseTagList(tags)
 	if err := ValidateCard(cardType, front, back); err != nil {
-		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags))
+		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags, q, tag))
 		return
 	}
 	if err := ValidateTagNames(tagList); err != nil {
-		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags))
+		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags, q, tag))
 		return
 	}
 	updated, err := a.store.UpdateCard(r.Context(), userID, deck.ID, id, cardType, front, back, notes)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
-			a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags))
+			a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags, q, tag))
 			return
 		}
 		a.fail(w, r, err)
@@ -551,11 +609,11 @@ func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !web.IsHTMX(r) {
-		http.Redirect(w, r, cardBasePath(deck.ID)+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		http.Redirect(w, r, cardURL(deck.ID, id, q, tag), http.StatusSeeOther)
 		return
 	}
-	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+strconv.FormatInt(id, 10))
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, deck, updated))
+	w.Header().Set("HX-Push-Url", cardURL(deck.ID, id, q, tag))
+	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, a.viewCardDetail(r, deck, updated, q, tag))
 }
 
 func (a *App) deleteCard(w http.ResponseWriter, r *http.Request) {
@@ -577,10 +635,13 @@ func (a *App) deleteCard(w http.ResponseWriter, r *http.Request) {
 	}
 	a.deps.Log.Info("card deleted", "app", ID, "user_id", userID, "deck_id", deck.ID, "card_id", id)
 
+	// A deleted card can no longer be the reference point for prev/next, so
+	// this always goes back to the (filtered) grid, never the next card.
+	q, tag := cardFilterFromQuery(r)
 	if !web.IsHTMX(r) {
-		http.Redirect(w, r, cardBasePath(deck.ID), http.StatusSeeOther)
+		http.Redirect(w, r, cardsURL(deck.ID, q, tag), http.StatusSeeOther)
 		return
 	}
-	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID))
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, cardDetailView{Deck: deck})
+	w.Header().Set("HX-Push-Url", cardsURL(deck.ID, q, tag))
+	a.renderCardDetailWithList(w, r, userID, deck, http.StatusOK, cardDetailView{Deck: deck, Query: q, Tag: tag})
 }

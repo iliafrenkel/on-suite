@@ -2,12 +2,14 @@
 package flash_test
 
 import (
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
+	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 )
 
@@ -309,6 +311,326 @@ func TestCardEditFormRendersPrefilledValues(t *testing.T) {
 	tags := doc.MustHave("#card-tags-" + itoa(c.ID))
 	if got, _ := htmlassert.Attr(tags, "value"); got != "basics, greetings" {
 		t.Errorf("tags value = %q, want %q", got, "basics, greetings")
+	}
+}
+
+// filteredThreeCards creates three cards (ids 1,2,3 in a fresh deck) with
+// "one" and "three" tagged "food", mirroring
+// TestOpenedCardPrevNextFollowTheFilter's fixture, and returns the deck.
+func filteredThreeCards(t *testing.T, s *apptest.Server[*flash.Store]) flash.Deck {
+	t.Helper()
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ front, tags string }{{"one", "food"}, {"two", "other"}, {"three", "food"}} {
+		rec := s.Post(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+			url.Values{"card_type": {"basic"}, "front": {c.front}, "back": {"x"}, "tags": {c.tags}})
+		if rec.Code != 303 {
+			t.Fatalf("create: %d", rec.Code)
+		}
+	}
+	return deck
+}
+
+func TestEditLinkAndEditFormKeepTheFilter(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/3?tag=food")
+	edit := doc.MustHave("a.flash-card-edit")
+	if href, _ := htmlassert.Attr(edit, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/edit/3?tag=food" {
+		t.Errorf("Edit card href = %q, want the filter kept", href)
+	}
+
+	form := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/edit/3?tag=food")
+	editForm := form.MustHave("#card-detail-edit")
+	if action, _ := htmlassert.Attr(editForm, "action"); action != "/flash/"+itoa(deck.ID)+"/cards/3?tag=food" {
+		t.Errorf("edit form action = %q, want the filter kept", action)
+	}
+	back := form.MustHave("#card-detail-edit a.toolbar-btn")
+	if href, _ := htmlassert.Attr(back, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/3?tag=food" {
+		t.Errorf("Back to the card href = %q, want the filter kept", href)
+	}
+}
+
+func TestSaveEditKeepsFilterOverHTMX(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/3?tag=food",
+		url.Values{"card_type": {"basic"}, "front": {"tres"}, "back": {"x"}, "tags": {"food"}})
+	if rec.Code != 200 {
+		t.Fatalf("save edit = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Push-Url"); got != "/flash/"+itoa(deck.ID)+"/cards/3?tag=food" {
+		t.Errorf("HX-Push-Url = %q, want the filter kept", got)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	next := doc.MustHave("a.flash-card-next")
+	if href, _ := htmlassert.Attr(next, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/1?tag=food" {
+		t.Errorf("next href = %q, want it to stay within the filtered set", href)
+	}
+}
+
+func TestSaveEditKeepsFilterWithoutJS(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/3?tag=food",
+		url.Values{"card_type": {"basic"}, "front": {"tres"}, "back": {"x"}, "tags": {"food"}},
+		"/flash/"+itoa(deck.ID)+"/cards/3?tag=food")
+}
+
+func TestEditValidationErrorKeepsFilter(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	rec := s.Post(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/3?tag=food",
+		url.Values{"card_type": {"basic"}, "front": {"tres"}})
+	if rec.Code != 400 {
+		t.Fatalf("save edit with no back = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	editForm := doc.MustHave("#card-detail-edit")
+	if action, _ := htmlassert.Attr(editForm, "action"); action != "/flash/"+itoa(deck.ID)+"/cards/3?tag=food" {
+		t.Errorf("re-rendered edit form action = %q, want the filter kept", action)
+	}
+}
+
+func TestCancelEditReturnsToTheFilteredCard(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/edit/3?tag=food")
+	cancel := doc.QueryAll(`a[href="/flash/` + itoa(deck.ID) + `/cards/3?tag=food"]`)
+	if len(cancel) == 0 {
+		t.Error("no Cancel/back link to the filtered card")
+	}
+}
+
+func TestDeleteCardKeepsFilterAndReturnsToTheFilteredGrid(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/3?tag=food")
+	del := doc.MustHave(".flash-deck-toolbar form")
+	if action, _ := htmlassert.Attr(del, "action"); action != "/flash/"+itoa(deck.ID)+"/cards/3/delete?tag=food" {
+		t.Errorf("delete form action = %q, want the filter kept", action)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/3/delete?tag=food", url.Values{})
+	if rec.Code != 200 {
+		t.Fatalf("delete card = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Push-Url"); got != "/flash/"+itoa(deck.ID)+"/cards/?tag=food" {
+		t.Errorf("HX-Push-Url = %q, want the filtered grid, not the next card", got)
+	}
+	resultDoc := htmlassert.Parse(t, rec.Body.String())
+	resultDoc.MustHave("#card-grid")
+	resultDoc.MustNotHave(".flash-viewer")
+}
+
+func TestDeleteCardKeepsFilterWithoutJS(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/3/delete?tag=food", url.Values{},
+		"/flash/"+itoa(deck.ID)+"/cards/?tag=food")
+}
+
+func TestNewCardTileCarriesTheFilterForCancel(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/?tag=food")
+	newTile := doc.MustHave("a.flash-mini-new")
+	href, _ := htmlassert.Attr(newTile, "href")
+	if href != "/flash/"+itoa(deck.ID)+"/cards/new?tag=food" {
+		t.Errorf("New card tile href = %q, want the filter kept", href)
+	}
+
+	form := s.Get(t, s.Alice, href)
+	newForm := form.MustHave("#card-detail-new")
+	if action, _ := htmlassert.Attr(newForm, "action"); action != "/flash/"+itoa(deck.ID)+"/cards/new?tag=food" {
+		t.Errorf("new card form action = %q; the new card itself is not filtered, but should still carry the origin", action)
+	}
+	cancel := form.QueryAll(`a[href="/flash/` + itoa(deck.ID) + `/cards/?tag=food"]`)
+	if len(cancel) == 0 {
+		t.Error("no Cancel/All cards link to the filtered grid")
+	}
+}
+
+func TestUnfilteredCardFlowStaysUnfiltered(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/"+itoa(c.ID))
+	edit := doc.MustHave("a.flash-card-edit")
+	if href, _ := htmlassert.Attr(edit, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/edit/"+itoa(c.ID) {
+		t.Errorf("Edit card href = %q, want no filter suffix", href)
+	}
+
+	gridDoc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/")
+	newTile := gridDoc.MustHave("a.flash-mini-new")
+	if href, _ := htmlassert.Attr(newTile, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/new" {
+		t.Errorf("New card tile href = %q, want no filter suffix", href)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/"+itoa(c.ID)+"/delete", url.Values{})
+	if got := rec.Header().Get("HX-Push-Url"); got != "/flash/"+itoa(deck.ID)+"/cards/" {
+		t.Errorf("HX-Push-Url = %q, want no filter suffix", got)
+	}
+}
+
+// TestSavingANewCardFromAFilteredFormStaysUnfiltered guards the user
+// decision in #322: a new card is never filtered by the grid the user came
+// from (it may not even match it), so saving one opens it unfiltered, both
+// over HTMX and without JS.
+func TestSavingANewCardFromAFilteredFormStaysUnfiltered(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	rec := s.PostHX(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new?tag=food",
+		url.Values{"card_type": {"basic"}, "front": {"four"}, "back": {"x"}})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create card = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	wantPush := "/flash/" + itoa(deck.ID) + "/cards/4"
+	if got := rec.Header().Get("HX-Push-Url"); got != wantPush {
+		t.Errorf("HX-Push-Url = %q, want %q (no filter)", got, wantPush)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	assertNoFilterOnOpenedCard(t, doc)
+}
+
+func TestSavingANewCardFromAFilteredFormStaysUnfilteredWithoutJS(t *testing.T) {
+	s := newServer(t)
+	deck := filteredThreeCards(t, s)
+
+	want := "/flash/" + itoa(deck.ID) + "/cards/4"
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new?tag=food",
+		url.Values{"card_type": {"basic"}, "front": {"four"}, "back": {"x"}}, want)
+
+	doc := s.Get(t, s.Alice, want)
+	assertNoFilterOnOpenedCard(t, doc)
+}
+
+// assertNoFilterOnOpenedCard checks that none of an opened card's next,
+// prev, back or edit links carry a ?q=/?tag= suffix.
+func assertNoFilterOnOpenedCard(t *testing.T, doc *htmlassert.Doc) {
+	t.Helper()
+	for _, sel := range []string{"a.flash-card-edit", "a.flash-card-back-to-grid", "a.flash-card-next", "a.flash-card-prev"} {
+		el := doc.Query(sel)
+		if el == nil {
+			continue
+		}
+		href, _ := htmlassert.Attr(el, "href")
+		if strings.Contains(href, "tag=") || strings.Contains(href, "q=") {
+			t.Errorf("%s href = %q, want no filter", sel, href)
+		}
+	}
+}
+
+// TestSaveEditKeepsFilterEncodedThroughMultipart guards #322's filter-carry
+// against special characters: q/tag values that contain quotes, "&", "#"
+// and non-ASCII must survive an edit save (sent as multipart/form-data, the
+// way the real editor posts) URL-encoded on the pushed URL, and properly
+// HTML-escaped wherever they're rendered as an href.
+func TestSaveEditKeepsFilterEncodedThroughMultipart(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"one"}, "back": {"x"}}, nil)
+
+	q := `o "x" & #é`
+	tag := "a&b c"
+	filter := url.Values{"q": {q}, "tag": {tag}}.Encode()
+	path := "/flash/" + itoa(deck.ID) + "/cards/1?" + filter
+
+	rec := postCardForm(t, s, s.Alice, path,
+		url.Values{"card_type": {"basic"}, "front": {"one"}, "back": {"y"}}, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save edit = %d; body: %s", rec.Code, rec.Body.String())
+	}
+
+	wantPush := "/flash/" + itoa(deck.ID) + "/cards/1?" + filter
+	if got := rec.Header().Get("HX-Push-Url"); got != wantPush {
+		t.Errorf("HX-Push-Url = %q, want %q", got, wantPush)
+	}
+
+	body := rec.Body.String()
+	// The raw HTML must escape "&" as an entity wherever the filter appears
+	// in an href (html/template's auto-escaping), or the "&tag=" separator
+	// between q and tag would silently break.
+	if !strings.Contains(body, "q=o&#43;%22x%22&#43;%26&#43;%23%C3%A9&amp;tag=a%26b&#43;c") {
+		t.Errorf("rendered hrefs don't contain the html-escaped encoded filter; body: %s", body)
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	back := doc.MustHave("a.flash-card-back-to-grid")
+	if href, _ := htmlassert.Attr(back, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/?"+filter {
+		t.Errorf("back-to-grid href = %q, want the filter kept encoded", href)
+	}
+	edit := doc.MustHave("a.flash-card-edit")
+	if href, _ := htmlassert.Attr(edit, "href"); href != "/flash/"+itoa(deck.ID)+"/cards/edit/1?"+filter {
+		t.Errorf("edit href = %q, want the filter kept encoded", href)
+	}
+}
+
+// TestSaveEditKeepsFilterEncodedWithoutJS is the no-JS counterpart: the
+// redirect Location must carry the same URL-encoded filter.
+func TestSaveEditKeepsFilterEncodedWithoutJS(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"one"}, "back": {"x"}}, nil)
+
+	q := `o "x" & #é`
+	tag := "a&b c"
+	filter := url.Values{"q": {q}, "tag": {tag}}.Encode()
+	path := "/flash/" + itoa(deck.ID) + "/cards/1?" + filter
+
+	wantLocation := "/flash/" + itoa(deck.ID) + "/cards/1?" + filter
+	s.Submit(t, s.Alice, path,
+		url.Values{"card_type": {"basic"}, "front": {"one"}, "back": {"z"}}, wantLocation)
+}
+
+// TestOpenedCardShowsTagsOnce guards against the back face's plain tag pills
+// duplicating the clickable tag links already shown below the card: an
+// opened card (not Static) should show the tags exactly once, as links.
+func TestOpenedCardShowsTagsOnce(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetCardTags(t.Context(), s.Alice.User.ID, c.ID, []string{"greetings"}); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/"+itoa(c.ID))
+	doc.MustNotHave(".flash-card-back .flash-pill")
+	link := doc.MustHave(".flash-tag-links a.flash-pill")
+	if got := htmlassert.Text(link); got != "greetings" {
+		t.Errorf("tag link text = %q, want greetings", got)
 	}
 }
 

@@ -95,10 +95,10 @@
 {{template "card-editor" (dict
 	"Form" .CardForm
 	"FormID" "card-detail-new"
-	"Action" (printf "/flash/%d/cards/new" .Deck.ID)
+	"Action" .CardForm.ActionURL
 	"Heading" "New card"
 	"IDSuffix" "new"
-	"CancelURL" (printf "/flash/%d/cards/" .Deck.ID)
+	"CancelURL" .CardForm.CancelURL
 	"CancelLabel" "All cards"
 	"ShowAddAnother" true)}}
 {{end}}
@@ -107,10 +107,10 @@
 {{template "card-editor" (dict
 	"Form" .CardForm
 	"FormID" "card-detail-edit"
-	"Action" (printf "/flash/%d/cards/%d" .Deck.ID .CardForm.Card.ID)
+	"Action" .CardForm.ActionURL
 	"Heading" "Edit card"
 	"IDSuffix" .CardForm.Card.ID
-	"CancelURL" (printf "/flash/%d/cards/%d" .Deck.ID .CardForm.Card.ID)
+	"CancelURL" .CardForm.CancelURL
 	"CancelLabel" "Back to the card"
 	"ShowAddAnother" false)}}
 {{end}}
