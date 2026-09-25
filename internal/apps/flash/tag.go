@@ -45,12 +45,18 @@ func ValidateTagNames(names []string) error {
 
 // SetCardTags replaces cardID's whole tag set with names, creating any tag
 // that does not exist yet for userID. It fails with ErrNotFound if the card
-// is not userID's own, via the same DeckByID-style ownership check as
-// CreateCard: cardOwnerCheck below.
+// is not userID's own.
+//
+// The ownership check runs inside the same transaction as the writes (via
+// cardOwner(ctx, tx, ...)), not before it, for the same reason as GradeCard
+// and UndoLastGrade (#294, #288): with one database connection, a check
+// before BeginTx hands the connection back in between, letting a concurrent
+// DeleteCard of the same card run to completion in that gap — SetCardTags'
+// own writes would then hit a card that no longer exists, surfacing as a
+// raw foreign-key error instead of ErrNotFound. Nothing in this method may
+// use st.db once the transaction has started: with SetMaxOpenConns(1), that
+// would deadlock waiting for the connection the transaction already holds.
 func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []string) error {
-	if _, err := st.cardOwnerCheck(ctx, userID, cardID); err != nil {
-		return err
-	}
 	if err := ValidateTagNames(names); err != nil {
 		return err
 	}
@@ -60,6 +66,10 @@ func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []
 		return fmt.Errorf("flash: set card tags: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	if _, err := cardOwner(ctx, tx, userID, cardID); err != nil {
+		return err
+	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM flash_card_tags WHERE card_id = ?`, cardID); err != nil {
 		return fmt.Errorf("flash: set card tags: %w", err)
