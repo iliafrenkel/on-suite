@@ -88,6 +88,51 @@ func TestGradingRequiresCSRF(t *testing.T) {
 	}
 }
 
+// TestUndoRequiresCSRF mirrors TestGradingRequiresCSRF: before #295, only
+// the grade path had a dedicated CSRF-403 test for POST /flash/review/undo.
+func TestUndoRequiresCSRF(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.PostHX(t, s.Alice, "/flash/review/grade", url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
+
+	req := httpPost(t, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != 403 {
+		t.Errorf("undo without CSRF = %d, want 403", rec.Code)
+	}
+
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || !reviewed {
+		t.Errorf("after a 403 undo: reviewed = %v (err %v), want the grade left in place", reviewed, err)
+	}
+	now := time.Now().UTC()
+	if newCount, reviewCount, err := s.Store.DailyCounts(t.Context(), s.Alice.User.ID, deck.ID, now); err != nil || newCount != 1 || reviewCount != 0 {
+		t.Errorf("after a 403 undo: today's tally = new=%d review=%d (err %v), want 1/0 (the grade still counts)", newCount, reviewCount, err)
+	}
+	tally, err := s.Store.TodayTally(t.Context(), s.Alice.User.ID, &deck.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tally.Reviewed != 1 {
+		t.Errorf("after a 403 undo: TodayTally.Reviewed = %d, want 1 (the grade still counts)", tally.Reviewed)
+	}
+
+	// A proper undo, with a valid CSRF token, still works afterwards.
+	okRec := s.PostHX(t, s.Alice, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
+	if okRec.Code != 200 {
+		t.Fatalf("undo with CSRF = %d, want 200", okRec.Code)
+	}
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || reviewed {
+		t.Errorf("after a valid undo: reviewed = %v (err %v), want the grade undone", reviewed, err)
+	}
+}
+
 func TestGradingRejectsAnInvalidRating(t *testing.T) {
 	s := newServer(t)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
@@ -117,6 +162,43 @@ func TestGradingSomeoneElsesCardIs404(t *testing.T) {
 	rec := s.PostHX(t, s.Bob, "/flash/review/grade", url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
 	if rec.Code != 404 {
 		t.Errorf("grading someone else's card = %d, want 404", rec.Code)
+	}
+}
+
+// TestUndoSomeoneElsesCardIs404 mirrors TestGradingSomeoneElsesCardIs404:
+// before #295, only the grade path had a cross-user-404 test.
+func TestUndoSomeoneElsesCardIs404(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "alice's", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.PostHX(t, s.Alice, "/flash/review/grade", url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
+
+	rec := s.PostHX(t, s.Bob, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
+	if rec.Code != 404 {
+		t.Errorf("undoing someone else's card = %d, want 404", rec.Code)
+	}
+
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || !reviewed {
+		t.Errorf("after Bob's 404 undo: reviewed = %v (err %v), want Alice's grade left in place", reviewed, err)
+	}
+	now := time.Now().UTC()
+	if newCount, reviewCount, err := s.Store.DailyCounts(t.Context(), s.Alice.User.ID, deck.ID, now); err != nil || newCount != 1 || reviewCount != 0 {
+		t.Errorf("after Bob's 404 undo: Alice's today tally = new=%d review=%d (err %v), want 1/0 unchanged", newCount, reviewCount, err)
+	}
+
+	// Alice can still undo her own card afterwards.
+	okRec := s.PostHX(t, s.Alice, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
+	if okRec.Code != 200 {
+		t.Fatalf("Alice's own undo = %d, want 200", okRec.Code)
+	}
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || reviewed {
+		t.Errorf("after Alice's own undo: reviewed = %v (err %v), want the grade undone", reviewed, err)
 	}
 }
 
@@ -190,6 +272,9 @@ func TestGradingScopedToSomeoneElsesDeckIs404(t *testing.T) {
 	}
 }
 
+// TestReviewPageScopedToSomeoneElsesDeckIs404 guards that GET /flash/review
+// is wired to the shared reviewScope helper (which grade and undo also use
+// since #333/#355), not a separate ownership check of its own — see #295.
 func TestReviewPageScopedToSomeoneElsesDeckIs404(t *testing.T) {
 	s := newServer(t)
 	bobDeck, err := s.Store.CreateDeck(t.Context(), s.Bob.User.ID, "bob's", "", flash.DefaultDeckColor)
@@ -267,6 +352,36 @@ func TestReviewCardShowsTagsAsBackFacePills(t *testing.T) {
 		t.Errorf("back-face pill text = %q, want greetings", got)
 	}
 	doc.MustNotHave("#review-card .flash-tag-links")
+}
+
+// TestReviewedCardHasNoCorner is #338 bullet 1's counterpart to the existing
+// new-card corner test: a card that has already been graded once (so it is
+// due again, but not new) must render with no .flash-card-corner at all.
+func TestReviewedCardHasNoCorner(t *testing.T) {
+	s := newServer(t)
+	ctx := t.Context()
+	deck, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := s.Store.CreateCard(ctx, s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Grade once, far enough in the past (via the test's own store, at an
+	// explicit time) that the short FSRS learning-step due date it lands on
+	// has already passed by the handler's real now() — see
+	// TestStatsPageRendersConsistentNumbers for why this is anchored to the
+	// wall clock rather than s.Store.SetClock, which the handler's own
+	// store never sees.
+	t0 := time.Now().UTC().Add(-3 * time.Hour)
+	if _, err := s.Store.GradeCard(ctx, s.Alice.User.ID, card.ID, flash.RatingGood, t0); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	doc.MustHave("#review-card")
+	doc.MustNotHave("#review-card .flash-card-corner")
 }
 
 func TestReviewCardFlipsAndGradesWithFriendlyLabels(t *testing.T) {
@@ -746,6 +861,123 @@ func TestGradeFinishingQueueAnnouncesSummary(t *testing.T) {
 		t.Errorf("announce = %q, want the summary headline %q", got, headline)
 	}
 	_ = summary
+}
+
+// TestUndoFromSummaryBringsCardBackAndReducesTally is #338 bullet 3: undoing
+// from the end-of-session summary (the last card in the queue was just
+// graded) must bring that card back into view, reduce the reviewed tally,
+// and re-announce "Card N of M" rather than the summary headline.
+func TestUndoFromSummaryBringsCardBackAndReducesTally(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	graded := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(c.ID)}, "rating": {"3"}})
+	gradedDoc := htmlassert.Parse(t, graded.Body.String())
+	gradedDoc.MustHave(".flash-review-summary")
+
+	rec := s.PostHX(t, s.Alice, "/flash/review/undo?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(c.ID)}})
+	if rec.Code != 200 {
+		t.Fatalf("undo from summary = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustNotHave(".flash-review-summary")
+	doc.MustHave(".flash-review-card")
+	if got := htmlassert.Text(doc.MustHave(".flash-review-count")); got != "1 of 1" {
+		t.Errorf("progress after undo = %q, want %q", got, "1 of 1")
+	}
+	region := doc.MustHave("#review-announce")
+	if got := htmlassert.Text(region); got != "Card 1 of 1" {
+		t.Errorf("announce after undo = %q, want %q", got, "Card 1 of 1")
+	}
+
+	newCount, reviewCount, err := s.Store.DailyCounts(t.Context(), s.Alice.User.ID, deck.ID, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newCount != 0 || reviewCount != 0 {
+		t.Errorf("today's tally after undo = new=%d review=%d, want 0/0 (the graded card no longer counts)", newCount, reviewCount)
+	}
+}
+
+// TestReviewColourMatchesDeckForOneDeckScope is #338 bullet 4's single-deck
+// case: the progress stripe on .flash-review carries a deck-c-<color> class
+// matching the scoped deck's own colour.
+func TestReviewColourMatchesDeckForOneDeckScope(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setDeckColor(t, s.Store, s.Alice.User.ID, deck.ID, "purple")
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	stripe := doc.MustHave(".flash-review")
+	class, _ := htmlassert.Attr(stripe, "class")
+	if !strings.Contains(class, "deck-c-purple") {
+		t.Errorf(".flash-review class = %q, want it to contain deck-c-purple", class)
+	}
+}
+
+// TestReviewAllColourTracksCurrentCard is #338 bullet 4's Review-all case:
+// with no single-deck scope, the progress stripe's colour tracks whichever
+// deck the head-of-queue card belongs to, not a fixed colour — grading the
+// head card advances the queue to the other deck's card, and the stripe's
+// colour must follow it. Both cards are new (never reviewed), so the queue
+// picks a deck's new card in ListDecks order (newest first): deck B, then
+// deck A.
+func TestReviewAllColourTracksCurrentCard(t *testing.T) {
+	s := newServer(t)
+	ctx := t.Context()
+	deckA, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "A", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setDeckColor(t, s.Store, s.Alice.User.ID, deckA.ID, "blue")
+	if _, err := s.Store.CreateCard(ctx, s.Alice.User.ID, deckA.ID, flash.CardTypeBasic, "a1", "x", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	deckB, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "B", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setDeckColor(t, s.Store, s.Alice.User.ID, deckB.ID, "pink")
+	cardB, err := s.Store.CreateCard(ctx, s.Alice.User.ID, deckB.ID, flash.CardTypeBasic, "b1", "x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stripeClass := func(doc *htmlassert.Doc) string {
+		t.Helper()
+		class, _ := htmlassert.Attr(doc.MustHave(".flash-review"), "class")
+		return class
+	}
+
+	// deck B was created last, so ListDecks (newest first) puts it first:
+	// its card is the initial head, and the stripe follows its colour.
+	doc := s.Get(t, s.Alice, "/flash/review")
+	if got := stripeClass(doc); !strings.Contains(got, "deck-c-pink") {
+		t.Errorf(".flash-review class = %q, want it to contain deck-c-pink", got)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/flash/review/grade", url.Values{"card_id": {itoa(cardB.ID)}, "rating": {"3"}})
+	if rec.Code != 200 {
+		t.Fatalf("grade = %d, want 200", rec.Code)
+	}
+	after := htmlassert.Parse(t, rec.Body.String())
+	if got := stripeClass(after); !strings.Contains(got, "deck-c-blue") {
+		t.Errorf("after grading, .flash-review class = %q, want it to contain deck-c-blue", got)
+	}
 }
 
 func TestGradeIntoBreakStateAnnouncesBreak(t *testing.T) {

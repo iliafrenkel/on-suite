@@ -235,6 +235,33 @@ func TestSnoozeDeckRequiresCSRF(t *testing.T) {
 	}
 }
 
+// TestUnsnoozeDeckRequiresCSRF mirrors TestSnoozeDeckRequiresCSRF: the two
+// routes share the shape (POST /flash/{deckID}/unsnooze vs. .../snooze) but,
+// before #295, only /snooze had a dedicated CSRF-403 test.
+func TestUnsnoozeDeckRequiresCSRF(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, time.Now().Add(7*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	req := httpPost(t, "/flash/"+itoa(deck.ID)+"/unsnooze", url.Values{})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != 403 {
+		t.Errorf("unsnooze without CSRF = %d, want 403", rec.Code)
+	}
+
+	got, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SnoozedUntil == nil {
+		t.Error("after a 403 unsnooze: deck is no longer snoozed, want it left snoozed")
+	}
+}
+
 func TestCreateDeckWithColor(t *testing.T) {
 	s := newServer(t)
 	s.Submit(t, s.Alice, "/flash/new", url.Values{"name": {"Planets"}, "description": {""}, "color": {"purple"}}, "/flash/1")
@@ -484,6 +511,46 @@ func TestDeckFragmentCarriesOutOfBandListAndToolbar(t *testing.T) {
 		}
 	}
 	doc.MustHave(`#deck-list .deck-c-green`)
+}
+
+// TestOutOfBandReviewAllBadgeMatchesFullPageCount pins #316: the OOB
+// #flash-review-all fragment sent back from an HTMX action must show the
+// same due count as the full page, not just be present and marked
+// hx-swap-oob. The badge's visible text is just the number; its accessible
+// text (with the visually-hidden suffix added by #376) is "N to review in
+// all decks".
+func TestOutOfBandReviewAllBadgeMatchesFullPageCount(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, front := range []string{"hola", "adiós"} {
+		if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, front, "x", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	full := s.Get(t, s.Alice, "/flash/")
+	fullBadge := full.MustHave(`#flash-review-all .flash-due-badge`)
+	if got := htmlassert.Text(fullBadge); got != "2 to review in all decks" {
+		t.Fatalf("full-page Review all badge = %q, want %q", got, "2 to review in all decks")
+	}
+
+	// A second, unrelated create-deck HTMX round trip should carry the
+	// same due count in its OOB #flash-review-all fragment.
+	rec := s.PostHX(t, s.Alice, "/flash/new", url.Values{"name": {"French"}})
+	if rec.Code != 201 {
+		t.Fatalf("create over HTMX = %d, want 201; body: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	badge := doc.MustHave(`#flash-review-all .flash-due-badge`)
+	if got := htmlassert.Text(badge); got != "2 to review in all decks" {
+		t.Errorf("OOB Review all badge = %q, want %q", got, "2 to review in all decks")
+	}
+	if badge.FirstChild == nil || badge.FirstChild.Type != html.TextNode || strings.TrimSpace(badge.FirstChild.Data) != "2" {
+		t.Errorf("OOB Review all badge visible text = %q, want %q", htmlassert.Text(badge), "2")
+	}
 }
 
 func httpGet(t *testing.T, path string) *http.Request {

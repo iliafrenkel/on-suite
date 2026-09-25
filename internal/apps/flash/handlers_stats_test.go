@@ -287,4 +287,16 @@ func TestStatsHTMXPaneMatchesFullPage(t *testing.T) {
 	if n := len(full.QueryAll(".flash-load-row")); n != 3 {
 		t.Errorf("full page has %d stats rows, want 3", n)
 	}
+
+	// #352: the HTMX response also carries the deck list as an
+	// out-of-band swap, and marks #flash-detail-open checked (the pane is
+	// open), matching every other deck-detail HTMX fragment.
+	list := frag.MustHave("#deck-list")
+	if _, ok := htmlassert.Attr(list, "hx-swap-oob"); !ok {
+		t.Error("#deck-list in the stats HTMX fragment is not marked hx-swap-oob")
+	}
+	open := frag.MustHave("#flash-detail-open")
+	if _, checked := htmlassert.Attr(open, "checked"); !checked {
+		t.Error("#flash-detail-open in the stats HTMX fragment is not checked")
+	}
 }
