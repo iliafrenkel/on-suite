@@ -359,7 +359,8 @@ that deck.
 - **Focused layout**: `/flash/review` and `/flash/review/{deckID}` keep the
   suite header but have no deck list. Top bar: "← Stop" (to the deck pane
   for a deck review, to home for Review all), deck name (or "All decks"), a
-  progress bar in `var(--deck)` (accent colour for Review all), and "N of M".
+  progress bar in `var(--deck)` (for Review all, the current card's own deck
+  colour, so it changes as the queue moves between decks — #339), and "N of M".
   M = cards graded today in this scope + cards remaining in the queue; N = graded
   today + 1. Both come from existing data, so a reload keeps the count.
 - **Card**: `flash-card` at large size, max-width ~28rem. Front: the
@@ -370,16 +371,29 @@ that deck.
   selector off the flip checkbox, so no JS is needed): four large buttons in
   a row — Forgot (red), Hard (amber), Got it (green/teal), Easy (blue) —
   each tinted background with a matching border and dark text, showing its
-  key (1–4) underneath. New `--flash-grade-*` tokens, light and dark.
+  key (1–4) underneath. New `--flash-grade-*` tokens, light and dark. On
+  hover a grade keeps its own colour with a small brightness shift (darker
+  in light theme, lighter in dark) — #337.
 - **Undo** (U) stays as a small text button under the grades.
 - Grading and undo post as today (`hx-target="#review-body"`); the next card
   arrives face up. The deck scope query parameter behaviour is unchanged.
+  Without JS, grade and undo redirect (303) back to the review page; grade
+  carries `?undo={cardID}` so the Undo button survives (#296).
+- **Taking a break**: a deck's own review page, while the deck is snoozed,
+  says "This deck is taking a break" with the end date and an End break
+  button, instead of the empty summary (#296).
+- **Accessibility**: each state has exactly one `<h1>` — a visually-hidden
+  one with the scope name, outside `#review-body` (the break and summary
+  headings are `<h2>`). A persistent `aria-live="polite"` region, also
+  outside `#review-body`, is updated out-of-band on every HTMX response:
+  "Card N of M", the summary headline, or the break message (#334).
 - **Session summary** (queue empty), replacing "All done for now":
   - "Nice work! You reviewed N cards today" (N from today's
     `flash_review_counts` for this scope; if N is 0, "Nothing to review
     right now" instead, with no breakdown or celebration).
-  - A stacked breakdown bar (got it / hard / forgot / easy) from today's
-    `again/hard/good/easy_count` columns, with a text legend.
+  - A stacked breakdown bar, best first (got it / easy / hard / forgot —
+    #339), from today's `again/hard/good/easy_count` columns, with a text
+    legend in the same order.
   - "🔥 N days in a row" from `Store.Streak` (omit when the streak is 0 or 1).
   - One big next-step button: "Review *Deck* next (N due)" linking to the
     deck with the most due cards (excluding snoozed decks) if any, otherwise
