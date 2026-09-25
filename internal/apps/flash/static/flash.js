@@ -115,6 +115,16 @@
 				x.className = "flash-tag-remove";
 				x.setAttribute("aria-label", "Remove tag " + name);
 				x.textContent = "×";
+				// A mousedown on this button moves focus off entry before the
+				// click fires, which would otherwise run entry's blur handler
+				// first and commit any leftover typed text as a new tag — the
+				// removal click then lands on a re-rendered pill list and does
+				// nothing (#326). preventDefault() keeps focus on entry so
+				// blur never fires, while a real click (mouse or, for
+				// keyboard, Enter/Space) still reaches the listener below.
+				x.addEventListener("mousedown", function (e) {
+					e.preventDefault();
+				});
 				x.addEventListener("click", function () {
 					names.splice(i, 1);
 					sync();
