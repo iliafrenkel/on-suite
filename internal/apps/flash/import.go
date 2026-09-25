@@ -184,6 +184,16 @@ func parseCardBlock(lines []string) map[string]string {
 			fields[currentKey] += "\n" + line
 		}
 	}
+	// front/back/notes (and any other multi-line text field) may have
+	// started with no same-line value, leaving a stray leading "\n" from
+	// the first continuation line appended above; TrimSpace removes that
+	// (and any trailing whitespace) while preserving internal newlines
+	// between continuation lines.
+	for _, key := range []string{"front", "back", "notes"} {
+		if v, ok := fields[key]; ok {
+			fields[key] = strings.TrimSpace(v)
+		}
+	}
 	return fields
 }
 
