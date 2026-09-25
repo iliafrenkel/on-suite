@@ -2614,6 +2614,11 @@ kbd {
 .flash-swatch-input:focus-visible + .flash-swatch { outline: var(--ring); outline-offset: 3px; }
 
 .flash-deck-form { max-width: var(--measure); }
+/* Wraps the edit form and the Take-a-break section (decks.html) so the
+   section lines up with the form instead of stretching wider (#345). The
+   form's own max-width above still applies inside, so this isn't a double
+   constraint — both settle on the same width. */
+.flash-deck-edit { max-width: var(--measure); }
 
 /* Below 900px the list and the pane can't sit side by side: show one at a
  * time, driven by #flash-detail-open (checked by the server whenever the
