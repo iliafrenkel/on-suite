@@ -144,6 +144,28 @@ func TestParseImportAutoDetectsMarkdown(t *testing.T) {
 	}
 }
 
+// TestParseImportMissingDeckNameAndCardsReportsSameErrorBothFormats is #300
+// item 4: JSON used to check "at least one card" before validating the deck
+// name, while Markdown validated the deck first; a payload missing both
+// reported a different error depending on format. Both formats should
+// report the deck-name error first (it reads most naturally).
+func TestParseImportMissingDeckNameAndCardsReportsSameErrorBothFormats(t *testing.T) {
+	jsonPayload := `{"deck": {}, "cards": []}`
+	mdPayload := "# \n"
+
+	_, jerr := ParseImport(jsonPayload, "json")
+	if !errors.Is(jerr, ErrInvalid) {
+		t.Fatalf("json err = %v, want ErrInvalid", jerr)
+	}
+	_, merr := ParseImport(mdPayload, "markdown")
+	if !errors.Is(merr, ErrInvalid) {
+		t.Fatalf("markdown err = %v, want ErrInvalid", merr)
+	}
+	if jerr.Error() != merr.Error() {
+		t.Errorf("json err = %q, markdown err = %q, want identical", jerr.Error(), merr.Error())
+	}
+}
+
 func TestParseImportUnknownFormat(t *testing.T) {
 	_, err := ParseImport("anything", "yaml")
 	if !errors.Is(err, ErrInvalid) {

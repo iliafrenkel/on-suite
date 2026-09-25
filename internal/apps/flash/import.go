@@ -125,16 +125,18 @@ func parseImportJSON(payload string) (parsedDeck, error) {
 	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
 		return parsedDeck{}, fmt.Errorf("%w: invalid JSON: %v", ErrInvalid, err)
 	}
-	if len(raw.Cards) == 0 {
-		return parsedDeck{}, fmt.Errorf("%w: the import needs at least one card", ErrInvalid)
-	}
-
 	deck := parsedDeck{
 		Name:        strings.TrimSpace(raw.Deck.Name),
 		Description: raw.Deck.Description,
 	}
+	// Deck name is validated before checking for cards, matching
+	// parseImportMarkdown's order, so a payload missing both reports the
+	// same error regardless of format (#300 item 4).
 	if err := ValidateDeck(deck.Name, deck.Description); err != nil {
 		return parsedDeck{}, err
+	}
+	if len(raw.Cards) == 0 {
+		return parsedDeck{}, fmt.Errorf("%w: the import needs at least one card", ErrInvalid)
 	}
 
 	for i, c := range raw.Cards {
