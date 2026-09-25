@@ -54,7 +54,10 @@ type importJSON struct {
 
 // ParseImport parses payload as format ("json", "markdown", or "auto") and
 // returns a fully-validated deck, or the first validation error found.
-// format=="" is treated the same as "auto".
+// format=="" is treated the same as "auto". It returns the unexported
+// parsedDeck type deliberately: the only way to get one is by parsing and
+// validating a payload here, so Store.ImportDeck can accept it as proof its
+// cards are already well-formed.
 func ParseImport(payload, format string) (parsedDeck, error) {
 	switch format {
 	case "json":
@@ -125,16 +128,18 @@ func parseImportJSON(payload string) (parsedDeck, error) {
 	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
 		return parsedDeck{}, fmt.Errorf("%w: invalid JSON: %v", ErrInvalid, err)
 	}
-	if len(raw.Cards) == 0 {
-		return parsedDeck{}, fmt.Errorf("%w: the import needs at least one card", ErrInvalid)
-	}
-
 	deck := parsedDeck{
 		Name:        strings.TrimSpace(raw.Deck.Name),
 		Description: raw.Deck.Description,
 	}
+	// Deck name is validated before checking for cards, matching
+	// parseImportMarkdown's order, so a payload missing both reports the
+	// same error regardless of format (#300 item 4).
 	if err := ValidateDeck(deck.Name, deck.Description); err != nil {
 		return parsedDeck{}, err
+	}
+	if len(raw.Cards) == 0 {
+		return parsedDeck{}, fmt.Errorf("%w: the import needs at least one card", ErrInvalid)
 	}
 
 	for i, c := range raw.Cards {
@@ -182,6 +187,16 @@ func parseCardBlock(lines []string) map[string]string {
 		}
 		if currentKey != "" && strings.TrimSpace(line) != "" {
 			fields[currentKey] += "\n" + line
+		}
+	}
+	// front/back/notes (and any other multi-line text field) may have
+	// started with no same-line value, leaving a stray leading "\n" from
+	// the first continuation line appended above; TrimSpace removes that
+	// (and any trailing whitespace) while preserving internal newlines
+	// between continuation lines.
+	for _, key := range []string{"front", "back", "notes"} {
+		if v, ok := fields[key]; ok {
+			fields[key] = strings.TrimSpace(v)
 		}
 	}
 	return fields

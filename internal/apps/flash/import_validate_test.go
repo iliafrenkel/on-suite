@@ -144,6 +144,28 @@ func TestParseImportAutoDetectsMarkdown(t *testing.T) {
 	}
 }
 
+// TestParseImportMissingDeckNameAndCardsReportsSameErrorBothFormats is #300
+// item 4: JSON used to check "at least one card" before validating the deck
+// name, while Markdown validated the deck first; a payload missing both
+// reported a different error depending on format. Both formats should
+// report the deck-name error first (it reads most naturally).
+func TestParseImportMissingDeckNameAndCardsReportsSameErrorBothFormats(t *testing.T) {
+	jsonPayload := `{"deck": {}, "cards": []}`
+	mdPayload := "# \n"
+
+	_, jerr := ParseImport(jsonPayload, "json")
+	if !errors.Is(jerr, ErrInvalid) {
+		t.Fatalf("json err = %v, want ErrInvalid", jerr)
+	}
+	_, merr := ParseImport(mdPayload, "markdown")
+	if !errors.Is(merr, ErrInvalid) {
+		t.Fatalf("markdown err = %v, want ErrInvalid", merr)
+	}
+	if jerr.Error() != merr.Error() {
+		t.Errorf("json err = %q, markdown err = %q, want identical", jerr.Error(), merr.Error())
+	}
+}
+
 func TestParseImportUnknownFormat(t *testing.T) {
 	_, err := ParseImport("anything", "yaml")
 	if !errors.Is(err, ErrInvalid) {
@@ -203,6 +225,24 @@ func TestParseImportMarkdownDefaultsTypeToBasic(t *testing.T) {
 
 func TestParseImportMarkdownMultilineFront(t *testing.T) {
 	payload := "# D\n\n## Card\nFront: Line one\nLine two\nBack: A\n"
+	d, err := ParseImport(payload, "markdown")
+	if err != nil {
+		t.Fatalf("ParseImport: %v", err)
+	}
+	want := "Line one\nLine two"
+	if d.Cards[0].Front != want {
+		t.Errorf("Front = %q, want %q", d.Cards[0].Front, want)
+	}
+}
+
+// TestParseImportMarkdownFrontOnOwnLineHasNoLeadingNewline is #300 item 3:
+// when a key's value starts entirely on the line(s) after "Front:" (no text
+// on the same line), parseCardBlock used to seed the field with an empty
+// same-line value and then append "\n"+line for every continuation line,
+// leaving a stray leading "\n" in the stored value. The internal newline
+// between continuation lines must survive.
+func TestParseImportMarkdownFrontOnOwnLineHasNoLeadingNewline(t *testing.T) {
+	payload := "# D\n\n## Card\nFront:\nLine one\nLine two\nBack: A\n"
 	d, err := ParseImport(payload, "markdown")
 	if err != nil {
 		t.Fatalf("ParseImport: %v", err)
