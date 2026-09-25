@@ -33,7 +33,7 @@
 
 {{/* flash-review-all is the toolbar's Review-all button. It shows the
      total due count, and is re-sent out of band with every pane change. */}}
-{{define "flash-review-all"}}<a id="flash-review-all" class="toolbar-btn" href="/flash/review"{{if .OOB}} hx-swap-oob="true"{{end}}>{{ticon "play"}}Review all{{if .TotalDue}} <span class="flash-due-badge">{{.TotalDue}}</span>{{end}}</a>{{end}}
+{{define "flash-review-all"}}<a id="flash-review-all" class="toolbar-btn" href="/flash/review"{{if .OOB}} hx-swap-oob="true"{{end}}>{{ticon "play"}}Review all{{if .TotalDue}} <span class="flash-due-badge">{{.TotalDue}}<span class="visually-hidden"> to review in all decks</span></span>{{end}}</a>{{end}}
 
 {{define "flash-home-toolbar"}}
 <div class="notes-toolbar flash-home-toolbar">
@@ -210,7 +210,7 @@
 <ul class="deck-list" id="deck-list"{{if .OOB}} hx-swap-oob="true"{{end}}>
 	{{range .Gifts}}
 	<li>
-		<a class="deck-row deck-row-gift deck-c-{{.DeckColor}}{{if eq .ShareID $.ActiveGiftID}} deck-row-active{{end}}" href="/flash/shared/{{.ShareID}}" hx-get="/flash/shared/{{.ShareID}}" hx-target="#deck-detail" hx-push-url="true">
+		<a class="deck-row deck-row-gift deck-c-{{.DeckColor}}{{if eq .ShareID $.ActiveGiftID}} deck-row-active{{end}}" href="/flash/shared/{{.ShareID}}" hx-get="/flash/shared/{{.ShareID}}" hx-target="#deck-detail" hx-push-url="true"{{if eq .ShareID $.ActiveGiftID}} aria-current="true"{{end}}>
 			{{template "flash-stack" (dict "Size" "sm")}}
 			<span class="deck-row-text">
 				<span class="deck-row-name">{{.DeckName}}</span>
@@ -229,7 +229,7 @@
 				<span class="deck-row-name">{{$d.Name}}</span>
 				<span class="deck-row-status">{{.Status}}</span>
 			</span>
-			{{if and .Due (not .Snoozed)}}<span class="flash-due-badge" aria-label="{{.Due}} to review">{{.Due}}</span>{{end}}
+			{{if and .Due (not .Snoozed)}}<span class="flash-due-badge">{{.Due}}<span class="visually-hidden"> to review</span></span>{{end}}
 		</a>
 	</li>
 	{{end}}
