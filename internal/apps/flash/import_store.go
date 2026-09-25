@@ -10,7 +10,9 @@ import (
 // ImportDeck creates a new deck for userID and populates it with cards, all
 // inside one transaction: if any insert fails, nothing is left behind. cards
 // must already be validated (see ParseImport) — ImportDeck only persists,
-// it does not re-validate field contents. It takes the unexported
+// it does not re-validate field contents, and that includes the deck name
+// and description: it trims them but doesn't run ValidateDeck, so a caller
+// must have validated them already. It takes the unexported
 // parsedCard type deliberately, so only ParseImport's validated output —
 // never a hand-built slice — can reach this method.
 func (st *Store) ImportDeck(ctx context.Context, userID int64, name, description string, cards []parsedCard) (Deck, error) {
