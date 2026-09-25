@@ -3119,8 +3119,11 @@ input.flash-tag-entry:focus { outline: none; }
 	padding: var(--s-6) var(--s-4);
 	text-align: center;
 }
-.flash-review-summary h1,
-.flash-review-break h1 { margin: 0; }
+/* These are <h2>s (the page's one <h1> is the visually-hidden scope name
+   outside #review-body, see review.html's "content"), but they keep the
+   bigger heading size they had as <h1>s so the panel looks unchanged. */
+.flash-review-summary h2,
+.flash-review-break h2 { margin: 0; font-size: var(--fs-2xl); }
 .flash-summary-lead { margin: 0; font-size: var(--fs-lg); }
 .flash-breakdown { width: 100%; max-width: 24rem; height: 12px; border-radius: 6px; overflow: hidden; }
 .flash-seg-good  { fill: var(--flash-grade-good); }

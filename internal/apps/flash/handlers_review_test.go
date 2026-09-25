@@ -611,3 +611,165 @@ func TestReviewIgnoresAMalformedUndoParam(t *testing.T) {
 		doc.MustNotHave(".flash-undo-btn")
 	}
 }
+
+// mustOneVisuallyHiddenH1 asserts the page has exactly one <h1>, that it is
+// visually-hidden, and that its accessible text is scope. It exists so the
+// review screen's card, break and summary states all get the same check
+// (#334): a single steady heading, not one per swapped panel.
+func mustOneVisuallyHiddenH1(t *testing.T, doc *htmlassert.Doc, scope string) {
+	t.Helper()
+	hs := doc.QueryAll("h1")
+	if len(hs) != 1 {
+		t.Fatalf("page has %d <h1> elements, want exactly 1", len(hs))
+	}
+	h1 := hs[0]
+	class, _ := htmlassert.Attr(h1, "class")
+	if !containsClass(class, "visually-hidden") {
+		t.Errorf("h1 class = %q, want it to include visually-hidden", class)
+	}
+	if got := htmlassert.Text(h1); got != scope {
+		t.Errorf("h1 text = %q, want %q", got, scope)
+	}
+}
+
+func TestReviewPageHasOneHiddenH1InCardState(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	doc.MustHave(".flash-review-card")
+	mustOneVisuallyHiddenH1(t, doc, "Spanish")
+}
+
+func TestReviewPageHasOneHiddenH1InSummaryState(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/flash/review")
+	doc.MustHave(".flash-review-summary")
+	mustOneVisuallyHiddenH1(t, doc, "All decks")
+	if h2s := doc.QueryAll(".flash-review-summary h2"); len(h2s) != 1 {
+		t.Errorf(".flash-review-summary has %d <h2>, want 1", len(h2s))
+	}
+	doc.MustNotHave(".flash-review-summary h1")
+}
+
+func TestReviewPageHasOneHiddenH1InBreakState(t *testing.T) {
+	s := newServer(t)
+	now := time.Now().UTC()
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, now.AddDate(0, 0, 7)); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
+	doc.MustHave(".flash-review-break")
+	mustOneVisuallyHiddenH1(t, doc, "Spanish")
+	if h2s := doc.QueryAll(".flash-review-break h2"); len(h2s) != 1 {
+		t.Errorf(".flash-review-break has %d <h2>, want 1", len(h2s))
+	}
+	doc.MustNotHave(".flash-review-break h1")
+}
+
+func TestReviewLiveRegionIsOutsideReviewBodyAndEmptyOnFullLoad(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/flash/review")
+	region := doc.MustHave("#review-announce")
+	if v, _ := htmlassert.Attr(region, "role"); v != "status" {
+		t.Errorf("review-announce role = %q, want status", v)
+	}
+	if v, _ := htmlassert.Attr(region, "aria-live"); v != "polite" {
+		t.Errorf("review-announce aria-live = %q, want polite", v)
+	}
+	class, _ := htmlassert.Attr(region, "class")
+	if !containsClass(class, "visually-hidden") {
+		t.Errorf("review-announce class = %q, want it to include visually-hidden", class)
+	}
+	if got := htmlassert.Text(region); got != "" {
+		t.Errorf("review-announce text on full load = %q, want empty (avoid double announcement)", got)
+	}
+	doc.MustNotHave("#review-body #review-announce") // it lives outside the swapped area
+}
+
+func TestGradeAnnouncesCardPosition(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var first flash.Card
+	for i, front := range []string{"uno", "dos", "tres"} {
+		c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, front, "x", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = c
+		}
+	}
+
+	rec := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(first.ID)}, "rating": {"3"}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	region := doc.MustHave("#review-announce")
+	if got := htmlassert.Text(region); got != "Card 2 of 3" {
+		t.Errorf("announce = %q, want %q", got, "Card 2 of 3")
+	}
+}
+
+func TestGradeFinishingQueueAnnouncesSummary(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(c.ID)}, "rating": {"3"}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	summary := doc.MustHave(".flash-review-summary")
+	headline := htmlassert.Text(doc.MustHave(".flash-review-summary h2"))
+	region := doc.MustHave("#review-announce")
+	if got := htmlassert.Text(region); got != headline {
+		t.Errorf("announce = %q, want the summary headline %q", got, headline)
+	}
+	_ = summary
+}
+
+func TestGradeIntoBreakStateAnnouncesBreak(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Snooze the deck first: grading its card still succeeds (grading
+	// doesn't check snooze), but the deck drops out of its own queue, so
+	// the post-grade response lands on the break panel, not the summary.
+	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, time.Now().UTC().AddDate(0, 0, 7)); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(c.ID)}, "rating": {"3"}})
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave(".flash-review-break")
+	region := doc.MustHave("#review-announce")
+	if got := htmlassert.Text(region); got != "This deck is taking a break" {
+		t.Errorf("announce = %q, want %q", got, "This deck is taking a break")
+	}
+}

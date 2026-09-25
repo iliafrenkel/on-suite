@@ -3,6 +3,7 @@ package flash
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -117,6 +118,11 @@ type reviewView struct {
 	Done, Position, Total, ProgressPct int
 
 	CelebrationColors []string
+
+	// Announce is the short status message an HTMX grade/undo response
+	// resends out of band to #review-announce (#334) — never shown on a
+	// full page load, only after a swap.
+	Announce string
 }
 
 // review backs GET /review: the cross-deck queue, or one deck's queue if
@@ -214,8 +220,10 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 		if deck == nil {
 			view.Color = qc.Deck.Color
 		}
+		view.Announce = fmt.Sprintf("Card %d of %d", view.Position, view.Total)
 	case deck != nil && deck.IsSnoozed(now):
 		view.Break = &reviewBreak{DeckID: deck.ID, Until: deck.SnoozedUntil.Format("2 Jan")}
+		view.Announce = "This deck is taking a break"
 	default:
 		summary, err := a.reviewSummaryFor(ctx, userID, deckID, tally, now)
 		if err != nil {
@@ -223,10 +231,15 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 			return
 		}
 		view.Summary = &summary
+		if summary.Reviewed > 0 {
+			view.Announce = "Nice work!"
+		} else {
+			view.Announce = "Nothing to review right now"
+		}
 	}
 
 	if web.IsHTMX(r) {
-		if err := a.deps.Render.Fragment(w, status, "flash/review", "review-body", view); err != nil {
+		if err := a.deps.Render.Fragment(w, status, "flash/review", "review-body-oob", view); err != nil {
 			a.deps.Errors.Internal(w, r, err)
 		}
 		return
