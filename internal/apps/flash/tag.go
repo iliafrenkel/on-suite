@@ -189,15 +189,27 @@ func (st *Store) TagsForCard(ctx context.Context, userID, cardID int64) ([]Tag, 
 	return out, rows.Err()
 }
 
+// CardWithDeck is a card plus the name and colour of the deck it belongs
+// to, for the cross-deck tag filter — one JOIN instead of a DeckByID lookup
+// per card (#290).
+type CardWithDeck struct {
+	Card      Card
+	DeckName  string
+	DeckColor string
+}
+
 // CardsByTag returns every one of userID's cards, across every deck, that
-// carries tagName. This is Flash's cross-deck filter.
-func (st *Store) CardsByTag(ctx context.Context, userID int64, tagName string) ([]Card, error) {
+// carries tagName, alongside each card's own deck name and colour. This is
+// Flash's cross-deck filter.
+func (st *Store) CardsByTag(ctx context.Context, userID int64, tagName string) ([]CardWithDeck, error) {
 	name := normalizeTagName(tagName)
 	rows, err := st.db.QueryContext(ctx,
-		`SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at, c.image_hash, c.audio_hash
+		`SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at, c.image_hash, c.audio_hash,
+		        d.name, d.color
 		 FROM flash_cards c
 		 JOIN flash_card_tags ct ON ct.card_id = c.id
 		 JOIN flash_tags t ON t.id = ct.tag_id
+		 JOIN flash_decks d ON d.id = c.deck_id
 		 WHERE c.user_id = ? AND t.user_id = ? AND t.name = ?
 		 ORDER BY c.created_at DESC, c.id DESC`, userID, userID, name)
 	if err != nil {
@@ -205,13 +217,28 @@ func (st *Store) CardsByTag(ctx context.Context, userID int64, tagName string) (
 	}
 	defer func() { _ = rows.Close() }()
 
-	var out []Card
+	var out []CardWithDeck
 	for rows.Next() {
-		c, err := scanCardRow(rows)
-		if err != nil {
-			return nil, err
+		var (
+			c                    Card
+			createdAt            string
+			imageHash, audioHash sql.NullString
+			deckName, deckColor  string
+		)
+		if err := rows.Scan(&c.ID, &c.DeckID, &c.UserID, &c.CardType, &c.Front, &c.Back, &c.Notes, &createdAt,
+			&imageHash, &audioHash, &deckName, &deckColor); err != nil {
+			return nil, fmt.Errorf("flash: cards by tag: %w", err)
 		}
-		out = append(out, c)
+		if c.CreatedAt, err = parseTime(createdAt); err != nil {
+			return nil, fmt.Errorf("flash: cards by tag: %w", err)
+		}
+		if imageHash.Valid {
+			c.ImageHash = &imageHash.String
+		}
+		if audioHash.Valid {
+			c.AudioHash = &audioHash.String
+		}
+		out = append(out, CardWithDeck{Card: c, DeckName: deckName, DeckColor: deckColor})
 	}
 	return out, rows.Err()
 }

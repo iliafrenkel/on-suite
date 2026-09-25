@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"strconv"
@@ -155,6 +156,33 @@ func TestAdoptShareHandlerListsAccountsOnce(t *testing.T) {
 	}
 	if got := n.Load(); got != 1 {
 		t.Errorf("adoptShareHandler ran ListAccounts %d times, want 1", got)
+	}
+}
+
+// TestTagFilterPageDoesNotLookUpEachCardsDeckSeparately pins #290's N+1:
+// the tag-filter handler used to call DeckByID once per card returned by
+// CardsByTag to get its deck's name, instead of one query that joins
+// flash_decks. Three cards across three different decks must still run
+// DeckByID's own query zero times — CardsByTag's own JOIN carries the name.
+func TestTagFilterPageDoesNotLookUpEachCardsDeckSeparately(t *testing.T) {
+	s, n := newQueryCountingServer(t, deckByIDSubstring)
+	for _, name := range []string{"A", "B", "C"} {
+		deckID := createDeckHX(t, s, s.Alice, name)
+		rec := s.Post(t, s.Alice, "/flash/"+strconv.FormatInt(deckID, 10)+"/cards/new",
+			url.Values{"card_type": {"basic"}, "front": {name}, "back": {"x"}, "tags": {"hard"}})
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("create card in deck %q: %d; body: %s", name, rec.Code, rec.Body.String())
+		}
+	}
+	n.Store(0)
+
+	doc := s.Get(t, s.Alice, "/flash/tags/hard")
+	items := doc.QueryAll(".tag-filter-item")
+	if len(items) != 3 {
+		t.Fatalf("GET /flash/tags/hard shows %d cards, want 3", len(items))
+	}
+	if got := n.Load(); got != 0 {
+		t.Errorf("GET /flash/tags/hard ran DeckByID %d times, want 0 (joined instead)", got)
 	}
 }
 
