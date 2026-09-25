@@ -107,6 +107,30 @@ func TestUndoRequiresCSRF(t *testing.T) {
 	if rec.Code != 403 {
 		t.Errorf("undo without CSRF = %d, want 403", rec.Code)
 	}
+
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || !reviewed {
+		t.Errorf("after a 403 undo: reviewed = %v (err %v), want the grade left in place", reviewed, err)
+	}
+	now := time.Now().UTC()
+	if newCount, reviewCount, err := s.Store.DailyCounts(t.Context(), s.Alice.User.ID, deck.ID, now); err != nil || newCount != 1 || reviewCount != 0 {
+		t.Errorf("after a 403 undo: today's tally = new=%d review=%d (err %v), want 1/0 (the grade still counts)", newCount, reviewCount, err)
+	}
+	tally, err := s.Store.TodayTally(t.Context(), s.Alice.User.ID, &deck.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tally.Reviewed != 1 {
+		t.Errorf("after a 403 undo: TodayTally.Reviewed = %d, want 1 (the grade still counts)", tally.Reviewed)
+	}
+
+	// A proper undo, with a valid CSRF token, still works afterwards.
+	okRec := s.PostHX(t, s.Alice, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
+	if okRec.Code != 200 {
+		t.Fatalf("undo with CSRF = %d, want 200", okRec.Code)
+	}
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || reviewed {
+		t.Errorf("after a valid undo: reviewed = %v (err %v), want the grade undone", reviewed, err)
+	}
 }
 
 func TestGradingRejectsAnInvalidRating(t *testing.T) {
@@ -158,6 +182,23 @@ func TestUndoSomeoneElsesCardIs404(t *testing.T) {
 	rec := s.PostHX(t, s.Bob, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
 	if rec.Code != 404 {
 		t.Errorf("undoing someone else's card = %d, want 404", rec.Code)
+	}
+
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || !reviewed {
+		t.Errorf("after Bob's 404 undo: reviewed = %v (err %v), want Alice's grade left in place", reviewed, err)
+	}
+	now := time.Now().UTC()
+	if newCount, reviewCount, err := s.Store.DailyCounts(t.Context(), s.Alice.User.ID, deck.ID, now); err != nil || newCount != 1 || reviewCount != 0 {
+		t.Errorf("after Bob's 404 undo: Alice's today tally = new=%d review=%d (err %v), want 1/0 unchanged", newCount, reviewCount, err)
+	}
+
+	// Alice can still undo her own card afterwards.
+	okRec := s.PostHX(t, s.Alice, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
+	if okRec.Code != 200 {
+		t.Fatalf("Alice's own undo = %d, want 200", okRec.Code)
+	}
+	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || reviewed {
+		t.Errorf("after Alice's own undo: reviewed = %v (err %v), want the grade undone", reviewed, err)
 	}
 }
 

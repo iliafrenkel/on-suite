@@ -252,6 +252,14 @@ func TestUnsnoozeDeckRequiresCSRF(t *testing.T) {
 	if rec.Code != 403 {
 		t.Errorf("unsnooze without CSRF = %d, want 403", rec.Code)
 	}
+
+	got, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SnoozedUntil == nil {
+		t.Error("after a 403 unsnooze: deck is no longer snoozed, want it left snoozed")
+	}
 }
 
 func TestCreateDeckWithColor(t *testing.T) {
