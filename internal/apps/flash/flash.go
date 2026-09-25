@@ -4,7 +4,9 @@ package flash
 import (
 	"context"
 	"embed"
+	"errors"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -73,21 +75,31 @@ func (a *App) Jobs(deps app.Deps) []app.Job {
 			Description: "Deletes cached card images/sounds and tags that no card uses any more.",
 			Every:       mediaPurgeTick,
 			Run: func(ctx context.Context) error {
-				media, err := a.store.PurgeOrphanMedia(ctx)
-				if err != nil {
-					return err
-				}
-				tags, err := a.store.PurgeOrphanTags(ctx)
-				if err != nil {
-					return err
-				}
-				if media > 0 || tags > 0 {
-					a.deps.Log.Info("flash purged orphans", "media", media, "tags", tags)
-				}
-				return nil
+				return purgeOrphans(ctx, a.deps.Log, a.store.PurgeOrphanMedia, a.store.PurgeOrphanTags)
 			},
 		},
 	}
+}
+
+// purgeOrphans runs both daily sweeps unconditionally — one failing (a
+// transient lock, a cancelled context) must not stop the other from
+// running, since the two clean up unrelated tables and neither's success
+// depends on the other's. Both errors, if any, are combined with
+// errors.Join so the job's own failure log line reports either or both;
+// counts from a successful sweep are still logged even when its sibling
+// failed. Pulled out of the Run closure so it can be tested directly with
+// fake purge funcs, without needing a way to force a real PurgeOrphanMedia
+// or PurgeOrphanTags call to fail.
+func purgeOrphans(ctx context.Context, log *slog.Logger, purgeMedia, purgeTags func(context.Context) (int, error)) error {
+	media, mediaErr := purgeMedia(ctx)
+	tags, tagErr := purgeTags(ctx)
+	if err := errors.Join(mediaErr, tagErr); err != nil {
+		return err
+	}
+	if media > 0 || tags > 0 {
+		log.Info("flash purged orphans", "media", media, "tags", tags)
+	}
+	return nil
 }
 
 func (a *App) Meta() app.Meta {
