@@ -15,7 +15,7 @@ import (
 func purgeCard(t *testing.T, f *fixture) (flash.Deck, flash.Card) {
 	t.Helper()
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Animals", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}

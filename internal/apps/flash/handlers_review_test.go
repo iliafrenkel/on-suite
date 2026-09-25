@@ -13,7 +13,7 @@ import (
 
 func TestReviewShowsACardAcrossAllDecks(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,11 +33,11 @@ func TestReviewShowsNothingDueWhenQueueIsEmpty(t *testing.T) {
 
 func TestReviewScopedToOneDeck(t *testing.T) {
 	s := newServer(t)
-	deckA, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "A", "")
+	deckA, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "A", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	deckB, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "B", "")
+	deckB, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "B", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestReviewScopedToOneDeck(t *testing.T) {
 
 func TestGradingACardAdvancesTheQueue(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestGradingACardAdvancesTheQueue(t *testing.T) {
 
 func TestGradingRequiresCSRF(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestGradingRequiresCSRF(t *testing.T) {
 
 func TestGradingRejectsAnInvalidRating(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestGradingRejectsAnInvalidRating(t *testing.T) {
 
 func TestGradingSomeoneElsesCardIs404(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "alice's", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestGradingSomeoneElsesCardIs404(t *testing.T) {
 
 func TestUndoAfterGradingReshowsTheCard(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestUndoAfterGradingReshowsTheCard(t *testing.T) {
 
 func TestUndoingTwiceIsRejected(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,12 +163,12 @@ func TestUndoingTwiceIsRejected(t *testing.T) {
 func TestGradingScopedToSomeoneElsesDeckIs404(t *testing.T) {
 	s := newServer(t)
 	// Bob's deck: valid, but not Alice's to scope a review against.
-	bobDeck, err := s.Store.CreateDeck(t.Context(), s.Bob.User.ID, "bob's", "")
+	bobDeck, err := s.Store.CreateDeck(t.Context(), s.Bob.User.ID, "bob's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Alice's own card, which she is otherwise allowed to grade.
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "alice's", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestGradingScopedToSomeoneElsesDeckIs404(t *testing.T) {
 
 func TestReviewPageScopedToSomeoneElsesDeckIs404(t *testing.T) {
 	s := newServer(t)
-	bobDeck, err := s.Store.CreateDeck(t.Context(), s.Bob.User.ID, "bob's", "")
+	bobDeck, err := s.Store.CreateDeck(t.Context(), s.Bob.User.ID, "bob's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,13 +207,11 @@ func TestReviewRespectsTheDailyNewCardLimit(t *testing.T) {
 	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 	s.Store.SetClock(func() time.Time { return now })
 
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Store.UpdateDeckSettings(t.Context(), s.Alice.User.ID, deck.ID, 1, nil); err != nil {
-		t.Fatal(err)
-	}
+	setDeckPace(t, s.Store, s.Alice.User.ID, deck.ID, 1, nil)
 	cardA, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +249,7 @@ func TestFlashScriptIsServed(t *testing.T) {
 // never as the clickable links the opened-card view uses instead.
 func TestReviewCardShowsTagsAsBackFacePills(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +271,7 @@ func TestReviewCardShowsTagsAsBackFacePills(t *testing.T) {
 
 func TestReviewCardFlipsAndGradesWithFriendlyLabels(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +304,7 @@ func TestReviewCardFlipsAndGradesWithFriendlyLabels(t *testing.T) {
 
 func TestReviewShowsProgress(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +341,7 @@ func TestReviewShowsProgress(t *testing.T) {
 
 func TestReviewSummaryAfterTheLastCard(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,11 +369,11 @@ func TestReviewSummaryAfterTheLastCard(t *testing.T) {
 
 func TestReviewSummarySuggestsTheNextDeck(t *testing.T) {
 	s := newServer(t)
-	a, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Alpha", "")
+	a, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Alpha", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Beta", "")
+	b, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Beta", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +399,7 @@ func TestReviewSummarySuggestsTheNextDeck(t *testing.T) {
 
 func TestReviewSummaryShowsAStreak(t *testing.T) {
 	s := newServer(t)
-	other, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Yesterday", "")
+	other, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Yesterday", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -412,7 +410,7 @@ func TestReviewSummaryShowsAStreak(t *testing.T) {
 	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, old.ID, flash.RatingEasy, time.Now().UTC().AddDate(0, 0, -1)); err != nil {
 		t.Fatal(err)
 	}
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Today", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Today", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +447,7 @@ func TestReviewOfASnoozedDeckSaysItIsOnABreak(t *testing.T) {
 	s := newServer(t)
 	now := time.Now().UTC()
 	until := now.AddDate(0, 0, 7)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -496,11 +494,11 @@ func TestReviewAllShowsTheMostOverdueCardFirst(t *testing.T) {
 	// wall clock and anchors every card relative to it.
 	s := newServer(t)
 	now := time.Now().UTC()
-	older, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Older", "")
+	older, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Older", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newer, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Newer", "")
+	newer, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Newer", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -534,7 +532,7 @@ func TestReviewAllShowsTheMostOverdueCardFirst(t *testing.T) {
 
 func TestGradingWithoutHTMXRedirectsBackToTheReview(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -563,7 +561,7 @@ func TestGradingWithoutHTMXRedirectsBackToTheReview(t *testing.T) {
 
 func TestReviewOffersUndoFromTheRedirect(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -589,7 +587,7 @@ func TestReviewOffersUndoFromTheRedirect(t *testing.T) {
 
 func TestUndoWithoutHTMXRedirectsBackToTheReview(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}

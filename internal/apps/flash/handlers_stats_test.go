@@ -38,7 +38,7 @@ func TestStatsPageRequiresSignIn(t *testing.T) {
 
 func TestStatsPageShowsPopulatedData(t *testing.T) {
 	s := apptest.NewServer(t, flash.New(), flash.NewStore)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestStatsPageRendersConsistentNumbers(t *testing.T) {
 	// Alpha (sorts first): one card graded three times with Good, spaced
 	// out enough to graduate it out of learning into "review" — mastered,
 	// and its resulting due date lands well beyond "today".
-	alpha, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Alpha", "")
+	alpha, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Alpha", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestStatsPageRendersConsistentNumbers(t *testing.T) {
 	// Beta (sorts second): one card graded once with Good — still in
 	// learning, not mastered — whose short learning-step due date has
 	// already passed by the time the page is viewed.
-	beta, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Beta", "")
+	beta, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Beta", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,10 +162,10 @@ func TestStatsPageMarksSnoozedDeckInPerDeckTable(t *testing.T) {
 	s := apptest.NewServer(t, flash.New(), flash.NewStore)
 	ctx := t.Context()
 
-	if _, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Active", ""); err != nil {
+	if _, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Active", "", flash.DefaultDeckColor); err != nil {
 		t.Fatal(err)
 	}
-	snoozed, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Snoozed", "")
+	snoozed, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Snoozed", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestStatsPageMarksSnoozedDeckInPerDeckTable(t *testing.T) {
 
 func TestStatsRenderInsideTheHomeLayout(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestStatsRenderInsideTheHomeLayout(t *testing.T) {
 func TestStatsRowsSortByName(t *testing.T) {
 	s := newServer(t)
 	for _, name := range []string{"Zebra", "Apple", "Mango"} {
-		if _, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, name, ""); err != nil {
+		if _, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, name, "", flash.DefaultDeckColor); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -248,7 +248,7 @@ func TestStatsHTMXPaneMatchesFullPage(t *testing.T) {
 	ctx := t.Context()
 	t0 := time.Now().UTC().Add(-3 * time.Hour)
 	for i, name := range []string{"Beta", "Alpha", "Gamma"} {
-		d, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, name, "")
+		d, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, name, "", flash.DefaultDeckColor)
 		if err != nil {
 			t.Fatal(err)
 		}

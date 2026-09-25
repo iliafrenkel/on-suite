@@ -60,7 +60,7 @@ func TestCreateDeckValidation(t *testing.T) {
 
 func TestViewingSomeoneElsesDeckIs404(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "alice's", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestViewingSomeoneElsesDeckIs404(t *testing.T) {
 
 func TestDeleteDeckRequiresCSRFAndPOST(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "doomed", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "doomed", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestDeleteDeckRequiresCSRFAndPOST(t *testing.T) {
 
 func TestUpdateDeckSettingsOverHTTP(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestUpdateDeckSettingsOverHTTP(t *testing.T) {
 
 func TestUpdateDeckSettingsRejectsNegativeOverHTTP(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestUpdateDeckSettingsRejectsNegativeOverHTTP(t *testing.T) {
 
 func TestUpdateDeckSettingsRejectsNegativeWithoutPartiallyWriting(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestUpdateDeckSettingsRejectsNegativeWithoutPartiallyWriting(t *testing.T) 
 
 func TestSnoozeAndUnsnoozeDeckOverHTTP(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestSnoozeAndUnsnoozeDeckOverHTTP(t *testing.T) {
 // the Review CTA, and the deck's list row is marked and says so.
 func TestSnoozedDeckPaneAndListRow(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestSnoozedDeckPaneAndListRow(t *testing.T) {
 
 func TestSnoozeDeckRequiresCSRF(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestCreateDeckRejectsUnknownColor(t *testing.T) {
 
 func TestUpdateDeckChangesColor(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,13 +303,11 @@ func TestNewDeckFormHasEverySwatch(t *testing.T) {
 
 func TestDeckListShowsColorAndDueBadge(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Store.SetDeckColor(t.Context(), s.Alice.User.ID, deck.ID, "blue"); err != nil {
-		t.Fatal(err)
-	}
+	setDeckColor(t, s.Store, s.Alice.User.ID, deck.ID, "blue")
 	for _, front := range []string{"hola", "adiós"} {
 		if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, front, "x", ""); err != nil {
 			t.Fatal(err)
@@ -331,7 +329,7 @@ func TestDeckListShowsColorAndDueBadge(t *testing.T) {
 
 func TestDeckPaneShowsReviewButtonWithCount(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +355,7 @@ func TestDeckPaneShowsReviewButtonWithCount(t *testing.T) {
 
 func TestDeckPaneShowsAllDoneWhenNothingIsDue(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +378,7 @@ func TestDeckPaneShowsAllDoneWhenNothingIsDue(t *testing.T) {
 
 func TestDeckPaneForAnEmptyDeckOffersToAddCards(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,7 +402,7 @@ func TestFirstRunShowsWelcome(t *testing.T) {
 
 func TestHomeWithDecksButNoneSelectedAsksToPick(t *testing.T) {
 	s := newServer(t)
-	if _, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", ""); err != nil {
+	if _, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor); err != nil {
 		t.Fatal(err)
 	}
 	doc := s.Get(t, s.Alice, "/flash/")
@@ -457,7 +455,7 @@ func itoa(id int64) string { return strconv.FormatInt(id, 10) }
 
 func TestTakeABreakLivesInTheEditPane(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,7 +470,7 @@ func TestTakeABreakLivesInTheEditPane(t *testing.T) {
 
 func TestSnoozedDeckShowsABreakBanner(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -496,7 +494,7 @@ func TestSnoozedDeckShowsABreakBanner(t *testing.T) {
 
 func TestSnoozeDaysMustBeBetweenOneAndAYear(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -98,7 +98,7 @@ func TestImportDeckRejectsDuplicateName(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Existing", ""); err != nil {
+	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Existing", "", flash.DefaultDeckColor); err != nil {
 		t.Fatal(err)
 	}
 

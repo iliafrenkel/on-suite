@@ -48,6 +48,11 @@ func ValidDeckColor(c string) bool {
 	return false
 }
 
+// errUnknownColor is the one message shown to a person who picked (or
+// otherwise submitted) a colour outside DeckColors, whether they were
+// creating or editing a deck (#314).
+var errUnknownColor = fmt.Errorf("%w: pick one of the colours shown", ErrInvalid)
+
 // deckColumns is the column list every query feeding scanDeckRow selects,
 // in scanDeckRow's own Scan order. One constant, so adding a column can't
 // leave one of the three SELECTs (DeckByID, ListDecks, share.go's
@@ -96,19 +101,22 @@ func ValidateDeck(name, description string) error {
 	return nil
 }
 
-// CreateDeck stores a new deck.
-func (st *Store) CreateDeck(ctx context.Context, userID int64, name, description string) (Deck, error) {
+// CreateDeck stores a new deck in a single write, colour included.
+func (st *Store) CreateDeck(ctx context.Context, userID int64, name, description, color string) (Deck, error) {
 	name = strings.TrimSpace(name)
 	if err := ValidateDeck(name, description); err != nil {
 		return Deck{}, err
 	}
+	if !ValidDeckColor(color) {
+		return Deck{}, errUnknownColor
+	}
 
-	d := Deck{UserID: userID, Name: name, Description: description, CreatedAt: st.now(), NewCardsPerDay: DefaultNewCardsPerDay, Color: DefaultDeckColor}
+	d := Deck{UserID: userID, Name: name, Description: description, CreatedAt: st.now(), NewCardsPerDay: DefaultNewCardsPerDay, Color: color}
 	err := st.db.QueryRowContext(ctx,
-		`INSERT INTO flash_decks (user_id, name, description, created_at)
-		 VALUES (?, ?, ?, ?)
+		`INSERT INTO flash_decks (user_id, name, description, created_at, color)
+		 VALUES (?, ?, ?, ?, ?)
 		 RETURNING id`,
-		d.UserID, d.Name, d.Description, formatTime(d.CreatedAt),
+		d.UserID, d.Name, d.Description, formatTime(d.CreatedAt), d.Color,
 	).Scan(&d.ID)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -119,16 +127,31 @@ func (st *Store) CreateDeck(ctx context.Context, userID int64, name, description
 	return d, nil
 }
 
-// UpdateDeck overwrites userID's own deck's editable fields.
-func (st *Store) UpdateDeck(ctx context.Context, userID, id int64, name, description string) (Deck, error) {
+// UpdateDeck overwrites userID's own deck's editable fields — name,
+// description, colour and pace — in a single statement. SQLite runs one
+// UPDATE atomically, so a rejected update (invalid name, colour or pace, or
+// a duplicate name) leaves every field exactly as it was (#297).
+func (st *Store) UpdateDeck(ctx context.Context, userID, id int64, name, description, color string, newCardsPerDay int, reviewsPerDay *int) (Deck, error) {
 	name = strings.TrimSpace(name)
 	if err := ValidateDeck(name, description); err != nil {
 		return Deck{}, err
 	}
+	if !ValidDeckColor(color) {
+		return Deck{}, errUnknownColor
+	}
+	if err := ValidateDeckSettings(newCardsPerDay, reviewsPerDay); err != nil {
+		return Deck{}, err
+	}
 
+	var reviewsArg any
+	if reviewsPerDay != nil {
+		reviewsArg = *reviewsPerDay
+	}
 	res, err := st.db.ExecContext(ctx,
-		`UPDATE flash_decks SET name = ?, description = ? WHERE id = ? AND user_id = ?`,
-		name, description, id, userID)
+		`UPDATE flash_decks
+		 SET name = ?, description = ?, color = ?, new_cards_per_day = ?, reviews_per_day = ?
+		 WHERE id = ? AND user_id = ?`,
+		name, description, color, newCardsPerDay, reviewsArg, id, userID)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return Deck{}, fmt.Errorf("%w: you already have a deck named %q", ErrInvalid, name)
@@ -244,32 +267,6 @@ func ValidateDeckSettings(newCardsPerDay int, reviewsPerDay *int) error {
 	return nil
 }
 
-// UpdateDeckSettings overwrites userID's own deck's pace. reviewsPerDay of
-// nil means unlimited.
-func (st *Store) UpdateDeckSettings(ctx context.Context, userID, id int64, newCardsPerDay int, reviewsPerDay *int) (Deck, error) {
-	if err := ValidateDeckSettings(newCardsPerDay, reviewsPerDay); err != nil {
-		return Deck{}, err
-	}
-	var reviewsArg any
-	if reviewsPerDay != nil {
-		reviewsArg = *reviewsPerDay
-	}
-	res, err := st.db.ExecContext(ctx,
-		`UPDATE flash_decks SET new_cards_per_day = ?, reviews_per_day = ? WHERE id = ? AND user_id = ?`,
-		newCardsPerDay, reviewsArg, id, userID)
-	if err != nil {
-		return Deck{}, fmt.Errorf("flash: update deck settings: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return Deck{}, fmt.Errorf("flash: update deck settings: %w", err)
-	}
-	if n == 0 {
-		return Deck{}, ErrNotFound
-	}
-	return st.DeckByID(ctx, userID, id)
-}
-
 // SnoozeDeck hides userID's own deck from the review queue until until.
 func (st *Store) SnoozeDeck(ctx context.Context, userID, id int64, until time.Time) (Deck, error) {
 	res, err := st.db.ExecContext(ctx,
@@ -299,26 +296,6 @@ func (st *Store) UnsnoozeDeck(ctx context.Context, userID, id int64) (Deck, erro
 	n, err := res.RowsAffected()
 	if err != nil {
 		return Deck{}, fmt.Errorf("flash: unsnooze deck: %w", err)
-	}
-	if n == 0 {
-		return Deck{}, ErrNotFound
-	}
-	return st.DeckByID(ctx, userID, id)
-}
-
-// SetDeckColor changes userID's own deck's colour.
-func (st *Store) SetDeckColor(ctx context.Context, userID, id int64, color string) (Deck, error) {
-	if !ValidDeckColor(color) {
-		return Deck{}, fmt.Errorf("%w: %q is not a deck colour", ErrInvalid, color)
-	}
-	res, err := st.db.ExecContext(ctx,
-		`UPDATE flash_decks SET color = ? WHERE id = ? AND user_id = ?`, color, id, userID)
-	if err != nil {
-		return Deck{}, fmt.Errorf("flash: set deck colour: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return Deck{}, fmt.Errorf("flash: set deck colour: %w", err)
 	}
 	if n == 0 {
 		return Deck{}, ErrNotFound

@@ -52,7 +52,7 @@ func postCardForm(t *testing.T, s *apptest.Server[*flash.Store], sess *apptest.S
 
 func TestCreateCardWithImageInOneForm(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestCreateCardWithImageInOneForm(t *testing.T) {
 // cap adds a 1 MiB allowance for exactly that overhead.
 func TestCreateCardWithNearMaxImageAndAudioSucceeds(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestCreateCardWithNearMaxImageAndAudioSucceeds(t *testing.T) {
 // keep being exercised on the route that actually carries media today.
 func TestCreateCardRequiresCSRF(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestCreateCardRequiresCSRF(t *testing.T) {
 // targets — even though it also sets HX-Request for other tests' benefit.
 func TestCreateCardOverBodyCapWithNoJSGetsA413NotA403(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func postCardFormHTMXHeaderToken(t *testing.T, s *apptest.Server[*flash.Store], 
 // test actually exercised the header-only HTMX path for this case.
 func TestCreateCardOverBodyCapOverHTMXGetsTheFriendlyMessage(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestCreateCardOverBodyCapOverHTMXGetsTheFriendlyMessage(t *testing.T) {
 // TestUploadCardImageRejectsOversizedFile, moved to the card-form route.
 func TestCreateCardWithOversizedImageIsRejected(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestCreateCardWithOversizedImageIsRejected(t *testing.T) {
 // this at all (#330/#327).
 func TestCreateCardWithImageOverGlobalCapSucceeds(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +318,7 @@ func TestCreateCardWithImageOverGlobalCapSucceeds(t *testing.T) {
 // so it only succeeds once the update route's own override is in effect.
 func TestUpdateCardWithImageOverGlobalCapSucceeds(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +349,7 @@ func TestUpdateCardWithImageOverGlobalCapSucceeds(t *testing.T) {
 
 func TestCreateCardWithBadImageKeepsTheFormAndCreatesNothing(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +372,7 @@ func TestCreateCardWithBadImageKeepsTheFormAndCreatesNothing(t *testing.T) {
 
 func TestUpdateCardCanRemoveItsImage(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,7 +414,7 @@ var onePNG2 = []byte{
 // wins over Remove for that kind.
 func TestNewImageWinsOverRemoveFlag(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,7 +453,7 @@ func TestNewImageWinsOverRemoveFlag(t *testing.T) {
 // validation error, leaving the card's existing image untouched.
 func TestBadNewImageStillValidatesWithRemoveTicked(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -499,7 +499,7 @@ var oneMP3 = []byte("ID3\x03\x00\x00\x00\x00\x00\x00")
 // database.
 func TestUpdateCardWithBadImageLeavesTheCardUnchanged(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -533,7 +533,7 @@ func TestUpdateCardWithBadImageLeavesTheCardUnchanged(t *testing.T) {
 // needs different, audio-sniffable bytes.
 func TestCreateCardWithAudioInOneForm(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Music", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Music", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -557,7 +557,7 @@ func TestCreateCardWithAudioInOneForm(t *testing.T) {
 // same rule, just for the other kind.
 func TestNewAudioWinsOverRemoveFlag(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Music", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Music", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -593,7 +593,7 @@ func TestNewAudioWinsOverRemoveFlag(t *testing.T) {
 
 func TestClozeCardIgnoresAStaleBack(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Geography", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Geography", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -614,7 +614,7 @@ func TestClozeCardIgnoresAStaleBack(t *testing.T) {
 
 func TestSaveAndAddAnotherOverHTMX(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -648,7 +648,7 @@ func TestSaveAndAddAnotherOverHTMX(t *testing.T) {
 
 func TestSaveAndAddAnotherWithoutJS(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -711,7 +711,7 @@ func TestSaveAndAddAnotherWithoutJSKeepsTheFilter(t *testing.T) {
 
 func TestNewCardEditorStructure(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -743,7 +743,7 @@ func TestNewCardEditorStructure(t *testing.T) {
 
 func TestEditCardEditorOffersToRemoveExistingImage(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -758,7 +758,7 @@ func TestEditCardEditorOffersToRemoveExistingImage(t *testing.T) {
 
 func TestOpenedCardHasNoSeparateMediaForm(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Animals", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}

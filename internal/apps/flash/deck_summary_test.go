@@ -26,7 +26,7 @@ func TestDeckSummariesCountsAFreshDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,14 +57,12 @@ func TestDeckSummariesAgreeWithDueQueue(t *testing.T) {
 	ctx := context.Background()
 	t0 := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
 
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
 	limit := 2
-	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, d.ID, 3, &limit); err != nil {
-		t.Fatal(err)
-	}
+	setDeckPace(t, f.store, f.alice.ID, d.ID, 3, &limit)
 	var cards []flash.Card
 	for i := 0; i < 6; i++ {
 		c, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "front", "back", "")
@@ -111,7 +109,7 @@ func TestDeckSummariesZeroTodayForASnoozedDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,15 +136,15 @@ func TestDeckSummariesAreOwnerScopedAndInListOrder(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	older, err := f.store.CreateDeck(ctx, f.alice.ID, "Older", "")
+	older, err := f.store.CreateDeck(ctx, f.alice.ID, "Older", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newer, err := f.store.CreateDeck(ctx, f.alice.ID, "Newer", "")
+	newer, err := f.store.CreateDeck(ctx, f.alice.ID, "Newer", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.CreateDeck(ctx, f.bob.ID, "Bob's", ""); err != nil {
+	if _, err := f.store.CreateDeck(ctx, f.bob.ID, "Bob's", "", flash.DefaultDeckColor); err != nil {
 		t.Fatal(err)
 	}
 	sums, err := f.store.DeckSummaries(ctx, f.alice.ID, now)

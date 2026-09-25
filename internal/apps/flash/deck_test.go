@@ -63,7 +63,7 @@ func TestCreateAndFetchDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	created, err := f.store.CreateDeck(ctx, f.alice.ID, "  Spanish  ", "Travel phrases")
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "  Spanish  ", "Travel phrases", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatalf("CreateDeck: %v", err)
 	}
@@ -90,14 +90,14 @@ func TestCreateDeckRejectsDuplicateName(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", ""); err != nil {
+	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", ""); !errors.Is(err, flash.ErrInvalid) {
+	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor); !errors.Is(err, flash.ErrInvalid) {
 		t.Errorf("second CreateDeck with the same name = %v, want ErrInvalid", err)
 	}
 	// Another user may still use the same name.
-	if _, err := f.store.CreateDeck(ctx, f.bob.ID, "Spanish", ""); err != nil {
+	if _, err := f.store.CreateDeck(ctx, f.bob.ID, "Spanish", "", flash.DefaultDeckColor); err != nil {
 		t.Errorf("bob could not create a deck named the same as alice's: %v", err)
 	}
 }
@@ -106,11 +106,11 @@ func TestUpdateDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Original", "")
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Original", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated, err := f.store.UpdateDeck(ctx, f.alice.ID, created.ID, "  Renamed  ", "new description")
+	updated, err := f.store.UpdateDeck(ctx, f.alice.ID, created.ID, "  Renamed  ", "new description", "purple", 5, nil)
 	if err != nil {
 		t.Fatalf("UpdateDeck: %v", err)
 	}
@@ -126,12 +126,98 @@ func TestUpdateDeckRejectsSomeoneElsesDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	created, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.UpdateDeck(ctx, f.bob.ID, created.ID, "hijacked", ""); !errors.Is(err, flash.ErrNotFound) {
+	if _, err := f.store.UpdateDeck(ctx, f.bob.ID, created.ID, "hijacked", "", flash.DefaultDeckColor, 20, nil); !errors.Is(err, flash.ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestUpdateDeckChangesEveryFieldInOneCall is the #297 guarantee's positive
+// case: name, description, colour and pace all change together in a single
+// UpdateDeck call.
+func TestUpdateDeckChangesEveryFieldInOneCall(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Original", "old description", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviews := 30
+	updated, err := f.store.UpdateDeck(ctx, f.alice.ID, created.ID, "Renamed", "new description", "purple", 5, &reviews)
+	if err != nil {
+		t.Fatalf("UpdateDeck: %v", err)
+	}
+	if updated.Name != "Renamed" || updated.Description != "new description" || updated.Color != "purple" ||
+		updated.NewCardsPerDay != 5 || updated.ReviewsPerDay == nil || *updated.ReviewsPerDay != 30 {
+		t.Errorf("UpdateDeck = %+v, want every field group changed", updated)
+	}
+}
+
+// TestUpdateDeckRejectedChangesLeaveEveryFieldUnchanged is the #297
+// guarantee's negative case: a rejected update — for any one of the reasons
+// below — must not partially apply. It writes nothing at all.
+func TestUpdateDeckRejectedChangesLeaveEveryFieldUnchanged(t *testing.T) {
+	tests := []struct {
+		name           string
+		newName        string
+		description    string
+		color          string
+		newCardsPerDay int
+		reviewsPerDay  *int
+	}{
+		{"invalid colour", "New name", "new description", "chartreuse", 5, nil},
+		{"invalid pace", "New name", "new description", "purple", -1, nil},
+		{"empty name", "   ", "new description", "purple", 5, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFixture(t)
+			ctx := context.Background()
+			created, err := f.store.CreateDeck(ctx, f.alice.ID, "Original", "old description", flash.DefaultDeckColor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.store.UpdateDeck(ctx, f.alice.ID, created.ID, tt.newName, tt.description, tt.color, tt.newCardsPerDay, tt.reviewsPerDay); !errors.Is(err, flash.ErrInvalid) {
+				t.Fatalf("UpdateDeck(%s) err = %v, want ErrInvalid", tt.name, err)
+			}
+			unchanged, err := f.store.DeckByID(ctx, f.alice.ID, created.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if unchanged.Name != "Original" || unchanged.Description != "old description" ||
+				unchanged.Color != flash.DefaultDeckColor || unchanged.NewCardsPerDay != flash.DefaultNewCardsPerDay ||
+				unchanged.ReviewsPerDay != nil {
+				t.Errorf("a rejected update (%s) changed the deck: %+v", tt.name, unchanged)
+			}
+		})
+	}
+}
+
+// TestUpdateDeckRejectsDuplicateNameLeavingDeckUnchanged is the #297
+// guarantee's duplicate-name case: it maps the unique-constraint violation
+// to ErrInvalid exactly as CreateDeck does, and writes nothing.
+func TestUpdateDeckRejectsDuplicateNameLeavingDeckUnchanged(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Taken", "", flash.DefaultDeckColor); err != nil {
+		t.Fatal(err)
+	}
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Original", "old description", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.UpdateDeck(ctx, f.alice.ID, created.ID, "Taken", "new description", "purple", 5, nil); !errors.Is(err, flash.ErrInvalid) {
+		t.Fatalf("UpdateDeck with a duplicate name err = %v, want ErrInvalid", err)
+	}
+	unchanged, err := f.store.DeckByID(ctx, f.alice.ID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Name != "Original" || unchanged.Description != "old description" || unchanged.Color != flash.DefaultDeckColor {
+		t.Errorf("a rejected duplicate-name update changed the deck: %+v", unchanged)
 	}
 }
 
@@ -140,7 +226,7 @@ func TestDeckOwnerScoping(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,12 +248,12 @@ func TestListDecksIsNewestFirstAndOwnerScoped(t *testing.T) {
 	base := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 	for i, name := range []string{"first", "second", "third"} {
 		f.store.SetClock(func() time.Time { return base.Add(time.Duration(i) * time.Minute) })
-		if _, err := f.store.CreateDeck(ctx, f.alice.ID, name, ""); err != nil {
+		if _, err := f.store.CreateDeck(ctx, f.alice.ID, name, "", flash.DefaultDeckColor); err != nil {
 			t.Fatal(err)
 		}
 	}
 	f.store.SetClock(func() time.Time { return base })
-	if _, err := f.store.CreateDeck(ctx, f.bob.ID, "bob's", ""); err != nil {
+	if _, err := f.store.CreateDeck(ctx, f.bob.ID, "bob's", "", flash.DefaultDeckColor); err != nil {
 		t.Fatal(err)
 	}
 
@@ -188,7 +274,7 @@ func TestDeleteDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "doomed", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "doomed", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,10 +289,13 @@ func TestDeleteDeck(t *testing.T) {
 	}
 }
 
-func TestUpdateDeckSettings(t *testing.T) {
+// TestUpdateDeckPace exercises UpdateDeck's pace fields, keeping the
+// name/description/colour unchanged — the combined store method's
+// replacement for the retired UpdateDeckSettings.
+func TestUpdateDeckPace(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,10 +307,7 @@ func TestUpdateDeckSettings(t *testing.T) {
 	}
 
 	reviewCap := 50
-	updated, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, created.ID, 10, &reviewCap)
-	if err != nil {
-		t.Fatalf("UpdateDeckSettings: %v", err)
-	}
+	updated := setDeckPace(t, f.store, f.alice.ID, created.ID, 10, &reviewCap)
 	if updated.NewCardsPerDay != 10 {
 		t.Errorf("NewCardsPerDay = %d, want 10", updated.NewCardsPerDay)
 	}
@@ -230,47 +316,32 @@ func TestUpdateDeckSettings(t *testing.T) {
 	}
 
 	// Setting it back to nil restores "unlimited."
-	unlimited, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, created.ID, 10, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	unlimited := setDeckPace(t, f.store, f.alice.ID, created.ID, 10, nil)
 	if unlimited.ReviewsPerDay != nil {
 		t.Errorf("ReviewsPerDay after clearing = %v, want nil", unlimited.ReviewsPerDay)
 	}
 }
 
-func TestUpdateDeckSettingsRejectsNegativeValues(t *testing.T) {
+func TestUpdateDeckRejectsNegativePaceValues(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, created.ID, -1, nil); !errors.Is(err, flash.ErrInvalid) {
-		t.Errorf("UpdateDeckSettings(new=-1) = %v, want ErrInvalid", err)
+	if _, err := f.store.UpdateDeck(ctx, f.alice.ID, created.ID, created.Name, created.Description, created.Color, -1, nil); !errors.Is(err, flash.ErrInvalid) {
+		t.Errorf("UpdateDeck(new=-1) = %v, want ErrInvalid", err)
 	}
 	neg := -5
-	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, created.ID, 10, &neg); !errors.Is(err, flash.ErrInvalid) {
-		t.Errorf("UpdateDeckSettings(reviews=-5) = %v, want ErrInvalid", err)
-	}
-}
-
-func TestUpdateDeckSettingsRejectsSomeoneElsesDeck(t *testing.T) {
-	f := newFixture(t)
-	ctx := context.Background()
-	created, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.store.UpdateDeckSettings(ctx, f.bob.ID, created.ID, 10, nil); !errors.Is(err, flash.ErrNotFound) {
-		t.Errorf("err = %v, want ErrNotFound", err)
+	if _, err := f.store.UpdateDeck(ctx, f.alice.ID, created.ID, created.Name, created.Description, created.Color, 10, &neg); !errors.Is(err, flash.ErrInvalid) {
+		t.Errorf("UpdateDeck(reviews=-5) = %v, want ErrInvalid", err)
 	}
 }
 
 func TestSnoozeAndUnsnoozeDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +371,7 @@ func TestSnoozeAndUnsnoozeDeck(t *testing.T) {
 func TestSnoozeDeckRejectsSomeoneElsesDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	created, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "")
+	created, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +408,7 @@ func TestValidateDeck(t *testing.T) {
 func TestNewDeckIsTealByDefault(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,18 +424,18 @@ func TestNewDeckIsTealByDefault(t *testing.T) {
 	}
 }
 
-func TestSetDeckColor(t *testing.T) {
+// TestUpdateDeckColor exercises UpdateDeck's colour field, keeping the
+// name/description/pace unchanged — the combined store method's
+// replacement for the retired SetDeckColor.
+func TestUpdateDeckColor(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	updated, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "purple")
-	if err != nil {
-		t.Fatalf("SetDeckColor: %v", err)
-	}
+	updated := setDeckColor(t, f.store, f.alice.ID, d.ID, "purple")
 	if updated.Color != "purple" {
 		t.Errorf("Color = %q, want purple", updated.Color)
 	}
@@ -377,27 +448,54 @@ func TestSetDeckColor(t *testing.T) {
 	}
 }
 
-func TestSetDeckColorRejectsUnknownColor(t *testing.T) {
+func TestUpdateDeckStoreRejectsUnknownColor(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "chartreuse"); !errors.Is(err, flash.ErrInvalid) {
-		t.Errorf("SetDeckColor(chartreuse) err = %v, want ErrInvalid", err)
+	if _, err := f.store.UpdateDeck(ctx, f.alice.ID, d.ID, d.Name, d.Description, "chartreuse", d.NewCardsPerDay, d.ReviewsPerDay); !errors.Is(err, flash.ErrInvalid) {
+		t.Errorf("UpdateDeck(chartreuse) err = %v, want ErrInvalid", err)
 	}
 }
 
-func TestSetDeckColorRejectsSomeoneElsesDeck(t *testing.T) {
+// TestCreateDeckRejectsUnknownColorWritesNothing is the #313 negative case:
+// an invalid colour on create must not insert a deck row at all.
+func TestCreateDeckRejectsUnknownColorWritesNothing(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	if _, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", "chartreuse"); !errors.Is(err, flash.ErrInvalid) {
+		t.Errorf("CreateDeck(chartreuse) err = %v, want ErrInvalid", err)
+	}
+	decks, err := f.store.ListDecks(ctx, f.alice.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.SetDeckColor(ctx, f.bob.ID, d.ID, "blue"); !errors.Is(err, flash.ErrNotFound) {
-		t.Errorf("SetDeckColor as bob err = %v, want ErrNotFound", err)
+	if len(decks) != 0 {
+		t.Errorf("a rejected create left %d decks behind, want 0", len(decks))
+	}
+}
+
+// TestCreateDeckStoresNonDefaultColorInOneWrite is the #313 positive case:
+// a non-default colour lands on the deck row right after CreateDeck, with
+// no follow-up write needed.
+func TestCreateDeckStoresNonDefaultColorInOneWrite(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "", "purple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Color != "purple" {
+		t.Errorf("CreateDeck Color = %q, want purple", d.Color)
+	}
+	got, err := f.store.DeckByID(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Color != "purple" {
+		t.Errorf("DeckByID Color = %q, want purple", got.Color)
 	}
 }
 
@@ -415,4 +513,37 @@ func TestValidDeckColor(t *testing.T) {
 	if len(flash.DeckColors) != 8 || flash.DeckColors[0] != flash.DefaultDeckColor {
 		t.Errorf("DeckColors = %v, want 8 names starting with the default", flash.DeckColors)
 	}
+}
+
+// setDeckPace is a test-only helper standing in for the retired
+// UpdateDeckSettings: it reads the deck's current name/description/colour
+// and calls the combined UpdateDeck with only the pace changed, so tests
+// that only care about pace stay short.
+func setDeckPace(t *testing.T, store *flash.Store, userID, deckID int64, newCardsPerDay int, reviewsPerDay *int) flash.Deck {
+	t.Helper()
+	d, err := store.DeckByID(context.Background(), userID, deckID)
+	if err != nil {
+		t.Fatalf("setDeckPace: DeckByID: %v", err)
+	}
+	updated, err := store.UpdateDeck(context.Background(), userID, deckID, d.Name, d.Description, d.Color, newCardsPerDay, reviewsPerDay)
+	if err != nil {
+		t.Fatalf("setDeckPace: UpdateDeck: %v", err)
+	}
+	return updated
+}
+
+// setDeckColor is a test-only helper standing in for the retired
+// SetDeckColor: it reads the deck's current name/description/pace and calls
+// the combined UpdateDeck with only the colour changed.
+func setDeckColor(t *testing.T, store *flash.Store, userID, deckID int64, color string) flash.Deck {
+	t.Helper()
+	d, err := store.DeckByID(context.Background(), userID, deckID)
+	if err != nil {
+		t.Fatalf("setDeckColor: DeckByID: %v", err)
+	}
+	updated, err := store.UpdateDeck(context.Background(), userID, deckID, d.Name, d.Description, color, d.NewCardsPerDay, d.ReviewsPerDay)
+	if err != nil {
+		t.Fatalf("setDeckColor: UpdateDeck: %v", err)
+	}
+	return updated
 }

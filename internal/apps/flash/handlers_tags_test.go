@@ -12,7 +12,7 @@ import (
 
 func TestCreatingACardSetsItsTags(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,8 +35,8 @@ func TestCreatingACardSetsItsTags(t *testing.T) {
 
 func TestTagFilterViewListsCardsAcrossDecks(t *testing.T) {
 	s := newServer(t)
-	deckA, _ := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "A", "")
-	deckB, _ := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "B", "")
+	deckA, _ := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "A", "", flash.DefaultDeckColor)
+	deckB, _ := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "B", "", flash.DefaultDeckColor)
 	s.Submit(t, s.Alice, "/flash/"+itoa(deckA.ID)+"/cards/new",
 		url.Values{"card_type": {"basic"}, "front": {"a1"}, "back": {"x"}, "tags": {"hard"}},
 		"/flash/"+itoa(deckA.ID)+"/cards/1")
@@ -57,7 +57,7 @@ func TestTagFilterViewListsCardsAcrossDecks(t *testing.T) {
 // card field does, and must leave no card behind to retry into a duplicate.
 func TestCreateCardRejectsOverlongTagWithoutPersisting(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestCreateCardRejectsOverlongTagWithoutPersisting(t *testing.T) {
 // when its new tags are invalid.
 func TestUpdateCardRejectsOverlongTagWithoutMutating(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestUpdateCardRejectsOverlongTagWithoutMutating(t *testing.T) {
 // rather than interpolated straight into the template.
 func TestTagChipHrefEscapesSlash(t *testing.T) {
 	s := newServer(t)
-	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "")
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestTagChipHrefEscapesSlash(t *testing.T) {
 
 func TestTagFilterPageShowsMiniCardsWithDeckNames(t *testing.T) {
 	s := newServer(t)
-	deckA, _ := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Alpha", "")
+	deckA, _ := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Alpha", "", flash.DefaultDeckColor)
 	s.Submit(t, s.Alice, "/flash/"+itoa(deckA.ID)+"/cards/new",
 		url.Values{"card_type": {"basic"}, "front": {"a1"}, "back": {"x"}, "tags": {"hard"}},
 		"/flash/"+itoa(deckA.ID)+"/cards/1")

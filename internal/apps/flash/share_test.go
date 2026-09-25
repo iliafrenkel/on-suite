@@ -18,7 +18,7 @@ import (
 func TestShareDeckCreatesPendingShare(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestShareDeckCreatesPendingShare(t *testing.T) {
 func TestShareDeckRejectsSelfShare(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestShareDeckRejectsSelfShare(t *testing.T) {
 func TestShareDeckRejectsSomeoneElsesDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestShareDeckRejectsSomeoneElsesDeck(t *testing.T) {
 func TestShareDeckIsIdempotentWhilePending(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestShareDeckIsIdempotentWhilePending(t *testing.T) {
 func TestRevokeShareRequiresPendingAndOwnership(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,11 +111,11 @@ func TestRevokeShareRequiresPendingAndOwnership(t *testing.T) {
 func TestRevokeShareRequiresMatchingDeckID(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := f.store.CreateDeck(ctx, f.alice.ID, "French", "")
+	other, err := f.store.CreateDeck(ctx, f.alice.ID, "French", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestRevokeShareRequiresMatchingDeckID(t *testing.T) {
 func TestDeclineShareThenReshareCreatesFreshOffer(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestDeclineShareThenReshareCreatesFreshOffer(t *testing.T) {
 func TestDeleteDeckCascadesShares(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func TestAdoptShareFirstTimeCopiesCardsTagsAndMedia(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "Basics")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "Basics", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ func TestAdoptShareNeverCopiesReviewState(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestAdoptShareMergeCopiesOnlyNewCards(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +396,7 @@ func TestAdoptShareMergeCopiesOnlyNewCards(t *testing.T) {
 func TestAdoptShareResultReportsFirstTimeAdoption(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,7 +431,7 @@ func TestAdoptShareResultReportsFirstTimeAdoption(t *testing.T) {
 func TestAdoptShareResultReportsMergeAndNewCardCount(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +485,7 @@ func TestAdoptShareResultReportsMergeAndNewCardCount(t *testing.T) {
 func TestAdoptShareRejectsWrongRecipientAndDoubleAdopt(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -508,7 +508,7 @@ func TestAdoptShareRejectsWrongRecipientAndDoubleAdopt(t *testing.T) {
 func TestDeleteAdoptedDeckClearsShareBackReferenceButKeepsShare(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -568,7 +568,7 @@ func TestSharesForDeckShowsEachRecipientsLatestStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -644,7 +644,7 @@ func TestSharesForDeckShowsEachRecipientsLatestStatus(t *testing.T) {
 func TestSharesForRecipientDistinguishesFirstOfferFromMerge(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -695,13 +695,11 @@ func TestSharesForRecipientDistinguishesFirstOfferFromMerge(t *testing.T) {
 func TestAdoptShareCopiesDeckColor(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "pink"); err != nil {
-		t.Fatal(err)
-	}
+	setDeckColor(t, f.store, f.alice.ID, d.ID, "pink")
 	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -722,13 +720,11 @@ func TestAdoptShareCopiesDeckColor(t *testing.T) {
 func TestAdoptShareMergeKeepsAdoptersOwnColor(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "pink"); err != nil {
-		t.Fatal(err)
-	}
+	setDeckColor(t, f.store, f.alice.ID, d.ID, "pink")
 	sh1, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -742,9 +738,7 @@ func TestAdoptShareMergeKeepsAdoptersOwnColor(t *testing.T) {
 	}
 
 	// Bob recolours his adopted deck.
-	if _, err := f.store.SetDeckColor(ctx, f.bob.ID, firstResult.Deck.ID, "teal"); err != nil {
-		t.Fatal(err)
-	}
+	setDeckColor(t, f.store, f.bob.ID, firstResult.Deck.ID, "teal")
 
 	// Alice adds a card and re-shares; bob merges.
 	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "Mercury", "the first planet", ""); err != nil {
@@ -769,13 +763,11 @@ func TestAdoptShareMergeKeepsAdoptersOwnColor(t *testing.T) {
 func TestSharesForRecipientCarriesDeckColor(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.SetDeckColor(ctx, f.alice.ID, d.ID, "purple"); err != nil {
-		t.Fatal(err)
-	}
+	setDeckColor(t, f.store, f.alice.ID, d.ID, "purple")
 	if _, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -791,7 +783,7 @@ func TestSharesForRecipientCarriesDeckColor(t *testing.T) {
 func TestSharePreviewForTheRecipient(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "The solar system")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "The solar system", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -823,7 +815,7 @@ func TestSharePreviewForTheRecipient(t *testing.T) {
 func TestSharePreviewIsOnlyForThePendingRecipient(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -851,7 +843,7 @@ func TestSharePreviewIsOnlyForThePendingRecipient(t *testing.T) {
 func TestSharePreviewOfAMergeCountsOnlyNewCards(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Planets", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -896,7 +888,7 @@ func TestAdoptShareRenamesOnNameCollision(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	names := map[int64]string{f.alice.ID: "alice", f.bob.ID: "bob"}
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -904,7 +896,7 @@ func TestAdoptShareRenamesOnNameCollision(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"Spanish", "Spanish (from alice)"} {
-		if _, err := f.store.CreateDeck(ctx, f.bob.ID, name, ""); err != nil {
+		if _, err := f.store.CreateDeck(ctx, f.bob.ID, name, "", flash.DefaultDeckColor); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -953,11 +945,11 @@ func TestAdoptShareRenameStaysWithinTheNameLimit(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	long := strings.Repeat("é", flash.MaxDeckNameRunes)
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, long, "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, long, "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.CreateDeck(ctx, f.bob.ID, long, ""); err != nil {
+	if _, err := f.store.CreateDeck(ctx, f.bob.ID, long, "", flash.DefaultDeckColor); err != nil {
 		t.Fatal(err)
 	}
 	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
@@ -982,11 +974,11 @@ func TestAdoptShareRenameStaysWithinTheNameLimit(t *testing.T) {
 func TestAdoptShareRenameWithoutASharerName(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.CreateDeck(ctx, f.bob.ID, "Spanish", ""); err != nil {
+	if _, err := f.store.CreateDeck(ctx, f.bob.ID, "Spanish", "", flash.DefaultDeckColor); err != nil {
 		t.Fatal(err)
 	}
 	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
@@ -1007,7 +999,7 @@ func TestAdoptShareRenameWithoutASharerName(t *testing.T) {
 func TestSharePreviewOfAnEmptyDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Empty", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Empty", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1030,7 +1022,7 @@ func TestSharePreviewOfAnEmptyDeck(t *testing.T) {
 func TestUpToDateMergeOfferCountsZero(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "")
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}

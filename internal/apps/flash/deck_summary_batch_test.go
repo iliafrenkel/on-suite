@@ -39,7 +39,7 @@ func TestDeckSummariesMatchPerDeckReference(t *testing.T) {
 
 	mkDeck := func(owner int64, name string) flash.Deck {
 		t.Helper()
-		d, err := f.store.CreateDeck(ctx, owner, name, "")
+		d, err := f.store.CreateDeck(ctx, owner, name, "", flash.DefaultDeckColor)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -79,9 +79,7 @@ func TestDeckSummariesMatchPerDeckReference(t *testing.T) {
 	// counter row exists and eats into both budgets.
 	limited := mkDeck(f.alice.ID, "Limited")
 	two := 2
-	if _, err := f.store.UpdateDeckSettings(ctx, f.alice.ID, limited.ID, 3, &two); err != nil {
-		t.Fatal(err)
-	}
+	setDeckPace(t, f.store, f.alice.ID, limited.ID, 3, &two)
 	lc := mkCards(f.alice.ID, limited, 8)
 	grade(f.alice.ID, lc[:2], flash.RatingAgain, t0.Add(-2*24*time.Hour))
 	grade(f.alice.ID, lc[2:5], flash.RatingGood, t0)
@@ -156,7 +154,7 @@ func TestDeckSummariesQueryCountDoesNotGrowWithDecks(t *testing.T) {
 	}
 	addDeck := func(i int) {
 		t.Helper()
-		d, err := f.store.CreateDeck(ctx, f.alice.ID, fmt.Sprintf("Deck %d", i), "")
+		d, err := f.store.CreateDeck(ctx, f.alice.ID, fmt.Sprintf("Deck %d", i), "", flash.DefaultDeckColor)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -205,7 +203,7 @@ func TestQueueFrontAllDecksQueryCountDoesNotGrowWithDecks(t *testing.T) {
 	}
 	addDeck := func(i int) {
 		t.Helper()
-		d, err := f.store.CreateDeck(ctx, f.alice.ID, fmt.Sprintf("Deck %d", i), "")
+		d, err := f.store.CreateDeck(ctx, f.alice.ID, fmt.Sprintf("Deck %d", i), "", flash.DefaultDeckColor)
 		if err != nil {
 			t.Fatal(err)
 		}

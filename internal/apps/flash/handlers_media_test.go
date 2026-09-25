@@ -34,7 +34,7 @@ func seedCardWithImage(t *testing.T, s *apptest.Server[*flash.Store], srcURL str
 	t.Helper()
 	ctx := context.Background()
 
-	deck, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Media deck", "")
+	deck, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Media deck", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
 	}
