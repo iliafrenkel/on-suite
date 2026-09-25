@@ -123,6 +123,31 @@ func TestPurgeOrphanTagsSweepsAcrossUsersAfterCardAndDeckDeletes(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Bob orphans one of his own tags the same way, and keeps a used one —
+	// this is the unscoped sweep, so it must reach across users, not just
+	// happen to work for whichever user's rows were seeded first.
+	bobDeck, err := f.store.CreateDeck(ctx, f.bob.ID, "Bob's deck", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobDoomedCard, err := f.store.CreateCard(ctx, f.bob.ID, bobDeck.ID, flash.CardTypeBasic, "x", "y", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobKeptCard, err := f.store.CreateCard(ctx, f.bob.ID, bobDeck.ID, flash.CardTypeBasic, "a", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetCardTags(ctx, f.bob.ID, bobDoomedCard.ID, []string{"bob-doomed-by-card"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetCardTags(ctx, f.bob.ID, bobKeptCard.ID, []string{"bob-kept"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.DeleteCard(ctx, f.bob.ID, bobDeck.ID, bobDoomedCard.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := f.store.DeleteCard(ctx, f.alice.ID, deck.ID, doomedCard.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -138,13 +163,16 @@ func TestPurgeOrphanTagsSweepsAcrossUsersAfterCardAndDeckDeletes(t *testing.T) {
 	if !tagRowExists(t, f, f.alice.ID, "doomed-by-deck") {
 		t.Fatal(`"doomed-by-deck" tag row is already gone before PurgeOrphanTags ran`)
 	}
+	if !tagRowExists(t, f, f.bob.ID, "bob-doomed-by-card") {
+		t.Fatal(`bob's "bob-doomed-by-card" tag row is already gone before PurgeOrphanTags ran`)
+	}
 
 	n, err := f.store.PurgeOrphanTags(ctx)
 	if err != nil {
 		t.Fatalf("PurgeOrphanTags: %v", err)
 	}
-	if n != 2 {
-		t.Errorf("PurgeOrphanTags deleted %d rows, want 2", n)
+	if n != 3 {
+		t.Errorf("PurgeOrphanTags deleted %d rows, want 3", n)
 	}
 
 	if tagRowExists(t, f, f.alice.ID, "doomed-by-card") {
@@ -155,6 +183,12 @@ func TestPurgeOrphanTagsSweepsAcrossUsersAfterCardAndDeckDeletes(t *testing.T) {
 	}
 	if !tagRowExists(t, f, f.alice.ID, "kept") {
 		t.Error(`"kept" tag row (still referenced) was removed by PurgeOrphanTags`)
+	}
+	if tagRowExists(t, f, f.bob.ID, "bob-doomed-by-card") {
+		t.Error(`bob's "bob-doomed-by-card" tag row survived PurgeOrphanTags`)
+	}
+	if !tagRowExists(t, f, f.bob.ID, "bob-kept") {
+		t.Error(`bob's "bob-kept" tag row (still referenced) was removed by PurgeOrphanTags`)
 	}
 
 	// Running it again finds nothing left to do.

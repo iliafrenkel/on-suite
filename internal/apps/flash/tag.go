@@ -209,9 +209,9 @@ func (st *Store) CardsByTag(ctx context.Context, userID int64, tagName string) (
 		 FROM flash_cards c
 		 JOIN flash_card_tags ct ON ct.card_id = c.id
 		 JOIN flash_tags t ON t.id = ct.tag_id
-		 JOIN flash_decks d ON d.id = c.deck_id
+		 JOIN flash_decks d ON d.id = c.deck_id AND d.user_id = ?
 		 WHERE c.user_id = ? AND t.user_id = ? AND t.name = ?
-		 ORDER BY c.created_at DESC, c.id DESC`, userID, userID, name)
+		 ORDER BY c.created_at DESC, c.id DESC`, userID, userID, userID, name)
 	if err != nil {
 		return nil, fmt.Errorf("flash: cards by tag: %w", err)
 	}
@@ -219,28 +219,26 @@ func (st *Store) CardsByTag(ctx context.Context, userID int64, tagName string) (
 
 	var out []CardWithDeck
 	for rows.Next() {
-		var (
-			c                    Card
-			createdAt            string
-			imageHash, audioHash sql.NullString
-			deckName, deckColor  string
-		)
-		if err := rows.Scan(&c.ID, &c.DeckID, &c.UserID, &c.CardType, &c.Front, &c.Back, &c.Notes, &createdAt,
-			&imageHash, &audioHash, &deckName, &deckColor); err != nil {
+		var deckName, deckColor string
+		c, err := scanCardRow(withDeckInfo{rows: rows, deckName: &deckName, deckColor: &deckColor})
+		if err != nil {
 			return nil, fmt.Errorf("flash: cards by tag: %w", err)
-		}
-		if c.CreatedAt, err = parseTime(createdAt); err != nil {
-			return nil, fmt.Errorf("flash: cards by tag: %w", err)
-		}
-		if imageHash.Valid {
-			c.ImageHash = &imageHash.String
-		}
-		if audioHash.Valid {
-			c.AudioHash = &audioHash.String
 		}
 		out = append(out, CardWithDeck{Card: c, DeckName: deckName, DeckColor: deckColor})
 	}
 	return out, rows.Err()
+}
+
+// withDeckInfo lets scanCardRow read CardsByTag's row, which carries the
+// joined deck name and colour after the usual card columns — the same
+// trick review.go's withDueAt uses for s.due_at.
+type withDeckInfo struct {
+	rows                *sql.Rows
+	deckName, deckColor *string
+}
+
+func (w withDeckInfo) Scan(dest ...any) error {
+	return w.rows.Scan(append(dest, w.deckName, w.deckColor)...)
 }
 
 // PurgeOrphanTags deletes flash_tags rows, across every user, that no

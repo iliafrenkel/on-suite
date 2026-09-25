@@ -50,7 +50,11 @@ func concurrentlyOps(ops []func() error) []error {
 // Genuinely forcing the old interleaving is a matter of goroutine scheduling
 // luck, so this repeats the race many times over fresh cards: with the old
 // code it reliably produces at least one non-ErrNotFound error within a few
-// dozen trials; with the fix the invariant holds on every trial.
+// dozen trials; with the fix the invariant holds on every trial. That
+// reliability only holds under `go test -race`, which slows and interleaves
+// goroutines enough to surface the race — without -race this test can pass
+// even against the old, buggy code, so it is not a reliable regression
+// guard on its own outside a -race run.
 func TestSetCardTagsConcurrentWithDeleteCardChecksOwnershipInsideItsTransaction(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
