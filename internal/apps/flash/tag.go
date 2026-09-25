@@ -45,12 +45,18 @@ func ValidateTagNames(names []string) error {
 
 // SetCardTags replaces cardID's whole tag set with names, creating any tag
 // that does not exist yet for userID. It fails with ErrNotFound if the card
-// is not userID's own, via the same DeckByID-style ownership check as
-// CreateCard: cardOwnerCheck below.
+// is not userID's own.
+//
+// The ownership check runs inside the same transaction as the writes (via
+// cardOwner(ctx, tx, ...)), not before it, for the same reason as GradeCard
+// and UndoLastGrade (#294, #288): with one database connection, a check
+// before BeginTx hands the connection back in between, letting a concurrent
+// DeleteCard of the same card run to completion in that gap — SetCardTags'
+// own writes would then hit a card that no longer exists, surfacing as a
+// raw foreign-key error instead of ErrNotFound. Nothing in this method may
+// use st.db once the transaction has started: with SetMaxOpenConns(1), that
+// would deadlock waiting for the connection the transaction already holds.
 func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []string) error {
-	if _, err := st.cardOwnerCheck(ctx, userID, cardID); err != nil {
-		return err
-	}
 	if err := ValidateTagNames(names); err != nil {
 		return err
 	}
@@ -61,12 +67,36 @@ func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if _, err := cardOwner(ctx, tx, userID, cardID); err != nil {
+		return err
+	}
+
 	if _, err := tx.ExecContext(ctx, `DELETE FROM flash_card_tags WHERE card_id = ?`, cardID); err != nil {
 		return fmt.Errorf("flash: set card tags: %w", err)
 	}
 
 	if err := upsertCardTags(ctx, tx, userID, cardID, names); err != nil {
 		return err
+	}
+
+	// Replacing this card's tags can leave one of userID's own flash_tags
+	// rows with nothing left referencing it — dropping the last card that
+	// carried it, or replacing "hard" with "easy" on its only card. Garbage
+	// collect all of userID's now-unreferenced tags here rather than only
+	// the ones this call touched: it is one extra statement, scoped by
+	// user_id so it can never reach another account's tags, and simpler
+	// than tracking which specific names might have been orphaned (#289).
+	// PurgeOrphanTags below is the cross-user sweep for the cases this
+	// can't reach — deleting a card or deck, or an account — since those
+	// paths cascade the flash_card_tags links away (ON DELETE CASCADE) but
+	// have no single user_id to scope a cleanup like this one to.
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM flash_tags
+		 WHERE user_id = ?
+		   AND NOT EXISTS (SELECT 1 FROM flash_card_tags WHERE tag_id = flash_tags.id)`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("flash: garbage collect tags: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -115,13 +145,19 @@ func (st *Store) cardOwnerCheck(ctx context.Context, userID, cardID int64) (int6
 }
 
 // cardOwner is cardOwnerCheck on any dbExecutor, so GradeCard and
-// UndoLastGrade can run it inside their own transactions (#294).
+// UndoLastGrade can run it inside their own transactions (#294). Only
+// sql.ErrNoRows means "not found" — anything else (a cancelled context, a
+// connection failure, a scan error) is a real error and must not be
+// reported as a 404 (#288).
 func cardOwner(ctx context.Context, exec dbExecutor, userID, cardID int64) (int64, error) {
 	var deckID int64
 	err := exec.QueryRowContext(ctx,
 		`SELECT deck_id FROM flash_cards WHERE id = ? AND user_id = ?`, cardID, userID).Scan(&deckID)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("flash: card owner: %w", err)
 	}
 	return deckID, nil
 }
@@ -153,31 +189,77 @@ func (st *Store) TagsForCard(ctx context.Context, userID, cardID int64) ([]Tag, 
 	return out, rows.Err()
 }
 
+// CardWithDeck is a card plus the name and colour of the deck it belongs
+// to, for the cross-deck tag filter — one JOIN instead of a DeckByID lookup
+// per card (#290).
+type CardWithDeck struct {
+	Card      Card
+	DeckName  string
+	DeckColor string
+}
+
 // CardsByTag returns every one of userID's cards, across every deck, that
-// carries tagName. This is Flash's cross-deck filter.
-func (st *Store) CardsByTag(ctx context.Context, userID int64, tagName string) ([]Card, error) {
+// carries tagName, alongside each card's own deck name and colour. This is
+// Flash's cross-deck filter.
+func (st *Store) CardsByTag(ctx context.Context, userID int64, tagName string) ([]CardWithDeck, error) {
 	name := normalizeTagName(tagName)
 	rows, err := st.db.QueryContext(ctx,
-		`SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at, c.image_hash, c.audio_hash
+		`SELECT c.id, c.deck_id, c.user_id, c.card_type, c.front, c.back, c.notes, c.created_at, c.image_hash, c.audio_hash,
+		        d.name, d.color
 		 FROM flash_cards c
 		 JOIN flash_card_tags ct ON ct.card_id = c.id
 		 JOIN flash_tags t ON t.id = ct.tag_id
+		 JOIN flash_decks d ON d.id = c.deck_id AND d.user_id = ?
 		 WHERE c.user_id = ? AND t.user_id = ? AND t.name = ?
-		 ORDER BY c.created_at DESC, c.id DESC`, userID, userID, name)
+		 ORDER BY c.created_at DESC, c.id DESC`, userID, userID, userID, name)
 	if err != nil {
 		return nil, fmt.Errorf("flash: cards by tag: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var out []Card
+	var out []CardWithDeck
 	for rows.Next() {
-		c, err := scanCardRow(rows)
+		var deckName, deckColor string
+		c, err := scanCardRow(withDeckInfo{rows: rows, deckName: &deckName, deckColor: &deckColor})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("flash: cards by tag: %w", err)
 		}
-		out = append(out, c)
+		out = append(out, CardWithDeck{Card: c, DeckName: deckName, DeckColor: deckColor})
 	}
 	return out, rows.Err()
+}
+
+// withDeckInfo lets scanCardRow read CardsByTag's row, which carries the
+// joined deck name and colour after the usual card columns — the same
+// trick review.go's withDueAt uses for s.due_at.
+type withDeckInfo struct {
+	rows                *sql.Rows
+	deckName, deckColor *string
+}
+
+func (w withDeckInfo) Scan(dest ...any) error {
+	return w.rows.Scan(append(dest, w.deckName, w.deckColor)...)
+}
+
+// PurgeOrphanTags deletes flash_tags rows, across every user, that no
+// flash_card_tags row references any more. SetCardTags already garbage
+// collects userID's own unreferenced tags inline, but a card or deck delete
+// (or an account delete) cascades the flash_card_tags links away without
+// touching flash_tags itself, and has no single user_id to scope a cleanup
+// to — this is the catch-all sweep for those, run from Flash's daily job
+// alongside PurgeOrphanMedia (#289).
+func (st *Store) PurgeOrphanTags(ctx context.Context) (int, error) {
+	res, err := st.db.ExecContext(ctx, `
+		DELETE FROM flash_tags
+		 WHERE NOT EXISTS (SELECT 1 FROM flash_card_tags WHERE tag_id = flash_tags.id)`)
+	if err != nil {
+		return 0, fmt.Errorf("flash: purge orphan tags: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("flash: purge orphan tags: %w", err)
+	}
+	return int(n), nil
 }
 
 // CardTagsInDeck returns every tagged card in one of userID's decks, mapped

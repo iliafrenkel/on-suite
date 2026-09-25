@@ -145,6 +145,31 @@ func TestTagChipHrefEscapesSlash(t *testing.T) {
 	}
 }
 
+// TestTagFilterHeadingNormalizesLikeTheQuery pins #290: CardsByTag
+// normalizes (trims + lowercases) before matching, but the handler used to
+// pass the raw, un-normalized path value to the page heading and title, so
+// GET /flash/tags/HARD showed "HARD" even though it matched and listed
+// cards tagged (lowercase) "hard". Both must agree.
+func TestTagFilterHeadingNormalizesLikeTheQuery(t *testing.T) {
+	s := newServer(t)
+	deck, _ := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	s.Submit(t, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"a1"}, "back": {"x"}, "tags": {"hard"}},
+		"/flash/"+itoa(deck.ID)+"/cards/1")
+
+	doc := s.Get(t, s.Alice, "/flash/tags/HARD")
+	items := doc.QueryAll(".tag-filter-item")
+	if len(items) != 1 {
+		t.Fatalf("GET /flash/tags/HARD shows %d cards, want 1", len(items))
+	}
+	if got := htmlassert.Text(doc.MustHave("h1 .flash-pill-active")); got != "hard" {
+		t.Errorf("heading pill = %q, want normalized %q", got, "hard")
+	}
+	if got := htmlassert.Text(doc.MustHave("title")); got != "Tag: hard · ON Suite" {
+		t.Errorf("page title = %q, want %q", got, "Tag: hard · ON Suite")
+	}
+}
+
 func TestTagFilterPageShowsMiniCardsWithDeckNames(t *testing.T) {
 	s := newServer(t)
 	deckA, _ := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Alpha", "", flash.DefaultDeckColor)

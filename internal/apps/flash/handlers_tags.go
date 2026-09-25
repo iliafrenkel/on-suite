@@ -16,28 +16,23 @@ func (a *App) tagFilter(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	tagName := r.PathValue("tagName")
+	// Normalized once, up front: CardsByTag matches on the normalized name
+	// regardless, but the heading/title must show the same form it actually
+	// matched against, not the raw path value (#290).
+	tagName := normalizeTagName(r.PathValue("tagName"))
 	cards, err := a.store.CardsByTag(r.Context(), userID, tagName)
 	if err != nil {
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
 
-	decks := map[int64]Deck{}
 	items := make([]cardGridItem, 0, len(cards))
-	for _, c := range cards {
-		d, ok := decks[c.DeckID]
-		if !ok {
-			if d, err = a.store.DeckByID(r.Context(), userID, c.DeckID); err != nil {
-				a.deps.Errors.Internal(w, r, err)
-				return
-			}
-			decks[c.DeckID] = d
-		}
+	for _, cd := range cards {
+		d := Deck{ID: cd.Card.DeckID, Color: cd.DeckColor}
 		items = append(items, cardGridItem{
-			Face:     newCardFace(c, d, nil),
-			Href:     cardURL(d.ID, c.ID, "", ""),
-			DeckName: d.Name,
+			Face:     newCardFace(cd.Card, d, nil),
+			Href:     cardURL(d.ID, cd.Card.ID, "", ""),
+			DeckName: cd.DeckName,
 		})
 	}
 

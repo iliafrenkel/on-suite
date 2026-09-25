@@ -4,7 +4,9 @@ package flash
 import (
 	"context"
 	"embed"
+	"errors"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -53,29 +55,51 @@ type App struct {
 func New() *App { return &App{} }
 
 // mediaPurgeTick is daily, like internal/apps/reader's purgeTick: orphaned
-// media is housekeeping, not something anybody is waiting on.
+// media (and, since #289, orphaned tags) is housekeeping, not something
+// anybody is waiting on.
 const mediaPurgeTick = 24 * time.Hour
 
 // Jobs implements app.Scheduler. RegisterJobs runs after Mount, so the
 // store this closure reads is already built by the time the job first runs.
+//
+// Orphan media and orphan tags are the same kind of leftover — rows a
+// delete elsewhere stopped referencing — so they run as two steps of one
+// daily job rather than two separate registrations, the same way Reader's
+// "purge old articles" job bundles PurgeItems, PurgeOrphanImages, and
+// reindexing (internal/apps/reader/app.go): one cadence, one log line, one
+// thing for the admin page to list.
 func (a *App) Jobs(deps app.Deps) []app.Job {
 	return []app.Job{
 		{
-			Name:        "purge orphan media",
-			Description: "Deletes cached card images and sounds that no card uses any more.",
+			Name:        "purge orphan media and tags",
+			Description: "Deletes cached card images/sounds and tags that no card uses any more.",
 			Every:       mediaPurgeTick,
 			Run: func(ctx context.Context) error {
-				n, err := a.store.PurgeOrphanMedia(ctx)
-				if err != nil {
-					return err
-				}
-				if n > 0 {
-					a.deps.Log.Info("flash purged orphan media", "count", n)
-				}
-				return nil
+				return purgeOrphans(ctx, a.deps.Log, a.store.PurgeOrphanMedia, a.store.PurgeOrphanTags)
 			},
 		},
 	}
+}
+
+// purgeOrphans runs both daily sweeps unconditionally — one failing (a
+// transient lock, a cancelled context) must not stop the other from
+// running, since the two clean up unrelated tables and neither's success
+// depends on the other's. Both errors, if any, are combined with
+// errors.Join so the job's own failure log line reports either or both;
+// counts from a successful sweep are still logged even when its sibling
+// failed. Pulled out of the Run closure so it can be tested directly with
+// fake purge funcs, without needing a way to force a real PurgeOrphanMedia
+// or PurgeOrphanTags call to fail.
+func purgeOrphans(ctx context.Context, log *slog.Logger, purgeMedia, purgeTags func(context.Context) (int, error)) error {
+	media, mediaErr := purgeMedia(ctx)
+	tags, tagErr := purgeTags(ctx)
+	if err := errors.Join(mediaErr, tagErr); err != nil {
+		return err
+	}
+	if media > 0 || tags > 0 {
+		log.Info("flash purged orphans", "media", media, "tags", tags)
+	}
+	return nil
 }
 
 func (a *App) Meta() app.Meta {
