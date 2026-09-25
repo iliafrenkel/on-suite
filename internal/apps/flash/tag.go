@@ -79,6 +79,26 @@ func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []
 		return err
 	}
 
+	// Replacing this card's tags can leave one of userID's own flash_tags
+	// rows with nothing left referencing it — dropping the last card that
+	// carried it, or replacing "hard" with "easy" on its only card. Garbage
+	// collect all of userID's now-unreferenced tags here rather than only
+	// the ones this call touched: it is one extra statement, scoped by
+	// user_id so it can never reach another account's tags, and simpler
+	// than tracking which specific names might have been orphaned (#289).
+	// PurgeOrphanTags below is the cross-user sweep for the cases this
+	// can't reach — deleting a card or deck, or an account — since those
+	// paths cascade the flash_card_tags links away (ON DELETE CASCADE) but
+	// have no single user_id to scope a cleanup like this one to.
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM flash_tags
+		 WHERE user_id = ?
+		   AND NOT EXISTS (SELECT 1 FROM flash_card_tags WHERE tag_id = flash_tags.id)`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("flash: garbage collect tags: %w", err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("flash: set card tags: %w", err)
 	}
@@ -194,6 +214,27 @@ func (st *Store) CardsByTag(ctx context.Context, userID int64, tagName string) (
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// PurgeOrphanTags deletes flash_tags rows, across every user, that no
+// flash_card_tags row references any more. SetCardTags already garbage
+// collects userID's own unreferenced tags inline, but a card or deck delete
+// (or an account delete) cascades the flash_card_tags links away without
+// touching flash_tags itself, and has no single user_id to scope a cleanup
+// to — this is the catch-all sweep for those, run from Flash's daily job
+// alongside PurgeOrphanMedia (#289).
+func (st *Store) PurgeOrphanTags(ctx context.Context) (int, error) {
+	res, err := st.db.ExecContext(ctx, `
+		DELETE FROM flash_tags
+		 WHERE NOT EXISTS (SELECT 1 FROM flash_card_tags WHERE tag_id = flash_tags.id)`)
+	if err != nil {
+		return 0, fmt.Errorf("flash: purge orphan tags: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("flash: purge orphan tags: %w", err)
+	}
+	return int(n), nil
 }
 
 // CardTagsInDeck returns every tagged card in one of userID's decks, mapped

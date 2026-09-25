@@ -53,24 +53,36 @@ type App struct {
 func New() *App { return &App{} }
 
 // mediaPurgeTick is daily, like internal/apps/reader's purgeTick: orphaned
-// media is housekeeping, not something anybody is waiting on.
+// media (and, since #289, orphaned tags) is housekeeping, not something
+// anybody is waiting on.
 const mediaPurgeTick = 24 * time.Hour
 
 // Jobs implements app.Scheduler. RegisterJobs runs after Mount, so the
 // store this closure reads is already built by the time the job first runs.
+//
+// Orphan media and orphan tags are the same kind of leftover — rows a
+// delete elsewhere stopped referencing — so they run as two steps of one
+// daily job rather than two separate registrations, the same way Reader's
+// "purge old articles" job bundles PurgeItems, PurgeOrphanImages, and
+// reindexing (internal/apps/reader/app.go): one cadence, one log line, one
+// thing for the admin page to list.
 func (a *App) Jobs(deps app.Deps) []app.Job {
 	return []app.Job{
 		{
-			Name:        "purge orphan media",
-			Description: "Deletes cached card images and sounds that no card uses any more.",
+			Name:        "purge orphan media and tags",
+			Description: "Deletes cached card images/sounds and tags that no card uses any more.",
 			Every:       mediaPurgeTick,
 			Run: func(ctx context.Context) error {
-				n, err := a.store.PurgeOrphanMedia(ctx)
+				media, err := a.store.PurgeOrphanMedia(ctx)
 				if err != nil {
 					return err
 				}
-				if n > 0 {
-					a.deps.Log.Info("flash purged orphan media", "count", n)
+				tags, err := a.store.PurgeOrphanTags(ctx)
+				if err != nil {
+					return err
+				}
+				if media > 0 || tags > 0 {
+					a.deps.Log.Info("flash purged orphans", "media", media, "tags", tags)
 				}
 				return nil
 			},
