@@ -263,9 +263,46 @@ func TestCreateDeckRejectsUnknownColor(t *testing.T) {
 	if rec.Code != 400 {
 		t.Fatalf("unknown colour = %d, want 400", rec.Code)
 	}
-	htmlassert.Parse(t, rec.Body.String()).MustHave(".notice-error")
+	notice := htmlassert.Parse(t, rec.Body.String()).MustHave(".notice-error")
+	if got := htmlassert.Text(notice); got != "Pick one of the colours shown" {
+		t.Errorf("createDeck unknown-colour message = %q, want %q", got, "Pick one of the colours shown")
+	}
 	if decks, _ := s.Store.ListDecks(t.Context(), s.Alice.User.ID); len(decks) != 0 {
 		t.Errorf("a rejected create left %d decks behind", len(decks))
+	}
+}
+
+// TestUpdateDeckRejectsUnknownColor is #315 plus half of #314: posting an
+// unknown colour to an existing deck's edit form is a 400 with the shared
+// message, and leaves every one of the deck's fields — including colour and
+// pace — unchanged.
+func TestUpdateDeckRejectsUnknownColor(t *testing.T) {
+	s := newServer(t)
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "some notes", "blue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deck = setDeckPace(t, s.Store, s.Alice.User.ID, deck.ID, 7, nil)
+
+	rec := s.Post(t, s.Alice, "/flash/"+itoa(deck.ID), url.Values{
+		"name": {"Renamed"}, "description": {"changed"}, "color": {"chartreuse"},
+		"new_cards_per_day": {"3"}, "reviews_per_day": {"9"},
+	})
+	if rec.Code != 400 {
+		t.Fatalf("unknown colour on update = %d, want 400", rec.Code)
+	}
+	notice := htmlassert.Parse(t, rec.Body.String()).MustHave(".notice-error")
+	if got := htmlassert.Text(notice); got != "Pick one of the colours shown" {
+		t.Errorf("updateDeck unknown-colour message = %q, want %q", got, "Pick one of the colours shown")
+	}
+
+	unchanged, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Name != "Spanish" || unchanged.Description != "some notes" || unchanged.Color != "blue" ||
+		unchanged.NewCardsPerDay != 7 || unchanged.ReviewsPerDay != nil {
+		t.Errorf("a rejected update with an unknown colour changed the deck: %+v", unchanged)
 	}
 }
 

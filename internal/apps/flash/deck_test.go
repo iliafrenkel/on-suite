@@ -499,6 +499,27 @@ func TestCreateDeckStoresNonDefaultColorInOneWrite(t *testing.T) {
 	}
 }
 
+// TestCreateDeckAndUpdateDeckShareTheUnknownColorMessage is the #314
+// guarantee at the store level: both entry points reject an unknown colour
+// with the exact same error.
+func TestCreateDeckAndUpdateDeckShareTheUnknownColorMessage(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, createErr := f.store.CreateDeck(ctx, f.alice.ID, "Other", "", "chartreuse")
+	_, updateErr := f.store.UpdateDeck(ctx, f.alice.ID, d.ID, d.Name, d.Description, "chartreuse", d.NewCardsPerDay, d.ReviewsPerDay)
+	if createErr == nil || updateErr == nil {
+		t.Fatal("expected both calls to reject the unknown colour")
+	}
+	if createErr.Error() != updateErr.Error() {
+		t.Errorf("CreateDeck error = %q, UpdateDeck error = %q, want identical messages", createErr.Error(), updateErr.Error())
+	}
+}
+
 func TestValidDeckColor(t *testing.T) {
 	for _, c := range flash.DeckColors {
 		if !flash.ValidDeckColor(c) {
