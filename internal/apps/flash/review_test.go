@@ -566,12 +566,12 @@ func TestUndoLastGradeDecrementsTheMatchingRatingCounter(t *testing.T) {
 }
 
 // TestBumpDailyCountsFloorsRatingColumnAtZero proves bumpDailyCounts' UPDATE
-// clamps a rating column at 0 rather than letting it go negative. A card
-// graded just before migration 0009 shipped, whose flash_review_counts row
-// predates the new columns, can leave a rating column at 0 for a day that
-// still has an undo-able grade logged against it; undoing that grade must
-// not drive the column negative, since RetentionRate sums these columns
-// directly and a negative summand can push its ratio over 100%.
+// clamps a rating column at 0 rather than letting it go negative. No known
+// path leaves a rating column behind an undo-able grade (GradeCard and
+// UndoLastGrade read and write in one transaction, #294), so this is a
+// defensive floor: if a column is ever out of sync, undoing must still not
+// drive it negative, since RetentionRate sums these columns directly and a
+// negative summand can push its ratio over 100%.
 func TestBumpDailyCountsFloorsRatingColumnAtZero(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -592,10 +592,8 @@ func TestBumpDailyCountsFloorsRatingColumnAtZero(t *testing.T) {
 		t.Fatalf("again_count after grade = %d, want 1", got)
 	}
 
-	// Simulate the pre-existing-row edge case: force again_count back to 0
-	// (as if this row predated migration 0009, or was otherwise out of
-	// sync with the still-undo-able grade log) while leaving the grade
-	// itself undone.
+	// Force again_count back to 0, out of sync with the still-undo-able
+	// grade log, while leaving the grade itself in place.
 	if _, err := f.db.ExecContext(ctx,
 		`UPDATE flash_review_counts SET again_count = 0 WHERE user_id = ? AND deck_id = ? AND day = ?`,
 		f.alice.ID, deck.ID, now.UTC().Format("2006-01-02"),

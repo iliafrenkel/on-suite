@@ -21,15 +21,18 @@ func (st *Store) CardState(ctx context.Context, userID, cardID int64) (cardSched
 	if _, err := st.cardOwnerCheck(ctx, userID, cardID); err != nil {
 		return cardSchedule{}, false, err
 	}
-	return st.scanCardState(ctx, userID, cardID)
+	return scanCardState(ctx, st.db, userID, cardID)
 }
 
-func (st *Store) scanCardState(ctx context.Context, userID, cardID int64) (cardSchedule, bool, error) {
+// scanCardState reads cardID's schedule through exec, which GradeCard passes
+// as its transaction so the read and the write it bases on that read cannot
+// be split by a concurrent grade (#294).
+func scanCardState(ctx context.Context, exec dbExecutor, userID, cardID int64) (cardSchedule, bool, error) {
 	var (
 		c                   cardSchedule
 		dueAt, lastReviewAt sql.NullString
 	)
-	err := st.db.QueryRowContext(ctx, `
+	err := exec.QueryRowContext(ctx, `
 		SELECT state, due_at, stability, difficulty, scheduled_days, reps, lapses, remaining_steps, last_review_at
 		FROM flash_card_state WHERE user_id = ? AND card_id = ?`, userID, cardID,
 	).Scan(&c.State, &dueAt, &c.Stability, &c.Difficulty, &c.ScheduledDays, &c.Reps, &c.Lapses, &c.RemainingSteps, &lastReviewAt)
@@ -68,13 +71,27 @@ func formatNullableTime(t time.Time) any {
 // a grade that updated the schedule but not the daily count (or vice versa)
 // would leave the queue-construction logic in Task 4 lying about what is
 // still due today.
+//
+// The owner check and the state read happen inside that same transaction,
+// not before it (#294): the database has one connection, so a transaction
+// holds it until commit, but a read before BeginTx hands it back in between
+// and lets a concurrent grade of the same card read the same "before" state
+// — both then count it as new, and the later write discards the earlier
+// review. Nothing inside the transaction may use st.db: with one
+// connection, that waits forever for the connection the transaction holds.
 func (st *Store) GradeCard(ctx context.Context, userID, cardID int64, rating int, now time.Time) (cardSchedule, error) {
-	deckID, err := st.cardOwnerCheck(ctx, userID, cardID)
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return cardSchedule{}, fmt.Errorf("flash: grade card: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	deckID, err := cardOwner(ctx, tx, userID, cardID)
 	if err != nil {
 		return cardSchedule{}, err
 	}
 
-	current, hadState, err := st.scanCardState(ctx, userID, cardID)
+	current, hadState, err := scanCardState(ctx, tx, userID, cardID)
 	if err != nil {
 		return cardSchedule{}, err
 	}
@@ -86,12 +103,6 @@ func (st *Store) GradeCard(ctx context.Context, userID, cardID int64, rating int
 	if err != nil {
 		return cardSchedule{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-
-	tx, err := st.db.BeginTx(ctx, nil)
-	if err != nil {
-		return cardSchedule{}, fmt.Errorf("flash: grade card: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
 
 	wasNew := 0
 	if !hadState {
@@ -136,13 +147,24 @@ func (st *Store) GradeCard(ctx context.Context, userID, cardID int64, rating int
 // UndoLastGrade reverses cardID's most recent grade, if any. hasUndo is
 // false, with no error, when there is nothing to undo — a card that has
 // never been graded, or whose one undo slot was already spent.
+//
+// As in GradeCard, the reads happen inside the transaction (#294), so of
+// two undos racing for one grade the second sees the log the first already
+// cleared and reports nothing to undo, exactly as it would one after the
+// other — instead of reversing the grade twice.
 func (st *Store) UndoLastGrade(ctx context.Context, userID, cardID int64, now time.Time) (schedule cardSchedule, hasUndo bool, err error) {
-	deckID, err := st.cardOwnerCheck(ctx, userID, cardID)
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return cardSchedule{}, false, fmt.Errorf("flash: undo last grade: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	deckID, err := cardOwner(ctx, tx, userID, cardID)
 	if err != nil {
 		return cardSchedule{}, false, err
 	}
 
-	current, log, wasNew, hasLog, err := st.scanCardStateWithLog(ctx, userID, cardID)
+	current, log, wasNew, hasLog, err := scanCardStateWithLog(ctx, tx, userID, cardID)
 	if err != nil {
 		return cardSchedule{}, false, err
 	}
@@ -154,12 +176,6 @@ func (st *Store) UndoLastGrade(ctx context.Context, userID, cardID int64, now ti
 	if err != nil {
 		return cardSchedule{}, false, fmt.Errorf("flash: undo last grade: %w", err)
 	}
-
-	tx, err := st.db.BeginTx(ctx, nil)
-	if err != nil {
-		return cardSchedule{}, false, fmt.Errorf("flash: undo last grade: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
 
 	if wasNew {
 		// Undoing a card's first-ever review must restore "never reviewed"
@@ -202,14 +218,14 @@ func (st *Store) UndoLastGrade(ctx context.Context, userID, cardID int64, now ti
 	return reverted, true, nil
 }
 
-func (st *Store) scanCardStateWithLog(ctx context.Context, userID, cardID int64) (current cardSchedule, log reviewLog, wasNew bool, hasLog bool, err error) {
+func scanCardStateWithLog(ctx context.Context, exec dbExecutor, userID, cardID int64) (current cardSchedule, log reviewLog, wasNew bool, hasLog bool, err error) {
 	var (
 		dueAt, lastReviewAt                                          sql.NullString
 		logDue, logReview, logState                                  sql.NullString
 		logRating, logScheduledDays, logRemainingSteps, logWasNewCol sql.NullInt64
 		logStability, logDifficulty                                  sql.NullFloat64
 	)
-	err = st.db.QueryRowContext(ctx, `
+	err = exec.QueryRowContext(ctx, `
 		SELECT state, due_at, stability, difficulty, scheduled_days, reps, lapses, remaining_steps, last_review_at,
 		       log_rating, log_due, log_scheduled_days, log_review, log_state, log_stability, log_difficulty, log_remaining_steps, log_was_new
 		FROM flash_card_state WHERE user_id = ? AND card_id = ?`, userID, cardID,
@@ -271,6 +287,14 @@ func (st *Store) bumpDailyCounts(ctx context.Context, tx *sql.Tx, userID, deckID
 	// delta in a second statement, sidesteps that: the insert candidate is
 	// always non-negative, and the UPDATE's CHECK is evaluated against the
 	// real post-update row.
+	//
+	// The rating column additionally floors at zero. Nothing is known to
+	// drive one negative — GradeCard and UndoLastGrade read and write inside
+	// one transaction (#294), so every decrement matches an earlier
+	// increment — but these columns have no CHECK of their own, and
+	// RetentionRate sums them directly, so this is a defensive floor rather
+	// than a constraint violation. new_count and review_count are left to
+	// their CHECK, which would surface an unmatched decrement as an error.
 	if _, err := tx.ExecContext(ctx, `
         INSERT INTO flash_review_counts (user_id, deck_id, day, new_count, review_count)
         VALUES (?, ?, ?, 0, 0)
