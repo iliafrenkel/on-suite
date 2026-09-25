@@ -4,13 +4,22 @@ package flash
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // ImportDeck creates a new deck for userID and populates it with cards, all
 // inside one transaction: if any insert fails, nothing is left behind. cards
 // must already be validated (see ParseImport) — ImportDeck only persists,
-// it does not re-validate field contents.
+// it does not re-validate field contents. It takes the unexported
+// parsedCard type deliberately, so only ParseImport's validated output —
+// never a hand-built slice — can reach this method.
 func (st *Store) ImportDeck(ctx context.Context, userID int64, name, description string, cards []parsedCard) (Deck, error) {
+	// Defensive: both parser paths already trim the deck name/description,
+	// but ImportDeck shouldn't rely on that — CreateDeck/UpdateDeck trim
+	// too (#300 item 5).
+	name = strings.TrimSpace(name)
+	description = strings.TrimSpace(description)
+
 	tx, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Deck{}, fmt.Errorf("flash: import deck: %w", err)

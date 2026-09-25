@@ -54,7 +54,10 @@ type importJSON struct {
 
 // ParseImport parses payload as format ("json", "markdown", or "auto") and
 // returns a fully-validated deck, or the first validation error found.
-// format=="" is treated the same as "auto".
+// format=="" is treated the same as "auto". It returns the unexported
+// parsedDeck type deliberately: the only way to get one is by parsing and
+// validating a payload here, so Store.ImportDeck can accept it as proof its
+// cards are already well-formed.
 func ParseImport(payload, format string) (parsedDeck, error) {
 	switch format {
 	case "json":

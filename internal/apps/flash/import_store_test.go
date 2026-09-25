@@ -60,6 +60,40 @@ func TestImportDeckCreatesDeckCardsAndTags(t *testing.T) {
 	}
 }
 
+// TestImportDeckTrimsNameAndDescription is #300 item 5: ImportDeck did not
+// TrimSpace the deck name/description the way CreateDeck/UpdateDeck do,
+// relying only on both parser paths already trimming them. Call it
+// directly with a padded name/description (bypassing the parser) to prove
+// ImportDeck itself trims defensively.
+func TestImportDeckTrimsNameAndDescription(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	d, err := flash.ParseImport(`{"deck": {"name": "D"}, "cards": [{"front": "Q", "back": "A"}]}`, "json")
+	if err != nil {
+		t.Fatalf("ParseImport: %v", err)
+	}
+
+	deck, err := f.store.ImportDeck(ctx, f.alice.ID, "  Padded Deck  ", "  Padded description  ", d.Cards)
+	if err != nil {
+		t.Fatalf("ImportDeck: %v", err)
+	}
+	if deck.Name != "Padded Deck" {
+		t.Errorf("Name = %q, want %q", deck.Name, "Padded Deck")
+	}
+	if deck.Description != "Padded description" {
+		t.Errorf("Description = %q, want %q", deck.Description, "Padded description")
+	}
+
+	stored, err := f.store.DeckByID(ctx, f.alice.ID, deck.ID)
+	if err != nil {
+		t.Fatalf("DeckByID: %v", err)
+	}
+	if stored.Name != "Padded Deck" || stored.Description != "Padded description" {
+		t.Errorf("stored deck = %+v, want trimmed name/description", stored)
+	}
+}
+
 func TestImportDeckRejectsDuplicateName(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
