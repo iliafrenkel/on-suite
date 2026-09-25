@@ -15,6 +15,12 @@
 	function isTyping(el) {
 		if (!el) return false;
 		var tag = el.tagName;
+		// Exempting every checkbox/radio (not just .flash-flip) is deliberate
+		// but broader than strictly needed: it's only correct because the
+		// flip checkbox is the sole checkbox/radio ever coexisting with the
+		// review/viewer shortcut keys in the DOM (bb757f2, #337). If a future
+		// feature adds another checkbox or radio alongside those shortcuts,
+		// narrow this to el.classList.contains("flash-flip") instead.
 		if (tag === "INPUT" && (el.type === "checkbox" || el.type === "radio")) return false;
 		return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
 	}

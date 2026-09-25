@@ -83,9 +83,8 @@ func (a *App) cardIDFromForm(w http.ResponseWriter, r *http.Request) (int64, boo
 
 // reviewCardView is the card on screen.
 type reviewCardView struct {
-	Face     cardFace
-	IsNew    bool
-	DeckName string
+	Face  cardFace
+	IsNew bool
 }
 
 // celebrationColors are the deck colours the summary's little burst of
@@ -179,7 +178,7 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 	}
 	tally, err := a.store.TodayTally(ctx, userID, deckID, now)
 	if err != nil {
-		a.deps.Errors.Internal(w, r, err)
+		a.fail(w, r, err)
 		return
 	}
 
@@ -210,7 +209,7 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 		for i, tg := range tags {
 			names[i] = tg.Name
 		}
-		view.Current = &reviewCardView{Face: newCardFace(qc.Card, qc.Deck, names), IsNew: qc.IsNew, DeckName: qc.Deck.Name}
+		view.Current = &reviewCardView{Face: newCardFace(qc.Card, qc.Deck, names), IsNew: qc.IsNew}
 		view.Position = view.Done + 1
 		if deck == nil {
 			view.Color = qc.Deck.Color
@@ -220,7 +219,7 @@ func (a *App) renderReview(w http.ResponseWriter, r *http.Request, userID int64,
 	default:
 		summary, err := a.reviewSummaryFor(ctx, userID, deckID, tally, now)
 		if err != nil {
-			a.deps.Errors.Internal(w, r, err)
+			a.fail(w, r, err)
 			return
 		}
 		view.Summary = &summary

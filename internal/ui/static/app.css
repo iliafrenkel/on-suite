@@ -3141,6 +3141,11 @@ input.flash-tag-entry:focus { outline: none; }
 	opacity: 0;
 	animation: flash-burst 1s ease-out forwards;
 }
+/* Each span is one card in the celebration burst; --dx/--dy are the pixel
+   offset its animation travels to (left/up is negative) and --rot is the
+   degrees it spins by, together fanning six cards out in a rough arc above
+   the trigger point. The six pairs were picked by eye for an even spread,
+   not derived from a formula — adjust to taste if the count changes. */
 .flash-celebrate span:nth-child(1) { --dx: -110px; --dy: -30px; --rot: -40deg; }
 .flash-celebrate span:nth-child(2) { --dx: -60px;  --dy: -70px; --rot: -15deg; animation-delay: 0.05s; }
 .flash-celebrate span:nth-child(3) { --dx: -10px;  --dy: -90px; --rot: 10deg;  animation-delay: 0.1s; }
