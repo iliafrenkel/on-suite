@@ -255,7 +255,12 @@
 		var label = btn.querySelector(".flash-copy-label") || btn;
 		function done(text) {
 			label.textContent = text;
-			setTimeout(function () { label.textContent = "Copy the prompt"; }, 2000);
+			// Rapid repeated clicks on the same button would otherwise start
+			// overlapping timeouts, so an earlier one could revert the label
+			// mid-flicker after a later click already changed it (#353).
+			// Stash the timeout id on the button itself, scoped per button.
+			if (btn._flashCopyRevert) clearTimeout(btn._flashCopyRevert);
+			btn._flashCopyRevert = setTimeout(function () { label.textContent = "Copy the prompt"; }, 2000);
 		}
 		function selectIt() {
 			var details = box.closest("details");
