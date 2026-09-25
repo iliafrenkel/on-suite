@@ -1,0 +1,12 @@
+-- internal/apps/flash/migrations/0013_card_tags_tag_index.sql
+-- flash_card_tags' only index is its WITHOUT ROWID primary key on
+-- (card_id, tag_id) — tag_id is the second key column, so nothing can seek
+-- on it alone. Three lookups go the other way, from a tag to its cards: the
+-- orphan-tag NOT EXISTS (both SetCardTags' inline cleanup and
+-- PurgeOrphanTags' sweep), CardsByTag's cross-deck filter, and SQLite's own
+-- foreign-key check on every flash_tags row deleted, which searches
+-- flash_card_tags for a child row — without an index, each is a full scan
+-- of flash_card_tags. Measured against a fixture with 20k links: ~190ms per
+-- card save (SetCardTags' inline GC) without the index, <1ms with it; at
+-- 100k links, ~4s without it.
+CREATE INDEX flash_card_tags_tag_idx ON flash_card_tags (tag_id);

@@ -3,10 +3,30 @@ package flash_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 )
+
+// TestCardTagsAreIndexedByTag pins migration 0013: the orphan-tag NOT
+// EXISTS (both SetCardTags' inline cleanup and PurgeOrphanTags' sweep),
+// CardsByTag's cross-deck filter, and SQLite's own foreign-key check on
+// every flash_tags row deleted all look flash_card_tags up by tag_id —
+// the column that is not the leading key of its WITHOUT ROWID primary key.
+func TestCardTagsAreIndexedByTag(t *testing.T) {
+	f := newFixture(t)
+	var def string
+	err := f.db.QueryRowContext(context.Background(),
+		`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'flash_card_tags' AND name = ?`,
+		"flash_card_tags_tag_idx").Scan(&def)
+	if err != nil {
+		t.Fatalf("index on flash_card_tags(tag_id): %v", err)
+	}
+	if !strings.Contains(def, "tag_id") {
+		t.Errorf("index def = %q, want it to cover tag_id", def)
+	}
+}
 
 // tagRowExists reports whether userID has a flash_tags row named name,
 // regardless of whether anything still references it — the raw row count,
