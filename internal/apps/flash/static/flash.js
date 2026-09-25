@@ -15,6 +15,12 @@
 	function isTyping(el) {
 		if (!el) return false;
 		var tag = el.tagName;
+		// Exempting every checkbox/radio (not just .flash-flip) is deliberate
+		// but broader than strictly needed: it's only correct because the
+		// flip checkbox is the sole checkbox/radio ever coexisting with the
+		// review/viewer shortcut keys in the DOM (bb757f2, #337). If a future
+		// feature adds another checkbox or radio alongside those shortcuts,
+		// narrow this to el.classList.contains("flash-flip") instead.
 		if (tag === "INPUT" && (el.type === "checkbox" || el.type === "radio")) return false;
 		return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
 	}
@@ -115,6 +121,16 @@
 				x.className = "flash-tag-remove";
 				x.setAttribute("aria-label", "Remove tag " + name);
 				x.textContent = "×";
+				// A mousedown on this button moves focus off entry before the
+				// click fires, which would otherwise run entry's blur handler
+				// first and commit any leftover typed text as a new tag — the
+				// removal click then lands on a re-rendered pill list and does
+				// nothing (#326). preventDefault() keeps focus on entry so
+				// blur never fires, while a real click (mouse or, for
+				// keyboard, Enter/Space) still reaches the listener below.
+				x.addEventListener("mousedown", function (e) {
+					e.preventDefault();
+				});
 				x.addEventListener("click", function () {
 					names.splice(i, 1);
 					sync();
@@ -245,7 +261,12 @@
 		var label = btn.querySelector(".flash-copy-label") || btn;
 		function done(text) {
 			label.textContent = text;
-			setTimeout(function () { label.textContent = "Copy the prompt"; }, 2000);
+			// Rapid repeated clicks on the same button would otherwise start
+			// overlapping timeouts, so an earlier one could revert the label
+			// mid-flicker after a later click already changed it (#353).
+			// Stash the timeout id on the button itself, scoped per button.
+			if (btn._flashCopyRevert) clearTimeout(btn._flashCopyRevert);
+			btn._flashCopyRevert = setTimeout(function () { label.textContent = "Copy the prompt"; }, 2000);
 		}
 		function selectIt() {
 			var details = box.closest("details");

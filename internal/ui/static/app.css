@@ -2614,6 +2614,11 @@ kbd {
 .flash-swatch-input:focus-visible + .flash-swatch { outline: var(--ring); outline-offset: 3px; }
 
 .flash-deck-form { max-width: var(--measure); }
+/* Wraps the edit form and the Take-a-break section (decks.html) so the
+   section lines up with the form instead of stretching wider (#345). The
+   form's own max-width above still applies inside, so this isn't a double
+   constraint — both settle on the same width. */
+.flash-deck-edit { max-width: var(--measure); }
 
 /* Below 900px the list and the pane can't sit side by side: show one at a
  * time, driven by #flash-detail-open (checked by the server whenever the
@@ -2705,8 +2710,11 @@ a.flash-pill:hover { color: var(--c-text); border-color: var(--c-border-firm); }
 	height: 5px;
 	background: var(--deck, var(--c-border-firm));
 }
-.flash-mini-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgb(0 0 0 / 0.08); }
-.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
+/* Only the linked case (cards grid, tag page) is clickable — the gift
+   preview's sample cards render as plain <span>s and must not look
+   interactive (#344). */
+a.flash-mini-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgb(0 0 0 / 0.08); }
+a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 .flash-mini-text {
 	display: -webkit-box;
 	-webkit-line-clamp: 3;
@@ -2841,7 +2849,7 @@ a.flash-pill:hover { color: var(--c-text); border-color: var(--c-border-firm); }
 	.flash-flip:checked + .flash-card .flash-card-back { opacity: 1; }
 	.flash-flip:checked + .flash-card .flash-card-front { opacity: 0; }
 	.flash-mini-card { transition: none; }
-	.flash-mini-card:hover { transform: none; }
+	a.flash-mini-card:hover { transform: none; }
 }
 
 /* ---- ON Flash: card editor (UI overhaul U3) ----------------------------- */
@@ -3008,6 +3016,7 @@ input.flash-tag-entry:focus { outline: none; }
 	--flash-grade-hard-bg:  #412402; --flash-grade-hard-text:  #FAC775;
 	--flash-grade-good-bg:  #04342C; --flash-grade-good-text:  #9FE1CB;
 	--flash-grade-easy-bg:  #042C53; --flash-grade-easy-text:  #B5D4F4;
+	--flash-grade-hover: 1.3;
 }
 
 .flash-review { max-width: 40rem; margin: 0 auto; }
@@ -3084,11 +3093,17 @@ input.flash-tag-entry:focus { outline: none; }
 	font-weight: 600;
 	cursor: pointer;
 }
-.flash-grade-again { border-color: var(--flash-grade-again); background: var(--flash-grade-again-bg); color: var(--flash-grade-again-text); }
-.flash-grade-hard  { border-color: var(--flash-grade-hard);  background: var(--flash-grade-hard-bg);  color: var(--flash-grade-hard-text); }
-.flash-grade-good  { border-color: var(--flash-grade-good);  background: var(--flash-grade-good-bg);  color: var(--flash-grade-good-text); }
-.flash-grade-easy  { border-color: var(--flash-grade-easy);  background: var(--flash-grade-easy-bg);  color: var(--flash-grade-easy-text); }
-.flash-grade:hover { filter: brightness(0.97); }
+/* Two classes (0,2,0) so these outrank the generic button:hover background
+   (0,1,1) — otherwise hovering a grade swaps its colour for the neutral
+   button hover in both themes (#337). */
+.flash-grade.flash-grade-again { border-color: var(--flash-grade-again); background: var(--flash-grade-again-bg); color: var(--flash-grade-again-text); }
+.flash-grade.flash-grade-hard  { border-color: var(--flash-grade-hard);  background: var(--flash-grade-hard-bg);  color: var(--flash-grade-hard-text); }
+.flash-grade.flash-grade-good  { border-color: var(--flash-grade-good);  background: var(--flash-grade-good-bg);  color: var(--flash-grade-good-text); }
+.flash-grade.flash-grade-easy  { border-color: var(--flash-grade-easy);  background: var(--flash-grade-easy-bg);  color: var(--flash-grade-easy-text); }
+/* Hover keeps each grade's own colour and nudges it: darker on the pale
+   light-theme fills, lighter on the deep dark-theme ones (a darken there
+   is invisible). */
+.flash-grade:hover { filter: brightness(var(--flash-grade-hover, 0.94)); }
 .flash-grade:focus-visible { outline: var(--ring); outline-offset: 2px; }
 
 .flash-undo { display: flex; justify-content: center; margin-top: var(--s-4); }
@@ -3133,6 +3148,11 @@ input.flash-tag-entry:focus { outline: none; }
 	opacity: 0;
 	animation: flash-burst 1s ease-out forwards;
 }
+/* Each span is one card in the celebration burst; --dx/--dy are the pixel
+   offset its animation travels to (left/up is negative) and --rot is the
+   degrees it spins by, together fanning six cards out in a rough arc above
+   the trigger point. The six pairs were picked by eye for an even spread,
+   not derived from a formula — adjust to taste if the count changes. */
 .flash-celebrate span:nth-child(1) { --dx: -110px; --dy: -30px; --rot: -40deg; }
 .flash-celebrate span:nth-child(2) { --dx: -60px;  --dy: -70px; --rot: -15deg; animation-delay: 0.05s; }
 .flash-celebrate span:nth-child(3) { --dx: -10px;  --dy: -90px; --rot: 10deg;  animation-delay: 0.1s; }
