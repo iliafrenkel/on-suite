@@ -92,6 +92,13 @@ type Deps struct {
 	// would make an app's own cookie silently stop working there.
 	Secure bool
 
+	// Now, if set, is the clock the app must read instead of the real one.
+	// Only tests set it (apptest.NewServer, issue #357); production leaves
+	// it nil and each app keeps its Store's real-UTC default. An app's Mount
+	// passes a non-nil Now to its Store's SetClock, and every clock read in
+	// the app goes through that Store.
+	Now func() time.Time
+
 	// nav is the switcher contents, set by the registry so Page can fill in
 	// the shell without every app knowing about every other app.
 	nav []render.NavItem

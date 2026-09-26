@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
@@ -88,9 +89,13 @@ type Session struct {
 //
 // A real file, not ":memory:", for the reason given in notes' own N1 store
 // tests: the bugs worth catching live in SQLite's own behaviour.
+//
+// Clock is the time source shared by the app under test and Store: pin it
+// with Set or Advance to make a test's "now" deterministic (issue #357).
 type Server[S any] struct {
 	Handler http.Handler
 	Store   S
+	Clock   *Clock // the app's clock and s.Store's; pin it with Set/Advance
 	Alice   *Session
 	Bob     *Session
 }
@@ -179,18 +184,30 @@ func NewServer[S any](t *testing.T, a app.App, newStore func(*sql.DB) S, opts ..
 		Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Secure: cfg.secure,
 	})
 
+	clock := &Clock{}
+
 	mux := http.NewServeMux()
 	authn.Routes(mux, nil)
 	if err := registry.Mount(mux, app.Deps{
 		DB: handle, Render: rend, Users: users, Errors: errs, Log: log, Secure: cfg.secure,
+		Now: clock.Now,
 	}, authn.RequireUser); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
 
+	store := newStore(handle)
+	// The harness's own Store is a separate instance from the one the app
+	// builds in Mount; give it the same clock so a test's writes through
+	// s.Store and the handler's reads agree on "now".
+	if c, ok := any(store).(interface{ SetClock(func() time.Time) }); ok {
+		c.SetClock(clock.Now)
+	}
+
 	s := &Server[S]{
 		Handler: web.Stack(mux, log, errs, csrf, authn),
-		Store:   newStore(handle),
+		Store:   store,
+		Clock:   clock,
 	}
 
 	for _, name := range []string{"alice", "bob"} {
