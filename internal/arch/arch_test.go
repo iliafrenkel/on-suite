@@ -446,3 +446,64 @@ func TestRFC3339IsContained(t *testing.T) {
 		t.Errorf("time.RFC3339/RFC3339Nano used in %v, want only %v", users, want)
 	}
 }
+
+// TestAppsReadTheirStoreClock: app code must read time only through its
+// Store's own now() field, which apptest's Clock (and app.Deps.Now in
+// production) can replace. A stray time.Now() elsewhere in an app quietly
+// stops responding to a pinned test clock (#357).
+func TestAppsReadTheirStoreClock(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	appsDir := filepath.Join(root, "internal", "apps")
+
+	var users []string
+	err = filepath.WalkDir(appsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") || strings.HasSuffix(d.Name(), "_test.go") {
+			return nil
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return nil // unrelated to this check, as in TestReadabilityIsContained
+		}
+		found := false
+		ast.Inspect(f, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if sel.Sel.Name != "Now" {
+				return true
+			}
+			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "time" {
+				found = true
+			}
+			return true
+		})
+		if found {
+			rel, _ := filepath.Rel(root, path)
+			users = append(users, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"internal/apps/flash/store.go",
+		"internal/apps/notes/store.go",
+		"internal/apps/paste/store.go",
+		"internal/apps/reader/store.go",
+	}
+	if !slices.Equal(users, want) {
+		t.Errorf("time.Now outside an app's NewStore default: %v — read the clock through the Store (a.store.now()) so apptest's Clock reaches it (#357)", users)
+	}
+}

@@ -76,6 +76,13 @@ canonical example's own comment, not here.
   order (#356). Canonical: `internal/platform/db/timefmt.go`, wrapped in
   `internal/apps/flash/store.go`.
 
+- **Pinned test clock** — reach for this whenever a handler test depends on
+  "now": pin it with `s.Clock.Set(t)`/`.Advance(d)` rather than computing an
+  expected value from the real clock, since app code and the harness's
+  `Store` both read time through the same `Clock`. Canonical:
+  `internal/apptest/clock.go`, used by
+  `TestReviewOfASnoozedDeckSaysItIsOnABreak`.
+
 - **Status-code-to-title/message table for error pages** — reach for this
   when adding a new HTTP error response: add an entry to `titles` rather
   than hand-writing another error page. Canonical:

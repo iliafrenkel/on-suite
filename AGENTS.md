@@ -115,6 +115,12 @@ time formatted with `time.RFC3339Nano`, which trims trailing zeros;
 `TestRFC3339IsContained` in the arch test enforces that. Date-only columns
 use `"2006-01-02"`. A migration that adds a timestamp column needs nothing
 special; one that backfills one must write the same 30-character form.
+Handler tests control time with `s.Clock` (`apptest.Clock`): `s.Clock.Set(t)`
+/ `s.Clock.Advance(d)` pins the clock for both the app under test and
+`s.Store`. Never compute "now" from the real clock to line up with a
+handler, and don't call `s.Store.SetClock` in a handler test — it doesn't
+reach the app. App code reads time only through its Store's `now()` (arch
+test `TestAppsReadTheirStoreClock`).
 
 **Auth**: Argon2id password hashing, invite-only accounts (no public
 registration), sessions with throttled sliding expiry (30-day lifetime,
