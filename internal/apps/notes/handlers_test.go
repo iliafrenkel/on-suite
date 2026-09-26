@@ -2238,11 +2238,13 @@ func TestDueDateHasANoJSSubmissionPath(t *testing.T) {
 	}
 }
 
-// TestOverdueChipIsMarked pins the clock to 2026-03-10 12:00 UTC and sets a
-// due date the day before, which must read as overdue.
+// TestOverdueChipIsMarked pins the clock to 2026-03-10 12:00 local and sets
+// a due date the day before, which must read as overdue. Local, not UTC:
+// handlers compare due dates against a.store.now().Local(), and pinning UTC
+// would fail in timezones on the other side of midnight from UTC.
 func TestOverdueChipIsMarked(t *testing.T) {
 	s := newServer(t)
-	s.Clock.Set(time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC))
+	s.Clock.Set(time.Date(2026, 3, 10, 12, 0, 0, 0, time.Local))
 	id := s.seed(t, s.Alice, notes.RootID, "task")
 	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, "2026-03-09"); err != nil {
 		t.Fatal(err)
@@ -2254,7 +2256,7 @@ func TestOverdueChipIsMarked(t *testing.T) {
 
 func TestAFutureDueChipIsNotMarkedOverdue(t *testing.T) {
 	s := newServer(t)
-	s.Clock.Set(time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC))
+	s.Clock.Set(time.Date(2026, 3, 10, 12, 0, 0, 0, time.Local))
 	id := s.seed(t, s.Alice, notes.RootID, "task")
 	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, "2026-03-11"); err != nil {
 		t.Fatal(err)
@@ -2267,7 +2269,7 @@ func TestAFutureDueChipIsNotMarkedOverdue(t *testing.T) {
 // overdue.
 func TestTodayDueChipIsNotMarkedOverdue(t *testing.T) {
 	s := newServer(t)
-	s.Clock.Set(time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC))
+	s.Clock.Set(time.Date(2026, 3, 10, 12, 0, 0, 0, time.Local))
 	id := s.seed(t, s.Alice, notes.RootID, "task")
 	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, "2026-03-10"); err != nil {
 		t.Fatal(err)
