@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/paste"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
@@ -279,6 +280,17 @@ func TestCreateThenView(t *testing.T) {
 	doc.MustHave(`form[action=/paste/` + itoa(id) + `/share]`)
 	if strings.Contains(doc.Text(), "Anyone with this link") {
 		t.Error("a private snippet advertises a share link")
+	}
+}
+
+func TestCreatedAtUsesThePinnedClock(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC))
+	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
+
+	doc := s.Get(t, s.Alice, "/paste/"+itoa(id))
+	if got := htmlassert.Text(doc.MustHave("time")); got != "10 Mar 2026 12:00" {
+		t.Errorf("created-at time = %q, want %q", got, "10 Mar 2026 12:00")
 	}
 }
 

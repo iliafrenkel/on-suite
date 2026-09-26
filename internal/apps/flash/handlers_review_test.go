@@ -368,16 +368,15 @@ func TestReviewedCardHasNoCorner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Grade once, far enough in the past (via the test's own store, at an
-	// explicit time) that the short FSRS learning-step due date it lands on
-	// has already passed by the handler's real now() — see
-	// TestStatsPageRendersConsistentNumbers for why this is anchored to the
-	// wall clock rather than s.Store.SetClock, which the handler's own
-	// store never sees.
-	t0 := time.Now().UTC().Add(-3 * time.Hour)
+	// Grade once, then move the pinned clock forward far enough that the
+	// short FSRS learning-step due date it lands on has already passed by
+	// the time the handler reads it.
+	t0 := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(t0)
 	if _, err := s.Store.GradeCard(ctx, s.Alice.User.ID, card.ID, flash.RatingGood, t0); err != nil {
 		t.Fatal(err)
 	}
+	s.Clock.Advance(3 * time.Hour)
 
 	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
 	doc.MustHave("#review-card")
@@ -555,13 +554,10 @@ func TestReviewWithNothingToDoHasNoCelebration(t *testing.T) {
 }
 
 func TestReviewOfASnoozedDeckSaysItIsOnABreak(t *testing.T) {
-	// s.Store.SetClock has no effect here: the app under test builds its own
-	// Store via NewStore(deps.DB) (see flash.go's App.Mount), so this test
-	// works off the real wall clock instead, like
-	// TestSnoozeDaysMustBeBetweenOneAndAYear.
 	s := newServer(t)
-	now := time.Now().UTC()
-	until := now.AddDate(0, 0, 7)
+	t0 := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(t0)
+	until := t0.AddDate(0, 0, 7)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
@@ -604,11 +600,9 @@ func TestReviewOfASnoozedDeckSaysItIsOnABreak(t *testing.T) {
 }
 
 func TestReviewAllShowsTheMostOverdueCardFirst(t *testing.T) {
-	// s.Store.SetClock has no effect here (see the note on
-	// TestReviewOfASnoozedDeckSaysItIsOnABreak above), so this uses the real
-	// wall clock and anchors every card relative to it.
 	s := newServer(t)
-	now := time.Now().UTC()
+	t0 := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(t0)
 	older, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Older", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
@@ -628,10 +622,10 @@ func TestReviewAllShowsTheMostOverdueCardFirst(t *testing.T) {
 	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, newer.ID, flash.CardTypeBasic, "fresh", "x", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, overdue.ID, flash.RatingAgain, now.AddDate(0, 0, -10)); err != nil {
+	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, overdue.ID, flash.RatingAgain, t0.AddDate(0, 0, -10)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, recent.ID, flash.RatingAgain, now.AddDate(0, 0, -1)); err != nil {
+	if _, err := s.Store.GradeCard(t.Context(), s.Alice.User.ID, recent.ID, flash.RatingAgain, t0.AddDate(0, 0, -1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -775,7 +769,8 @@ func TestReviewPageHasOneHiddenH1InSummaryState(t *testing.T) {
 
 func TestReviewPageHasOneHiddenH1InBreakState(t *testing.T) {
 	s := newServer(t)
-	now := time.Now().UTC()
+	t0 := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(t0)
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
@@ -783,7 +778,7 @@ func TestReviewPageHasOneHiddenH1InBreakState(t *testing.T) {
 	if _, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, now.AddDate(0, 0, 7)); err != nil {
+	if _, err := s.Store.SnoozeDeck(t.Context(), s.Alice.User.ID, deck.ID, t0.AddDate(0, 0, 7)); err != nil {
 		t.Fatal(err)
 	}
 

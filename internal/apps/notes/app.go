@@ -112,6 +112,9 @@ func (a *App) script(w http.ResponseWriter, r *http.Request) {
 func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.deps = deps
 	a.store = NewStore(deps.DB)
+	if deps.Now != nil {
+		a.store.SetClock(deps.Now)
+	}
 
 	r.HandleFunc("GET /{$}", a.outline)
 	r.HandleFunc("GET /{id}", a.outlineZoomed)

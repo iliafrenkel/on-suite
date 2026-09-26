@@ -2238,13 +2238,13 @@ func TestDueDateHasANoJSSubmissionPath(t *testing.T) {
 	}
 }
 
-// TestOverdueChipIsMarked doesn't depend on the real clock: it sets a due
-// date far enough in the past (year 2000) that it will read as overdue for
-// the entire lifetime of this test suite.
+// TestOverdueChipIsMarked pins the clock to 2026-03-10 12:00 UTC and sets a
+// due date the day before, which must read as overdue.
 func TestOverdueChipIsMarked(t *testing.T) {
 	s := newServer(t)
+	s.Clock.Set(time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC))
 	id := s.seed(t, s.Alice, notes.RootID, "task")
-	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, "2000-01-01"); err != nil {
+	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, "2026-03-09"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2254,9 +2254,22 @@ func TestOverdueChipIsMarked(t *testing.T) {
 
 func TestAFutureDueChipIsNotMarkedOverdue(t *testing.T) {
 	s := newServer(t)
+	s.Clock.Set(time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC))
 	id := s.seed(t, s.Alice, notes.RootID, "task")
-	future := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
-	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, future); err != nil {
+	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, "2026-03-11"); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Get(t, s.Alice, "/notes/").MustNotHave(".outline-due-overdue")
+}
+
+// TestTodayDueChipIsNotMarkedOverdue: a due date of today is not yet
+// overdue.
+func TestTodayDueChipIsNotMarkedOverdue(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC))
+	id := s.seed(t, s.Alice, notes.RootID, "task")
+	if err := s.Store.SetDue(context.Background(), s.Alice.User.ID, id, "2026-03-10"); err != nil {
 		t.Fatal(err)
 	}
 

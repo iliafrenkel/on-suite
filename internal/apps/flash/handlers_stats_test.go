@@ -72,6 +72,8 @@ func TestStatsPageRendersConsistentNumbers(t *testing.T) {
 	// Alpha (sorts first): one card graded three times with Good, spaced
 	// out enough to graduate it out of learning into "review" — mastered,
 	// and its resulting due date lands well beyond "today".
+	t0 := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(t0)
 	alpha, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, "Alpha", "", flash.DefaultDeckColor)
 	if err != nil {
 		t.Fatal(err)
@@ -80,15 +82,6 @@ func TestStatsPageRendersConsistentNumbers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The handler's own store (a.store, created inside App.Mount) is a
-	// separate *Store instance from s.Store here — both wrap the same
-	// database handle, but SetClock on one does not affect the other's
-	// notion of "now". So instead of faking the clock, times are anchored
-	// to the real wall clock, far enough in the past that everything
-	// graded below reads as "due" or "not due" the same way whether the
-	// handler's real now() is called a millisecond or a few seconds after
-	// this test computes t0.
-	t0 := time.Now().UTC().Add(-3 * time.Hour)
 	for _, at := range []time.Time{t0, t0.Add(20 * time.Minute), t0.Add(40 * time.Minute)} {
 		if _, err := s.Store.GradeCard(ctx, s.Alice.User.ID, cardAlpha.ID, flash.RatingGood, at); err != nil {
 			t.Fatal(err)
@@ -110,10 +103,9 @@ func TestStatsPageRendersConsistentNumbers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Beta's card is now due (its short learning-step due date, minutes
-	// after t0, is comfortably in the past); Alpha's is not (it graduated
-	// into "review" with a due date days out). The handler's real now()
-	// call, whenever it happens, sees the same picture.
+	// Move the clock forward past Beta's short learning-step due date, so
+	// Beta's card reads as due while Alpha's (days out) does not.
+	s.Clock.Set(t0.Add(3 * time.Hour))
 	doc := s.Get(t, s.Alice, "/flash/stats")
 
 	// Top-line tiles: 1 mastered (Alpha's card), 1 due (Beta's card; Alpha's
