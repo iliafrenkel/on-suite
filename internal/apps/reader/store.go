@@ -47,9 +47,17 @@ func Migrations() fs.FS {
 }
 
 // Store is the only thing in this package that touches SQL.
-type Store struct{ db *sql.DB }
+type Store struct {
+	db  *sql.DB
+	now func() time.Time
+}
 
-func NewStore(handle *sql.DB) *Store { return &Store{db: handle} }
+func NewStore(handle *sql.DB) *Store {
+	return &Store{db: handle, now: func() time.Time { return time.Now().UTC() }}
+}
+
+// SetClock replaces the time source, for tests.
+func (s *Store) SetClock(now func() time.Time) { s.now = now }
 
 // DB exposes the handle for tests that assert on rows no method returns.
 func (s *Store) DB() *sql.DB { return s.db }
@@ -203,7 +211,7 @@ func (s *Store) Subscribe(ctx context.Context, userID int64, rawURL string, fold
 	if err != nil {
 		return Subscription{}, err
 	}
-	now := time.Now().UTC()
+	now := s.now()
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

@@ -16,19 +16,16 @@ func TestRecordDailyStatsCountsTodaysActivity(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
+	// Subscribe stamps added_at from the store's clock at call time, so
+	// pinning the clock a day back makes it predate the items below rather
+	// than land after "now" and make every item look like backlog from
+	// before the subscription existed.
+	f.store.SetClock(func() time.Time { return now.Add(-24 * time.Hour) })
 	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Backdate the subscription so it predates the items below: Subscribe
-	// stamps added_at from the wall clock at call time, which would otherwise
-	// land after "now" and make every item look like backlog from before the
-	// subscription existed.
-	if _, err := f.store.DB().ExecContext(ctx,
-		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		db.FormatTime(now.Add(-24*time.Hour)), sub.ID); err != nil {
-		t.Fatal(err)
-	}
+	f.store.SetClock(func() time.Time { return now })
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
 		{GUID: "a", Title: "A", PublishedAt: now.Add(-2 * time.Hour)},
 		{GUID: "b", Title: "B", PublishedAt: now.Add(-time.Hour)},

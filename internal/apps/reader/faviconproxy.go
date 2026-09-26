@@ -76,7 +76,7 @@ func (a *App) favicon(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.deps.Log.Info("reader favicon fetch failed", "src", icon.SrcURL, "error", err)
-		if err := a.store.SaveFeedIconFailure(r.Context(), hash, err.Error(), time.Now().UTC()); err != nil {
+		if err := a.store.SaveFeedIconFailure(r.Context(), hash, err.Error(), a.store.now()); err != nil {
 			a.deps.Log.Error("reader recording a favicon failure failed", "error", err)
 		}
 		a.deps.Errors.Status(w, r, http.StatusNotFound)
@@ -107,7 +107,7 @@ func (a *App) fetchFeedIcon(r *http.Request, icon FeedIcon) (FeedIcon, error) {
 		return FeedIcon{}, errors.New("reader: response is not an image (" + ct + ")")
 	}
 
-	if err := a.store.SaveFeedIconBytes(r.Context(), icon.Hash, ct, res.Body, time.Now().UTC()); err != nil {
+	if err := a.store.SaveFeedIconBytes(r.Context(), icon.Hash, ct, res.Body, a.store.now()); err != nil {
 		return FeedIcon{}, err
 	}
 	icon.ContentType = ct

@@ -147,7 +147,7 @@ func (s *Store) DailyStats(ctx context.Context, userID int64, days int) ([]DaySt
 	if days <= 0 {
 		return nil, nil
 	}
-	end := time.Now().UTC().Truncate(24 * time.Hour)
+	end := s.now().Truncate(24 * time.Hour)
 	start := end.AddDate(0, 0, -(days - 1))
 
 	rows, err := s.db.QueryContext(ctx, `

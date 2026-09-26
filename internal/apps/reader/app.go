@@ -83,6 +83,9 @@ func (a *App) Stats(ctx context.Context, handle *sql.DB) ([]app.Stat, error) {
 func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.deps = deps
 	a.store = NewStore(deps.DB)
+	if deps.Now != nil {
+		a.store.SetClock(deps.Now)
+	}
 	a.client = NewClient(deps.Version)
 	a.poller = NewPoller(a.store, a.client, deps.Log)
 	a.imgSem = make(chan struct{}, imageFetchConcurrency)
@@ -150,10 +153,10 @@ func (a *App) Jobs(deps app.Deps) []app.Job {
 				if _, err := a.store.BackfillDailyStats(ctx); err != nil {
 					return err
 				}
-				if err := a.store.RecordDailyStats(ctx, time.Now().UTC()); err != nil {
+				if err := a.store.RecordDailyStats(ctx, a.store.now()); err != nil {
 					return err
 				}
-				n, err := a.store.PurgeItems(ctx, time.Now().UTC().Add(-RetentionAge))
+				n, err := a.store.PurgeItems(ctx, a.store.now().Add(-RetentionAge))
 				if err != nil {
 					return err
 				}
