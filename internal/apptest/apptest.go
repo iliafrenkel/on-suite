@@ -95,7 +95,7 @@ type Session struct {
 type Server[S any] struct {
 	Handler http.Handler
 	Store   S
-	Clock   *Clock // the app's clock and s.Store's; pin it with Set/Advance
+	Clock   *Clock // shared clock (#357)
 	Alice   *Session
 	Bob     *Session
 }
