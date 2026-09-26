@@ -82,6 +82,8 @@ func TestStatsPageRendersConsistentNumbers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Each grade time is relative to t0, the clock pinned above, so this
+	// loop stays in step with s.Clock rather than the real clock.
 	for _, at := range []time.Time{t0, t0.Add(20 * time.Minute), t0.Add(40 * time.Minute)} {
 		if _, err := s.Store.GradeCard(ctx, s.Alice.User.ID, cardAlpha.ID, flash.RatingGood, at); err != nil {
 			t.Fatal(err)
@@ -238,7 +240,9 @@ func TestStatsRowsSortByName(t *testing.T) {
 func TestStatsHTMXPaneMatchesFullPage(t *testing.T) {
 	s := newServer(t)
 	ctx := t.Context()
-	t0 := time.Now().UTC().Add(-3 * time.Hour)
+	now := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(now)
+	t0 := now.Add(-3 * time.Hour)
 	for i, name := range []string{"Beta", "Alpha", "Gamma"} {
 		d, err := s.Store.CreateDeck(ctx, s.Alice.User.ID, name, "", flash.DefaultDeckColor)
 		if err != nil {
@@ -256,7 +260,7 @@ func TestStatsHTMXPaneMatchesFullPage(t *testing.T) {
 			}
 		}
 		if name == "Gamma" {
-			if _, err := s.Store.SnoozeDeck(ctx, s.Alice.User.ID, d.ID, time.Now().Add(24*time.Hour)); err != nil {
+			if _, err := s.Store.SnoozeDeck(ctx, s.Alice.User.ID, d.ID, now.Add(24*time.Hour)); err != nil {
 				t.Fatal(err)
 			}
 		}
