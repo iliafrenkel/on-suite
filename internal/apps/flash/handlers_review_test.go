@@ -100,6 +100,8 @@ func TestUndoRequiresCSRF(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	now := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(now)
 	s.PostHX(t, s.Alice, "/flash/review/grade", url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
 
 	req := httpPost(t, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
@@ -111,7 +113,6 @@ func TestUndoRequiresCSRF(t *testing.T) {
 	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || !reviewed {
 		t.Errorf("after a 403 undo: reviewed = %v (err %v), want the grade left in place", reviewed, err)
 	}
-	now := time.Now().UTC()
 	if newCount, reviewCount, err := s.Store.DailyCounts(t.Context(), s.Alice.User.ID, deck.ID, now); err != nil || newCount != 1 || reviewCount != 0 {
 		t.Errorf("after a 403 undo: today's tally = new=%d review=%d (err %v), want 1/0 (the grade still counts)", newCount, reviewCount, err)
 	}
@@ -177,6 +178,8 @@ func TestUndoSomeoneElsesCardIs404(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	now := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(now)
 	s.PostHX(t, s.Alice, "/flash/review/grade", url.Values{"card_id": {itoa(card.ID)}, "rating": {"3"}})
 
 	rec := s.PostHX(t, s.Bob, "/flash/review/undo", url.Values{"card_id": {itoa(card.ID)}})
@@ -187,7 +190,6 @@ func TestUndoSomeoneElsesCardIs404(t *testing.T) {
 	if _, reviewed, err := s.Store.CardState(t.Context(), s.Alice.User.ID, card.ID); err != nil || !reviewed {
 		t.Errorf("after Bob's 404 undo: reviewed = %v (err %v), want Alice's grade left in place", reviewed, err)
 	}
-	now := time.Now().UTC()
 	if newCount, reviewCount, err := s.Store.DailyCounts(t.Context(), s.Alice.User.ID, deck.ID, now); err != nil || newCount != 1 || reviewCount != 0 {
 		t.Errorf("after Bob's 404 undo: Alice's today tally = new=%d review=%d (err %v), want 1/0 unchanged", newCount, reviewCount, err)
 	}
@@ -290,7 +292,7 @@ func TestReviewPageScopedToSomeoneElsesDeckIs404(t *testing.T) {
 func TestReviewRespectsTheDailyNewCardLimit(t *testing.T) {
 	s := newServer(t)
 	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
-	s.Store.SetClock(func() time.Time { return now })
+	s.Clock.Set(now)
 
 	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
 	if err != nil {
