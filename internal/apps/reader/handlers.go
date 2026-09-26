@@ -89,7 +89,7 @@ func (a *App) stats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page := a.deps.Page(r, "Reading stats")
-	page.Data = buildStatsView(days, feeds, counts)
+	page.Data = buildStatsView(days, feeds, counts, a.store.now())
 	if err := a.deps.Render.Page(w, http.StatusOK, "reader/stats", page); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
@@ -315,7 +315,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		return
 	}
 	listTitleStr := listTitle(lc.Scope, sub)
-	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID), search)
+	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID), search, a.store.now())
 	view.List.HideRead = opts.HideRead
 	// The currently-open article's row is highlighted in the list, the same
 	// way the tree highlights the selected feed — real item ids start at 1,
@@ -414,7 +414,7 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 	// star and mark-unread POST here too, and only lc's hidden "view" field
 	// survives that round trip — the query string does not (issue #232).
 	showFull := lc.View != "feed"
-	art := viewArticle(item, page.Shell, lc, showFull)
+	art := viewArticle(item, page.Shell, lc, showFull, a.store.now())
 
 	// Anything that did not come from htmx is a plain browser navigation and
 	// gets the whole page back: a form submission from the star or unread
@@ -1031,7 +1031,7 @@ func (a *App) fetchFull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A recent failure is re-shown, not retried — see fullArticleRetryBackoff.
-	if item.FullError != "" && time.Since(item.FullFetchedAt) < fullArticleRetryBackoff {
+	if item.FullError != "" && a.store.now().Sub(item.FullFetchedAt) < fullArticleRetryBackoff {
 		a.renderArticle(w, r, userID, itemID)
 		return
 	}

@@ -148,9 +148,11 @@ func TestMediaGivesUpPermanentlyPastAttemptCap(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
 	_, hash := seedCardWithImage(t, s, "http://127.0.0.1:1/unreachable")
+	now := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(now)
 
 	for i := 0; i < flash.MaxMediaFetchAttemptsForTest; i++ {
-		if err := s.Store.SaveMediaFailure(ctx, hash, "boom", time.Now().UTC().Add(-2*flash.MediaRetryBackoffForTest)); err != nil {
+		if err := s.Store.SaveMediaFailure(ctx, hash, "boom", now.Add(-2*flash.MediaRetryBackoffForTest)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -165,14 +167,60 @@ func TestMediaRefusesRetryWithinBackoffWindow(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
 	_, hash := seedCardWithImage(t, s, "http://127.0.0.1:1/unreachable")
+	now := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(now)
 
-	if err := s.Store.SaveMediaFailure(ctx, hash, "boom", time.Now().UTC()); err != nil {
+	if err := s.Store.SaveMediaFailure(ctx, hash, "boom", now); err != nil {
 		t.Fatal(err)
 	}
 
 	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/flash/media/"+hash, nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("within backoff window = %d, want 404", rec.Code)
+	}
+}
+
+// TestMediaBackoffHonoursThePinnedClock proves the backoff window in
+// handlers_media.go is read through the store's clock, not time.Now: a
+// failure recorded at t0 still backs off a fetch at t0+1m (no retry
+// attempted, still 404), and once the clock is advanced past the backoff
+// window the same request retries and succeeds (#357).
+func TestMediaBackoffHonoursThePinnedClock(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+	var hits int
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(onePNG)
+	}))
+	defer origin.Close()
+
+	_, hash := seedCardWithImage(t, s, origin.URL+"/a.png")
+	a.AllowPrivateFetchesForTest()
+
+	t0 := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(t0)
+	if err := s.Store.SaveMediaFailure(ctx, hash, "boom", t0); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Clock.Set(t0.Add(time.Minute))
+	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/flash/media/"+hash, nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("t0+1m (inside the backoff window) = %d, want 404", rec.Code)
+	}
+	if hits != 0 {
+		t.Errorf("t0+1m: origin was hit %d times, want 0 — still backing off", hits)
+	}
+
+	s.Clock.Set(t0.Add(flash.MediaRetryBackoffForTest + time.Minute))
+	rec2 := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/flash/media/"+hash, nil))
+	if rec2.Code != http.StatusOK {
+		t.Errorf("past the backoff window = %d, want 200 (retried)", rec2.Code)
+	}
+	if hits != 1 {
+		t.Errorf("past the backoff window: origin was hit %d times, want 1 (one retry)", hits)
 	}
 }
 

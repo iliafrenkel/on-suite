@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // validFaviconHash reports whether the path segment could be one of our
@@ -64,7 +63,7 @@ func (a *App) favicon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if icon.ErrorCount >= maxImageFetchAttempts ||
-		(icon.ErrorCount > 0 && time.Since(icon.FetchedAt) < imageRetryBackoff) {
+		(icon.ErrorCount > 0 && a.store.now().Sub(icon.FetchedAt) < imageRetryBackoff) {
 		bareNotFound(w)
 		return
 	}

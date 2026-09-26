@@ -119,8 +119,9 @@ Handler tests control time with `s.Clock` (`apptest.Clock`): `s.Clock.Set(t)`
 / `s.Clock.Advance(d)` pins the clock for both the app under test and
 `s.Store`. Never compute "now" from the real clock to line up with a
 handler, and don't call `s.Store.SetClock` in a handler test — it doesn't
-reach the app. App code reads time only through its Store's `now()` (arch
-test `TestAppsReadTheirStoreClock`).
+reach the app. App code reads time only through its Store's `now()` — never `time.Now`,
+`time.Since`, or `time.Until` directly (arch test
+`TestAppsReadTheirStoreClock`).
 
 **Auth**: Argon2id password hashing, invite-only accounts (no public
 registration), sessions with throttled sliding expiry (30-day lifetime,

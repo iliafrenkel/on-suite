@@ -214,7 +214,7 @@ func (s *Store) Stats(ctx context.Context) ([]app.Stat, error) {
 		{Label: "Cached images", Value: strconv.Itoa(cachedImages)},
 	}
 	if lastPoll.Valid {
-		out = append(out, app.Stat{Label: "Last poll", Value: humanTime(parseTime(lastPoll.String))})
+		out = append(out, app.Stat{Label: "Last poll", Value: humanTime(parseTime(lastPoll.String), s.now())})
 	}
 	// Only shown when it is non-zero: a permanent "Failing feeds: 0" teaches
 	// people to stop reading the line, which is the opposite of what it is for.
@@ -266,11 +266,14 @@ func (f FeedStat) ReadPercent() int { return int(f.ReadRatio()*100 + 0.5) }
 // has published. A feed added last week has not had time to be dead, and
 // telling someone to prune the feed they just added is the fastest way to make
 // them stop trusting the page.
-func (f FeedStat) Quiet() bool {
-	if time.Since(f.AddedAt) < QuietAfter {
+//
+// now is the caller's clock (a.store.now()), not time.Now: app code reads
+// time only through its Store's clock (issue #357).
+func (f FeedStat) Quiet(now time.Time) bool {
+	if now.Sub(f.AddedAt) < QuietAfter {
 		return false
 	}
-	return f.LastArticle.IsZero() || time.Since(f.LastArticle) > QuietAfter
+	return f.LastArticle.IsZero() || now.Sub(f.LastArticle) > QuietAfter
 }
 
 // QuietAfter is how long a feed must go without publishing to be called quiet.

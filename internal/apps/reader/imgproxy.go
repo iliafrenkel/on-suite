@@ -86,7 +86,7 @@ func (a *App) image(w http.ResponseWriter, r *http.Request) {
 	// this an image that failed once from a DNS blip would 404 for the
 	// household forever.
 	if img.ErrorCount >= maxImageFetchAttempts ||
-		(img.ErrorCount > 0 && time.Since(img.FetchedAt) < imageRetryBackoff) {
+		(img.ErrorCount > 0 && a.store.now().Sub(img.FetchedAt) < imageRetryBackoff) {
 		a.deps.Errors.Status(w, r, http.StatusNotFound)
 		return
 	}

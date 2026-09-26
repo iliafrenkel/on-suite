@@ -197,7 +197,7 @@ func filterUnread(subs []Subscription, counts Counts, activeID int64) []Subscrip
 	return out
 }
 
-func viewList(items []Item, title string, scope Scope, subID int64, filter Filter, basePath, query string) listView {
+func viewList(items []Item, title string, scope Scope, subID int64, filter Filter, basePath, query string, now time.Time) listView {
 	out := listView{
 		Title:    title,
 		Selected: true,
@@ -212,7 +212,7 @@ func viewList(items []Item, title string, scope Scope, subID int64, filter Filte
 			ID:        it.ID,
 			Title:     firstNonEmpty(it.Title, it.URL, "(untitled)"),
 			FeedName:  it.FeedName,
-			Published: humanTime(it.PublishedAt),
+			Published: humanTime(it.PublishedAt, now),
 			Read:      it.Read,
 			Starred:   it.Starred,
 		})
@@ -232,7 +232,7 @@ func viewList(items []Item, title string, scope Scope, subID int64, filter Filte
 	return out
 }
 
-func viewArticle(it Item, shell render.Shell, lc listContext, showFull bool) articleView {
+func viewArticle(it Item, shell render.Shell, lc listContext, showFull bool, now time.Time) articleView {
 	// showFull is honoured only when there is a full article to show, so a
 	// stale ?view= on an item nobody has fetched still renders the feed body.
 	body := it.Body()
@@ -251,7 +251,7 @@ func viewArticle(it Item, shell render.Shell, lc listContext, showFull bool) art
 		URL:      it.URL,
 		Author:   it.Author,
 		FeedName: it.FeedName,
-		When:     humanTime(it.PublishedAt),
+		When:     humanTime(it.PublishedAt, now),
 		Read:     it.Read,
 		Starred:  it.Starred,
 		// Safe: both bodies have been through SanitizeArticleHTML — the feed
@@ -275,11 +275,14 @@ func firstNonEmpty(vals ...string) string {
 
 // humanTime is short for anything recent and absolute beyond a week, which is
 // the resolution someone scanning a list actually reads.
-func humanTime(t time.Time) string {
+//
+// now is the caller's clock (a.store.now()), not time.Now: app code reads
+// time only through its Store's clock (issue #357).
+func humanTime(t, now time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	switch d := time.Since(t); {
+	switch d := now.Sub(t); {
 	case d < time.Minute:
 		return "just now"
 	case d < time.Hour:
@@ -458,7 +461,7 @@ type statsView struct {
 // buildStatsView assembles the reading-stats page from its three inputs: the
 // daily series (flows and stock), the per-feed rows, and the sidebar's own
 // unread/starred counts, so the tiles never disagree with the tree.
-func buildStatsView(days []DayStat, feeds []FeedStat, counts Counts) statsView {
+func buildStatsView(days []DayStat, feeds []FeedStat, counts Counts, now time.Time) statsView {
 	var articles int
 	for _, f := range feeds {
 		articles += f.Articles
@@ -485,7 +488,7 @@ func buildStatsView(days []DayStat, feeds []FeedStat, counts Counts) statsView {
 		}
 	}
 	for _, f := range feeds {
-		if f.Quiet() {
+		if f.Quiet(now) {
 			out.Quiet = append(out.Quiet, f)
 		}
 		if f.Neglected() {

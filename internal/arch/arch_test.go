@@ -449,8 +449,8 @@ func TestRFC3339IsContained(t *testing.T) {
 
 // TestAppsReadTheirStoreClock: app code must read time only through its
 // Store's own now() field, which apptest's Clock (and app.Deps.Now in
-// production) can replace. A stray time.Now() elsewhere in an app quietly
-// stops responding to a pinned test clock (#357).
+// production) can replace. A stray time.Now/Since/Until elsewhere in an app
+// quietly stops responding to a pinned test clock (#357).
 func TestAppsReadTheirStoreClock(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -479,7 +479,7 @@ func TestAppsReadTheirStoreClock(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if sel.Sel.Name != "Now" {
+			if sel.Sel.Name != "Now" && sel.Sel.Name != "Since" && sel.Sel.Name != "Until" {
 				return true
 			}
 			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "time" {
@@ -504,6 +504,6 @@ func TestAppsReadTheirStoreClock(t *testing.T) {
 		"internal/apps/reader/store.go",
 	}
 	if !slices.Equal(users, want) {
-		t.Errorf("time.Now outside an app's NewStore default: %v — read the clock through the Store (a.store.now()) so apptest's Clock reaches it (#357)", users)
+		t.Errorf("time.Now/Since/Until outside an app's NewStore default: %v — read the clock through the Store (a.store.now()) so apptest's Clock reaches it (#357)", users)
 	}
 }
