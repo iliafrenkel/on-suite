@@ -27,9 +27,13 @@
      themselves can stay hx-swap="none". */}}
 {{define "text-update"}}{{template "rendered-title" .}}{{template "rendered-note" .}}{{end}}
 
-{{/* outline-swap is the whole HTMX response for a structural op or a prefs
-     toggle: #outline's new content, plus the toolbar toggle out of band. */}}
-{{define "outline-swap"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span><div id="outline-heading" class="stack" hx-swap-oob="true">{{template "outline-heading" .}}</div>{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{template "due-badge" .}}{{end}}
+{{/* outline-swap is the whole HTMX response for a structural op, a prefs
+     toggle or a zoom: #outline's new content, plus everything outside it
+     that depends on the zoom root or the outline's state, out of band. The
+     search box is left out when it sent the request itself (SyncSearch,
+     renderOutlineFragment): swapping it mid-typing would throw away
+     whatever was typed while the request was in flight. */}}
+{{define "outline-swap"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span><div id="outline-heading" class="stack" hx-swap-oob="true">{{template "outline-heading" .}}</div>{{template "outline-body" .}}{{template "show-completed-toggle" .}}{{template "due-badge" .}}{{template "export-actions" .}}{{template "import-root" .}}{{template "prefs-root" .}}{{if .SyncSearch}}{{template "notes-search-box" (dict "Query" .Query "Action" .SearchAction "Target" "#outline" "OOB" true)}}{{end}}{{end}}
 
 {{define "content"}}
 <div class="stack notes">
@@ -45,12 +49,12 @@
 		<div class="notes-toolbar-actions">
 			<a href="/notes/due" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Due{{template "due-badge" .Data}}</a>
 			<a href="/notes/archive" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8H3l2-4h14z"/><path d="M5 8v11h14V8"/><path d="M10 12h4"/></svg>Archive</a>
-			<a href="/notes/export?root={{.Data.Root.ID}}" class="toolbar-btn toolbar-btn-nav"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Export</a>
+			{{template "export-actions" .Data}}
 			<span class="toolbar-sep" aria-hidden="true"></span>
 			<form method="post" action="/notes/import" enctype="multipart/form-data" class="notes-import"
 			      hx-post="/notes/import" hx-target="#outline" hx-swap="innerHTML" hx-encoding="multipart/form-data">
 				<input type="hidden" name="{{csrfField}}" value="{{.Data.CSRFToken}}">
-				<input type="hidden" name="root" value="{{.Data.Root.ID}}">
+				{{template "import-root" .Data}}
 				{{/* The file input is visually hidden but stays in the layout and
 				     the accessibility tree (.visually-hidden, app.css) — its
 				     label is what's visible, styled as a toolbar-btn. This
@@ -70,7 +74,7 @@
 			<form method="post" action="/notes/prefs"
 			      hx-post="/notes/prefs" hx-target="#outline" hx-swap="innerHTML">
 				<input type="hidden" name="{{csrfField}}" value="{{.Data.CSRFToken}}">
-				<input type="hidden" name="root" value="{{.Data.Root.ID}}">
+				{{template "prefs-root" .Data}}
 				{{template "show-completed-toggle" .Data}}
 			</form>
 			<details class="notes-help-menu">
@@ -293,6 +297,14 @@
 							<svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 							<span class="outline-menu-label">Add bullet</span>
 							<span class="outline-menu-shortcut">Enter</span>
+						</button>
+
+						{{/* type="button": the menu sits inside the row's own form,
+						     and this must copy, never submit. theme.js's
+						     data-copy-raw does the fetch-and-copy — issue #392. */}}
+						<button type="button" class="quiet" data-copy-raw="/notes/export?root={{.ID}}">
+							<svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+							<span class="outline-menu-label">Copy as Markdown</span>
 						</button>
 
 						<button type="submit" class="quiet" formaction="/notes/{{.ID}}/archive"

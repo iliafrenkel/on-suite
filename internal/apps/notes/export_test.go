@@ -78,7 +78,10 @@ func TestExportIncludesCollapsedDoneAndArchivedNodes(t *testing.T) {
 	}
 }
 
-func TestExportOfASubtreeExcludesTheRootItself(t *testing.T) {
+// TestExportOfASubtreeIncludesTheRootItself — issue #392: exporting (or
+// copying) one bullet's subtree means that bullet too, at depth 0, with its
+// own children one level under it.
+func TestExportOfASubtreeIncludesTheRootItself(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	root := f.mk(t, notes.RootID, "root")
@@ -89,8 +92,8 @@ func TestExportOfASubtreeExcludesTheRootItself(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].ID != child.ID || got[0].Depth != 0 {
-		t.Fatalf("Export(root) = %+v, want only the child at depth 0", got)
+	if len(got) != 2 || got[0].ID != root.ID || got[0].Depth != 0 || got[1].ID != child.ID || got[1].Depth != 1 {
+		t.Fatalf("Export(root) = %+v, want the root at depth 0 then its child at depth 1", got)
 	}
 }
 

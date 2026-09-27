@@ -16,8 +16,13 @@
      Action/Target vary per page and are passed via dict at each call site,
      alongside the existing Query (every page prefills its current filter).
      role="search" is the landmark WCAG asks for alongside the input's own
-     aria-label. */}}
-{{define "notes-search-box"}}<form method="get" action="{{.Action}}" class="notes-search" role="search">
+     aria-label.
+
+     OOB is set only by the outline's fragment response (outline-swap), on
+     the same discipline as show-completed-toggle below: Action carries the
+     zoom root, and an htmx zoom never reaches this form otherwise — issue
+     #392. */}}
+{{define "notes-search-box"}}<form method="get" action="{{.Action}}" id="notes-search" class="notes-search" role="search"{{if .OOB}} hx-swap-oob="true"{{end}}>
 	<input type="search" id="notes-search-input" name="q" value="{{.Query}}"
 	       placeholder="Search…" aria-label="Search notes"
 	       hx-get="{{.Action}}" hx-target="{{.Target}}" hx-swap="innerHTML"
@@ -46,3 +51,16 @@
      show. Same OOB discipline as show-completed-toggle: the fragment sets
      .OOB, a full-page render does not. */}}
 {{define "due-badge"}}<span id="due-badge" class="toolbar-due-badge"{{if .OOB}} hx-swap-oob="true"{{end}}>{{if .DueCount}}{{.DueCount}}{{end}}</span>{{end}}
+
+{{/* export-actions is the toolbar's Export link and its Copy as Markdown
+     button (issue #392), both aimed at the current zoom root's subtree —
+     Copy fetches the very Markdown Export downloads, through theme.js's
+     generic data-copy-raw. import-root and prefs-root are the hidden root
+     fields of the toolbar's Import and Completed forms. All of these live
+     outside #outline and carry the zoom root, so each is re-sent out of
+     band on every fragment, exactly like show-completed-toggle; without
+     it, an htmx zoom left every one of them acting on whatever root the
+     page was first loaded at. */}}
+{{define "export-actions"}}<a href="/notes/export?root={{.Root.ID}}" id="notes-export-link" class="toolbar-btn toolbar-btn-nav"{{if .OOB}} hx-swap-oob="true"{{end}}><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Export</a><button type="button" id="notes-copy-markdown" class="toolbar-btn" data-copy-raw="/notes/export?root={{.Root.ID}}" title="Copy as Markdown"{{if .OOB}} hx-swap-oob="true"{{end}}><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy</button>{{end}}
+{{define "import-root"}}<input type="hidden" id="notes-import-root" name="root" value="{{.Root.ID}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{end}}
+{{define "prefs-root"}}<input type="hidden" id="notes-prefs-root" name="root" value="{{.Root.ID}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{end}}

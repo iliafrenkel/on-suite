@@ -398,9 +398,17 @@ func TestExportThenImportRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A subtree export leads with its own root (issue #392), so the
+	// original comes back one level down, under "copy destination".
+	want := "- copy destination\n"
+	for _, line := range strings.SplitAfter(md, "\n") {
+		if line != "" {
+			want += "  " + line
+		}
+	}
 	got := notes.ExportMarkdown(reExported)
-	if got != md {
-		t.Errorf("round-trip mismatch:\noriginal:\n%s\nafter round-trip:\n%s", md, got)
+	if got != want {
+		t.Errorf("round-trip mismatch:\nwant:\n%s\nafter round-trip:\n%s", want, got)
 	}
 }
 
