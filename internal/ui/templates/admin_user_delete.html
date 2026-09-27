@@ -1,0 +1,12 @@
+{{define "content"}}
+<div class="centered stack">
+	<p class="faint"><a href="/admin/">Admin</a> / <a href="/admin/users">Users</a></p>
+	<h1>Delete {{.Data.Username}}?</h1>
+	<p>Permanently delete <strong>{{.Data.Username}}</strong> and everything they own in every app? This cannot be undone.</p>
+	<form method="post" action="/admin/users/{{.Data.ID}}/delete" class="row">
+		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+		<button type="submit" class="danger">Delete {{.Data.Username}}</button>
+		<a href="/admin/users">Cancel</a>
+	</form>
+</div>
+{{end}}

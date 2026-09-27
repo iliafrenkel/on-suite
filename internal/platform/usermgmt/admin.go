@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
@@ -115,8 +116,107 @@ func (h *handlers) newPassword(w http.ResponseWriter, r *http.Request) (password
 	return password, hash, true
 }
 
-// Filled in by Task 5.
-func (h *handlers) resetPassword(w http.ResponseWriter, r *http.Request) { h.d.Errors.NotFound(w, r) }
-func (h *handlers) setRole(w http.ResponseWriter, r *http.Request)       { h.d.Errors.NotFound(w, r) }
-func (h *handlers) confirmDelete(w http.ResponseWriter, r *http.Request) { h.d.Errors.NotFound(w, r) }
-func (h *handlers) delete(w http.ResponseWriter, r *http.Request)        { h.d.Errors.NotFound(w, r) }
+// deletePage is the view model for admin_user_delete.html.
+type deletePage struct {
+	ID       int64
+	Username string
+}
+
+// target resolves {id} to an account other than the viewer's. When it
+// returns false it has already written the response: 404 for an id that is
+// malformed or unknown, or the users page with selfMsg when the id is the
+// viewer's own. The self check runs server-side, not only by hiding the menu
+// (spec §4.4).
+func (h *handlers) target(w http.ResponseWriter, r *http.Request, selfMsg string) (auth.User, bool) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		h.d.Errors.NotFound(w, r)
+		return auth.User{}, false
+	}
+	u, err := h.d.Users.UserByID(r.Context(), id)
+	if errors.Is(err, auth.ErrNotFound) {
+		h.d.Errors.NotFound(w, r)
+		return auth.User{}, false
+	}
+	if err != nil {
+		h.d.Errors.Internal(w, r, err)
+		return auth.User{}, false
+	}
+	if me, _ := web.UserFrom(r.Context()); u.ID == me.ID {
+		h.renderUsers(w, r, http.StatusUnprocessableEntity, usersPage{Error: selfMsg})
+		return auth.User{}, false
+	}
+	return u, true
+}
+
+// storeFailed maps a store error from a mutation to a response.
+func (h *handlers) storeFailed(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, auth.ErrNotFound):
+		h.d.Errors.NotFound(w, r)
+	case errors.Is(err, auth.ErrLastAdmin):
+		h.renderUsers(w, r, http.StatusUnprocessableEntity, usersPage{Error: "At least one administrator must remain."})
+	default:
+		h.d.Errors.Internal(w, r, err)
+	}
+}
+
+func (h *handlers) resetPassword(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.target(w, r, "Use Account to change your own password.")
+	if !ok {
+		return
+	}
+	password, hash, ok := h.newPassword(w, r)
+	if !ok {
+		return
+	}
+	if err := h.d.Users.SetPassword(r.Context(), u.ID, hash, ""); err != nil {
+		h.storeFailed(w, r, err)
+		return
+	}
+	h.audit(r, "user.reset_password", u.Username)
+	h.renderUsers(w, r, http.StatusOK, usersPage{Generated: &generatedPassword{Username: u.Username, Password: password}})
+}
+
+func (h *handlers) setRole(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.target(w, r, "You can't change your own role.")
+	if !ok {
+		return
+	}
+	makeAdmin := r.PostFormValue("admin") == "1"
+	if err := h.d.Users.SetAdmin(r.Context(), u.ID, makeAdmin); err != nil {
+		h.storeFailed(w, r, err)
+		return
+	}
+	action := "user.demote"
+	if makeAdmin {
+		action = "user.promote"
+	}
+	h.audit(r, action, u.Username)
+	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+}
+
+func (h *handlers) confirmDelete(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.target(w, r, "You can't delete yourself.")
+	if !ok {
+		return
+	}
+	page := h.page(r, "Delete "+u.Username, "admin")
+	page.Data = deletePage{ID: u.ID, Username: u.Username}
+	if err := h.d.Render.Page(w, http.StatusOK, "admin_user_delete", page); err != nil {
+		h.d.Errors.Internal(w, r, err)
+	}
+}
+
+func (h *handlers) delete(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.target(w, r, "You can't delete yourself.")
+	if !ok {
+		return
+	}
+	if err := h.d.Users.DeleteUser(r.Context(), u.ID); err != nil {
+		h.storeFailed(w, r, err)
+		return
+	}
+	h.audit(r, "user.delete", u.Username)
+	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+}

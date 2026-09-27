@@ -1,13 +1,16 @@
 package usermgmt_test
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 )
@@ -137,5 +140,148 @@ func TestAccountChangesAreLoggedWithoutPasswords(t *testing.T) {
 	}
 	if strings.Contains(logs, password) {
 		t.Error("the generated password was logged")
+	}
+}
+
+func path(format string, id int64) string { return fmt.Sprintf(format, id) }
+
+func TestResettingAPasswordShowsANewOneAndSignsTheUserOut(t *testing.T) {
+	s := newServer(t)
+	ilia := s.plain.user
+
+	rec := s.post(t, s.root, path("/admin/users/%d/password", ilia.ID), url.Values{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Error("the reset response may be cached")
+	}
+	password := generated(t, s.doc(t, rec))
+
+	if again := s.get(t, s.plain, "/admin/users"); again.Code != http.StatusSeeOther {
+		t.Errorf("ilia's old session still works: status = %d", again.Code)
+	}
+	if s.tryLogIn(t, "ilia", password).Code != http.StatusSeeOther {
+		t.Error("the new password does not sign in")
+	}
+	if s.tryLogIn(t, "ilia", apptest.Password).Code == http.StatusSeeOther {
+		t.Error("the old password still signs in")
+	}
+}
+
+func TestPromotingAndDemoting(t *testing.T) {
+	s := newServer(t)
+	id := s.plain.user.ID
+
+	rec := s.post(t, s.root, path("/admin/users/%d/role", id), url.Values{"admin": {"1"}})
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/admin/users" {
+		t.Fatalf("promote = %d → %q, want 303 → /admin/users", rec.Code, rec.Header().Get("Location"))
+	}
+	if !s.user(t, "ilia").IsAdmin {
+		t.Fatal("promote did not take")
+	}
+	// The new role applies to ilia's existing session at once.
+	if got := s.get(t, s.plain, "/admin/users"); got.Code != http.StatusOK {
+		t.Errorf("promoted ilia gets %d on /admin/users, want 200", got.Code)
+	}
+
+	s.post(t, s.root, path("/admin/users/%d/role", id), url.Values{"admin": {"0"}})
+	if s.user(t, "ilia").IsAdmin {
+		t.Error("demote did not take")
+	}
+}
+
+func TestDeletingAUserAsksFirstThenRemovesThem(t *testing.T) {
+	s := newServer(t)
+	id := s.plain.user.ID
+
+	confirm := s.get(t, s.root, path("/admin/users/%d/delete", id))
+	if confirm.Code != http.StatusOK {
+		t.Fatalf("confirm page = %d", confirm.Code)
+	}
+	doc := s.doc(t, confirm)
+	if !strings.Contains(doc.Text(), "Permanently delete") || !strings.Contains(doc.Text(), "ilia") {
+		t.Error("the confirmation page does not say who and what is deleted")
+	}
+	doc.MustHave(fmt.Sprintf(`form[action="/admin/users/%d/delete"]`, id))
+	if _, err := s.users.UserByID(context.Background(), id); err != nil {
+		t.Fatal("merely viewing the confirmation deleted the user")
+	}
+
+	rec := s.post(t, s.root, path("/admin/users/%d/delete", id), url.Values{})
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/admin/users" {
+		t.Fatalf("delete = %d → %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if _, err := s.users.UserByID(context.Background(), id); !errors.Is(err, auth.ErrNotFound) {
+		t.Errorf("user still exists: err = %v", err)
+	}
+	if !strings.Contains(s.logs.String(), "action=user.delete") {
+		t.Error("the delete was not logged")
+	}
+}
+
+func TestAnAdminCannotActOnThemselvesHere(t *testing.T) {
+	s := newServer(t)
+	id := s.root.user.ID
+	before := s.user(t, "root").PasswordHash
+
+	for _, tc := range []struct{ method, path string }{
+		{"POST", path("/admin/users/%d/password", id)},
+		{"POST", path("/admin/users/%d/role", id)},
+		{"GET", path("/admin/users/%d/delete", id)},
+		{"POST", path("/admin/users/%d/delete", id)},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			var rec *httptest.ResponseRecorder
+			if tc.method == "GET" {
+				rec = s.get(t, s.root, tc.path)
+			} else {
+				rec = s.post(t, s.root, tc.path, url.Values{"admin": {"0"}})
+			}
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status = %d, want 422", rec.Code)
+			}
+			s.doc(t, rec).MustHave(".notice-error")
+		})
+	}
+
+	root := s.user(t, "root")
+	if !root.IsAdmin || root.PasswordHash != before {
+		t.Error("a self-action changed the account")
+	}
+	if s.get(t, s.root, "/admin/users").Code != http.StatusOK {
+		t.Error("a self-action ended root's session")
+	}
+}
+
+func TestUnknownOrMalformedIDsAre404(t *testing.T) {
+	s := newServer(t)
+	for _, p := range []string{"/admin/users/9999/password", "/admin/users/abc/role", "/admin/users/9999/delete"} {
+		if rec := s.post(t, s.root, p, url.Values{}); rec.Code != http.StatusNotFound {
+			t.Errorf("POST %s = %d, want 404", p, rec.Code)
+		}
+	}
+	if rec := s.get(t, s.root, "/admin/users/9999/delete"); rec.Code != http.StatusNotFound {
+		t.Errorf("GET confirm for a missing user = %d, want 404", rec.Code)
+	}
+}
+
+func TestEveryMutatingRouteIs404ForANonAdmin(t *testing.T) {
+	s := newServer(t)
+	id := s.root.user.ID
+	for _, p := range []string{
+		path("/admin/users/%d/password", id),
+		path("/admin/users/%d/role", id),
+		path("/admin/users/%d/delete", id),
+	} {
+		if rec := s.post(t, s.plain, p, url.Values{"admin": {"0"}}); rec.Code != http.StatusNotFound {
+			t.Errorf("POST %s as non-admin = %d, want 404", p, rec.Code)
+		}
+	}
+	if rec := s.get(t, s.plain, path("/admin/users/%d/delete", id)); rec.Code != http.StatusNotFound {
+		t.Errorf("GET confirm as non-admin = %d, want 404", rec.Code)
+	}
+	if !s.user(t, "root").IsAdmin {
+		t.Error("a non-admin demoted root")
 	}
 }
