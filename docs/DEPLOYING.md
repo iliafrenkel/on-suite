@@ -44,10 +44,10 @@ Once you can sign in as an administrator, you can add further accounts at
 **Admin → Manage users** (`/admin/users`) with the service running. Each new
 account gets a one-time generated password that you pass on, and the user can
 change it under **Account**. If an account (even the only admin) cannot sign
-in, reset it from the server:
+in, reset it from the server — this works with the service running:
 
 ```bash
-onsuite user reset-password <name> --data-dir /var/lib/onsuite
+sudo -u root onsuite user reset-password <name> --data-dir /var/lib/onsuite
 ```
 
 ## Choose a TLS story
