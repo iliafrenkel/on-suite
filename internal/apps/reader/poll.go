@@ -170,6 +170,12 @@ func (p *Poller) pollOne(ctx context.Context, f Feed) {
 	// 304: nothing changed. Still a successful poll, so the error count
 	// resets and the feed goes back to its normal interval.
 	if res.NotModified {
+		// The body still lists every purged article it did, so they were all
+		// seen again (#389). Failing here only risks a tombstone aging out
+		// early, not the poll itself.
+		if err := p.store.TouchTombstones(ctx, f.ID, now); err != nil {
+			p.log.Warn("reader touching tombstones failed", "feed", f.URL, "error", err)
+		}
 		p.record(ctx, FetchResult{
 			FeedID:       f.ID,
 			ResolvedURL:  res.FinalURL,

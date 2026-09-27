@@ -145,7 +145,7 @@ func (a *App) Jobs(deps app.Deps) []app.Job {
 		},
 		{
 			Name:        "purge old articles",
-			Description: "Records daily reading statistics, backfills history, deletes read, unstarred articles older than the retention window, and reindexes articles for search.",
+			Description: "Records daily reading statistics, backfills history, deletes read, unstarred articles older than the retention window (and tombstones of purged articles their feeds no longer list), and reindexes articles for search.",
 			Every:       purgeTick,
 			Run: func(ctx context.Context) error {
 				// Before the purge, always: retention is about to delete the
@@ -160,12 +160,16 @@ func (a *App) Jobs(deps app.Deps) []app.Job {
 				if err != nil {
 					return err
 				}
+				tombstones, err := a.store.PruneTombstones(ctx, a.store.now().Add(-RetentionAge))
+				if err != nil {
+					return err
+				}
 				images, err := a.store.PurgeOrphanImages(ctx)
 				if err != nil {
 					return err
 				}
-				if n > 0 || images > 0 {
-					a.deps.Log.Info("reader purged old articles", "items", n, "images", images)
+				if n > 0 || images > 0 || tombstones > 0 {
+					a.deps.Log.Info("reader purged old articles", "items", n, "images", images, "tombstones", tombstones)
 				}
 				indexed, err := a.store.ReindexBatch(ctx, ReindexBatchSize)
 				if err != nil {
