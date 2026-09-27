@@ -306,6 +306,8 @@ go from cards written by an AI chat, or by hand.
 
 ![The Import a deck page, with three numbered steps: Copy the prompt, Ask your AI, and Paste the answer below](images/flash-import.png)
 
+ON Flash doesn't have a way to export your decks yet.
+
 ### With an AI chat
 
 ON Flash has a ready-made prompt: a message that tells an AI exactly how to
@@ -329,7 +331,7 @@ card with **Edit card**.
 ### Writing it by hand
 
 You can write the cards yourself in a simple format instead. Click
-**Writing it by hand?** for an example. It looks like this:
+**Writing it by hand?** to see the format in the app. Here's an example:
 
 ```text
 # Planets
@@ -381,8 +383,6 @@ can fix it. For example:
 - A message starting with **Card 3:** — something is wrong with that card,
   such as a question and answer card without a back.
 
-ON Flash doesn't have a way to export your decks yet.
-
 ## Your stats
 
 Click **Stats** in the toolbar to see how your studying is going.
@@ -414,7 +414,7 @@ keys on the buttons, and a card's page lists its keys under the card.
 
 | Key | What it does |
 |-----|--------------|
-| `Space` | Review: turn the card over to show the answer. Card page: turn the card over or back |
+| `Space` | Review: turn the card over to show the answer. Card page: turn the card over |
 | `1` | Review: grade the card **Forgot** (once the answer is showing) |
 | `2` | Review: grade the card **Hard** (once the answer is showing) |
 | `3` | Review: grade the card **Got it** (once the answer is showing) |

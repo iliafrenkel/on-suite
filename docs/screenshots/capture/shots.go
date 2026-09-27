@@ -52,7 +52,7 @@ var shots = []shot{
 	// docs/user/flash.md
 	// Nothing here grades a card or answers sam's pending gift: the review
 	// shot only turns the card over, so due counts and stats stay as seeded.
-	{Name: "docs/user/images/flash-home.png", URL: "/flash/1", Height: 430},
+	{Name: "docs/user/images/flash-home.png", URL: "/flash/1", Height: 460},
 	{Name: "docs/user/images/flash-cards.png", URL: "/flash/2/cards/", Height: 520},
 	{Name: "docs/user/images/flash-editor.png", URL: "/flash/2/cards/new", Height: 675, Setup: `
 		document.getElementById('card-type-new-cloze').checked = true;
