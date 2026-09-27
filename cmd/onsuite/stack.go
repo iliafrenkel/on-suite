@@ -152,14 +152,15 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 // docs/superpowers/specs/2026-08-18-on-suite-platform-design.md §3), so the
 // home page can name them instead of pretending only one app exists. Remove
 // an app from this list the day it is actually registered in
-// registeredApps().
+// registeredApps() — TestComingSoonAppsExcludesRegisteredApps enforces it.
+//
+// Every specced app is built today, so the list is empty; the plumbing stays
+// for the next one.
 var comingSoonApps = []struct {
 	ID      string
 	Name    string
 	Summary string
-}{
-	{ID: "flash", Name: "ON Flash", Summary: "Flash cards for spaced repetition."},
-}
+}{}
 
 // homeHandler is the dashboard. It lists whatever apps are in this build,
 // plus the specced-but-unbuilt ones, so adding a real app requires no change

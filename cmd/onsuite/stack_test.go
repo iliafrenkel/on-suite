@@ -45,7 +45,7 @@ func testHomeHandler(t *testing.T) http.Handler {
 	return homeHandler(deps, rend, errs)
 }
 
-func TestHomePageShowsRealCardAndNamesComingSoonApps(t *testing.T) {
+func TestHomePageShowsRealCards(t *testing.T) {
 	rec := httptest.NewRecorder()
 	testHomeHandler(t).ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 
@@ -62,15 +62,34 @@ func TestHomePageShowsRealCardAndNamesComingSoonApps(t *testing.T) {
 		t.Error("the real app's card has no href")
 	}
 
-	// Coming-soon apps get no card of their own — equal card area for a
-	// shipped app and one that doesn't exist yet reads as a mockup — just a
-	// single muted line naming them.
 	if cards := doc.QueryAll(".app-card"); len(cards) != 1 {
 		t.Errorf("got %d app cards, want exactly 1 (the real app)", len(cards))
 	}
-	text := doc.Text()
-	if !strings.Contains(text, "ON Flash") {
-		t.Error("coming-soon app \"ON Flash\" is not named anywhere on the page")
+
+	// With nothing in comingSoonApps, the "More apps coming" line must not
+	// render at all (not even as "More apps coming: .").
+	if len(comingSoonApps) == 0 {
+		if strings.Contains(doc.Text(), "More apps coming") {
+			t.Error("home page shows a \"More apps coming\" line with no coming-soon apps")
+		}
+		if els := doc.QueryAll(".home-coming-soon"); len(els) != 0 {
+			t.Errorf("got %d .home-coming-soon elements, want 0", len(els))
+		}
+	}
+}
+
+// An app that is registered is by definition no longer coming soon; leaving
+// it in comingSoonApps makes the home page announce a shipped app as future
+// work.
+func TestComingSoonAppsExcludesRegisteredApps(t *testing.T) {
+	registered := make(map[string]bool)
+	for _, a := range registeredApps() {
+		registered[a.Meta().ID] = true
+	}
+	for _, a := range comingSoonApps {
+		if registered[a.ID] {
+			t.Errorf("%q (%s) is registered in registeredApps() but still listed in comingSoonApps", a.ID, a.Name)
+		}
 	}
 }
 
