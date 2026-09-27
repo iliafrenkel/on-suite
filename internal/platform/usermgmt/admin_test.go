@@ -254,6 +254,19 @@ func TestAnAdminCannotActOnThemselvesHere(t *testing.T) {
 	}
 }
 
+// The table used to sit in a .scroll-x wrapper so narrow screens could
+// scroll it instead of the page, but overflow-x: auto also computes
+// overflow-y as auto, which clipped each row's absolutely-positioned menu.
+func TestTheAccountsTableIsNotInAnOverflowContainer(t *testing.T) {
+	s := newServer(t)
+	rec := s.get(t, s.root, "/admin/users")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	doc := s.doc(t, rec)
+	doc.MustNotHave("#accounts .scroll-x")
+}
+
 func TestUnknownOrMalformedIDsAre404(t *testing.T) {
 	s := newServer(t)
 	for _, p := range []string{"/admin/users/9999/password", "/admin/users/abc/role", "/admin/users/9999/delete"} {

@@ -36,47 +36,45 @@
 
 	<section class="admin-section" id="accounts">
 		<h2>Accounts</h2>
-		<div class="scroll-x">
-			<table class="admin-table usermgmt-table">
-				<thead><tr><th>User</th><th>Role</th><th>Created</th><th>Live sessions</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
-				<tbody>
-				{{range .Data.Accounts}}
-					<tr data-user="{{.Username}}">
-						<td>{{.Username}}{{if .Self}} <span class="dim">(you)</span>{{end}}</td>
-						<td>{{if .IsAdmin}}Administrator{{else}}<span class="dim">User</span>{{end}}</td>
-						<td class="dim">{{.Created}}</td>
-						<td>{{.Sessions}}</td>
-						<td>
-						{{if .Self}}
-							<a href="/account">Account</a>
-						{{else}}
-							<details class="outline-menu usermgmt-menu">
-								<summary class="outline-menu-toggle quiet" aria-label="Actions for {{.Username}}">{{ticon "more"}}</summary>
-								<div class="outline-menu-list reader-row-menu-list">
-									<form method="post" action="/admin/users/{{.ID}}/password">
-										<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
-										<button type="submit">Reset password</button>
-									</form>
-									<form method="post" action="/admin/users/{{.ID}}/role">
-										<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
-										{{if .IsAdmin}}
-										<input type="hidden" name="admin" value="0">
-										<button type="submit">Remove admin</button>
-										{{else}}
-										<input type="hidden" name="admin" value="1">
-										<button type="submit">Make admin</button>
-										{{end}}
-									</form>
-									<a class="usermgmt-menu-link" href="/admin/users/{{.ID}}/delete">Delete…</a>
-								</div>
-							</details>
-						{{end}}
-						</td>
-					</tr>
-				{{end}}
-				</tbody>
-			</table>
-		</div>
+		<table class="admin-table usermgmt-table">
+			<thead><tr><th>User</th><th>Role</th><th class="usermgmt-optional">Created</th><th class="usermgmt-optional">Live sessions</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+			<tbody>
+			{{range .Data.Accounts}}
+				<tr data-user="{{.Username}}">
+					<td>{{.Username}}{{if .Self}} <span class="dim">(you)</span>{{end}}</td>
+					<td>{{if .IsAdmin}}Administrator{{else}}<span class="dim">User</span>{{end}}</td>
+					<td class="dim usermgmt-optional">{{.Created}}</td>
+					<td class="usermgmt-optional">{{.Sessions}}</td>
+					<td>
+					{{if .Self}}
+						<a href="/account">Account</a>
+					{{else}}
+						<details class="outline-menu usermgmt-menu">
+							<summary class="outline-menu-toggle quiet" aria-label="Actions for {{.Username}}">{{ticon "more"}}</summary>
+							<div class="outline-menu-list reader-row-menu-list">
+								<form method="post" action="/admin/users/{{.ID}}/password">
+									<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+									<button type="submit">Reset password</button>
+								</form>
+								<form method="post" action="/admin/users/{{.ID}}/role">
+									<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+									{{if .IsAdmin}}
+									<input type="hidden" name="admin" value="0">
+									<button type="submit">Remove admin</button>
+									{{else}}
+									<input type="hidden" name="admin" value="1">
+									<button type="submit">Make admin</button>
+									{{end}}
+								</form>
+								<a class="usermgmt-menu-link" href="/admin/users/{{.ID}}/delete">Delete…</a>
+							</div>
+						</details>
+					{{end}}
+					</td>
+				</tr>
+			{{end}}
+			</tbody>
+		</table>
 	</section>
 </div>
 {{end}}

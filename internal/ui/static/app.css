@@ -1759,6 +1759,14 @@ kbd {
 		display: inline-flex;
 	}
 
+	/* The accounts table can't sit in a .scroll-x wrapper: overflow-x: auto
+	 * also computes overflow-y as auto, which clips each row's
+	 * absolutely-positioned menu (#310). Hide the least essential columns
+	 * instead so the table fits without an overflow container. */
+	.usermgmt-table .usermgmt-optional {
+		display: none;
+	}
+
 }
 
 /* ---- ON Reader ---------------------------------------------------------- */
