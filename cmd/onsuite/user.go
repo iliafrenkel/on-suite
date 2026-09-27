@@ -18,12 +18,15 @@ import (
 
 func userCmd(args []string, getenv func(string) string, errOut io.Writer) error {
 	if len(args) == 0 {
-		fmt.Fprint(errOut, "usage: onsuite user add <username> [--admin] [--data-dir DIR]\n")
+		fmt.Fprint(errOut, "usage: onsuite user add <username> [--admin] [--data-dir DIR]\n"+
+			"       onsuite user reset-password <username> [--data-dir DIR]\n")
 		return errors.New("user: no subcommand given")
 	}
 	switch args[0] {
 	case "add":
 		return userAdd(args[1:], getenv, os.Stdin, os.Stdout, errOut)
+	case "reset-password":
+		return userResetPassword(args[1:], getenv, os.Stdin, os.Stdout, errOut)
 	default:
 		return fmt.Errorf("user: unknown subcommand %q", args[0])
 	}
@@ -77,6 +80,58 @@ func userAdd(args []string, getenv func(string) string, in *os.File, out, errOut
 		role = "administrator"
 	}
 	fmt.Fprintf(out, "Created %s %q (id %d) in %s\n", role, user.Username, user.ID, cfg.DBPath())
+	return nil
+}
+
+// userResetPassword is the recovery path for an account that cannot sign in,
+// including the only admin, whom /admin/users cannot help (#310). The new
+// password comes from readPassword, never a flag, exactly as for user add.
+func userResetPassword(args []string, getenv func(string) string, in *os.File, out, errOut io.Writer) error {
+	fs := flag.NewFlagSet("user reset-password", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	dataDir := fs.String("data-dir", envOrDefault(getenv, "ONSUITE_DATA_DIR", "./data"),
+		"directory holding the database")
+	positional, err := parseInterspersed(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(positional) != 1 {
+		return errors.New("user reset-password: exactly one username is required")
+	}
+	username := positional[0]
+
+	password, err := readPassword(in, out)
+	if err != nil {
+		return err
+	}
+	if err := auth.ValidatePassword(password); err != nil {
+		return err
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return err
+	}
+
+	cfg := config.Config{DataDir: *dataDir}
+	ctx := context.Background()
+	handle, _, _, err := openDatabase(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = handle.Close() }()
+
+	store := auth.NewStore(handle)
+	user, err := store.UserByUsername(ctx, username)
+	if errors.Is(err, auth.ErrNotFound) {
+		return fmt.Errorf("user reset-password: no account named %q", username)
+	}
+	if err != nil {
+		return err
+	}
+	if err := store.SetPassword(ctx, user.ID, hash, ""); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "Password for %q reset; all their sessions were signed out.\n", user.Username)
 	return nil
 }
 

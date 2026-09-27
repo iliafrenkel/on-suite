@@ -57,6 +57,8 @@ func usage(w io.Writer) {
 Usage:
   onsuite serve [flags]     run the server
   onsuite user add <name>   create an account
+  onsuite user reset-password <name>
+                            set a new password and sign the account out
   onsuite export <name>     write a user's data as JSON
   onsuite backup            write a database snapshot
   onsuite version           print the build version
