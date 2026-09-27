@@ -47,11 +47,21 @@ func (st *Store) ShareDeck(ctx context.Context, fromUserID, deckID, toUserID int
 	if fromUserID == toUserID {
 		return Share{}, fmt.Errorf("%w: you can't share a deck with yourself", ErrInvalid)
 	}
-	if _, err := st.DeckByID(ctx, fromUserID, deckID); err != nil {
+
+	// One transaction for the ownership check, the pending-offer check and
+	// the insert (#384): with one connection, separate statements let a
+	// DeleteDeck or a second Share click land in between.
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Share{}, fmt.Errorf("flash: share deck: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := deckOwned(ctx, tx, fromUserID, deckID); err != nil {
 		return Share{}, err
 	}
 
-	existing, err := st.pendingShare(ctx, deckID, fromUserID, toUserID)
+	existing, err := pendingShare(ctx, tx, deckID, fromUserID, toUserID)
 	switch {
 	case err == nil:
 		return existing, nil
@@ -60,7 +70,7 @@ func (st *Store) ShareDeck(ctx context.Context, fromUserID, deckID, toUserID int
 	}
 
 	sh := Share{DeckID: deckID, FromUserID: fromUserID, ToUserID: toUserID, Status: ShareStatusPending, CreatedAt: st.now()}
-	err = st.db.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`INSERT INTO flash_shares (deck_id, from_user_id, to_user_id, status, created_at)
 		 VALUES (?, ?, ?, ?, ?)
 		 RETURNING id`,
@@ -69,11 +79,14 @@ func (st *Store) ShareDeck(ctx context.Context, fromUserID, deckID, toUserID int
 	if err != nil {
 		return Share{}, fmt.Errorf("flash: share deck: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return Share{}, fmt.Errorf("flash: share deck: %w", err)
+	}
 	return sh, nil
 }
 
-func (st *Store) pendingShare(ctx context.Context, deckID, fromUserID, toUserID int64) (Share, error) {
-	return scanShare(st.db.QueryRowContext(ctx,
+func pendingShare(ctx context.Context, exec dbExecutor, deckID, fromUserID, toUserID int64) (Share, error) {
+	return scanShare(exec.QueryRowContext(ctx,
 		`SELECT id, deck_id, from_user_id, to_user_id, status, adopted_deck_id, created_at, responded_at
 		 FROM flash_shares
 		 WHERE deck_id = ? AND from_user_id = ? AND to_user_id = ? AND status = ?`,
