@@ -8,31 +8,26 @@ questions are always welcome without any of that ceremony.
 
 ## Before you dive in
 
-A few constraints worth knowing, all explained in more depth in the
-[design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md):
+The [developer guide](docs/developers/index.md) explains how ON Suite is
+built and why. The short version of the ground rules:
 
 - No CGO, ever — every dependency must be pure Go.
-- No Node, no npm, no JavaScript build step. HTMX is the one piece of
-  front-end JavaScript, vendored into the repo and embedded — never loaded
-  from a CDN.
-- Platform dependencies are capped by design (currently `modernc.org/sqlite`,
-  `golang.org/x/crypto`, `golang.org/x/term`, `golang.org/x/net`); adding a
-  new one is a spec change, not just an implementation detail.
+- No Node, no npm, no JavaScript build step.
+- Dependencies are capped; adding one is a design change, so ask first.
 - Migrations are forward-only — no down migrations.
 - Apps never import other apps, and the platform never imports an app —
   enforced by a test, not just a convention.
 - No inline `<script>` or `style=` attributes; the CSP forbids them.
 
+The reasoning behind each is in the
+[platform design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md).
+
 ## Building and testing
 
-```bash
-go build ./... && go vet ./... && go test ./... -race
-```
-
-This is expected to stay green on every commit. Store-layer tests run
-against a real SQLite file in a temp directory rather than a mock or
-`:memory:` database, because the interesting bugs live in the SQL and in WAL
-behaviour that `:memory:` doesn't reproduce.
+See [Getting started](docs/developers/getting-started.md) to build and run it
+locally, and [Testing](docs/developers/testing.md) for the full check and how
+tests are written here. Writing a new app? Start with
+[Adding an app](docs/developers/adding-an-app.md).
 
 ## Commit messages
 
@@ -67,14 +62,15 @@ A few things that matter for how a commit gets classified:
   entirely, on the assumption that repo maintenance isn't news to users of
   the binary.
 
-## Adding a new app
+## Pull requests
 
-Adding an app (ON Notes, ON Reader, ON Flash, or anything else) means writing
-a package under `internal/apps/` that implements the `App` interface and
-adding one line to `registeredApps()` in `cmd/onsuite/main.go` — nothing
-else in the platform changes. See the [design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md)
-for the `App` interface and the platform/app boundary rules an architecture
-test enforces.
+- Keep the full check green on every commit:
+  `go build ./... && go vet ./... && go test ./... -race`.
+- One topic per PR, and link the issue it addresses.
+- A behaviour change comes with a test; a bug fix with a test that failed
+  before it.
+- Update the docs your change affects — user guides, the developer guide, or
+  both.
 
 ## Forking
 

@@ -195,6 +195,13 @@ type-to-section table and the `feat`-vs-`refactor` distinction.
 ## Other docs worth knowing about
 
 - [PATTERNS.md](PATTERNS.md) — index of recurring, deliberate patterns; check it before writing new code.
+- `docs/user/` — end-user guides, one per app plus admin (being written for #308).
 - [docs/self-hosting/deploying.md](docs/self-hosting/deploying.md) — systemd, TLS, backups, upgrades, Docker.
-- [docs/developers/releasing.md](docs/developers/releasing.md) — cutting a tagged release.
-- [docs/superpowers/plans/](docs/superpowers/plans/) — task-by-task implementation plans per build phase.
+- [docs/developers/](docs/developers/index.md) — the developer guide:
+  [getting started](docs/developers/getting-started.md),
+  [architecture](docs/developers/architecture.md),
+  [repository layout](docs/developers/repository-layout.md),
+  [adding an app](docs/developers/adding-an-app.md),
+  [testing](docs/developers/testing.md) and
+  [releasing](docs/developers/releasing.md).
+- [docs/superpowers/](docs/superpowers/) — historical design specs and task-by-task implementation plans.
