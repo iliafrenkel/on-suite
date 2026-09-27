@@ -40,6 +40,16 @@ The command prompts for a password without echoing it. Note that with
 before the first start, `chown` the directory to match or simply run
 `onsuite user add` again afterwards with the service stopped.
 
+Once you can sign in as an administrator, you can add further accounts at
+**Admin → Manage users** (`/admin/users`) with the service running. Each new
+account gets a one-time generated password that you pass on, and the user can
+change it under **Account**. If an account (even the only admin) cannot sign
+in, reset it from the server:
+
+```bash
+onsuite user reset-password <name> --data-dir /var/lib/onsuite
+```
+
 ## Choose a TLS story
 
 **Behind a reverse proxy (recommended).** The service listens on
