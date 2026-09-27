@@ -18,6 +18,9 @@ var linkRe = regexp.MustCompile(`!?\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\
 // which README.md uses for <picture> and <img>.
 var htmlRefRe = regexp.MustCompile(`(?:src|href|srcset)="([^"]+)"`)
 
+// refDefRe matches Markdown reference-style link definitions: [ref]: target
+var refDefRe = regexp.MustCompile(`(?m)^ {0,3}\[[^\]]+\]:\s*<?([^\s>]+)>?`)
+
 // headingRe matches ATX headings.
 var headingRe = regexp.MustCompile(`(?m)^#{1,6}\s+(.+?)\s*#*\s*$`)
 
@@ -100,6 +103,9 @@ func TestEveryRelativeLinkResolves(t *testing.T) {
 			for _, part := range strings.Split(m[1], ",") {
 				targets = append(targets, strings.Fields(part)[0])
 			}
+		}
+		for _, m := range refDefRe.FindAllStringSubmatch(text, -1) {
+			targets = append(targets, m[1])
 		}
 		for _, target := range targets {
 			checkTarget(t, doc, target)
