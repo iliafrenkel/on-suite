@@ -476,6 +476,7 @@ func TestMarkAllReadOlderThanRespectsAllAndStarredScopes(t *testing.T) {
 	for _, sub := range []reader.Subscription{one, two} {
 		if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
 			{GUID: "new", Title: "New", PublishedAt: now.Add(-time.Hour)},
+			{GUID: "new-starred", Title: "New starred", PublishedAt: now.Add(-time.Hour)},
 			{GUID: "old", Title: "Old", PublishedAt: now.Add(-48 * time.Hour)},
 			{GUID: "old-starred", Title: "Old starred", PublishedAt: now.Add(-48 * time.Hour)},
 		}, now); err != nil {
@@ -487,7 +488,7 @@ func TestMarkAllReadOlderThanRespectsAllAndStarredScopes(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, it := range items {
-		if it.GUID == "old-starred" {
+		if it.GUID == "old-starred" || it.GUID == "new-starred" {
 			if err := f.store.SetStarred(ctx, f.alice.ID, it.ID, true, now); err != nil {
 				t.Fatal(err)
 			}
@@ -497,10 +498,10 @@ func TestMarkAllReadOlderThanRespectsAllAndStarredScopes(t *testing.T) {
 	if _, err := f.store.MarkAllRead(ctx, f.alice.ID, reader.ScopeStarred, 0, now, 24*time.Hour); err != nil {
 		t.Fatalf("MarkAllRead starred: %v", err)
 	}
-	if got, want := unreadGUIDs(t, f, f.alice.ID, one.ID), []string{"new", "old"}; !slices.Equal(got, want) {
+	if got, want := unreadGUIDs(t, f, f.alice.ID, one.ID), []string{"new", "new-starred", "old"}; !slices.Equal(got, want) {
 		t.Errorf("feed one after starred cutoff: unread = %v, want %v", got, want)
 	}
-	if got, want := unreadGUIDs(t, f, f.alice.ID, two.ID), []string{"new", "old", "old-starred"}; !slices.Equal(got, want) {
+	if got, want := unreadGUIDs(t, f, f.alice.ID, two.ID), []string{"new", "new-starred", "old", "old-starred"}; !slices.Equal(got, want) {
 		t.Errorf("feed two after starred cutoff: unread = %v, want %v (nothing there is starred)", got, want)
 	}
 
@@ -508,7 +509,7 @@ func TestMarkAllReadOlderThanRespectsAllAndStarredScopes(t *testing.T) {
 		t.Fatalf("MarkAllRead all: %v", err)
 	}
 	for _, sub := range []reader.Subscription{one, two} {
-		if got, want := unreadGUIDs(t, f, f.alice.ID, sub.ID), []string{"new"}; !slices.Equal(got, want) {
+		if got, want := unreadGUIDs(t, f, f.alice.ID, sub.ID), []string{"new", "new-starred"}; !slices.Equal(got, want) {
 			t.Errorf("sub %d after all-scope cutoff: unread = %v, want %v", sub.ID, got, want)
 		}
 	}
