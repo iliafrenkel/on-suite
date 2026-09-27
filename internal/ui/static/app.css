@@ -866,6 +866,11 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	border-top: var(--border);
 }
 
+/* The header username is the way into /account (#310): a link, but still
+ * reading as the plain name it replaced. */
+.shell-username { color: inherit; text-decoration: none; }
+.shell-username:hover { text-decoration: underline; }
+
 /* ---- Outline (ON Notes) ------------------------------------------------- */
 
 /* Spec §16: a single centred column. The suite shell already carries the
