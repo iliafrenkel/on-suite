@@ -135,9 +135,9 @@ func saveMediaUpload(ctx context.Context, exec dbExecutor, kind, contentType str
 	return hash, nil
 }
 
-// AttachCardUpload stores an uploaded file and points one of userID's own
-// card's image or audio column at it, in one transaction, and returns the
-// file's hash.
+// attachUpload stores an uploaded file and points one of userID's own card's
+// image or audio column at it, in one transaction (SaveCardForm's), and
+// returns the file's hash.
 //
 // The single transaction is what keeps PurgeOrphanMedia safe (#302.5): as
 // two statements, a purge landing between them deleted the just-stored
@@ -148,26 +148,7 @@ func saveMediaUpload(ctx context.Context, exec dbExecutor, kind, contentType str
 // deleted, or wholly after, when the card already uses the row.
 //
 // kind must be MediaKindImage or MediaKindAudio (else ErrInvalid); a card
-// that isn't userID's is ErrNotFound. Either way nothing is stored.
-func (st *Store) AttachCardUpload(ctx context.Context, userID, deckID, cardID int64, kind, contentType string, data []byte) (string, error) {
-	tx, err := st.db.BeginTx(ctx, nil)
-	if err != nil {
-		return "", fmt.Errorf("flash: attach upload: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	hash, err := attachUpload(ctx, tx, st.now(), userID, deckID, cardID, kind, CardUpload{ContentType: contentType, Data: data})
-	if err != nil {
-		return "", err
-	}
-	if err := tx.Commit(); err != nil {
-		return "", fmt.Errorf("flash: attach upload: %w", err)
-	}
-	return hash, nil
-}
-
-// attachUpload is AttachCardUpload's two writes on a caller's open
-// transaction — AttachCardUpload's own, or SaveCardForm's (#363). Pass a
+// that isn't userID's is ErrNotFound. Either way nothing is stored. Pass a
 // *sql.Tx, never the handle: storing and attaching in one transaction is
 // what keeps PurgeOrphanMedia from deleting the row in between (#302.5).
 func attachUpload(ctx context.Context, exec dbExecutor, now time.Time, userID, deckID, cardID int64, kind string, u CardUpload) (string, error) {

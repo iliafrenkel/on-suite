@@ -107,21 +107,7 @@ func insertCard(ctx context.Context, exec dbExecutor, c Card) (int64, error) {
 	return id, nil
 }
 
-// UpdateCard overwrites userID's own card's editable fields.
-func (st *Store) UpdateCard(ctx context.Context, userID, deckID, id int64, cardType, front, back, notes string) (Card, error) {
-	if err := ValidateCard(cardType, front, back); err != nil {
-		return Card{}, err
-	}
-	if err := validateCardNotes(notes); err != nil {
-		return Card{}, err
-	}
-	if err := updateCardRow(ctx, st.db, userID, deckID, id, cardType, front, back, notes); err != nil {
-		return Card{}, err
-	}
-	return st.CardByID(ctx, userID, deckID, id)
-}
-
-// updateCardRow is UpdateCard's UPDATE on any dbExecutor. Its WHERE clause
+// updateCardRow is SaveCardForm's UPDATE on any dbExecutor. Its WHERE clause
 // is the ownership check: a card that isn't userID's, or isn't in deckID,
 // matches no row and is ErrNotFound.
 func updateCardRow(ctx context.Context, exec dbExecutor, userID, deckID, id int64, cardType, front, back, notes string) error {
@@ -304,18 +290,13 @@ const (
 	MediaKindAudio = "audio"
 )
 
-// SetCardMedia sets or clears one of userID's own card's media hashes. hash
-// of nil clears the attachment (e.g. a "remove image" request). It does not
+// setCardMedia sets or clears one of userID's own card's media hashes, on
+// either the handle or a caller's open transaction (see dbExecutor). hash of
+// nil clears the attachment (e.g. a "remove image" request). It does not
 // validate that hash names a real flash_media row — the foreign key does,
-// and callers that create the row (ImportDeck, AttachCardUpload) do it in
-// the same transaction as the attach, so PurgeOrphanMedia can never delete
-// the row in between (#302.5).
-func (st *Store) SetCardMedia(ctx context.Context, userID, deckID, cardID int64, kind string, hash *string) error {
-	return setCardMedia(ctx, st.db, userID, deckID, cardID, kind, hash)
-}
-
-// setCardMedia is SetCardMedia against either the handle or a caller's open
-// transaction (see dbExecutor).
+// and callers that create the row (ImportDeck, SaveCardForm's attachUpload)
+// do it in the same transaction as the attach, so PurgeOrphanMedia can never
+// delete the row in between (#302.5).
 func setCardMedia(ctx context.Context, exec dbExecutor, userID, deckID, cardID int64, kind string, hash *string) error {
 	var column string
 	switch kind {

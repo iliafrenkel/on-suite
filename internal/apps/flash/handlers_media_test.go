@@ -2,14 +2,17 @@ package flash_test
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 // onePNG is the smallest thing http.DetectContentType calls an image/png.
@@ -21,16 +24,24 @@ var onePNG = []byte{
 // newServerWithApp is newServer, but it also hands back the App, so a test
 // can call AllowPrivateFetchesForTest — the proxy's fetches go to an
 // httptest origin on 127.0.0.1, which the SSRF guard refuses by
-// construction. Mirrors internal/apps/reader's own newServerWithApp.
-func newServerWithApp(t *testing.T) (*apptest.Server[*flash.Store], *flash.App) {
+// construction. Mirrors internal/apps/reader's own newServerWithApp. It also
+// hands back the raw database handle: seedCardWithImage needs it to attach
+// an already-known hash directly (#382 — SaveCardForm can only attach a new
+// upload's bytes, not an existing hash).
+func newServerWithApp(t *testing.T) (*apptest.Server[*flash.Store], *flash.App, *sql.DB) {
 	t.Helper()
+	handle, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = handle.Close() })
 	a := flash.New()
-	return apptest.NewServer(t, a, flash.NewStore), a
+	return apptest.NewServer(t, a, flash.NewStore, apptest.WithDatabase(handle)), a, handle
 }
 
 // seedCardWithImage creates a deck and a card carrying an unfetched
 // URL-attached image, and returns the card and its image hash.
-func seedCardWithImage(t *testing.T, s *apptest.Server[*flash.Store], srcURL string) (flash.Card, string) {
+func seedCardWithImage(t *testing.T, s *apptest.Server[*flash.Store], handle *sql.DB, srcURL string) (flash.Card, string) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -46,14 +57,12 @@ func seedCardWithImage(t *testing.T, s *apptest.Server[*flash.Store], srcURL str
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Store.SetCardMedia(ctx, s.Alice.User.ID, deck.ID, c.ID, flash.MediaKindImage, &hash); err != nil {
-		t.Fatal(err)
-	}
+	setCardMediaHash(t, handle, c.ID, flash.MediaKindImage, &hash)
 	return c, hash
 }
 
 func TestMediaFetchesCachesAndServes(t *testing.T) {
-	s, a := newServerWithApp(t)
+	s, a, handle := newServerWithApp(t)
 	var hits int
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits++
@@ -62,7 +71,7 @@ func TestMediaFetchesCachesAndServes(t *testing.T) {
 	}))
 	defer origin.Close()
 
-	_, hash := seedCardWithImage(t, s, origin.URL+"/a.png")
+	_, hash := seedCardWithImage(t, s, handle, origin.URL+"/a.png")
 	a.AllowPrivateFetchesForTest()
 
 	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/flash/media/"+hash, nil))
@@ -86,14 +95,14 @@ func TestMediaFetchesCachesAndServes(t *testing.T) {
 }
 
 func TestMediaConditionalRequestReturns304(t *testing.T) {
-	s, a := newServerWithApp(t)
+	s, a, handle := newServerWithApp(t)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(onePNG)
 	}))
 	defer origin.Close()
 
-	_, hash := seedCardWithImage(t, s, origin.URL+"/a.png")
+	_, hash := seedCardWithImage(t, s, handle, origin.URL+"/a.png")
 	a.AllowPrivateFetchesForTest()
 
 	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/flash/media/"+hash, nil))
@@ -128,14 +137,14 @@ func TestMediaRefusesAMalformedHash(t *testing.T) {
 }
 
 func TestMediaRejectsNonImageContent(t *testing.T) {
-	s, a := newServerWithApp(t)
+	s, a, handle := newServerWithApp(t)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png") // lying
 		_, _ = w.Write([]byte("<html><body>not an image</body></html>"))
 	}))
 	defer origin.Close()
 
-	_, hash := seedCardWithImage(t, s, origin.URL+"/a.png")
+	_, hash := seedCardWithImage(t, s, handle, origin.URL+"/a.png")
 	a.AllowPrivateFetchesForTest()
 
 	rec := s.Do(t, s.Alice, httptest.NewRequest(http.MethodGet, "/flash/media/"+hash, nil))
@@ -145,9 +154,9 @@ func TestMediaRejectsNonImageContent(t *testing.T) {
 }
 
 func TestMediaGivesUpPermanentlyPastAttemptCap(t *testing.T) {
-	s := newServer(t)
+	s, _, handle := newServerWithApp(t)
 	ctx := context.Background()
-	_, hash := seedCardWithImage(t, s, "http://127.0.0.1:1/unreachable")
+	_, hash := seedCardWithImage(t, s, handle, "http://127.0.0.1:1/unreachable")
 	now := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
 	s.Clock.Set(now)
 
@@ -164,9 +173,9 @@ func TestMediaGivesUpPermanentlyPastAttemptCap(t *testing.T) {
 }
 
 func TestMediaRefusesRetryWithinBackoffWindow(t *testing.T) {
-	s := newServer(t)
+	s, _, handle := newServerWithApp(t)
 	ctx := context.Background()
-	_, hash := seedCardWithImage(t, s, "http://127.0.0.1:1/unreachable")
+	_, hash := seedCardWithImage(t, s, handle, "http://127.0.0.1:1/unreachable")
 	now := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
 	s.Clock.Set(now)
 
@@ -186,7 +195,7 @@ func TestMediaRefusesRetryWithinBackoffWindow(t *testing.T) {
 // attempted, still 404), and once the clock is advanced past the backoff
 // window the same request retries and succeeds (#357).
 func TestMediaBackoffHonoursThePinnedClock(t *testing.T) {
-	s, a := newServerWithApp(t)
+	s, a, handle := newServerWithApp(t)
 	ctx := context.Background()
 	var hits int
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +205,7 @@ func TestMediaBackoffHonoursThePinnedClock(t *testing.T) {
 	}))
 	defer origin.Close()
 
-	_, hash := seedCardWithImage(t, s, origin.URL+"/a.png")
+	_, hash := seedCardWithImage(t, s, handle, origin.URL+"/a.png")
 	a.AllowPrivateFetchesForTest()
 
 	t0 := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)

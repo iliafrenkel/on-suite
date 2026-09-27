@@ -73,8 +73,9 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 	if m.SourceURL == "" {
 		// A row with no bytes and no source URL is a data-integrity
 		// impossibility given how rows are created (import's ensureMediaURL
-		// always sets source_url; AttachCardUpload always sets bytes) — there is
-		// nothing to fetch either way, so treat it the same as not found.
+		// always sets source_url; SaveCardForm's attachUpload always sets
+		// bytes) — there is nothing to fetch either way, so treat it the
+		// same as not found.
 		a.deps.Errors.Status(w, r, http.StatusNotFound)
 		return
 	}
