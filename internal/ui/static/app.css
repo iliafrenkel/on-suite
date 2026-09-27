@@ -818,8 +818,21 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 /* ---- Outline (ON Notes) ------------------------------------------------- */
 
 /* Spec §16: a single centred column. The suite shell already carries the
- * navigation, so the outline gets no second sidebar. */
-.notes { max-width: 46rem; }
+ * navigation, so the outline gets no second sidebar.
+ *
+ * The toolbar is the one exception to the column width: its search box and
+ * buttons need more than 46rem on one row. It is at least as wide as the
+ * column, grows to fit its content, and wraps (see .notes-toolbar) only when
+ * the page itself is too narrow — issue #392. */
+.notes > :not(.notes-toolbar) { max-width: 46rem; }
+.notes > .notes-toolbar {
+	min-width: min(46rem, 100%);
+	/* fit-content, not max-content: the shell's <main> is a flex item with
+	 * min-width: auto, and a max-content child would stretch <main> past
+	 * the viewport instead of wrapping. */
+	width: fit-content;
+	max-width: 100%;
+}
 
 /* Cross-fade the outline when zooming in/out (row dot, breadcrumb, "All
  * notes", and browser back/forward via hx-push-url) — issue-free everywhere
@@ -1079,8 +1092,15 @@ button.outline-chevron {
 	width: 6.5rem;
 }
 
+/* flex-wrap on both: when the toolbar doesn't fit on one row it wraps onto
+ * a second instead of pushing the whole page into horizontal scroll. This
+ * used to apply only below phone width (issue #155), until issue #392's
+ * Copy button overflowed it at 1024px with the sidebar expanded. On ON
+ * Notes' own pages the toolbar may also grow past the outline column
+ * before it wraps — see .notes above. */
 .notes-toolbar {
 	display: flex;
+	flex-wrap: wrap;
 	justify-content: space-between;
 	align-items: center;
 	gap: var(--s-3);
@@ -1091,6 +1111,7 @@ button.outline-chevron {
  * outline's toolbar, so N6's search box can sit alone on the left. */
 .notes-toolbar-actions {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: var(--s-2);
 }
@@ -1682,16 +1703,6 @@ kbd {
 		display: inline-flex;
 	}
 
-	/* Issue #155: .notes-toolbar's search box plus the Due/Archive/Export/
-	 * Import/Show completed/Shortcuts cluster don't fit one row below phone
-	 * width and, unwrapped, pushed the whole page into horizontal scroll
-	 * instead of just wrapping onto a second line. */
-	.notes-toolbar {
-		flex-wrap: wrap;
-	}
-	.notes-toolbar-actions {
-		flex-wrap: wrap;
-	}
 }
 
 /* ---- ON Reader ---------------------------------------------------------- */
@@ -2518,7 +2529,6 @@ kbd {
 
 /* Layout: toolbar above a two-pane split, like ON Paste. */
 .flash-home-toolbar { margin-bottom: var(--s-4); justify-content: flex-start; }
-.flash-home-toolbar .notes-toolbar-actions { flex-wrap: wrap; }
 
 .flash-shell {
 	display: flex;
@@ -2568,7 +2578,7 @@ kbd {
 .flash-back-btn { display: none; }
 
 .flash-deck-toolbar { margin-bottom: var(--s-4); }
-.flash-deck-toolbar .notes-toolbar-actions { margin-left: auto; flex-wrap: wrap; }
+.flash-deck-toolbar .notes-toolbar-actions { margin-left: auto; }
 .flash-deck-toolbar form { margin: 0; }
 
 .flash-deck-hero {

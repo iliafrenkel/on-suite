@@ -101,11 +101,20 @@
 	// the label is restored. A plain-text button (e.g. shared.html's own
 	// Copy, or "Copy link") is just as safe here: its whole content is
 	// already one trailing text node.
+	//
+	// It looks through descendants, not just direct children, and skips
+	// whitespace-only text: ON Notes' row-menu "Copy as Markdown" (issue
+	// #392) keeps its label in a <span class="outline-menu-label">, and the
+	// button's own last text node is the template's trailing indentation,
+	// so swapping that would leave the label untouched and put "Copied"
+	// after it.
 	function lastTextNode(btn) {
-		for (var i = btn.childNodes.length - 1; i >= 0; i--) {
-			if (btn.childNodes[i].nodeType === Node.TEXT_NODE) return btn.childNodes[i];
+		var walker = document.createTreeWalker(btn, NodeFilter.SHOW_TEXT);
+		var found = null;
+		while (walker.nextNode()) {
+			if (walker.currentNode.nodeValue.trim() !== "") found = walker.currentNode;
 		}
-		return null;
+		return found;
 	}
 
 	function flashLabel(btn, message) {

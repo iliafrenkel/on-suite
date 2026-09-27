@@ -8,14 +8,16 @@ import (
 	"time"
 )
 
-// Export returns every node in rootID's subtree, in pre-order with Depth
-// relative to rootID — spec §14: an export is a full data dump, not a
-// display view, so unlike Outline (store.go) it does not stop at a
-// collapsed node, does not exclude an archived one, and does not honour
-// the show-completed preference. rootID may be RootID for the whole tree.
-// It is empty both for a root with nothing under it and for a root that
-// does not exist or is not userID's: a caller that needs to tell those
-// apart calls ByID.
+// Export returns rootID's subtree in pre-order, rootID itself first at
+// Depth 0 and its descendants below it — issue #392: exporting or copying
+// one bullet means that bullet too, not just what hangs off it. For RootID,
+// which is not a real row, it is the whole tree with each top-level node
+// at Depth 0. Spec §14: an export is a full data dump, not a display view,
+// so unlike Outline (store.go) it does not stop at a collapsed node, does
+// not exclude an archived one, and does not honour the show-completed
+// preference. It is empty for an empty tree and for a root that does not
+// exist or is not userID's: a caller that needs to tell those apart calls
+// ByID.
 //
 // The recursive descent's owner-matching mirrors Outline's own, for the
 // same reason given there: parent_id is a plain foreign key, not a
@@ -23,11 +25,15 @@ import (
 // is what keeps a broken invariant I2 from leaking another household's
 // bullets into someone's export.
 func (st *Store) Export(ctx context.Context, userID, rootID int64) ([]Node, error) {
+	seed, args := "parent_id IS NULL", []any{userID}
+	if rootID != RootID {
+		seed, args = "id = ?", append(args, rootID)
+	}
 	rows, err := st.db.QueryContext(ctx,
 		`WITH RECURSIVE tree AS (
 		     SELECT `+nodeColumns+`, 0 AS depth, printf('%08d', position) AS path
 		       FROM notes_nodes
-		      WHERE user_id = ? AND parent_id IS ?
+		      WHERE user_id = ? AND `+seed+`
 		   UNION ALL
 		     SELECT `+childColumns+`,
 		            t.depth + 1, t.path || '/' || printf('%08d', c.position)
@@ -35,7 +41,7 @@ func (st *Store) Export(ctx context.Context, userID, rootID int64) ([]Node, erro
 		      WHERE c.user_id = t.user_id AND t.depth + 1 <= ?
 		 )
 		 SELECT `+nodeColumns+`, depth FROM tree ORDER BY path`,
-		userID, parentArg(rootID), MaxDepth)
+		append(args, MaxDepth)...)
 	if err != nil {
 		return nil, fmt.Errorf("notes: export: %w", err)
 	}

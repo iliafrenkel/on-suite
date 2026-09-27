@@ -99,7 +99,11 @@ canonical example's own comment, not here.
   for this when a UI element (a toolbar toggle, a badge) sits outside the
   container a normal HTMX response replaces, so it needs an out-of-band
   copy to stay in sync. Canonical: `internal/apps/notes/view.go`'s `OOB`
-  field, used by outline.html's toolbar toggle.
+  field, used by outline.html's toolbar toggle. That includes a plain link
+  or hidden field that carries something the swap can change, like the
+  zoom root (issue #392). Don't swap out the input that sent the request
+  (see `SyncSearch`): it would throw away whatever the user typed while
+  the request was in flight.
 
 - **Cross-app mirroring instead of a shared package** — reach for this when
   two apps need identical behavior (slug generation, revoke-then-remint

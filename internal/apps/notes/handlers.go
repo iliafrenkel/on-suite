@@ -168,6 +168,10 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 	a.render(w, r, http.StatusOK, "notes/outline", page)
 }
 
+// searchInputID is the toolbar search input's id (toolbar.partial.html),
+// which htmx sends as HX-Trigger on the requests that input fires.
+const searchInputID = "notes-search-input"
+
 // renderOutlineFragment re-renders #outline's own content for an HTMX swap.
 // It shares renderOutline's query but not its shell — outline-body only ever
 // reads Root.ID, which the caller already has as a plain int64. A structural
@@ -181,10 +185,11 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 // performing one while a filter is active resets it, deliberately: see this
 // plan's own note on that scope boundary.
 //
-// The response also carries the toolbar's show-completed toggle and the
-// breadcrumb/heading out of band: both live outside #outline, so the swap
-// cannot reach them, and would otherwise show a stale toggle state or the
-// previous zoom's heading.
+// The response also carries the breadcrumb/heading and every toolbar
+// control that depends on the outline's state or zoom root out of band:
+// they live outside #outline, so the swap cannot reach them, and would
+// otherwise show a stale toggle state, the previous zoom's heading, or —
+// issue #392 — export, copy, import into and search the previous zoom.
 func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, userID, rootID int64, showCompleted bool) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
@@ -193,6 +198,8 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 		Root:          Node{ID: rootID},
 		ShowCompleted: showCompleted,
 		Query:         query,
+		SearchAction:  outlinePath(rootID),
+		SyncSearch:    r.Header.Get("HX-Trigger") != searchInputID,
 		OOB:           true,
 	}
 	if rootID != RootID {

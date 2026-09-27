@@ -47,6 +47,10 @@ type outlineView struct {
 	// whatever zoom the page is already on.
 	Query        string
 	SearchAction string
+	// SyncSearch makes outline-swap re-send the search box out of band, so
+	// an htmx zoom points its Action at the new root — issue #392. False
+	// when the search box sent the request itself: see outline-swap.
+	SyncSearch bool
 	// Title and Shell are only populated by renderOutlineFragment, for the
 	// shell-crumb-tail OOB block outline-swap emits — a full page render's
 	// shell crumb comes from render.Page directly (via app.Deps.Page),

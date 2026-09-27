@@ -455,10 +455,13 @@ func TestRenderedOverlayIsNotOutOfBandOnAnOrdinaryRender(t *testing.T) {
 // it in.
 func assertOnlyKnownOOBIsOOB(t *testing.T, body string) {
 	t.Helper()
-	allowed := map[string]bool{"show-completed-toggle": true, "due-badge": true, "outline-heading": true, "shell-crumb-tail": true}
+	allowed := map[string]bool{
+		"show-completed-toggle": true, "due-badge": true, "outline-heading": true, "shell-crumb-tail": true,
+		"notes-export-link": true, "notes-copy-markdown": true, "notes-import-root": true, "notes-prefs-root": true, "notes-search": true,
+	}
 	for _, n := range htmlassert.Parse(t, body).QueryAll("[hx-swap-oob]") {
 		if id, _ := htmlassert.Attr(n, "id"); !allowed[id] {
-			t.Errorf("unexpected hx-swap-oob element (id=%q); only show-completed-toggle, due-badge, outline-heading, and shell-crumb-tail may be out of band", id)
+			t.Errorf("unexpected hx-swap-oob element (id=%q); only the toolbar's own controls, outline-heading, and shell-crumb-tail may be out of band", id)
 		}
 	}
 }
@@ -3271,21 +3274,8 @@ func TestExportOfASubtree(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "- child\n") {
-		t.Errorf("export body = %q, missing the child", body)
-	}
-	// A loose strings.Contains(body, "root") / "unrelated") check would
-	// still catch the root or unrelated bullet's own exported line being
-	// present — it's a strict superset of the exact-line check below. Its
-	// real defect is brittleness: it would only happen to pass because no
-	// other fixture in this test contains those strings as a substring,
-	// not because it's a reliable check on its own. Assert the exact
-	// absence of each one's own line instead.
-	if strings.Contains(body, "- root\n") {
-		t.Errorf("export body = %q, must not include the excluded root's own bullet line", body)
-	}
-	if strings.Contains(body, "- unrelated\n") {
-		t.Errorf("export body = %q, must not include the unrelated bullet's own line", body)
+	if want := "- root\n  - child\n"; body != want {
+		t.Errorf("export body = %q, want %q (the root itself, then its child, and nothing unrelated)", body, want)
 	}
 }
 
@@ -3326,6 +3316,115 @@ func TestOutlineToolbarHasAnExportLink(t *testing.T) {
 	}
 	if got, _ := htmlassert.Attr(link, "href"); got != "/notes/export?root=0" {
 		t.Errorf("export link href = %q, want /notes/export?root=0", got)
+	}
+}
+
+// TestOutlineToolbarHasACopyAsMarkdownButton — issue #392: the toolbar
+// copies the current zoom's subtree through theme.js's data-copy-raw,
+// fetching the same Markdown the Export link downloads.
+func TestOutlineToolbarHasACopyAsMarkdownButton(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	btn := s.Get(t, s.Alice, "/notes/"+itoa(id)).MustHave("#notes-copy-markdown")
+	if got, _ := htmlassert.Attr(btn, "data-copy-raw"); got != "/notes/export?root="+itoa(id) {
+		t.Errorf("copy button data-copy-raw = %q, want /notes/export?root=%d", got, id)
+	}
+	if got, _ := htmlassert.Attr(btn, "type"); got != "button" {
+		t.Errorf("copy button type = %q, want button (it must never submit a form)", got)
+	}
+}
+
+// TestRowMenuHasACopyAsMarkdownButton — issue #392: any bullet's subtree
+// can be copied from its own "…" menu, not just the zoomed-in one.
+func TestRowMenuHasACopyAsMarkdownButton(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	doc := s.Get(t, s.Alice, "/notes/")
+	var btn *html.Node
+	for _, n := range doc.QueryAll("[data-copy-raw]") {
+		if got, _ := htmlassert.Attr(n, "data-copy-raw"); got == "/notes/export?root="+itoa(id) {
+			btn = n
+		}
+	}
+	if btn == nil {
+		t.Fatalf("no data-copy-raw button for bullet %d's subtree", id)
+	}
+	if got, _ := htmlassert.Attr(btn, "type"); got != "button" {
+		t.Errorf("row copy button type = %q, want button (the row menu lives inside the row's form)", got)
+	}
+	if !strings.Contains(htmlassert.Text(btn), "Copy as Markdown") {
+		t.Errorf("row copy button text = %q, want it to read Copy as Markdown", htmlassert.Text(btn))
+	}
+}
+
+// TestZoomingViaHTMXRefreshesTheToolbarsRoot is issue #392's bug: every
+// toolbar control that carries the zoom root lives outside #outline, so an
+// htmx zoom must re-send each one out of band — otherwise Export, Copy,
+// Import, the Completed toggle and search all keep acting on whatever
+// root the page was first loaded at.
+func TestZoomingViaHTMXRefreshesTheToolbarsRoot(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	req := httptest.NewRequest("GET", "/notes/"+itoa(id), nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	checks := []struct{ sel, attr, want string }{
+		{"#notes-export-link", "href", "/notes/export?root=" + itoa(id)},
+		{"#notes-copy-markdown", "data-copy-raw", "/notes/export?root=" + itoa(id)},
+		{"#notes-import-root", "value", itoa(id)},
+		{"#notes-prefs-root", "value", itoa(id)},
+		{"#notes-search", "action", "/notes/" + itoa(id)},
+		{"#notes-search-input", "hx-get", "/notes/" + itoa(id)},
+	}
+	for _, c := range checks {
+		n := doc.MustHave(c.sel)
+		if got, _ := htmlassert.Attr(n, c.attr); got != c.want {
+			t.Errorf("%s %s = %q, want %q", c.sel, c.attr, got, c.want)
+		}
+	}
+	for _, sel := range []string{"#notes-export-link", "#notes-copy-markdown", "#notes-import-root", "#notes-prefs-root", "#notes-search"} {
+		if got, _ := htmlassert.Attr(doc.MustHave(sel), "hx-swap-oob"); got != "true" {
+			t.Errorf("%s hx-swap-oob = %q, want true", sel, got)
+		}
+	}
+}
+
+// TestSearchingViaHTMXDoesNotReplaceTheSearchBox: the search box's own
+// request must not swap the box out from under the user — it would reset
+// whatever they typed while the request was in flight. Its root can't
+// have changed anyway: typing doesn't zoom.
+func TestSearchingViaHTMXDoesNotReplaceTheSearchBox(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "Projects")
+
+	req := httptest.NewRequest("GET", "/notes/"+itoa(id)+"?q=pro", nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Trigger", "notes-search-input")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	htmlassert.Parse(t, rec.Body.String()).MustNotHave("#notes-search")
+}
+
+// TestFullPageToolbarRootIsNotOutOfBand: the page render's copies of the
+// toolbar's root-carrying controls must not carry hx-swap-oob, same
+// discipline as the show-completed toggle.
+func TestFullPageToolbarRootIsNotOutOfBand(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/notes/")
+	for _, sel := range []string{"#notes-export-link", "#notes-copy-markdown", "#notes-import-root", "#notes-prefs-root", "#notes-search"} {
+		if _, ok := htmlassert.Attr(doc.MustHave(sel), "hx-swap-oob"); ok {
+			t.Errorf("the page render's %s carries hx-swap-oob", sel)
+		}
 	}
 }
 

@@ -341,7 +341,10 @@ trailing `@YYYY-MM-DD` for a due date:
 ```
 
 `GET /notes/export` downloads the whole tree; `GET /notes/export?root={id}`
-downloads a subtree. `POST /notes/import` parses the same format into a chosen
+downloads one bullet and its subtree, the bullet itself as the top-level line
+(issue #392). The toolbar's Export and Copy follow the current zoom, and any
+bullet's menu has "Copy as Markdown" — Copy puts the same Markdown on the
+clipboard instead of downloading it. `POST /notes/import` parses the same format into a chosen
 parent. Because done state and due dates are encoded, a document round-trips.
 
 The parser is shared with **paste-a-multi-line-block-into-a-bullet**, which
