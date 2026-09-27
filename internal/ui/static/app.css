@@ -845,11 +845,15 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 .admin-tag-public,
 .admin-tag-failed { background: var(--c-danger-bg); color: var(--c-danger); }
 .admin-tag-ok,
+.admin-tag-running,
 .admin-tag-flag { background: var(--c-accent-bg); color: var(--c-accent); }
 .admin-tag-off,
 .admin-tag-default,
 .admin-tag-environment,
 .admin-tag-derived { background: var(--c-bg-inset); color: var(--c-text-dim); }
+
+/* Keeps a per-row action button on one line in a narrow table column. */
+.admin-table .nowrap { white-space: nowrap; }
 
 /* The admin entry is not an app, so it sits below a separator at the very
  * bottom of the sidebar rather than in the app list. A plain <hr> rather than

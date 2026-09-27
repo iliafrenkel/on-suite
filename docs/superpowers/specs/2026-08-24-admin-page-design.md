@@ -319,7 +319,11 @@ SQLite file in a temp dir, handler tests through the real middleware stack,
 Each is a separate spec if it is ever wanted:
 
 - Any control that changes state — trigger a backup, sweep sessions, create or
-  promote a user, delete another user's data.
+  promote a user, delete another user's data. (Users: done in
+  [2026-09-27-user-management-design.md](2026-09-27-user-management-design.md).
+  Running jobs: done in
+  [2026-09-27-trigger-jobs-design.md](2026-09-27-trigger-jobs-design.md). Both
+  live on sibling pages, so `/admin/` itself stays read-only.)
 - Runtime-editable settings.
 - A log tail or in-memory log ring buffer.
 - Request or latency metrics.

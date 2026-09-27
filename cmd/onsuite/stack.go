@@ -12,6 +12,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
 	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
+	"github.com/iliafrenkel/on-suite/internal/platform/jobsadmin"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/usermgmt"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -127,6 +128,19 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		Nav:     deps.Registry.NavItems(),
 		Version: deps.Version,
 	})
+
+	// Running a job on demand starts work, so it lives beside the read-only
+	// admin page rather than inside it, like user management (#311).
+	if deps.Jobs != nil {
+		jobsadmin.Routes(mux, routes, authn, jobsadmin.Deps{
+			Jobs:    deps.Jobs,
+			Render:  rend,
+			Errors:  errs,
+			Log:     deps.Log,
+			Nav:     deps.Registry.NavItems(),
+			Version: deps.Version,
+		})
+	}
 
 	routes.Handle(mux, "GET /{$}", false, authn.RequireUser(homeHandler(deps, rend, errs)))
 	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))

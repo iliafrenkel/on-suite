@@ -337,12 +337,15 @@ func TestTheJobsSectionListsRegisteredJobsAndTheirState(t *testing.T) {
 // "admin-tag-failed" class and "failed" text, which is the exact branch a
 // review found the plan had specified incorrectly (as "admin-tag-public").
 func TestTheJobsSectionShowsOutcomesForJobsThatHaveRun(t *testing.T) {
-	ctx := context.Background()
 	reg := jobs.NewRegistry()
 	reg.Register("successful thing", "always works", time.Hour, func(context.Context) error { return nil })
 	reg.Register("failed thing", "always fails", time.Hour, func(context.Context) error { return errors.New("boom") })
-	reg.RunOnceForTest(ctx, "successful thing")
-	reg.RunOnceForTest(ctx, "failed thing")
+	for _, slug := range []string{"successful-thing", "failed-thing"} {
+		if err := reg.Trigger(slug); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reg.Wait()
 
 	s := newServerWith(t, reg)
 	doc := htmlassert.Parse(t, s.get(t, s.admin, "/admin/").Body.String())
@@ -723,4 +726,10 @@ func TestTheUsersSectionLinksToUserManagement(t *testing.T) {
 	s := newServer(t)
 	rec := s.get(t, s.admin, "/admin/")
 	htmlassert.Parse(t, rec.Body.String()).MustHave(`#users a[href="/admin/users"]`)
+}
+
+func TestTheJobsSectionLinksToTheJobsPage(t *testing.T) {
+	s := newServer(t)
+	rec := s.get(t, s.admin, "/admin/")
+	htmlassert.Parse(t, rec.Body.String()).MustHave(`#jobs a[href="/admin/jobs"]`)
 }

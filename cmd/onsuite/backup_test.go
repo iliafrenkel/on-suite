@@ -372,7 +372,10 @@ func TestTheSnapshotJobWritesASnapshot(t *testing.T) {
 	registerMaintenance(reg, handle, auth.NewStore(handle),
 		config.Config{DataDir: dir, BackupInterval: time.Hour, BackupKeep: 3},
 		slog.New(slog.DiscardHandler))
-	reg.RunOnceForTest(context.Background(), "database snapshot")
+	if err := reg.Trigger("database-snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	reg.Wait()
 
 	entries, err := os.ReadDir(filepath.Join(dir, "backups"))
 	if err != nil {

@@ -144,10 +144,11 @@ participates in `onsuite export` automatically; one implementing `Stater`
 (`Stats(ctx, db) ([]app.Stat, error)`) gets a card on the admin page. Apps
 that don't implement these are silently skipped — that's a design choice.
 
-**Two platform packages exist only for operations.**
+**Several platform packages exist only for operations.**
 [internal/platform/jobs](internal/platform/jobs/jobs.go) is a generic interval
-scheduler that remembers how each run went; it takes closures and imports
-nothing else in the module, so it never learns what a backup is.
+scheduler that remembers how each run went and can run any job on demand
+(`Trigger`); it takes closures and imports nothing else in the module, so it
+never learns what a backup is.
 [internal/platform/admin](internal/platform/admin/admin.go) is the read-only
 admin page at `/admin/`, guarded by `Auth.RequireAdmin` — a signed-in
 non-admin gets the same 404 as a URL that does not exist. It is a platform
@@ -161,6 +162,12 @@ passwords, and `/account` lets anyone change their own password. `auth.Store`
 enforces that at least one admin always remains (`ErrLastAdmin`). Its design
 is in
 [docs/superpowers/specs/2026-09-27-user-management-design.md](docs/superpowers/specs/2026-09-27-user-management-design.md).
+
+[internal/platform/jobsadmin](internal/platform/jobsadmin/jobsadmin.go) is the
+other writable sibling: `/admin/jobs` (admin-only, same 404 guard) lists every
+job with a **Run now** button, runs it in the background, and polls the table
+with HTMX until it finishes. Its design is in
+[docs/superpowers/specs/2026-09-27-trigger-jobs-design.md](docs/superpowers/specs/2026-09-27-trigger-jobs-design.md).
 
 ## Commit messages
 
