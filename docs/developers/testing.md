@@ -178,7 +178,9 @@ served inside the app as well (#309).
 
 ## Refreshing screenshots
 
-How to regenerate the README and user-guide screenshots is described in
-docs/screenshots/README.md, added with the screenshot tooling.
+The README and user-guide screenshots are generated from a server running
+on seeded demo data, by a headless-Chrome tool in `docs/screenshots/`.
+[`docs/screenshots/README.md`](../screenshots/README.md) has the commands
+to refresh them all and explains how to add a new one.
 
 **Next:** [Releasing](releasing.md)
