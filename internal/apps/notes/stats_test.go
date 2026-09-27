@@ -94,6 +94,34 @@ func TestStatsCountsOverdueLikeTheDueList(t *testing.T) {
 	}
 }
 
+// TestStatsOverdueUsesLocalToday pins #379: at 08:00 in Melbourne it is
+// still yesterday in UTC, and the admin count must agree with the outline's
+// overdue chips, which use the server's local date. Swaps time.Local, so it
+// must not run in parallel.
+func TestStatsOverdueUsesLocalToday(t *testing.T) {
+	saved := time.Local
+	time.Local = time.FixedZone("AEST", 10*3600)
+	t.Cleanup(func() { time.Local = saved })
+
+	f := newFixture(t)
+	ctx := context.Background()
+	// 2026-06-15 08:00 local is 2026-06-14 22:00 UTC.
+	f.store.SetClock(func() time.Time { return time.Date(2026, 6, 14, 22, 0, 0, 0, time.UTC) })
+
+	due := f.mk(t, notes.RootID, "due yesterday, locally")
+	if err := f.store.SetDue(ctx, f.alice.ID, due.ID, "2026-06-14"); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err := f.store.Stats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := statValue(t, stats, "Overdue"); got != "1" {
+		t.Errorf(`"Overdue" = %q, want "1" (overdue by the local date)`, got)
+	}
+}
+
 func TestStatsReportsNewestBulletAndNeverForAnEmptyInstance(t *testing.T) {
 	f := newFixture(t)
 	stats, err := f.store.Stats(context.Background())
