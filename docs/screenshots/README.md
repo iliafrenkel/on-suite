@@ -38,9 +38,11 @@ before writing a setup script.
 From the repository root:
 
 ```bash
+# The version shown in screenshot footers; bump it per release.
+VERSION=v2.0.0
 SEED=$(mktemp -d)/demo
 go run ./docs/screenshots/seed --data-dir $SEED
-go build -o $SEED/onsuite ./cmd/onsuite
+go build -ldflags "-X main.version=$VERSION" -o $SEED/onsuite ./cmd/onsuite
 $SEED/onsuite serve --addr :8308 --data-dir $SEED &
 SERVER=$!
 until curl -fs http://localhost:8308/healthz >/dev/null; do sleep 0.2; done
