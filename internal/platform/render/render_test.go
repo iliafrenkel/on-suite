@@ -12,6 +12,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 	"github.com/iliafrenkel/on-suite/internal/ui"
+	"golang.org/x/net/html"
 )
 
 func testRenderer(t *testing.T) *render.Renderer {
@@ -89,9 +90,66 @@ func TestPageRendersADocumentWithTheShell(t *testing.T) {
 	}
 
 	doc.MustHave(".shell-user")
-	if got := htmlassert.Text(doc.MustHave(`.shell-user a[href="/account"]`)); got != "ilia" {
-		t.Errorf("username = %q", got)
+	if got := htmlassert.Text(doc.MustHave(`.shell-user-menu summary`)); got != "ilia" {
+		t.Errorf("user menu button = %q, want the username", got)
 	}
+}
+
+// TestShellPutsUserActionsBehindOneMenu covers #403: the top right holds the
+// connectivity dot and a single user menu, and everything else (Account,
+// Log out, theme and font) lives inside that menu.
+func TestShellPutsUserActionsBehindOneMenu(t *testing.T) {
+	r := testRenderer(t)
+	rec := httptest.NewRecorder()
+
+	err := r.Page(rec, http.StatusOK, "error", render.Page{
+		Shell: render.Shell{LoggedIn: true, Username: "ilia", CSRFToken: "tok123"},
+		Data:  map[string]any{"Status": 404, "Title": "Not found", "Message": "no such page"},
+	})
+	if err != nil {
+		t.Fatalf("Page: %v", err)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	// Only two things sit directly in the header's user area.
+	var children []*html.Node
+	for c := doc.MustHave(".shell-user").FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode {
+			children = append(children, c)
+		}
+	}
+	if len(children) != 2 {
+		t.Fatalf(".shell-user has %d child elements, want 2 (indicator and menu)", len(children))
+	}
+	if _, ok := htmlassert.Attr(children[0], "data-conn-indicator"); !ok {
+		t.Errorf("first child is <%s>, want the connectivity indicator", children[0].Data)
+	}
+	menu := children[1]
+	if class, _ := htmlassert.Attr(menu, "class"); menu.Data != "details" || class != "shell-user-menu" {
+		t.Fatalf("second child is <%s class=%q>, want <details class=\"shell-user-menu\">", menu.Data, class)
+	}
+	if _, open := htmlassert.Attr(menu, "open"); open {
+		t.Error("the user menu renders open")
+	}
+	doc.MustHave(".shell-user-menu summary svg")
+
+	panel := ".shell-user-menu-panel"
+	doc.MustHave(".shell-user-menu " + panel)
+	if got := htmlassert.Text(doc.MustHave(panel + ` a[href="/account"]`)); got != "Account" {
+		t.Errorf("Account link = %q", got)
+	}
+	form := doc.MustHave(panel + ` form[action="/logout"]`)
+	if m, _ := htmlassert.Attr(form, "method"); m != "post" {
+		t.Errorf("logout form method = %q, want post", m)
+	}
+	if got, _ := htmlassert.Attr(doc.MustHave(panel+` form[action="/logout"] input[name="`+web.CSRFFormField+`"]`), "value"); got != "tok123" {
+		t.Errorf("logout CSRF token = %q", got)
+	}
+	if got := htmlassert.Text(doc.MustHave(panel + ` form[action="/logout"] button`)); got != "Log out" {
+		t.Errorf("logout button = %q", got)
+	}
+	doc.MustHave(panel + " [data-theme-switch]")
+	doc.MustHave(panel + " [data-font-switch]")
 }
 
 // TestShellHasConnectivityIndicator covers the element connectivity.js
@@ -117,11 +175,6 @@ func TestShellHasConnectivityIndicator(t *testing.T) {
 	}
 	doc.MustHave(".shell-user [data-conn-indicator] .conn-dot")
 
-	// Still the username test's first .shell-user link, unaffected by the
-	// new indicator (which is a div, not a link).
-	if got := htmlassert.Text(doc.MustHave(`.shell-user a[href="/account"]`)); got != "ilia" {
-		t.Errorf("username = %q", got)
-	}
 }
 
 // TestPageTurnsOffHTMXIndicatorStyles guards #400: htmx injects an inline

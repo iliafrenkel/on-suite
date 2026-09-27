@@ -271,30 +271,100 @@ kbd {
 	color: var(--c-text-dim);
 }
 
-.shell-user form { display: inline; }
+/* ---- User menu (#403) ---- */
 
-.shell-settings { position: relative; }
-.shell-settings summary { list-style: none; cursor: pointer; }
-.shell-settings summary::-webkit-details-marker { display: none; }
+/* One button in the header's top right: icon, username, chevron. It opens a
+ * panel holding Account, the display settings and Log out. */
+.shell-user-menu { position: relative; }
+.shell-user-menu summary { list-style: none; cursor: pointer; }
+.shell-user-menu summary::-webkit-details-marker { display: none; }
 
-.shell-settings-menu {
+.shell-user-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	max-width: 14rem;
+	color: var(--c-text);
+}
+
+.shell-user-toggle .toolbar-icon:last-child {
+	width: 0.9rem;
+	height: 0.9rem;
+	color: var(--c-text-dim);
+	transition: transform 120ms ease-out;
+}
+
+.shell-user-menu[open] .shell-user-toggle { background: var(--c-bg-inset); }
+.shell-user-menu[open] .shell-user-toggle .toolbar-icon:last-child { transform: rotate(180deg); }
+
+.shell-user-name {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.shell-user-menu-panel {
 	position: absolute;
 	right: 0;
 	top: calc(100% + var(--s-2));
 	z-index: 10;
-	min-width: 12rem;
-	padding: var(--s-3);
+	display: flex;
+	flex-direction: column;
+	min-width: 14rem;
+	padding: var(--s-1);
 	background: var(--c-bg);
 	border: var(--border);
 	border-radius: var(--radius);
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+	color: var(--c-text);
 }
 
-.shell-settings-menu .field { margin-bottom: var(--s-3); }
-.shell-settings-menu .field:last-child { margin-bottom: 0; }
-.shell-settings-menu .row { flex-wrap: wrap; margin-top: var(--s-1); }
-.shell-settings-menu button[data-theme-value].active,
-.shell-settings-menu button[data-font-value].active {
+.shell-user-menu-panel form { display: block; }
+
+/* Account and Log out: full-width rows, a link and a button that look the
+ * same. */
+.shell-menu-item {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	width: 100%;
+	padding: var(--s-2);
+	border: none;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--c-text);
+	font: inherit;
+	font-size: var(--fs-sm);
+	text-align: left;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.shell-menu-item:hover { background: var(--c-bg-inset); }
+
+.shell-menu-separator {
+	margin: var(--s-1) 0;
+	border: none;
+	border-top: var(--border);
+}
+
+.shell-menu-settings { padding: var(--s-2); }
+
+.shell-menu-heading {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	margin-bottom: var(--s-2);
+	font-size: var(--fs-sm);
+	font-weight: 500;
+}
+
+.shell-menu-settings .field { margin-bottom: var(--s-2); }
+.shell-menu-settings .field:last-child { margin-bottom: 0; }
+.shell-menu-settings .row { flex-wrap: wrap; margin-top: var(--s-1); }
+.shell-menu-settings button[data-theme-value].active,
+.shell-menu-settings button[data-font-value].active {
 	background: var(--c-accent-bg);
 	color: var(--c-accent);
 	border-color: var(--c-accent);
@@ -888,11 +958,6 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	border: none;
 	border-top: var(--border);
 }
-
-/* The header username is the way into /account (#310): a link, but still
- * reading as the plain name it replaced. */
-.shell-username { color: inherit; text-decoration: none; }
-.shell-username:hover { text-decoration: underline; }
 
 /* ---- Outline (ON Notes) ------------------------------------------------- */
 
@@ -1745,6 +1810,10 @@ kbd {
 		flex-wrap: wrap;
 		gap: var(--s-2) var(--s-4);
 	}
+
+	/* The user menu button keeps the name (it is the button's accessible
+	 * name) but gives it less room. */
+	.shell-user-toggle { max-width: 9rem; }
 
 	/* The sidebar has no room to sit beside content at phone width, so it
 	 * always renders in its existing icon-only collapsed state here,
