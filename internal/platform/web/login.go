@@ -55,7 +55,7 @@ type Auth struct {
 	version string
 
 	now     func() time.Time
-	limiter *attemptLimiter
+	limiter *AttemptLimiter
 }
 
 func NewAuth(opts AuthOptions) *Auth {
@@ -68,7 +68,7 @@ func NewAuth(opts AuthOptions) *Auth {
 		secure:  opts.Secure,
 		version: opts.Version,
 		now:     func() time.Time { return time.Now().UTC() },
-		limiter: newAttemptLimiter(),
+		limiter: NewAttemptLimiter(),
 	}
 }
 
@@ -186,7 +186,7 @@ func (a *Auth) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := strings.ToLower(username) + "|" + clientIP(r)
-	if !a.limiter.allow(key, a.now()) {
+	if !a.limiter.Allow(key, a.now()) {
 		a.log.Warn("login rate limit reached", "username", username, "ip", clientIP(r))
 		a.errs.Status(w, r, http.StatusTooManyRequests)
 		return
@@ -201,7 +201,7 @@ func (a *Auth) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		// Spend the same work as a real verification, so response timing does
 		// not reveal whether the account exists.
 		auth.DummyVerify(password)
-		a.limiter.record(key, a.now())
+		a.limiter.Record(key, a.now())
 		a.renderLogin(w, r, http.StatusUnauthorized, loginFailedMessage, username, next)
 		return
 	}
@@ -213,12 +213,12 @@ func (a *Auth) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		a.limiter.record(key, a.now())
+		a.limiter.Record(key, a.now())
 		a.renderLogin(w, r, http.StatusUnauthorized, loginFailedMessage, username, next)
 		return
 	}
 
-	a.limiter.clear(key)
+	a.limiter.Clear(key)
 
 	sess, err := a.users.CreateSession(r.Context(), user.ID)
 	if err != nil {
@@ -320,43 +320,45 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-// attemptLimiter counts recent failures per key.
+// AttemptLimiter counts recent failures per key and refuses more once a key
+// has maxLoginAttempts inside loginWindow. Login keys it by username and IP;
+// usermgmt keys the /account current-password check by user id (#397).
 //
 // In memory on purpose: a restart clearing it is acceptable for a suite with a
 // handful of users, and it avoids a schema plus a database write on every
 // failed guess.
-type attemptLimiter struct {
+type AttemptLimiter struct {
 	mu       sync.Mutex
 	attempts map[string][]time.Time
 }
 
-func newAttemptLimiter() *attemptLimiter {
-	return &attemptLimiter{attempts: make(map[string][]time.Time)}
+func NewAttemptLimiter() *AttemptLimiter {
+	return &AttemptLimiter{attempts: make(map[string][]time.Time)}
 }
 
-// allow reports whether another attempt may be made.
-func (l *attemptLimiter) allow(key string, now time.Time) bool {
+// Allow reports whether another attempt may be made.
+func (l *AttemptLimiter) Allow(key string, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return len(l.prune(key, now)) < maxLoginAttempts
 }
 
-// record notes a failure.
-func (l *attemptLimiter) record(key string, now time.Time) {
+// Record notes a failure.
+func (l *AttemptLimiter) Record(key string, now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.attempts[key] = append(l.prune(key, now), now)
 }
 
-// clear forgets a key after a success.
-func (l *attemptLimiter) clear(key string) {
+// Clear forgets a key after a success.
+func (l *AttemptLimiter) Clear(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.attempts, key)
 }
 
 // prune drops attempts outside the window. Callers hold the lock.
-func (l *attemptLimiter) prune(key string, now time.Time) []time.Time {
+func (l *AttemptLimiter) prune(key string, now time.Time) []time.Time {
 	cutoff := now.Add(-loginWindow)
 	kept := l.attempts[key][:0]
 	for _, t := range l.attempts[key] {

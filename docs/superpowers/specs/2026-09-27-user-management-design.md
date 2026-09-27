@@ -226,5 +226,9 @@ sessions were signed out." `onsuite user` help lists the new subcommand.
 ## 10. Out of scope
 
 Invite links, email, forced password change, renaming users, disabling
-(rather than deleting) accounts, per-user session lists or remote sign-out,
-and rate-limiting the `/account` current-password check.
+(rather than deleting) accounts, and per-user session lists or remote
+sign-out.
+
+Rate-limiting the `/account` current-password check was out of scope here
+and was added later (#397): the same 10 tries per 15 minutes as login, keyed
+by user id, answered with a 429.

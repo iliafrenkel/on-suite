@@ -2,6 +2,7 @@ package usermgmt
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -42,15 +43,26 @@ func (h *handlers) changePassword(w http.ResponseWriter, r *http.Request) {
 		h.renderAccount(w, r, http.StatusUnprocessableEntity, accountPage{Error: msg})
 	}
 
+	// Checked before the verify, so a locked-out caller costs no Argon2id
+	// work. Keyed by user id, not IP: whoever holds a stolen cookie can
+	// change address, but not whose account the cookie is for (#397).
+	key := strconv.FormatInt(me.ID, 10)
+	if !h.passwordAttempts.Allow(key, h.d.Now()) {
+		h.d.Log.Warn("account password rate limit reached", "username", me.Username)
+		h.d.Errors.Status(w, r, http.StatusTooManyRequests)
+		return
+	}
 	ok, err := auth.VerifyPassword(me.PasswordHash, current)
 	if err != nil {
 		h.d.Errors.Internal(w, r, err)
 		return
 	}
 	if !ok {
+		h.passwordAttempts.Record(key, h.d.Now())
 		reject("Your current password is incorrect.")
 		return
 	}
+	h.passwordAttempts.Clear(key)
 	if next != confirm {
 		reject("The new passwords don't match.")
 		return
