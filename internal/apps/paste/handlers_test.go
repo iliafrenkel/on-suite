@@ -289,7 +289,7 @@ func TestCreatedAtUsesThePinnedClock(t *testing.T) {
 	id := s.createSnippet(t, s.Alice, "My config", "yaml", "key: value\n")
 
 	doc := s.Get(t, s.Alice, "/paste/"+itoa(id))
-	if got := htmlassert.Text(doc.MustHave("time")); got != "10 Mar 2026 12:00" {
+	if got := htmlassert.Text(doc.MustHave("#detail-view time")); got != "10 Mar 2026 12:00" {
 		t.Errorf("created-at time = %q, want %q", got, "10 Mar 2026 12:00")
 	}
 }
@@ -626,6 +626,78 @@ func TestListShowsOnlyYourSnippetsNewestFirst(t *testing.T) {
 	}
 	if text := doc.Text(); strings.Contains(text, "bob") {
 		t.Error("another user's snippet appeared in the list")
+	}
+}
+
+// TestListRowIsCompact — issue #393: a row is one head line (title, then
+// metadata as small pills and a short date) plus the one-line preview.
+func TestListRowIsCompact(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC))
+	s.createSnippet(t, s.Alice, "typed", "go", "package main\n\nfunc main() {}\n")
+	s.Clock.Set(time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC))
+
+	row := s.Get(t, s.Alice, "/paste/") // the only snippet, so the only row
+
+	if got := htmlassert.Text(row.MustHave(".snippet-title")); got != "typed" {
+		t.Errorf("title = %q, want typed", got)
+	}
+	if got := htmlassert.Text(row.MustHave(".snippet-pill-lang")); got != "Go" {
+		t.Errorf("language pill = %q, want Go", got)
+	}
+	if got := htmlassert.Text(row.MustHave(".snippet-pill-lines")); got != "3 lines" {
+		t.Errorf("lines pill = %q, want 3 lines", got)
+	}
+	date := row.MustHave(".snippet-date")
+	if got := htmlassert.Text(date); got != "1 Sep" {
+		t.Errorf("date = %q, want the short form 1 Sep (theme.js turns recent ones relative)", got)
+	}
+	if got, _ := htmlassert.Attr(date, "data-relative"); got != "short" {
+		t.Errorf("date data-relative = %q, want short", got)
+	}
+	if got, _ := htmlassert.Attr(date, "title"); got != "1 Sep 2026 12:00" {
+		t.Errorf("date title = %q, want the full timestamp", got)
+	}
+	row.MustNotHave(".snippet-meta")
+}
+
+// TestListRowDateNamesTheYearOnceItIsNotThisOne: "1 Sep" alone would be
+// ambiguous for a snippet from an earlier year.
+func TestListRowDateNamesTheYearOnceItIsNotThisOne(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(time.Date(2025, 9, 1, 12, 0, 0, 0, time.UTC))
+	s.createSnippet(t, s.Alice, "old", "go", "package main\n")
+	s.Clock.Set(time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC))
+
+	if got := htmlassert.Text(s.Get(t, s.Alice, "/paste/").MustHave(".snippet-date")); got != "Sep 2025" {
+		t.Errorf("date = %q, want Sep 2025", got)
+	}
+}
+
+// TestListRowHidesTheAutoLanguagePill — issue #393: "Detect automatically"
+// is too long for a pill and says nothing about the snippet itself.
+func TestListRowHidesTheAutoLanguagePill(t *testing.T) {
+	s := newServer(t)
+	s.createSnippet(t, s.Alice, "auto", "", "just text\n")
+
+	doc := s.Get(t, s.Alice, "/paste/")
+	doc.MustNotHave(".snippet-pill-lang")
+	doc.MustHave(".snippet-pill-lines")
+}
+
+// TestListRowMarksASharedSnippet: the shared marker is an icon-only pill,
+// so it needs a text alternative for screen readers.
+func TestListRowMarksASharedSnippet(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "public", "go", "package main\n")
+	s.Post(t, s.Alice, "/paste/"+itoa(id)+"/share", url.Values{})
+
+	pill := s.Get(t, s.Alice, "/paste/").MustHave(".snippet-pill-shared")
+	if got, _ := htmlassert.Attr(pill, "title"); got != "Shared with a public link" {
+		t.Errorf("shared pill title = %q", got)
+	}
+	if got := htmlassert.Text(pill); got != "Shared" {
+		t.Errorf("shared pill text = %q, want a visually hidden Shared", got)
 	}
 }
 

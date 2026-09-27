@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -154,9 +155,25 @@ func upperFirst(s string) string {
 // listItem is one row on the list page. The preview is computed here rather
 // than in the template so the truncation rules are testable.
 type listItem struct {
-	Snippet  Snippet
-	Preview  string
+	Snippet Snippet
+	Preview string
+	// Language is the language pill's label, "" for "Detect automatically"
+	// — too long for a pill, and it says nothing about the snippet itself
+	// (issue #393). The detail pane still shows the full label.
 	Language string
+	// Date is CreatedAt as shortDate renders it. theme.js replaces it with
+	// a short relative form ("5m", "3d") when it is recent enough.
+	Date string
+}
+
+// shortDate is a list row's compact date: "1 Sep" within now's year,
+// "Sep 2025" otherwise, where the day alone would be ambiguous.
+func shortDate(t, now time.Time) string {
+	t, now = t.Local(), now.Local()
+	if t.Year() == now.Year() {
+		return t.Format("2 Jan")
+	}
+	return t.Format("Jan 2006")
 }
 
 const previewRunes = 100
@@ -315,13 +332,18 @@ func (a *App) listItems(ctx context.Context, userID int64) ([]listItem, error) {
 	if err != nil {
 		return nil, err
 	}
+	now := a.store.now()
 	items := make([]listItem, 0, len(snippets))
 	for _, s := range snippets {
-		items = append(items, listItem{
-			Snippet:  s,
-			Preview:  preview(s.Body, previewRunes),
-			Language: LanguageLabel(s.Language),
-		})
+		item := listItem{
+			Snippet: s,
+			Preview: preview(s.Body, previewRunes),
+			Date:    shortDate(s.CreatedAt, now),
+		}
+		if s.Language != "" {
+			item.Language = LanguageLabel(s.Language)
+		}
+		items = append(items, item)
 	}
 	return items, nil
 }
