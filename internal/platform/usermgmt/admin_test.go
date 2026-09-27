@@ -94,22 +94,44 @@ func TestAddingAnAdministrator(t *testing.T) {
 }
 
 func TestAddingABadUsernameShowsANoticeAndKeepsTheForm(t *testing.T) {
+	const adminBox = `form.usermgmt-add input[name="admin"]`
 	for _, name := range []string{"a", "ILIA", "has space"} {
-		t.Run(name, func(t *testing.T) {
-			s := newServer(t)
-			rec := s.post(t, s.root, "/admin/users", url.Values{"username": {name}, "admin": {"1"}})
-			if rec.Code != http.StatusUnprocessableEntity {
-				t.Fatalf("status = %d, want 422", rec.Code)
-			}
-			doc := s.doc(t, rec)
-			doc.MustHave(".notice-error")
-			doc.MustNotHave("[data-generated-password]")
-			input := doc.MustHave(`input[name="username"]`)
-			if v, _ := htmlassert.Attr(input, "value"); v != name {
-				t.Errorf("username field = %q, want %q kept", v, name)
-			}
-			doc.MustHave(`input[checked]`) // the Administrator box, the only checkbox
-		})
+		for _, admin := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/admin=%v", name, admin), func(t *testing.T) {
+				s := newServer(t)
+				form := url.Values{"username": {name}}
+				if admin {
+					form.Set("admin", "1")
+				}
+				rec := s.post(t, s.root, "/admin/users", form)
+				if rec.Code != http.StatusUnprocessableEntity {
+					t.Fatalf("status = %d, want 422", rec.Code)
+				}
+				doc := s.doc(t, rec)
+				doc.MustHave(".notice-error")
+				doc.MustNotHave("[data-generated-password]")
+				input := doc.MustHave(`input[name="username"]`)
+				if v, _ := htmlassert.Attr(input, "value"); v != name {
+					t.Errorf("username field = %q, want %q kept", v, name)
+				}
+				if _, checked := htmlassert.Attr(doc.MustHave(adminBox), "checked"); checked != admin {
+					t.Errorf("Administrator box checked = %v, want %v kept", checked, admin)
+				}
+			})
+		}
+	}
+}
+
+func TestAddingAUserTrimsTheUsername(t *testing.T) {
+	s := newServer(t)
+	rec := s.post(t, s.root, "/admin/users", url.Values{"username": {"  alice \t"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	password := generated(t, s.doc(t, rec))
+	s.user(t, "alice") // fails the test if alice wasn't created under the trimmed name
+	if login := s.tryLogIn(t, "alice", password); login.Code != http.StatusSeeOther {
+		t.Errorf("signing in as the trimmed name = %d, want 303", login.Code)
 	}
 }
 
