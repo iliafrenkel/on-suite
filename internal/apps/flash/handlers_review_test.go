@@ -344,7 +344,7 @@ func TestReviewCardShowsTagsAsBackFacePills(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Store.SetCardTags(t.Context(), s.Alice.User.ID, c.ID, []string{"greetings"}); err != nil {
+	if _, err := applyCardForm(t, t.Context(), s.Store, s.Alice.User.ID, deck.ID, c, flash.CardForm{Tags: []string{"greetings"}}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -27,11 +27,13 @@ func aliceCardWithImage(t *testing.T, s *apptest.Server[*flash.Store]) (flash.De
 	if err != nil {
 		t.Fatal(err)
 	}
-	hash, err := s.Store.AttachCardUpload(ctx, s.Alice.User.ID, deck.ID, c.ID, flash.MediaKindImage, "image/png", onePNG)
+	got, err := applyCardForm(t, ctx, s.Store, s.Alice.User.ID, deck.ID, c, flash.CardForm{
+		Image: &flash.CardUpload{ContentType: "image/png", Data: onePNG},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return deck, c, "/flash/media/" + hash
+	return deck, got, "/flash/media/" + *got.ImageHash
 }
 
 func getMedia(t *testing.T, s *apptest.Server[*flash.Store], sess *apptest.Session, path string) *httptest.ResponseRecorder {

@@ -10,7 +10,7 @@ import (
 )
 
 // TestCardTagsAreIndexedByTag pins migration 0013: the orphan-tag NOT
-// EXISTS (both SetCardTags' inline cleanup and PurgeOrphanTags' sweep),
+// EXISTS (both replaceCardTags' inline cleanup and PurgeOrphanTags' sweep),
 // CardsByTag's cross-deck filter, and SQLite's own foreign-key check on
 // every flash_tags row deleted all look flash_card_tags up by tag_id —
 // the column that is not the leading key of its WITHOUT ROWID primary key.
@@ -43,11 +43,11 @@ func tagRowExists(t *testing.T, f *fixture, userID int64, name string) bool {
 	return n > 0
 }
 
-// TestSetCardTagsGarbageCollectsNowUnusedTags pins #289: replacing a card's
+// TestSaveCardFormGarbageCollectsNowUnusedTags pins #289: replacing a card's
 // tag set must not leave behind a flash_tags row nothing references any
 // more, but must keep a tag another of the same user's cards still carries,
 // and must never touch another user's tag of the same name.
-func TestSetCardTagsGarbageCollectsNowUnusedTags(t *testing.T) {
+func TestSaveCardFormGarbageCollectsNowUnusedTags(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	deck := qDeck(t, f, "Spanish")
@@ -63,21 +63,21 @@ func TestSetCardTagsGarbageCollectsNowUnusedTags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.bob.ID, bobCard.ID, []string{"hard"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.bob.ID, bobDeck.ID, bobCard, flash.CardForm{Tags: []string{"hard"}}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := f.store.SetCardTags(ctx, f.alice.ID, card1.ID, []string{"hard", "greetings"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, deck.ID, card1, flash.CardForm{Tags: []string{"hard", "greetings"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.alice.ID, card2.ID, []string{"hard"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, deck.ID, card2, flash.CardForm{Tags: []string{"hard"}}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Dropping "greetings" from card1 (alice's only card carrying it) must
 	// remove alice's "greetings" tag row, but "hard" stays: card2 still
 	// carries it, and so does bob's own, unrelated "hard" tag.
-	if err := f.store.SetCardTags(ctx, f.alice.ID, card1.ID, []string{"hard"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, deck.ID, card1, flash.CardForm{Tags: []string{"hard"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,7 +96,7 @@ func TestSetCardTagsGarbageCollectsNowUnusedTags(t *testing.T) {
 // sweep half: DeleteCard and DeleteDeck cascade flash_card_tags links away
 // (ON DELETE CASCADE) but leave the flash_tags row itself, since no write
 // path there is scoped to "this specific tag." PurgeOrphanTags is the
-// catch-all that removes what SetCardTags' own inline cleanup cannot reach.
+// catch-all that removes what replaceCardTags' own inline cleanup cannot reach.
 func TestPurgeOrphanTagsSweepsAcrossUsersAfterCardAndDeckDeletes(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -104,10 +104,10 @@ func TestPurgeOrphanTagsSweepsAcrossUsersAfterCardAndDeckDeletes(t *testing.T) {
 	deck := qDeck(t, f, "Spanish")
 	doomedCard := qCard(t, f, deck.ID, "hola")
 	survivingCard := qCard(t, f, deck.ID, "adios")
-	if err := f.store.SetCardTags(ctx, f.alice.ID, doomedCard.ID, []string{"doomed-by-card"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, deck.ID, doomedCard, flash.CardForm{Tags: []string{"doomed-by-card"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.alice.ID, survivingCard.ID, []string{"kept"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, deck.ID, survivingCard, flash.CardForm{Tags: []string{"kept"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -119,7 +119,7 @@ func TestPurgeOrphanTagsSweepsAcrossUsersAfterCardAndDeckDeletes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.alice.ID, doomedDeckCard.ID, []string{"doomed-by-deck"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, doomedDeck.ID, doomedDeckCard, flash.CardForm{Tags: []string{"doomed-by-deck"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,10 +138,10 @@ func TestPurgeOrphanTagsSweepsAcrossUsersAfterCardAndDeckDeletes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.bob.ID, bobDoomedCard.ID, []string{"bob-doomed-by-card"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.bob.ID, bobDeck.ID, bobDoomedCard, flash.CardForm{Tags: []string{"bob-doomed-by-card"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.bob.ID, bobKeptCard.ID, []string{"bob-kept"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.bob.ID, bobDeck.ID, bobKeptCard, flash.CardForm{Tags: []string{"bob-kept"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.store.DeleteCard(ctx, f.bob.ID, bobDeck.ID, bobDoomedCard.ID); err != nil {
@@ -155,7 +155,7 @@ func TestPurgeOrphanTagsSweepsAcrossUsersAfterCardAndDeckDeletes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The rows are orphaned now, but SetCardTags was never called again, so
+	// The rows are orphaned now, but SaveCardForm was never called again, so
 	// they must still be sitting there until the sweep runs.
 	if !tagRowExists(t, f, f.alice.ID, "doomed-by-card") {
 		t.Fatal(`"doomed-by-card" tag row is already gone before PurgeOrphanTags ran`)

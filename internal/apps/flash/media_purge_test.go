@@ -58,22 +58,18 @@ func TestPurgeOrphanMediaDeletesOnlyWhatNoCardUses(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	d, c := purgeCard(t, f)
+	_, c := purgeCard(t, f)
 
 	image, err := f.store.SaveMediaUpload(ctx, flash.MediaKindImage, "image/png", onePNG, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardMedia(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindImage, &image); err != nil {
-		t.Fatal(err)
-	}
+	setCardMediaHash(t, f.db, c.ID, flash.MediaKindImage, &image)
 	audio, err := f.store.EnsureMediaURL(ctx, flash.MediaKindAudio, "https://example.com/meow.mp3")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardMedia(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindAudio, &audio); err != nil {
-		t.Fatal(err)
-	}
+	setCardMediaHash(t, f.db, c.ID, flash.MediaKindAudio, &audio)
 	orphanUpload, err := f.store.SaveMediaUpload(ctx, flash.MediaKindImage, "image/png", onePNG2, now)
 	if err != nil {
 		t.Fatal(err)
@@ -111,27 +107,21 @@ func TestPurgeOrphanMediaFollowsReplaceRemoveAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardMedia(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindImage, &first); err != nil {
-		t.Fatal(err)
-	}
+	setCardMediaHash(t, f.db, c.ID, flash.MediaKindImage, &first)
 	second, err := f.store.SaveMediaUpload(ctx, flash.MediaKindImage, "image/png", onePNG2, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Replace.
-	if err := f.store.SetCardMedia(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindImage, &second); err != nil {
-		t.Fatal(err)
-	}
+	setCardMediaHash(t, f.db, c.ID, flash.MediaKindImage, &second)
 	purge(t, f, 1)
 	if mediaExists(t, f, first) || !mediaExists(t, f, second) {
 		t.Fatal("after a replace, the old image must go and the new one stay")
 	}
 
 	// Remove.
-	if err := f.store.SetCardMedia(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindImage, nil); err != nil {
-		t.Fatal(err)
-	}
+	setCardMediaHash(t, f.db, c.ID, flash.MediaKindImage, nil)
 	purge(t, f, 1)
 	if mediaExists(t, f, second) {
 		t.Fatal("a removed image survived the purge")
@@ -142,9 +132,7 @@ func TestPurgeOrphanMediaFollowsReplaceRemoveAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardMedia(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindImage, &third); err != nil {
-		t.Fatal(err)
-	}
+	setCardMediaHash(t, f.db, c.ID, flash.MediaKindImage, &third)
 	if err := f.store.DeleteCard(ctx, f.alice.ID, d.ID, c.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -162,9 +150,7 @@ func TestPurgeOrphanMediaFollowsReplaceRemoveAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardMedia(ctx, f.alice.ID, d.ID, c2.ID, flash.MediaKindAudio, &fourth); err != nil {
-		t.Fatal(err)
-	}
+	setCardMediaHash(t, f.db, c2.ID, flash.MediaKindAudio, &fourth)
 	if err := f.store.DeleteDeck(ctx, f.alice.ID, d.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -185,9 +171,7 @@ func TestPurgeOrphanMediaKeepsMediaAnAdoptedCopyStillUses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardMedia(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindImage, &hash); err != nil {
-		t.Fatal(err)
-	}
+	setCardMediaHash(t, f.db, c.ID, flash.MediaKindImage, &hash)
 	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
 	if err != nil {
 		t.Fatal(err)

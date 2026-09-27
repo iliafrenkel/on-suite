@@ -33,19 +33,23 @@ func concurrentlyOps(ops []func() error) []error {
 	return out
 }
 
-// TestSetCardTagsConcurrentWithDeleteCardChecksOwnershipInsideItsTransaction
-// pins the #288 comment: SetCardTags used to check ownership with
-// cardOwnerCheck on st.db, before BeginTx. With one database connection,
-// that hands the connection back between the check and the write, so a
-// concurrent DeleteCard of the same card can run to completion in between —
-// the card is gone by the time SetCardTags's own transaction starts, and its
-// INSERT into flash_card_tags fails a foreign-key check instead of the
-// friendly ErrNotFound every other "not yours/not there" case in this
-// package returns. Moving the ownership check onto the transaction (as
-// GradeCard and UndoLastGrade already do, #294) makes the whole check-and-
-// write atomic: a concurrent delete now either finishes entirely before
-// SetCardTags's transaction starts (ErrNotFound) or entirely after it
-// (SetCardTags succeeds normally) — never the interleaving above.
+// TestSaveCardFormConcurrentWithDeleteCardChecksOwnershipInsideItsTransaction
+// pins the #288 comment, now against SaveCardForm's update path (#382:
+// SetCardTags itself is gone, but the same interleaving is still reachable
+// through SaveCardForm's own ownership check, updateCardRow's WHERE clause,
+// which runs inside SaveCardForm's transaction exactly where SetCardTags's
+// cardOwner(ctx, tx, ...) check used to). With one database connection, an
+// ownership check before BeginTx hands the connection back between the
+// check and the write, so a concurrent DeleteCard of the same card can run
+// to completion in between — the card would be gone by the time the update
+// transaction starts, and its UPDATE/INSERT would either match no row or
+// fail a foreign-key check instead of the friendly ErrNotFound every other
+// "not yours/not there" case in this package returns. Running the ownership
+// check inside the transaction (as GradeCard and UndoLastGrade already do,
+// #294) makes the whole check-and-write atomic: a concurrent delete now
+// either finishes entirely before SaveCardForm's transaction starts
+// (ErrNotFound) or entirely after it (SaveCardForm succeeds normally) —
+// never the interleaving above.
 //
 // Genuinely forcing the old interleaving is a matter of goroutine scheduling
 // luck, so this repeats the race many times over fresh cards: with the old
@@ -55,7 +59,7 @@ func concurrentlyOps(ops []func() error) []error {
 // goroutines enough to surface the race — without -race this test can pass
 // even against the old, buggy code, so it is not a reliable regression
 // guard on its own outside a -race run.
-func TestSetCardTagsConcurrentWithDeleteCardChecksOwnershipInsideItsTransaction(t *testing.T) {
+func TestSaveCardFormConcurrentWithDeleteCardChecksOwnershipInsideItsTransaction(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	deck := qDeck(t, f, "Spanish")
@@ -65,16 +69,19 @@ func TestSetCardTagsConcurrentWithDeleteCardChecksOwnershipInsideItsTransaction(
 		card := qCard(t, f, deck.ID, "hola")
 
 		results := concurrentlyOps([]func() error{
-			func() error { return f.store.SetCardTags(ctx, f.alice.ID, card.ID, []string{"hard"}) },
+			func() error {
+				_, err := applyCardForm(t, ctx, f.store, f.alice.ID, deck.ID, card, flash.CardForm{Tags: []string{"hard"}})
+				return err
+			},
 			func() error { return f.store.DeleteCard(ctx, f.alice.ID, deck.ID, card.ID) },
 		})
-		setErr, delErr := results[0], results[1]
+		saveErr, delErr := results[0], results[1]
 
 		if delErr != nil {
 			t.Fatalf("trial %d: DeleteCard: %v", i, delErr)
 		}
-		if setErr != nil && !errors.Is(setErr, flash.ErrNotFound) {
-			t.Fatalf("trial %d: SetCardTags raced with DeleteCard = %v, want nil or ErrNotFound", i, setErr)
+		if saveErr != nil && !errors.Is(saveErr, flash.ErrNotFound) {
+			t.Fatalf("trial %d: SaveCardForm raced with DeleteCard = %v, want nil or ErrNotFound", i, saveErr)
 		}
 	}
 }

@@ -206,16 +206,14 @@ func TestAdoptShareFirstTimeCopiesCardsTagsAndMedia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.alice.ID, c.ID, []string{"greetings"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, d.ID, c, flash.CardForm{Tags: []string{"greetings"}}); err != nil {
 		t.Fatal(err)
 	}
 	hash, err := f.store.SaveMediaUpload(ctx, flash.MediaKindImage, "image/png", onePNG, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardMedia(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindImage, &hash); err != nil {
-		t.Fatal(err)
-	}
+	setCardMediaHash(t, f.db, c.ID, flash.MediaKindImage, &hash)
 
 	sh, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
 	if err != nil {
