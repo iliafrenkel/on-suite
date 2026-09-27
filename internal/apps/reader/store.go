@@ -645,7 +645,8 @@ func (s *Store) ItemsForScope(ctx context.Context, userID int64, scope Scope, su
 }
 
 // SaveItems inserts new items and updates ones whose GUID is already known,
-// returning how many were newly inserted.
+// returning how many were newly inserted. A GUID the purge tombstoned is
+// skipped, not re-inserted.
 //
 // Updating in place rather than inserting a duplicate is what stops a
 // publisher's typo fix from showing up as a second article — and (from R2) it
@@ -692,6 +693,21 @@ func (s *Store) SaveItems(ctx context.Context, feedID int64, items []ParsedItem,
 		if published.IsZero() {
 			// An undated item still has to sort somewhere sensible.
 			published = now
+		}
+
+		// A purged article the feed still lists stays purged (#389): note
+		// that it was seen, so PruneTombstones keeps the tombstone, and move
+		// on without resurrecting it as unread.
+		res, err := tx.ExecContext(ctx,
+			`UPDATE reader_purged_items SET last_seen_at = ? WHERE feed_id = ? AND guid = ?`,
+			formatTime(now), feedID, it.GUID)
+		if err != nil {
+			return 0, fmt.Errorf("reader: check purged item: %w", err)
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return 0, fmt.Errorf("reader: check purged item rows: %w", err)
+		} else if n > 0 {
+			continue
 		}
 
 		var existing int
@@ -1205,16 +1221,12 @@ func (s *Store) MarkAllRead(ctx context.Context, userID int64, scope Scope, subI
 // design question this app should not answer on its own.
 const RetentionAge = 60 * 24 * time.Hour
 
-// PurgeItems deletes articles published before the cutoff, keeping anything
-// anyone starred and anything anyone still has unread.
-//
-// The items are shared across the household but the state is not, so "read" has
-// to mean read by every subscriber who can see it. Deleting an article one
-// person finished while another has it waiting would be quiet data loss.
-func (s *Store) PurgeItems(ctx context.Context, before time.Time) (int, error) {
-	res, err := s.db.ExecContext(ctx, `
-		DELETE FROM reader_items
-		 WHERE published_at < ?
+// purgeablePredicate selects the articles PurgeItems deletes: published before
+// the cutoff (its one parameter), starred by nobody, and read by every
+// subscriber who can see it. It is shared by the tombstone INSERT and the
+// DELETE so the two can never pick different rows.
+const purgeablePredicate = `
+		 reader_items.published_at < ?
 		   AND NOT EXISTS (
 		       SELECT 1 FROM reader_item_state st
 		        WHERE st.item_id = reader_items.id
@@ -1227,8 +1239,36 @@ func (s *Store) PurgeItems(ctx context.Context, before time.Time) (int, error) {
 		              SELECT 1 FROM reader_item_state st2
 		               WHERE st2.user_id = sub.user_id
 		                 AND st2.item_id = reader_items.id
-		                 AND st2.read_at IS NOT NULL))`,
-		formatTime(before))
+		                 AND st2.read_at IS NOT NULL))`
+
+// PurgeItems deletes articles published before the cutoff, keeping anything
+// anyone starred and anything anyone still has unread.
+//
+// The items are shared across the household but the state is not, so "read" has
+// to mean read by every subscriber who can see it. Deleting an article one
+// person finished while another has it waiting would be quiet data loss.
+//
+// Each deleted article leaves a tombstone in reader_purged_items, in the same
+// transaction, so the next poll of a feed that still lists it does not insert
+// it again as unread (#389).
+func (s *Store) PurgeItems(ctx context.Context, before time.Time) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("reader: begin purge items: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	cutoff := formatTime(before)
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO reader_purged_items (feed_id, guid, last_seen_at)
+		SELECT feed_id, guid, ? FROM reader_items
+		 WHERE`+purgeablePredicate+`
+		ON CONFLICT (feed_id, guid) DO UPDATE SET last_seen_at = excluded.last_seen_at`,
+		formatTime(s.now()), cutoff); err != nil {
+		return 0, fmt.Errorf("reader: record purged items: %w", err)
+	}
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM reader_items WHERE`+purgeablePredicate, cutoff)
 	if err != nil {
 		return 0, fmt.Errorf("reader: purge items: %w", err)
 	}
@@ -1236,7 +1276,40 @@ func (s *Store) PurgeItems(ctx context.Context, before time.Time) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("reader: purge rows: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("reader: commit purge items: %w", err)
+	}
 	return int(n), nil
+}
+
+// PruneTombstones deletes purge tombstones no poll has seen since the cutoff:
+// the feed stopped listing the article, so there is nothing left to guard
+// against. The retention job calls it with the same RetentionAge cutoff it
+// gives PurgeItems.
+func (s *Store) PruneTombstones(ctx context.Context, before time.Time) (int, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM reader_purged_items WHERE last_seen_at < ?`, formatTime(before))
+	if err != nil {
+		return 0, fmt.Errorf("reader: prune tombstones: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reader: prune tombstone rows: %w", err)
+	}
+	return int(n), nil
+}
+
+// TouchTombstones marks every tombstone of a feed as seen at now. The poller
+// calls it on a 304: an unchanged body still lists everything it listed
+// before, so without this a quiet feed would lose its tombstones to
+// PruneTombstones and hand back its old backlog the next time it changed.
+func (s *Store) TouchTombstones(ctx context.Context, feedID int64, now time.Time) error {
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE reader_purged_items SET last_seen_at = ? WHERE feed_id = ?`,
+		formatTime(now), feedID); err != nil {
+		return fmt.Errorf("reader: touch tombstones: %w", err)
+	}
+	return nil
 }
 
 // Image is one cached remote image.
