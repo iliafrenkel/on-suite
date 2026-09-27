@@ -17,4 +17,19 @@ var shots = []shot{
 		document.querySelector('#new-body').value = '# This week\n\n- Milk\n- Bread\n- Apples\n- Pasta for Friday';`},
 	{Name: "docs/user/images/paste-sharing.png", URL: "/paste/8", Width: 1600, Height: 420},
 	{Name: "docs/user/images/paste-shared.png", URL: "{{share-paste}}", Anon: true, Height: 480},
+
+	// docs/user/notes.md
+	{Name: "docs/user/images/notes-outline.png", URL: "/notes/", Height: 720},
+	{Name: "docs/user/images/notes-menu.png", URL: "/notes/", Height: 660, Setup: `
+		const row = [...document.querySelectorAll('#outline .outline-row')].find(r => r.querySelector('input.outline-title').value.startsWith('Pick a paint'));
+		row.querySelector('details.outline-menu').open = true;`},
+	{Name: "docs/user/images/notes-zoomed.png", URL: "/notes/25", Height: 440},
+	{Name: "docs/user/images/notes-due.png", URL: "/notes/due", Height: 640},
+	{Name: "docs/user/images/notes-search.png", URL: "/notes/", Height: 480, Setup: `
+		const box = document.getElementById('notes-search-input');
+		box.value = 'kids';
+		box.dispatchEvent(new Event('input', {bubbles: true}));
+		await new Promise(r => setTimeout(r, 1200));
+		box.blur();`},
+	{Name: "docs/user/images/notes-share.png", URL: "{{share-notes}}", Anon: true, Height: 640},
 }
