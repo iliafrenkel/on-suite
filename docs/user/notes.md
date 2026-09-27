@@ -174,8 +174,8 @@ Add a tag to any bullet by typing `#` and a word, such as `#kids` or
 `#errand`. You can use letters, numbers and `_`, but no spaces. Tags can go
 anywhere in the text or the note, and a bullet can have several.
 
-Click a tag to see every bullet with that tag, across your whole outline.
-This is the same as typing the tag into the search box (see
+Click a tag to see every bullet that mentions it, across your whole
+outline. This is the same as typing the tag into the search box (see
 [Searching](#searching)); clear the search box to see everything again.
 
 ## Ticking things off
@@ -204,7 +204,8 @@ If every bullet on the page is done and hidden, you see a message such as
 ### Setting a due date
 
 1. Open the bullet's menu with **···**.
-2. Next to **Due date**, pick a date. It saves as soon as you pick it.
+2. Next to **Due date**, pick a date. It saves as soon as you pick it (or
+   click **Save**).
 
 The date then appears after the bullet's text. It turns red with a **!**
 once the date has passed. When you mark the bullet done, its date is no
@@ -307,7 +308,8 @@ text needs to be in the same format ON Notes exports:
 - Each bullet starts with `- `.
 - Each level is indented by two more spaces than the one above.
 - Add ` [x]` at the end to mark a bullet done, and ` @` with a date
-  (year-month-day) for a due date.
+  (year-month-day) for a due date. If a bullet has both, put `[x]` before
+  the date.
 - A line under a bullet, indented like its bullets would be but without the
   `- `, becomes its note.
 
@@ -358,7 +360,9 @@ changes, so a shared shopping list stays up to date as you tick things off.
 
 ### Stopping sharing
 
-Choose **Stop sharing** from the bullet's menu. The link stops working
+Go up one level, or click **All notes**, since the zoomed-in heading you
+land on after sharing has no bullet menu of its own. Then choose
+**Stop sharing** from the bullet's menu. The link stops working
 immediately: anyone who tries it sees **404 — Not found**.
 
 If you share the bullet again later, it gets a brand-new link. The old link
