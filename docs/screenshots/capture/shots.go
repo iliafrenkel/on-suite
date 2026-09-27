@@ -48,4 +48,22 @@ var shots = []shot{
 	{Name: "docs/user/images/reader-mark-read.png", URL: "/reader/", Height: 360, Setup: `
 		document.querySelector('details.reader-mark-all-menu').open = true;`},
 	{Name: "docs/user/images/reader-stats.png", URL: "/reader/stats", Height: 660},
+
+	// docs/user/flash.md
+	// Nothing here grades a card or answers sam's pending gift: the review
+	// shot only turns the card over, so due counts and stats stay as seeded.
+	{Name: "docs/user/images/flash-home.png", URL: "/flash/1", Height: 430},
+	{Name: "docs/user/images/flash-cards.png", URL: "/flash/2/cards/", Height: 520},
+	{Name: "docs/user/images/flash-editor.png", URL: "/flash/2/cards/new", Height: 675, Setup: `
+		document.getElementById('card-type-new-cloze').checked = true;
+		const front = document.getElementById('card-front-new');
+		front.value = 'The {{c1::Monaco}} Grand Prix runs through the streets of Monte Carlo';
+		front.blur();`},
+	{Name: "docs/user/images/flash-review.png", URL: "/flash/review/2", Height: 490, Setup: `
+		document.getElementById('review-flip').checked = true;
+		await new Promise(r => setTimeout(r, 800));`},
+	{Name: "docs/user/images/flash-share.png", URL: "/flash/1", Height: 300, Setup: `
+		document.querySelector('details.flash-share-menu').open = true;`},
+	{Name: "docs/user/images/flash-import.png", URL: "/flash/import", Height: 590},
+	{Name: "docs/user/images/flash-stats.png", URL: "/flash/stats", Height: 760},
 }
