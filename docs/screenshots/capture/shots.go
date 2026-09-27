@@ -32,4 +32,20 @@ var shots = []shot{
 		await new Promise(r => setTimeout(r, 1200));
 		box.blur();`},
 	{Name: "docs/user/images/notes-share.png", URL: "{{share-notes}}", Anon: true, Height: 640},
+
+	// docs/user/reader.md
+	// Item 10 is already read in the seed, so opening it changes no counts.
+	{Name: "docs/user/images/reader-three-pane.png", URL: "/reader/item/10?scope=all&filter=all", Height: 600, Setup: `
+		const rows = [...document.querySelectorAll('.reader-row')];
+		const i = rows.indexOf(document.querySelector('.reader-row.is-active'));
+		document.querySelector('.reader-list').scrollTop = rows[i - 2].offsetTop - rows[0].offsetTop + 8;`},
+	{Name: "docs/user/images/reader-add-feed.png", URL: "/reader/", Height: 480, Setup: `
+		document.getElementById('add-feed-dialog').showModal();
+		document.getElementById('feed-url').value = 'https://example.org/';
+		const folder = document.getElementById('feed-folder');
+		folder.value = [...folder.options].find(o => o.text === 'Science').value;
+		document.getElementById('feed-url').blur();`},
+	{Name: "docs/user/images/reader-mark-read.png", URL: "/reader/", Height: 360, Setup: `
+		document.querySelector('details.reader-mark-all-menu').open = true;`},
+	{Name: "docs/user/images/reader-stats.png", URL: "/reader/stats", Height: 660},
 }
