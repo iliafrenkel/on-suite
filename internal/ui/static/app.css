@@ -426,7 +426,11 @@ button, .button {
 	cursor: pointer;
 }
 
-button:hover, .button:hover { background: var(--c-border); }
+/* :where() drops this to (0,1,0) — just the :hover — so any component rule
+ * that sets its own background (one class plus its own :hover, or one class
+ * later in this file) wins without needing a second class (#375). Disabled
+ * buttons are excluded inside the :where() so they get no hover at all. */
+:where(button:not(:disabled), .button):hover { background: var(--c-border); }
 
 /* A button that reads as a link: used for actions that must be POSTs, such as
  * logging out, without shouting like a primary button. Comes after
@@ -543,7 +547,9 @@ button:hover, .button:hover { background: var(--c-border); }
 .snippet-actions form:last-child { margin-left: auto; }
 
 button.danger { color: var(--c-danger); }
-button.danger:hover { background: var(--c-danger-bg); }
+/* color too: .toolbar-btn:hover (0,2,0) would otherwise reset a danger
+ * toolbar button's text to neutral on hover (#375). */
+button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 
 .snippet-body {
 	border-radius: var(--radius);
@@ -1482,6 +1488,9 @@ input.outline-note:focus { outline: none; }
 }
 .outline-menu-list button:hover:not([disabled]) { background: var(--c-bg-inset); }
 .outline-menu-list button[disabled] { opacity: 0.4; cursor: default; }
+/* Disabled items are .quiet, whose own :hover (0,2,0) would still paint
+ * them (#375). */
+.outline-menu-list button[disabled]:hover { background: none; color: var(--c-text); }
 
 .outline-menu-label { flex: 1; }
 
@@ -1524,7 +1533,10 @@ input.outline-note:focus { outline: none; }
 	border-color: var(--c-accent);
 }
 
-.outline-menu-delete:hover { background: var(--c-danger-bg); color: var(--c-danger); }
+/* Scoped to the list so it outranks the generic menu-item hover
+ * (.outline-menu-list button:hover:not([disabled]), 0,3,1) — otherwise the
+ * danger background never shows (#375). */
+.outline-menu-list .outline-menu-delete:hover:not([disabled]) { background: var(--c-danger-bg); color: var(--c-danger); }
 
 /* Shortcuts help popup panel */
 .notes-help-menu {
@@ -1888,6 +1900,7 @@ kbd {
 	color: var(--c-text-dim);
 	cursor: pointer;
 }
+.reader-dialog-close:hover { background: var(--c-bg-inset); color: var(--c-text); }
 
 .dialog-actions {
 	display: flex;
@@ -2953,6 +2966,8 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	line-height: 1;
 	cursor: pointer;
 }
+/* The × turns red, no background block inside the teal pill (#375). */
+.flash-tag-remove:hover { color: var(--c-danger); }
 input.flash-tag-entry {
 	flex: 1;
 	min-width: 8rem;
@@ -3093,9 +3108,9 @@ input.flash-tag-entry:focus { outline: none; }
 	font-weight: 600;
 	cursor: pointer;
 }
-/* Two classes (0,2,0) so these outrank the generic button:hover background
-   (0,1,1) — otherwise hovering a grade swaps its colour for the neutral
-   button hover in both themes (#337). */
+/* Two classes (0,2,0): since #375 the generic button hover is only (0,1,0)
+   and one class would do, but the pair keeps each grade's colour safe from
+   any single-class .flash-grade rule (#337). */
 .flash-grade.flash-grade-again { border-color: var(--flash-grade-again); background: var(--flash-grade-again-bg); color: var(--flash-grade-again-text); }
 .flash-grade.flash-grade-hard  { border-color: var(--flash-grade-hard);  background: var(--flash-grade-hard-bg);  color: var(--flash-grade-hard-text); }
 .flash-grade.flash-grade-good  { border-color: var(--flash-grade-good);  background: var(--flash-grade-good-bg);  color: var(--flash-grade-good-text); }
