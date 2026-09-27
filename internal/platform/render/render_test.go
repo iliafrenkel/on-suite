@@ -1,6 +1,7 @@
 package render_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -174,6 +175,33 @@ func TestShellHasConnectivityIndicator(t *testing.T) {
 	}
 	doc.MustHave(".shell-user [data-conn-indicator] .conn-dot")
 
+}
+
+// TestPageTurnsOffHTMXIndicatorStyles guards #400: htmx injects an inline
+// <style> for .htmx-indicator on load unless told not to, and the CSP
+// (style-src 'self') blocks it, logging a console error on every page. The
+// meta tag must parse as JSON with includeIndicatorStyles false, since that
+// is how htmx reads it; app.css carries the rules htmx would have injected.
+func TestPageTurnsOffHTMXIndicatorStyles(t *testing.T) {
+	r := testRenderer(t)
+	rec := httptest.NewRecorder()
+
+	err := r.Page(rec, http.StatusOK, "error", render.Page{
+		Data: map[string]any{"Status": 404, "Title": "Not found", "Message": "no such page"},
+	})
+	if err != nil {
+		t.Fatalf("Page: %v", err)
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	content, _ := htmlassert.Attr(doc.MustHave(`head meta[name="htmx-config"]`), "content")
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(content), &cfg); err != nil {
+		t.Fatalf("htmx-config content %q is not JSON: %v", content, err)
+	}
+	if got, ok := cfg["includeIndicatorStyles"]; !ok || got != false {
+		t.Errorf("includeIndicatorStyles = %v (set: %v), want false", got, ok)
+	}
 }
 
 // TestPageOmitsUserChromeWhenLoggedOut is the negative case that matters: the

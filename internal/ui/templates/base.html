@@ -7,6 +7,10 @@
 <link rel="icon" href="{{asset "favicon.ico"}}" sizes="any">
 <link rel="icon" href="{{asset "favicon.svg"}}" type="image/svg+xml">
 <link rel="stylesheet" href="{{asset "app.css"}}">
+{{/* htmx injects an inline <style> for its indicator classes unless told
+     not to, and the CSP (style-src 'self') blocks it. app.css carries the
+     same rules instead (see "htmx request indicators" there). #400 */}}
+<meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
 <script src="{{asset "htmx.min.js"}}" defer></script>
 <script src="{{asset "theme.js"}}" defer></script>
 <script src="{{asset "htmx-notices.js"}}" defer></script>
