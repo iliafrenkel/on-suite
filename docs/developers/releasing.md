@@ -44,7 +44,7 @@ since the last tag, the same classification `.goreleaser.yaml`'s
 
    ```bash
    ./scripts/next-version.sh
-   # v0.4.0
+   # v2.0.0
    ```
 
    Then write the release's friendly name and summary into the tag's
@@ -142,7 +142,7 @@ a checksums file:
 ```bash
 cosign verify --certificate-identity-regexp 'https://github.com/iliafrenkel/on-suite/.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/iliafrenkel/on-suite:v0.4.0
+  ghcr.io/iliafrenkel/on-suite:v2.0.0
 ```
 
 ## If something goes wrong
@@ -151,8 +151,8 @@ Goreleaser refuses to reuse a tag. To redo a release, delete the tag both
 locally and on the remote, fix the problem, and tag again:
 
 ```bash
-git tag -d v0.4.0
-git push origin :refs/tags/v0.4.0
+git tag -d v2.0.0
+git push origin :refs/tags/v2.0.0
 ```
 
 Then also delete the (likely partial) GitHub Release it created before

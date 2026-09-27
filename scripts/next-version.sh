@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 # next-version.sh suggests the next release tag, per docs/developers/releasing.md's
-# versioning rule: derived from the Conventional Commits (see
-# CONTRIBUTING.md#commit-messages) merged since the last tag, the same way
-# .goreleaser.yaml's changelog.groups already classifies them.
+# versioning rule (see docs/developers/releasing.md#versioning): derived from
+# the Conventional Commits (see CONTRIBUTING.md#commit-messages) merged since
+# the last tag, the same way .goreleaser.yaml's changelog.groups already
+# classifies them.
 #
-# Pre-1.0 only (current major stays 0 until all four apps exist — see
-# README.md's Versioning section): a feat commit or a breaking change both
-# bump minor, since there is nowhere else for "breaking" to signal while
-# major is pinned at 0. Anything else release-worthy (fix/refactor/perf/
-# chore/unlabeled) bumps patch. docs:/test:-only commits produce no
-# suggestion, matching their exclusion from the changelog itself.
+# Past 1.0, ordinary semver: a breaking change (`BREAKING CHANGE:` footer or
+# `type!:`) bumps major, any `feat:` (with no breaking change) bumps minor,
+# and anything else release-worthy (fix/refactor/perf/chore/unlabeled) bumps
+# patch. Pre-1.0 (major stays 0 until all four apps exist), a feat commit or
+# a breaking change both bump minor instead, since there is nowhere else for
+# "breaking" to signal while major is pinned at 0 — that's how the 0.x
+# history was tagged, so it's kept as-is rather than reinterpreted. Either
+# way, docs:/test:-only commits produce no suggestion, matching their
+# exclusion from the changelog itself. The highest bump across all commits
+# since the last tag wins, so a breaking change isn't downgraded by a later
+# feat commit.
 #
 # This only prints a suggestion — it does not tag or push anything. Review
 # it, then follow docs/developers/releasing.md's own tagging steps.
@@ -28,9 +34,6 @@ if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 	exit 1
 fi
 IFS='.' read -r major minor patch <<<"$version"
-if [[ "$major" != "0" ]]; then
-	echo "warning: $last_tag is >= 1.0.0 — this script only implements the pre-1.0 rule (a breaking change should bump major, not minor, past 1.0). Check docs/developers/releasing.md and bump by hand." >&2
-fi
 
 # Record-separated (RS=\x1d, US=\x1e) so a multi-paragraph commit body can't
 # be mistaken for more than one commit, and so a body containing blank
@@ -42,9 +45,16 @@ if [[ -z "$commits" ]]; then
 	exit 1
 fi
 
+# Numeric so the highest bump across all commits wins, e.g. a breaking
+# change followed by a later feat: commit must stay a major bump, not get
+# downgraded to minor. 0=none, 1=patch, 2=minor, 3=major.
 shopt -s nocasematch
-bump=none
+bump_level=0
 while IFS= read -r -d $'\x1d' record; do
+	# git inserts its own "\n" between each --pretty=format record, which
+	# lands as a leading newline on every record but the first — strip it so
+	# the subject regexes below (anchored with ^) still match.
+	record="${record#$'\n'}"
 	subject="${record%%$'\x1e'*}"
 	body="${record#*$'\x1e'}"
 
@@ -52,28 +62,37 @@ while IFS= read -r -d $'\x1d' record; do
 		continue # excluded from the changelog itself; no release signal
 	fi
 
-	if [[ "$subject" =~ ^feat(\(.+\))?\!?: ]] ||
-		[[ "$subject" =~ ^[a-z]+(\(.+\))?\!: ]] ||
+	if [[ "$subject" =~ ^[a-z]+(\(.+\))?\!: ]] ||
 		[[ "$body" =~ BREAKING[-\ ]CHANGE ]]; then
-		bump=minor
-		continue
+		if [[ "$major" == "0" ]]; then
+			level=2 # pre-1.0: breaking has nowhere to signal but minor
+		else
+			level=3
+		fi
+	elif [[ "$subject" =~ ^feat(\(.+\))?:.* ]]; then
+		level=2
+	else
+		level=1
 	fi
 
-	if [[ "$bump" == "none" ]]; then
-		bump=patch
+	if ((level > bump_level)); then
+		bump_level=$level
 	fi
 done <<<"$commits"
 shopt -u nocasematch
 
-case "$bump" in
-none)
+case "$bump_level" in
+0)
 	echo "only docs:/test: commits since $last_tag; no release needed" >&2
 	exit 1
 	;;
-minor)
+3)
+	echo "v$((major + 1)).0.0"
+	;;
+2)
 	echo "v${major}.$((minor + 1)).0"
 	;;
-patch)
+1)
 	echo "v${major}.${minor}.$((patch + 1))"
 	;;
 esac
