@@ -19,6 +19,11 @@ jobs:
           # produces an empty one.
           fetch-depth: 0
 
+      # On a tag push, checkout can leave the tag without its annotation,
+      # and goreleaser reads the release's name and summary from it (see
+      # .goreleaser.yaml's release block). Re-fetching restores it.
+      - run: git fetch --force --tags
+
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
