@@ -1958,7 +1958,7 @@ git commit -m "feat(platform): render the user guides for in-app help (#309)"
 
 - [ ] **Step 1: Stop skipping `docs` in `scan`**
 
-In `scan`, change the skip list from `".git", "docs", "dist"` to `".git", "dist", "testdata"` — `docs/superpowers` has no Go files, and `docs` now holds real packages. Run `go test ./internal/arch/` and fix fallout: `docs/screenshots/seed` imports apps (it's a `main` tool — add it to whatever exemption `cmd/onsuite` has, if any rule flags it; check `TestAppsDoNotImportEachOther`/`TestPlatformDoesNotImportApps` only look at `internal/apps` and `internal/platform` prefixes, in which case nothing breaks).
+In `scan`, change the skip list from `".git", "docs", "dist"` to `".git", ".claude", "dist", "testdata"` (`.claude/` can hold whole git worktrees of this repo from agent sessions, which the walks would otherwise count as a second copy of every package — skip it in `importersOf` and every other tree walk in this file too) — `docs/superpowers` has no Go files, and `docs` now holds real packages. Run `go test ./internal/arch/` and fix fallout: `docs/screenshots/seed` imports apps (it's a `main` tool — add it to whatever exemption `cmd/onsuite` has, if any rule flags it; check `TestAppsDoNotImportEachOther`/`TestPlatformDoesNotImportApps` only look at `internal/apps` and `internal/platform` prefixes, in which case nothing breaks).
 
 - [ ] **Step 2: Add the failing rules**
 
