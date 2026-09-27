@@ -60,8 +60,8 @@ func TestSeedFillsEveryApp(t *testing.T) {
 
 	// Paste: several snippets, the shared one reachable by its public slug.
 	pastes := paste.NewStore(handle)
-	if s, _ := pastes.List(ctx, demo.ID, 100); len(s) < 4 {
-		t.Errorf("pastes = %d, want >= 4", len(s))
+	if s, _ := pastes.List(ctx, demo.ID, 100); len(s) < 8 {
+		t.Errorf("pastes = %d, want >= 8", len(s))
 	}
 	if s, err := pastes.ByShareSlug(ctx, strings.TrimPrefix(sharePaste, "/paste/s/")); err != nil || s.UserID != demo.ID {
 		t.Errorf("shared paste = %+v, %v; want one of demo's snippets", s, err)

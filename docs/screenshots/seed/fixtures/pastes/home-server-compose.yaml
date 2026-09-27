@@ -1,0 +1,40 @@
+# docker-compose for the home server: the Pi that runs ON Suite plus the
+# small utilities that share the same box.
+version: "3.9"
+
+services:
+  onsuite:
+    image: ghcr.io/iliafrenkel/onsuite:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - onsuite-data:/data
+    environment:
+      ON_SUITE_DATA_DIR: /data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - onsuite
+
+  backup:
+    image: offen/docker-volume-backup:v2
+    restart: unless-stopped
+    environment:
+      BACKUP_CRON_EXPRESSION: "0 3 * * *"
+      BACKUP_FILENAME: "onsuite-%Y-%m-%d.tar.gz"
+    volumes:
+      - onsuite-data:/backup/onsuite-data:ro
+      - ./backups:/archive
+
+volumes:
+  onsuite-data:
+  caddy-data:

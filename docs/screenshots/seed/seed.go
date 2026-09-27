@@ -128,9 +128,13 @@ func seedPastes(ctx context.Context, st *paste.Store, userID int64, now time.Tim
 		age               time.Duration
 		share             bool
 	}{
+		{"league_results.py", "Table tennis league standings", "python", 20 * day, false},
 		{"schema.sql", "Reading-list schema", "sql", 12 * day, false},
+		{"home-server-compose.yaml", "Home server docker-compose", "yaml", 8 * day, false},
 		{"deploy.sh", "Deploy to the Pi", "bash", 5 * day, false},
 		{"notes.txt", "Wi-Fi and router notes", "plaintext", 2 * day, false},
+		{"home-automation.json", "Home automation config", "json", 1 * day, false},
+		{"family-trip-packing-list.md", "Japan trip packing list", "markdown", 6 * time.Hour, false},
 		{"retry.go.txt", "Retry with backoff", "go", 3 * time.Hour, true},
 	} {
 		body, err := fixtures.ReadFile("fixtures/pastes/" + p.file)
