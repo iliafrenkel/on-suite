@@ -134,7 +134,7 @@ func (st *Store) GradeCard(ctx context.Context, userID, cardID int64, rating int
 	if !hadState {
 		newInc, reviewInc = 1, 0
 	}
-	if err := st.bumpDailyCounts(ctx, tx, userID, deckID, now, newInc, reviewInc, rating, 1); err != nil {
+	if err := bumpDailyCounts(ctx, tx, userID, deckID, now, newInc, reviewInc, rating, 1); err != nil {
 		return cardSchedule{}, err
 	}
 
@@ -208,7 +208,7 @@ func (st *Store) UndoLastGrade(ctx context.Context, userID, cardID int64, now ti
 	if wasNew {
 		newDec, reviewDec = -1, 0
 	}
-	if err := st.bumpDailyCounts(ctx, tx, userID, deckID, log.Review, newDec, reviewDec, log.Rating, -1); err != nil {
+	if err := bumpDailyCounts(ctx, tx, userID, deckID, log.Review, newDec, reviewDec, log.Rating, -1); err != nil {
 		return cardSchedule{}, false, err
 	}
 
@@ -271,7 +271,10 @@ func scanCardStateWithLog(ctx context.Context, exec dbExecutor, userID, cardID i
 // (+1 for a grade, -1 for undoing one) is added to whichever of the four
 // per-rating columns rating names, so retention rate can be computed later
 // without a separate per-review event log.
-func (st *Store) bumpDailyCounts(ctx context.Context, tx *sql.Tx, userID, deckID int64, now time.Time, newDelta, reviewDelta, rating, ratingDelta int) error {
+//
+// A plain function, not a Store method, so nothing inside it can reach
+// st.db while the caller's transaction holds the only connection (#372).
+func bumpDailyCounts(ctx context.Context, tx *sql.Tx, userID, deckID int64, now time.Time, newDelta, reviewDelta, rating, ratingDelta int) error {
 	column, err := ratingCountColumn(rating)
 	if err != nil {
 		return err
