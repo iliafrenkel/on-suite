@@ -123,7 +123,7 @@ func TestRetentionRateComputesFromRatingCounters(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rate, err := f.store.RetentionRate(ctx, f.alice.ID, now.AddDate(0, 0, -30))
+	rate, err := f.store.RetentionRate(ctx, f.alice.ID, now.AddDate(0, 0, -30), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,8 @@ func TestRetentionRateComputesFromRatingCounters(t *testing.T) {
 
 func TestRetentionRateIsZeroWithNoReviewsInWindow(t *testing.T) {
 	f := newFixture(t)
-	rate, err := f.store.RetentionRate(context.Background(), f.alice.ID, time.Now().AddDate(0, 0, -30))
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	rate, err := f.store.RetentionRate(context.Background(), f.alice.ID, now.AddDate(0, 0, -30), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,5 +456,40 @@ func TestStreakIgnoresDaysAfterNow(t *testing.T) {
 	}
 	if streak != 2 {
 		t.Errorf("streak = %d, want 2", streak)
+	}
+}
+
+// TestRetentionRateIgnoresDaysAfterNow: the window is since..now, so a
+// review stamped by a clock that has since stepped back doesn't count —
+// the same rule Streak follows.
+func TestRetentionRateIgnoresDaysAfterNow(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c1, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "c", "d", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, c1.ID, flash.RatingGood, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.GradeCard(ctx, f.alice.ID, c2.ID, flash.RatingAgain, now.AddDate(0, 0, 2)); err != nil {
+		t.Fatal(err)
+	}
+
+	rate, err := f.store.RetentionRate(ctx, f.alice.ID, now.AddDate(0, 0, -29), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rate != 1 {
+		t.Errorf("rate = %v, want 1 (the future Again must not count)", rate)
 	}
 }

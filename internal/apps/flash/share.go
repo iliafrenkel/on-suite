@@ -507,10 +507,9 @@ func freeDeckName(ctx context.Context, tx *sql.Tx, userID int64, base, sharer st
 // isn't listed. "Latest" is the highest id, not created_at: ids are
 // monotonic and share rows are only deleted with their deck, while a clock
 // stepping backwards could make an older row's timestamp look newer (#367).
-// ShareDeck never creates
-// a second pending row for the same triple, so a pending row is always its
-// recipient's latest one. That makes a waiting row's ID the pending share
-// Revoke has to target.
+// ShareDeck never creates a second pending row for the same triple, so a
+// pending row is always its recipient's latest one. That makes a waiting
+// row's ID the pending share Revoke has to target.
 func (st *Store) SharesForDeck(ctx context.Context, fromUserID, deckID int64) ([]Share, error) {
 	if _, err := st.DeckByID(ctx, fromUserID, deckID); err != nil {
 		return nil, err

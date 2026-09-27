@@ -14,9 +14,9 @@ import (
 //
 // It reads review days newest-first (the (user_id, day) index, migration
 // 0014) and stops at the first gap, so it touches the streak's own days
-// plus one, not the user's whole history (#365). Days after now are never
-// read: a review stamped by a clock that has since stepped back can't start
-// or extend a streak.
+// plus one, not the user's whole history (#365). The day <= now bound is
+// load-bearing: a review stamped by a clock that has since stepped back
+// would otherwise be the first row and zero the walk.
 func (st *Store) Streak(ctx context.Context, userID int64, now time.Time) (int, error) {
 	cursor := now.UTC().Truncate(24 * time.Hour)
 	rows, err := st.db.QueryContext(ctx, `
@@ -52,17 +52,19 @@ func (st *Store) Streak(ctx context.Context, userID int64, now time.Time) (int, 
 }
 
 // RetentionRate is the fraction of reviews rated Hard, Good, or Easy (i.e.
-// not Again) across every day since (inclusive) through now, across every
-// deck userID owns. Returns 0 when there were no reviews in the window at
-// all, rather than dividing by zero.
-func (st *Store) RetentionRate(ctx context.Context, userID int64, since time.Time) (float64, error) {
+// not Again) across every day from since through now (both inclusive),
+// across every deck userID owns. Returns 0 when there were no reviews in the
+// window at all, rather than dividing by zero. The upper bound keeps a
+// review stamped by a clock that has since stepped back out, as Streak
+// does, and makes the (user_id, day) index seek a closed range (#365).
+func (st *Store) RetentionRate(ctx context.Context, userID int64, since, now time.Time) (float64, error) {
 	var again, hard, good, easy int
 	err := st.db.QueryRowContext(ctx, `
         SELECT coalesce(sum(again_count), 0), coalesce(sum(hard_count), 0),
                coalesce(sum(good_count), 0), coalesce(sum(easy_count), 0)
           FROM flash_review_counts
-         WHERE user_id = ? AND day >= ?`,
-		userID, formatDay(since)).Scan(&again, &hard, &good, &easy)
+         WHERE user_id = ? AND day >= ? AND day <= ?`,
+		userID, formatDay(since), formatDay(now)).Scan(&again, &hard, &good, &easy)
 	if err != nil {
 		return 0, fmt.Errorf("flash: retention rate: %w", err)
 	}
