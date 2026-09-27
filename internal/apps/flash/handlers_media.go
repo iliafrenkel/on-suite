@@ -145,7 +145,7 @@ func (a *App) writeMedia(w http.ResponseWriter, r *http.Request, m Media) {
 // cardUploads is a card form's whole media part. It is read and checked
 // before anything is written, so a bad file can never leave a
 // half-updated card behind (UI overhaul spec §4). Image/Audio are
-// *CardUpload (Task 2's type, card.go) so they drop straight into a
+// *CardUpload (card.go) so they drop straight into a
 // CardForm — SaveCardForm is what actually applies them, in the same
 // transaction as the card and tag writes (#363).
 type cardUploads struct {

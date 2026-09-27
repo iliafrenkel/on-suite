@@ -215,7 +215,7 @@
 		// decision): ticking Remove clears any file already chosen for this
 		// same kind, so the drop zone can't show a chosen file the server is
 		// about to ignore in favour of the removal (a new file always wins
-		// over Remove server-side — see saveCardUploads — so once Remove is
+		// over Remove server-side — see SaveCardForm — so once Remove is
 		// ticked with no file chosen, that stays true). A convenience only,
 		// scoped to this drop zone via closest(".flash-drop-field") so it
 		// never reaches the other kind's checkbox or input.
