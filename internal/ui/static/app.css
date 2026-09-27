@@ -1891,8 +1891,6 @@ kbd {
 	flex: none;
 	display: flex;
 	align-items: stretch;
-	border: 1px solid var(--c-border);
-	border-radius: var(--radius);
 }
 
 .reader-mark-all button {
@@ -1900,6 +1898,7 @@ kbd {
 }
 
 .reader-mark-all-main {
+	border-color: var(--c-border);
 	border-top-right-radius: 0;
 	border-bottom-right-radius: 0;
 }
@@ -1907,7 +1906,8 @@ kbd {
 .reader-mark-all-toggle {
 	height: 100%;
 	padding: var(--s-1);
-	border-left: 1px solid var(--c-border);
+	border-color: var(--c-border);
+	border-left: none;
 	border-top-left-radius: 0;
 	border-bottom-left-radius: 0;
 	list-style: none;
