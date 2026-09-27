@@ -66,4 +66,12 @@ var shots = []shot{
 		document.querySelector('details.flash-share-menu').open = true;`},
 	{Name: "docs/user/images/flash-import.png", URL: "/flash/import", Height: 590},
 	{Name: "docs/user/images/flash-stats.png", URL: "/flash/stats", Height: 760},
+
+	// docs/user/admin.md
+	// Look only: nothing here adds a user, resets a password or presses
+	// Run now, so the seeded accounts and job history stay as they are.
+	{Name: "docs/user/images/admin-overview.png", URL: "/admin/", Height: 500},
+	{Name: "docs/user/images/admin-users.png", URL: "/admin/users", Height: 720, Setup: `
+		document.querySelector('tr[data-user="sam"] details.usermgmt-menu').open = true;`},
+	{Name: "docs/user/images/admin-jobs.png", URL: "/admin/jobs", Height: 770},
 }
