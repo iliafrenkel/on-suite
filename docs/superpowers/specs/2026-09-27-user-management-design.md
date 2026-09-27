@@ -38,8 +38,9 @@ promises `/admin/` is "a window, not a control panel", and that promise
 stays true. The `/admin/` users card gains a **Manage users →** link and
 nothing else.
 
-`usermgmt` imports only `auth`, `render`, `web` and `db`, the same layer as
-`admin`. It is added to `TestScanSeesTheRealTree` in the arch test.
+`usermgmt` imports `app` (for `app.NewPage`), `auth`, `render` and `web`, the
+same layer as `admin`. It is added to `TestScanSeesTheRealTree` in the arch
+test.
 
 Mounted in `buildStack` ([stack.go](../../../cmd/onsuite/stack.go)):
 
@@ -100,13 +101,14 @@ reset it generates a fresh password, which is also harmless.
 | Add | Validate the username (`auth.ValidateUsername`), generate a password, hash it, `CreateUser`. |
 | Reset password | Generate, hash, `SetPassword(id, hash, "")`, which deletes **all** the target's sessions. |
 | Make/Remove admin | `SetAdmin(id, bool)`. It takes effect on the target's next request, because `RequireUser` reloads the user from the database on every request. Sessions are left alone. |
-| Delete | The confirm page says: "Permanently delete **alice** and everything they own in every app? This cannot be undone." One red Delete button POSTs. `DeleteUser(id)` removes the row. Every app table references `users(id) ON DELETE CASCADE`, and so does `sessions`, so their data and sessions go with it. Then redirect to `/admin/users` (303). |
+| Delete | The confirm page says: "Permanently delete **alice** and everything they own in every app? This cannot be undone." One red Delete button POSTs. `DeleteUser(id)` removes the row. Every app table references `users(id) ON DELETE CASCADE` (flash_shares gained its user FKs in flash migration 0015 for this), and so does `sessions`, so their data and sessions go with it. Then redirect to `/admin/users` (303). |
 
 ### 4.4 Guardrails
 
 - **No self-actions.** The handlers refuse reset, role change and delete when
-  `{id}` is the viewer (notice: "Use Account to change your own password" or
-  "You can't change your own role or delete yourself here"). This is checked
+  `{id}` is the viewer, with three separate notices: "Use Account to change
+  your own password." for reset, "You can't change your own role." for role
+  change, and "You can't delete yourself." for delete. This is checked
   server-side, not just hidden in the UI. Self-password change is `/account`'s
   job.
 - **At least one admin remains.** `SetAdmin(id, false)` and `DeleteUser(id)`
@@ -131,7 +133,7 @@ and `target` (username). Passwords and hashes are never logged.
   with current password, new password and confirm.
 - On submit:
   1. Verify the current password against the stored hash. If wrong, show
-     the notice "Current password is incorrect".
+     the notice "Your current password is incorrect."
   2. Check that new and confirm match, and that the new password passes
      `auth.MinPasswordLength` (the same rule `HashPassword` already enforces).
   3. `SetPassword(id, hash, currentSessionID)`, which updates the hash and
@@ -157,7 +159,8 @@ func (s *Store) SetPassword(ctx context.Context, userID int64, hash, keepSession
 // SetAdmin changes the role. Demoting the last admin returns ErrLastAdmin.
 func (s *Store) SetAdmin(ctx context.Context, userID int64, isAdmin bool) error
 
-// DeleteUser removes the account; FK cascades remove its data and sessions.
+// DeleteUser removes the account; FK cascades remove its data and sessions
+// (flash_shares gained its user FKs in flash migration 0015 for this).
 // Deleting the last admin returns ErrLastAdmin.
 func (s *Store) DeleteUser(ctx context.Context, userID int64) error
 ```
