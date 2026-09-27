@@ -53,21 +53,25 @@ The package stays a leaf: no new imports from this module.
 var (
     ErrUnknownJob     = errors.New("jobs: unknown job")
     ErrAlreadyRunning = errors.New("jobs: job is already running")
-    ErrNotStarted     = errors.New("jobs: scheduler is not running")
 )
 
 // Trigger starts the job with this slug in its own goroutine and returns
 // without waiting for it.
 func (r *Registry) Trigger(slug string) error
+
+// Wait blocks until every triggered run has finished.
+func (r *Registry) Wait()
 ```
 
-- The run uses the context `Run` was given, never a request's. Closing the
-  browser tab cannot cancel a half-written snapshot; shutting the server down
-  cancels manual and scheduled runs alike.
-- `Run` records its context before anything else, **including** when no job
-  is enabled and it returns immediately — so a deployment with every job
-  disabled can still trigger them. `Trigger` before `Run` has been called
-  returns `ErrNotStarted`.
+- The run uses the registry's own context, never a request's. Closing the
+  browser tab cannot cancel a half-written snapshot.
+- `NewRegistry` creates that context; `Run` ties it to its own context with
+  `context.AfterFunc` as its first step — **including** when no job is enabled
+  and `Run` returns immediately. Shutting the server down therefore cancels
+  manual and scheduled runs alike, and a deployment with every job disabled
+  can still trigger them. `Trigger` works before `Run` is called too, so there
+  is no start-up race between `go Run(ctx)` and the first request, and no
+  "not started" error to handle.
 - Checking `Running` and setting it happen under the registry mutex in one
   critical section, so two concurrent triggers cannot both start.
 
@@ -91,7 +95,7 @@ job's `NextRun` stays zero.
 
 `RunOnceForTest` and the doc comment saying the package "deliberately offers
 no way to trigger a job from a request" are removed. Tests use `Trigger` plus
-a small test helper that waits for `Running` to go false (§6).
+`Wait`, which blocks until every triggered run has finished (§6).
 
 ## 4. The page (`internal/platform/jobsadmin`)
 
@@ -135,8 +139,6 @@ POST-redirect-GET round trip is the whole interaction.
   `.notice.notice-error` ("… is already running."), the same shape as
   usermgmt's rejections.
 - `ErrUnknownJob` → `Errors.NotFound`.
-- `ErrNotStarted` → 503 via `Errors` (only reachable if the scheduler failed
-  to start).
 - While a row is running, its button is `disabled`.
 
 ### 4.2 Polling
@@ -173,7 +175,7 @@ unchanged.
 
 | Package | Tests |
 |---|---|
-| `jobs` | slug derivation table; duplicate slug panics; `Trigger` runs the job and records `LastManual`; `Trigger` on a running job returns `ErrAlreadyRunning`; a tick during a run is skipped; manual runs leave `NextRun` alone (enabled and disabled jobs); a disabled job can be triggered; `Trigger` before `Run` returns `ErrNotStarted`; `Trigger` after `Run` returned early (nothing enabled) still works; unknown slug; a panicking manual run is recorded, not fatal; everything under `-race`. A package-internal test helper waits for a job's `Running` to clear. |
+| `jobs` | slug derivation table; duplicate slug panics; `Trigger` runs the job and records `LastManual`; `Trigger` on a running job returns `ErrAlreadyRunning`; a tick during a run is skipped; manual runs leave `NextRun` alone (enabled and disabled jobs); a disabled job can be triggered; `Trigger` after `Run` returned early (nothing enabled) still works; cancelling `Run`'s context cancels a manual run; two concurrent triggers start exactly one run; unknown slug; a panicking manual run is recorded, not fatal; everything under `-race`. |
 | `jobsadmin` | through the real `web.Stack`: anonymous → 303 to `/login`; non-admin → byte-identical to `/nope` for all three routes; admin GET → 200 with every job listed; admin POST → 303 and the job ran; POST without CSRF → rejected; unknown slug → 404; already running → 422 with the notice; the fragment carries `hx-trigger` only while a job is running. |
 | `admin` | the Jobs section links to `/admin/jobs`. |
 | `arch` | `jobsadmin` added to `TestScanSeesTheRealTree`. |
