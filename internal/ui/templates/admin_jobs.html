@@ -1,0 +1,48 @@
+{{define "content"}}
+<div class="stack">
+	<p class="faint"><a href="/admin/">Admin</a> / Jobs</p>
+	<h1>Jobs</h1>
+
+	{{with .Data.Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+
+	<section class="admin-section" id="jobs">
+		<p class="faint">Background work this process runs on a timer. <strong>Run now</strong> starts a job straight away without changing its schedule. Status is in memory and resets when the server restarts.</p>
+		{{template "jobs-table" .Data.Table}}
+	</section>
+</div>
+{{end}}
+
+{{define "jobs-table"}}
+<div class="scroll-x" id="jobs-table"{{if .Polling}} hx-get="/admin/jobs/table" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
+	<table class="admin-table">
+		<thead><tr><th>Job</th><th>Every</th><th>Last run</th><th>Took</th><th>Outcome</th><th>Next run</th><th>Runs</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+		<tbody>
+		{{$csrf := .CSRFToken}}
+		{{range .Jobs}}
+			<tr>
+				<td>{{.Name}}<br><span class="faint">{{.Description}}</span></td>
+				<td>{{if .Enabled}}{{.Interval}}{{else}}<span class="admin-tag admin-tag-off">disabled</span>{{end}}</td>
+				<td>{{if .LastRun.IsZero}}<span class="dim">never</span>{{else}}{{.LastRun.Format "2006-01-02 15:04:05 MST"}}{{if .LastManual}} <span class="faint">(manual)</span>{{end}}{{end}}</td>
+				<td class="dim">{{if .LastRun.IsZero}}—{{else}}{{.LastDuration}}{{end}}</td>
+				<td>
+					{{if .Running}}<span class="admin-tag admin-tag-running">running</span>
+					{{else if .LastRun.IsZero}}<span class="dim">—</span>
+					{{else if .LastErr}}<span class="admin-tag admin-tag-failed">failed</span> <span class="faint">{{.LastErr}}</span>
+					{{else}}<span class="admin-tag admin-tag-ok">ok</span>{{end}}
+				</td>
+				<td class="dim">{{if .NextRun.IsZero}}—{{else}}{{.NextRun.Format "2006-01-02 15:04:05 MST"}}{{end}}</td>
+				<td>{{.Runs}}</td>
+				<td>
+					<form method="post" action="/admin/jobs/{{.Slug}}/run">
+						<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+						<button type="submit"{{if .Running}} disabled{{end}}>Run now</button>
+					</form>
+				</td>
+			</tr>
+		{{else}}
+			<tr><td colspan="8" class="dim">No jobs are registered.</td></tr>
+		{{end}}
+		</tbody>
+	</table>
+</div>
+{{end}}
