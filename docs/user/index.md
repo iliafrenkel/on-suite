@@ -1,8 +1,8 @@
 # Welcome to ON Suite
 
 ON Suite is a small set of everyday apps that you and your household share
-from one private website. Everything you create is yours: other people on
-the same ON Suite can't see it in ON Suite unless you choose to share it.
+from one private website. Everything you create is yours: other people
+can't see it in ON Suite unless you choose to share it.
 
 ## What ON Suite is
 
