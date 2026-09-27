@@ -149,6 +149,21 @@ canonical example's own comment, not here.
   `reader-dialogs` defines and `internal/apps/reader/static/reader.js`'s
   menu/dialog sections.
 
+- **No-JS `<details>` disclosure menu** — reach for this for a per-row or
+  toolbar "..."/options menu whose actions are all form submits: a
+  `<details class="outline-menu">` with a `<summary class="outline-menu-toggle">`
+  (or a `.toolbar-btn` summary for a toolbar split button) and an
+  `.outline-menu-list` of submit buttons living inside the form they act on.
+  Works with JavaScript off, htmx sends the clicked button's own name/value,
+  and it closes because the panes re-render on success — no outside-click or
+  Escape handling by design, unlike the JS-driven `.reader-menu` above.
+  `.reader-row-menu-list` right-anchors it in panes narrow enough that
+  Notes' left-anchored default would force horizontal scroll. Canonical:
+  `internal/apps/notes/templates/outline.html`'s outline row menu, reader's
+  row/folder menus and its "Mark all read" split button
+  (`.reader-mark-all-menu`) in
+  `internal/apps/reader/templates/panes.partial.html`.
+
 - **Draggable, persisted, keyboard-accessible pane gutters** — reach for this
   for any multi-pane layout that wants real resize-by-drag: a flex row with
   `role="separator"` gutter elements between panes, widths held as CSS custom
