@@ -1122,3 +1122,43 @@ func TestSharesPickLatestByIDWhenTheClockStepsBack(t *testing.T) {
 		t.Fatalf("SharesForRecipient = %+v, want [french #%d, spanish #%d]", offers, french.ID, again.ID)
 	}
 }
+
+// TestDeletingAUserCascadesTheirShareRows covers #310: flash_shares'
+// from_user_id/to_user_id had no foreign key at all, so deleting a user who
+// had received (or sent) a share left the row behind as an orphan, and the
+// sender's "Shared with" list rendered it with a blank username. Flash
+// migration 0015 gives both columns ON DELETE CASCADE; this proves deleting
+// the recipient through auth.Store removes the share row.
+func TestDeletingAUserCascadesTheirShareRows(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	shares, err := f.store.SharesForDeck(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shares) != 1 {
+		t.Fatalf("SharesForDeck before delete = %+v, want 1 row", shares)
+	}
+
+	users := auth.NewStore(f.db)
+	if err := users.DeleteUser(ctx, f.bob.ID); err != nil {
+		t.Fatalf("DeleteUser: %v", err)
+	}
+
+	shares, err = f.store.SharesForDeck(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shares) != 0 {
+		t.Errorf("SharesForDeck after deleting the recipient = %+v, want none (the share row should cascade away)", shares)
+	}
+}

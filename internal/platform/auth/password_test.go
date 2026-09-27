@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -126,5 +127,29 @@ func TestValidatePassword(t *testing.T) {
 				t.Errorf("ValidatePassword rejected a valid password: %v", err)
 			}
 		})
+	}
+}
+
+var generatedShape = regexp.MustCompile(
+	`^[abcdefghjkmnpqrstuvwxyz23456789]{5}(-[abcdefghjkmnpqrstuvwxyz23456789]{5}){3}$`)
+
+func TestGeneratePasswordHasTheDocumentedShapeAndPassesPolicy(t *testing.T) {
+	a, err := GeneratePassword()
+	if err != nil {
+		t.Fatalf("GeneratePassword: %v", err)
+	}
+	if !generatedShape.MatchString(a) {
+		t.Errorf("%q does not match xxxxx-xxxxx-xxxxx-xxxxx over the look-alike-free alphabet", a)
+	}
+	if err := ValidatePassword(a); err != nil {
+		t.Errorf("a generated password fails policy: %v", err)
+	}
+
+	b, err := GeneratePassword()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Error("two generated passwords are identical")
 	}
 }

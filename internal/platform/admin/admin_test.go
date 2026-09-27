@@ -718,3 +718,9 @@ func TestTheRouteMapShowsAnEmptyStateWithNoRoutesRecorded(t *testing.T) {
 		t.Error("an empty route map must not render any public tag")
 	}
 }
+
+func TestTheUsersSectionLinksToUserManagement(t *testing.T) {
+	s := newServer(t)
+	rec := s.get(t, s.admin, "/admin/")
+	htmlassert.Parse(t, rec.Body.String()).MustHave(`#users a[href="/admin/users"]`)
+}

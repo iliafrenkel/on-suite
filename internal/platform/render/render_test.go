@@ -88,7 +88,7 @@ func TestPageRendersADocumentWithTheShell(t *testing.T) {
 	}
 
 	doc.MustHave(".shell-user")
-	if got := htmlassert.Text(doc.MustHave(".shell-user span")); got != "ilia" {
+	if got := htmlassert.Text(doc.MustHave(`.shell-user a[href="/account"]`)); got != "ilia" {
 		t.Errorf("username = %q", got)
 	}
 }
@@ -116,9 +116,9 @@ func TestShellHasConnectivityIndicator(t *testing.T) {
 	}
 	doc.MustHave(".shell-user [data-conn-indicator] .conn-dot")
 
-	// Still the username test's first .shell-user span, unaffected by the
-	// new indicator (which is a div, not a span).
-	if got := htmlassert.Text(doc.MustHave(".shell-user span")); got != "ilia" {
+	// Still the username test's first .shell-user link, unaffected by the
+	// new indicator (which is a div, not a link).
+	if got := htmlassert.Text(doc.MustHave(`.shell-user a[href="/account"]`)); got != "ilia" {
 		t.Errorf("username = %q", got)
 	}
 }

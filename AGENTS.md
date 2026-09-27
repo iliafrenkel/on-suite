@@ -59,6 +59,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o onsuite ./cmd/onsuite
 Local run:
 ```bash
 ./onsuite user add ilia --admin --data-dir ./data   # first account, prompts for password
+./onsuite user reset-password ilia --data-dir ./data  # recovery; prompts for the new password
 ./onsuite serve --data-dir ./data
 ```
 Every `serve` flag has an `ONSUITE_*` env equivalent. `./onsuite help` lists
@@ -152,6 +153,14 @@ admin page at `/admin/`, guarded by `Auth.RequireAdmin` — a signed-in
 non-admin gets the same 404 as a URL that does not exist. It is a platform
 page rather than an app because it reports *on* the platform. Its design is in
 [docs/superpowers/specs/2026-08-24-admin-page-design.md](docs/superpowers/specs/2026-08-24-admin-page-design.md).
+
+[internal/platform/usermgmt](internal/platform/usermgmt/usermgmt.go) is the
+admin page's writable sibling: `/admin/users` (admin-only, same 404 guard)
+adds, deletes, promotes/demotes and resets users with one-time generated
+passwords, and `/account` lets anyone change their own password. `auth.Store`
+enforces that at least one admin always remains (`ErrLastAdmin`). Its design
+is in
+[docs/superpowers/specs/2026-09-27-user-management-design.md](docs/superpowers/specs/2026-09-27-user-management-design.md).
 
 ## Commit messages
 

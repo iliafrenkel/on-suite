@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"unicode/utf8"
 
@@ -57,6 +58,33 @@ func ValidatePassword(plain string) error {
 		return fmt.Errorf("password must be at least %d characters", MinPasswordLength)
 	}
 	return nil
+}
+
+// generatedAlphabet leaves out 0/o and 1/l/i, so a password read aloud or
+// copied off a screen cannot be mistyped (#310).
+const generatedAlphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+
+// GeneratePassword returns a random password for an account an admin has just
+// created or reset: four groups of five from generatedAlphabet, such as
+// "k7mqa-x3vnd-pr4tz-hw9cb". That is about 99 bits, and 23 runes clears
+// MinPasswordLength.
+func GeneratePassword() (string, error) {
+	const groups, groupLen = 4, 5
+	max := big.NewInt(int64(len(generatedAlphabet)))
+	var b strings.Builder
+	for g := 0; g < groups; g++ {
+		if g > 0 {
+			b.WriteByte('-')
+		}
+		for i := 0; i < groupLen; i++ {
+			n, err := rand.Int(rand.Reader, max)
+			if err != nil {
+				return "", fmt.Errorf("auth: generate password: %w", err)
+			}
+			b.WriteByte(generatedAlphabet[n.Int64()])
+		}
+	}
+	return b.String(), nil
 }
 
 // HashPassword returns a PHC-format Argon2id hash, e.g.

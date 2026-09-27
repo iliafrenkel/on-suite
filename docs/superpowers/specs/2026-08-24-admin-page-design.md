@@ -23,6 +23,11 @@ and ON Flash arrive, each contributes its own numbers by implementing one
 optional method — with no change to the admin page, and without the platform
 ever importing an app.
 
+> **Amendment (2026-09-27, #310):** `/admin/` itself stays read-only. Changing
+> accounts lives on a separate page, `/admin/users`, in its own package
+> (`internal/platform/usermgmt`), linked from the users card. See
+> [2026-09-27-user-management-design.md](2026-09-27-user-management-design.md).
+
 ## 2. Constraints
 
 Decided during brainstorming; each drives a specific decision below.

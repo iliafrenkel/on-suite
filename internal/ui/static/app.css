@@ -811,6 +811,26 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 .admin-table th { color: var(--c-text-dim); font-weight: 600; white-space: nowrap; }
 .admin-table tr:last-child td { border-bottom: none; }
 
+/* ---- User management (#310) ------------------------------------------- */
+
+/* The row menus reuse .outline-menu (PATTERNS.md "No-JS <details>
+ * disclosure menu"), whose toggle stays transparent until its .outline-row
+ * is hovered. A table row is not an .outline-row, so show it outright. */
+.usermgmt-menu .outline-menu-toggle { opacity: 1; }
+
+.usermgmt-menu-link {
+	display: block;
+	padding: var(--s-1) var(--s-2);
+	border-radius: var(--radius);
+	color: var(--c-danger);
+	text-decoration: none;
+	line-height: 1.5;
+}
+.usermgmt-menu-link:hover { background: var(--c-danger-bg); }
+
+.usermgmt-password code { font-size: var(--fs-base); user-select: all; }
+.usermgmt-add { max-width: 22rem; }
+
 .admin-tag {
 	display: inline-block;
 	padding: 0 var(--s-2);
@@ -845,6 +865,11 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	border: none;
 	border-top: var(--border);
 }
+
+/* The header username is the way into /account (#310): a link, but still
+ * reading as the plain name it replaced. */
+.shell-username { color: inherit; text-decoration: none; }
+.shell-username:hover { text-decoration: underline; }
 
 /* ---- Outline (ON Notes) ------------------------------------------------- */
 
@@ -1732,6 +1757,14 @@ kbd {
 	}
 	.paste-back-btn {
 		display: inline-flex;
+	}
+
+	/* The accounts table can't sit in a .scroll-x wrapper: overflow-x: auto
+	 * also computes overflow-y as auto, which clips each row's
+	 * absolutely-positioned menu (#310). Hide the least essential columns
+	 * instead so the table fits without an overflow container. */
+	.usermgmt-table .usermgmt-optional {
+		display: none;
 	}
 
 }
