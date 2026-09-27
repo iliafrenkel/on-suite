@@ -51,7 +51,7 @@
 					{{else}}
 						<details class="outline-menu usermgmt-menu">
 							<summary class="outline-menu-toggle quiet" aria-label="Actions for {{.Username}}">{{ticon "more"}}</summary>
-							<div class="outline-menu-list reader-row-menu-list">
+							<div class="outline-menu-list outline-menu-list-end">
 								<form method="post" action="/admin/users/{{.ID}}/password">
 									<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
 									<button type="submit">Reset password</button>
