@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -135,6 +136,9 @@ func TestTheTablePollsOnlyWhileAJobIsRunning(t *testing.T) {
 	reg := jobs.NewRegistry()
 	release := blockingJob(reg, "slow thing")
 	s := newServer(t, reg)
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	defer func() { unblock(); reg.Wait() }()
 
 	if err := reg.Trigger("slow-thing"); err != nil {
 		t.Fatal(err)
@@ -150,7 +154,7 @@ func TestTheTablePollsOnlyWhileAJobIsRunning(t *testing.T) {
 		d.MustHave(`button[disabled]`)
 	}
 
-	close(release)
+	unblock()
 	reg.Wait()
 
 	d := doc(t, s.get(t, s.root, "/admin/jobs/table"))

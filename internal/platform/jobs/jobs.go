@@ -256,8 +256,10 @@ func (r *Registry) Trigger(slug string) error {
 	return nil
 }
 
-// Wait blocks until every triggered run has finished. Tests use it to
-// observe a triggered run's outcome without polling.
+// Wait blocks until every triggered run has finished. It exists for tests,
+// to observe a triggered run's outcome without polling, and must not be
+// called concurrently with Trigger: a sync.WaitGroup forbids Add from zero
+// racing Wait.
 func (r *Registry) Wait() {
 	r.manual.Wait()
 }

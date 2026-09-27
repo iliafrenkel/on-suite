@@ -144,7 +144,7 @@ participates in `onsuite export` automatically; one implementing `Stater`
 (`Stats(ctx, db) ([]app.Stat, error)`) gets a card on the admin page. Apps
 that don't implement these are silently skipped — that's a design choice.
 
-**Two platform packages exist only for operations.**
+**Several platform packages exist only for operations.**
 [internal/platform/jobs](internal/platform/jobs/jobs.go) is a generic interval
 scheduler that remembers how each run went and can run any job on demand
 (`Trigger`); it takes closures and imports nothing else in the module, so it

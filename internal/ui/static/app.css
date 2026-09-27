@@ -852,6 +852,9 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 .admin-tag-environment,
 .admin-tag-derived { background: var(--c-bg-inset); color: var(--c-text-dim); }
 
+/* Keeps a per-row action button on one line in a narrow table column. */
+.admin-table .nowrap { white-space: nowrap; }
+
 /* The admin entry is not an app, so it sits below a separator at the very
  * bottom of the sidebar rather than in the app list. A plain <hr> rather than
  * a border on .sidebar-admin itself: that link shares .sidebar-item's

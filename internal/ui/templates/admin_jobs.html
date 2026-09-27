@@ -32,7 +32,7 @@
 				</td>
 				<td class="dim">{{if .NextRun.IsZero}}—{{else}}{{.NextRun.Format "2006-01-02 15:04:05 MST"}}{{end}}</td>
 				<td>{{.Runs}}</td>
-				<td>
+				<td class="nowrap">
 					<form method="post" action="/admin/jobs/{{.Slug}}/run">
 						<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
 						<button type="submit"{{if .Running}} disabled{{end}}>Run now</button>
