@@ -43,7 +43,7 @@ the template`. The scope is usually an app name (`notes`, `paste`) or
 
 The `type` decides which section of the release notes a commit lands in —
 [`.goreleaser.yaml`](.goreleaser.yaml)'s `changelog.groups` sorts on it when a
-tagged release is cut (see [docs/RELEASING.md](docs/RELEASING.md)):
+tagged release is cut (see [docs/developers/releasing.md](docs/developers/releasing.md)):
 
 | Type                                 | Release notes section          |
 | ------------------------------------ | ------------------------------- |

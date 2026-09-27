@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# next-version.sh suggests the next release tag, per docs/RELEASING.md's
+# next-version.sh suggests the next release tag, per docs/developers/releasing.md's
 # versioning rule: derived from the Conventional Commits (see
 # CONTRIBUTING.md#commit-messages) merged since the last tag, the same way
 # .goreleaser.yaml's changelog.groups already classifies them.
@@ -12,7 +12,7 @@
 # suggestion, matching their exclusion from the changelog itself.
 #
 # This only prints a suggestion — it does not tag or push anything. Review
-# it, then follow docs/RELEASING.md's own tagging steps.
+# it, then follow docs/developers/releasing.md's own tagging steps.
 set -euo pipefail
 
 last_tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
@@ -29,7 +29,7 @@ if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 IFS='.' read -r major minor patch <<<"$version"
 if [[ "$major" != "0" ]]; then
-	echo "warning: $last_tag is >= 1.0.0 — this script only implements the pre-1.0 rule (a breaking change should bump major, not minor, past 1.0). Check docs/RELEASING.md and bump by hand." >&2
+	echo "warning: $last_tag is >= 1.0.0 — this script only implements the pre-1.0 rule (a breaking change should bump major, not minor, past 1.0). Check docs/developers/releasing.md and bump by hand." >&2
 fi
 
 # Record-separated (RS=\x1d, US=\x1e) so a multi-paragraph commit body can't

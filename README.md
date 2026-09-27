@@ -34,7 +34,7 @@ still to come.
 - **You want to self-host something small for yourself and a few people you
   trust**, and you'd rather manage one binary and one SQLite file than a pile
   of Docker Compose services. → Read [Getting started](#getting-started)
-  below, then [Deploying](docs/DEPLOYING.md).
+  below, then [Deploying](docs/self-hosting/deploying.md).
 - **You want to run it, and maybe also change it or add an app.** → Same
   starting point, then [Contributing](CONTRIBUTING.md) for the ground rules
   (no CGO, no Node, the platform/app boundary) before you dive into the code.
@@ -87,7 +87,7 @@ since there's no CGO to worry about:
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o onsuite ./cmd/onsuite
 ```
 
-**Running this somewhere real?** See [Deploying ON Suite](docs/DEPLOYING.md)
+**Running this somewhere real?** See [Deploying ON Suite](docs/self-hosting/deploying.md)
 for a systemd unit, choosing between a reverse proxy and built-in TLS,
 backups and restores, upgrades, and a Docker option.
 
@@ -155,9 +155,11 @@ on-suite/
 │   ├── htmlassert/             # test-only HTML structure assertions
 │   └── arch/                  # one test enforcing the import-boundary rules above
 ├── docs/
-│   ├── DEPLOYING.md            # running it somewhere real
-│   ├── RELEASING.md            # how to cut a tagged release
-│   ├── onsuite.service         # systemd unit
+│   ├── self-hosting/
+│   │   ├── deploying.md         # running it somewhere real
+│   │   └── onsuite.service      # systemd unit
+│   ├── developers/
+│   │   └── releasing.md        # how to cut a tagged release
 │   ├── images/                 # screenshots used in this README
 │   └── superpowers/
 │       ├── specs/              # the design document
@@ -206,8 +208,8 @@ major stays `0` until all four apps exist and feel solid, not on a fixed
 schedule. Until then, a new feature and a breaking change both bump minor
 (there's nowhere else for "breaking" to signal while major is pinned at
 `0`); anything else release-worthy bumps patch. See
-[`docs/RELEASING.md`](docs/RELEASING.md) for the full rule and the tagging
-steps.
+[`docs/developers/releasing.md`](docs/developers/releasing.md) for the full
+rule and the tagging steps.
 
 ## Testing
 
@@ -224,8 +226,8 @@ behaviour that `:memory:` doesn't reproduce.
 
 | Doc | For |
 |---|---|
-| [Deploying ON Suite](docs/DEPLOYING.md) | Running it on a real server: systemd, TLS, backups, upgrades, Docker |
-| [Releasing](docs/RELEASING.md) | Cutting and verifying a tagged release (maintainers) |
+| [Deploying ON Suite](docs/self-hosting/deploying.md) | Running it on a real server: systemd, TLS, backups, upgrades, Docker |
+| [Releasing](docs/developers/releasing.md) | Cutting and verifying a tagged release (maintainers) |
 | [Contributing](CONTRIBUTING.md) | Ground rules for contributing or forking |
 | [Design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md) | The full architecture and rationale |
 

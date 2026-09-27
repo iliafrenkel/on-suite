@@ -45,8 +45,8 @@ archives:
     files:
       - README.md
       - LICENSE
-      - docs/DEPLOYING.md
-      - docs/onsuite.service
+      - docs/self-hosting/deploying.md
+      - docs/self-hosting/onsuite.service
 
 # One multi-platform image built from the linux binaries in `builds` above —
 # goreleaser assembles a single manifest covering both platforms, so there's
@@ -112,7 +112,7 @@ signs:
 # rest a few plain sentences about what changed. Both sit above the
 # generated changelog below. A tag whose message is just the version (every
 # tag before v1.1.0, or a quick `-m v1.2.3`) gets a plain title and no header.
-# See docs/RELEASING.md.
+# See docs/developers/releasing.md.
 release:
   name_template: >-
     {{ if eq .TagSubject .Tag }}{{ .Tag }}{{ else }}{{ .TagSubject }} ({{ .Tag }}){{ end }}

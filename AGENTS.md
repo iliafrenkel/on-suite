@@ -195,6 +195,6 @@ type-to-section table and the `feat`-vs-`refactor` distinction.
 ## Other docs worth knowing about
 
 - [PATTERNS.md](PATTERNS.md) — index of recurring, deliberate patterns; check it before writing new code.
-- [docs/DEPLOYING.md](docs/DEPLOYING.md) — systemd, TLS, backups, upgrades, Docker.
-- [docs/RELEASING.md](docs/RELEASING.md) — cutting a tagged release.
+- [docs/self-hosting/deploying.md](docs/self-hosting/deploying.md) — systemd, TLS, backups, upgrades, Docker.
+- [docs/developers/releasing.md](docs/developers/releasing.md) — cutting a tagged release.
 - [docs/superpowers/plans/](docs/superpowers/plans/) — task-by-task implementation plans per build phase.

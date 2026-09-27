@@ -1,12 +1,28 @@
 # Releasing
 
 > This is for maintainers cutting a new version of ON Suite itself. If you
-> just want to deploy an existing release, see [`docs/DEPLOYING.md`](DEPLOYING.md).
+> just want to deploy an existing release, see
+> [`docs/self-hosting/deploying.md`](../self-hosting/deploying.md).
 
 Releases are just a git tag. Pushing a tag matching `v*` triggers
-[`.github/workflows/release.yml`](../.github/workflows/release.yml), which
+[`.github/workflows/release.yml`](../../.github/workflows/release.yml), which
 runs [goreleaser](https://goreleaser.com) to build, package, and publish a
 GitHub Release — there's no separate release script or manual build step.
+
+## Versioning
+
+Releases follow ordinary [semver](https://semver.org). ON Suite is past 1.0
+(tags `v1.0.0`, `v1.1.0`, ... exist), so the bump is derived straight from
+the [Conventional Commits](../../CONTRIBUTING.md#commit-messages) merged
+since the last tag, the same classification `.goreleaser.yaml`'s
+`changelog.groups` already uses:
+
+| Commits since the last tag                                   | Bump               |
+| -------------------------------------------------------------- | ------------------ |
+| a `BREAKING CHANGE:` footer / `type!:`                          | major (`(N+1).0.0`) |
+| any `feat:` (no breaking change)                                | minor (`N.(M+1).0`) |
+| only `fix:`/`refactor:`/`perf:`/`chore:` (or unlabeled)         | patch (`N.M.(P+1)`) |
+| only `docs:`/`test:`                                            | no release needed  |
 
 ## Cutting a release
 
@@ -21,25 +37,10 @@ GitHub Release — there's no separate release script or manual build step.
    release is ad hoc — whenever a batch of merged work feels release-worthy,
    not on a schedule or a fixed set of triggers.
 
-   ON Suite is pre-1.0 (`0.MINOR.PATCH`) until all four apps
-   (README.md's "Of the four apps...") exist and feel solid; major stays `0`
-   until then. The bump itself is derived from the [Conventional
-   Commits](CONTRIBUTING.md#commit-messages) merged since the last tag, the
-   same classification `.goreleaser.yaml`'s `changelog.groups` already uses:
+   See [Versioning](#versioning) above for the bump rule.
 
-   | Commits since the last tag                                | Bump                |
-   | ----------------------------------------------------------- | ------------------- |
-   | any `feat:`, or a `BREAKING CHANGE:` footer / `type!:`       | minor (`0.(N+1).0`) |
-   | only `fix:`/`refactor:`/`perf:`/`chore:` (or unlabeled)      | patch (`0.N.(P+1)`) |
-   | only `docs:`/`test:`                                         | no release needed   |
-
-   A feature and a breaking change bump the same digit pre-1.0 because
-   major is pinned at `0` — there is nowhere else for "breaking" to signal.
-   Once ON Suite crosses 1.0, this becomes ordinary semver: breaking →
-   major, `feat` → minor, `fix` → patch.
-
-   [`scripts/next-version.sh`](../scripts/next-version.sh) applies this rule
-   for you — it only prints a suggestion, review it before tagging:
+   [`scripts/next-version.sh`](../../scripts/next-version.sh) applies this
+   rule for you — it only prints a suggestion, review it before tagging:
 
    ```bash
    ./scripts/next-version.sh
@@ -84,25 +85,25 @@ GitHub Release — there's no separate release script or manual build step.
 
 3. Watch the run under the repo's Actions tab. Goreleaser will:
    - re-run `go mod tidy` and `go test ./... -race` as a final gate
-     ([`.goreleaser.yaml`](../.goreleaser.yaml) `before.hooks`),
+     ([`.goreleaser.yaml`](../../.goreleaser.yaml) `before.hooks`),
    - cross-compile `onsuite` for `linux/amd64`, `linux/arm64`, `darwin/arm64`,
      `windows/amd64` with `CGO_ENABLED=0`, stamping the tag into
      `main.version`,
    - package each binary into a `.tar.gz` (`.zip` for Windows) alongside
-     `README.md`, `LICENSE`, `docs/DEPLOYING.md`, and `docs/onsuite.service`,
-     plus a `checksums.txt`,
+     `README.md`, `LICENSE`, `docs/self-hosting/deploying.md`, and
+     `docs/self-hosting/onsuite.service`, plus a `checksums.txt`,
    - sign `checksums.txt` with [cosign](https://docs.sigstore.dev/cosign/overview/)
      using keyless (Sigstore) signing, producing `checksums.txt.sig` and
      `checksums.txt.pem`,
    - build a multi-arch (`linux/amd64`, `linux/arm64`) Docker image from
-     [`Dockerfile.release`](../Dockerfile.release) — packaging the `linux`
+     [`Dockerfile.release`](../../Dockerfile.release) — packaging the `linux`
      binaries already built above, not rebuilding from source — and push it to
      `ghcr.io/iliafrenkel/on-suite` tagged with the version and `latest`,
      signing it the same keyless way as the checksums,
    - generate release notes from `git log`, grouped into New Features, Bug
      Fixes, Improvements, and Everything Else (for the curious) based on each
      commit's Conventional Commits type — see
-     [`CONTRIBUTING.md`](../CONTRIBUTING.md#commit-messages) for the type-to-section
+     [`CONTRIBUTING.md`](../../CONTRIBUTING.md#commit-messages) for the type-to-section
      mapping. Commits starting with `docs:` or `test:`, and merge commits,
      are dropped entirely,
    - publish everything as a GitHub Release, titled and introduced by the
@@ -159,4 +160,5 @@ re-pushing the tag, or goreleaser will fail on the name collision.
 
 ## What this doesn't cover
 
-- **Deploying a release to a server** — see [`docs/DEPLOYING.md`](DEPLOYING.md).
+- **Deploying a release to a server** — see
+  [`docs/self-hosting/deploying.md`](../self-hosting/deploying.md).
