@@ -28,7 +28,7 @@ func purgeOldReadItem(t *testing.T, f *storeFixture, feedURL string, now time.Ti
 	if _, err := f.store.SaveItems(ctx, sub.FeedID, feed, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.MarkAllRead(ctx, f.alice.ID, reader.ScopeAll, 0, now); err != nil {
+	if _, err := f.store.MarkAllRead(ctx, f.alice.ID, reader.ScopeAll, 0, now, 0); err != nil {
 		t.Fatal(err)
 	}
 	n, err := f.store.PurgeItems(ctx, now.Add(-reader.RetentionAge))

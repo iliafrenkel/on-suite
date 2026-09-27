@@ -445,10 +445,24 @@
              hx-trigger="input changed delay:300ms, search"
              hx-replace-url="true">
     </form>
+    {{/* Split button (#307): the main half marks the whole list read; the
+         chevron opens a <details> menu — the same no-JS disclosure as the
+         tree's row menus, see PATTERNS.md — whose buttons submit this same
+         form with older_than=day|week. Same form, so they carry reader-ctx
+         and work with JavaScript off; htmx sends the clicked button's
+         name/value along. The panes re-render on success, which also closes
+         the menu. */}}
     <form class="reader-mark-all" method="post" action="/reader/read-all"
           hx-post="/reader/read-all" hx-target="#reader-panes" hx-swap="outerHTML">
       {{template "reader-ctx" .}}
-      <button type="submit" class="toolbar-btn">{{ticon "check"}}Mark all read</button>
+      <button type="submit" class="toolbar-btn reader-mark-all-main">{{ticon "check"}}Mark all read</button>
+      <details class="outline-menu reader-mark-all-menu">
+        <summary class="toolbar-btn reader-mark-all-toggle" aria-label="More mark-read options">{{ticon "chevron-down"}}</summary>
+        <div class="outline-menu-list reader-row-menu-list">
+          <button type="submit" name="older_than" value="day">Older than 1 day</button>
+          <button type="submit" name="older_than" value="week">Older than 1 week</button>
+        </div>
+      </details>
     </form>
   </div>
   <header class="reader-list-head">

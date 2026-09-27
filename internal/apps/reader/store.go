@@ -1172,12 +1172,15 @@ func (s *Store) UnreadCounts(ctx context.Context, userID int64) (Counts, error) 
 }
 
 // MarkAllRead marks everything currently unread in a scope as read, returning
-// how many rows it touched.
+// how many rows it touched. A positive olderThan narrows that to items
+// published strictly before now-olderThan (#307); zero means everything.
 //
 // It writes state rows for exactly the items the same predicate as
 // ItemsForScope would list — including ItemsForScope's fetched_at cutoff — so
-// "mark all read" and "what is unread" can never disagree.
-func (s *Store) MarkAllRead(ctx context.Context, userID int64, scope Scope, subID int64, now time.Time) (int, error) {
+// "mark all read" and "what is unread" can never disagree. The age cutoff is
+// on published_at, not fetched_at, because it is the date the list shows and
+// sorts by: "older than a day" should match what is on screen.
+func (s *Store) MarkAllRead(ctx context.Context, userID int64, scope Scope, subID int64, now time.Time, olderThan time.Duration) (int, error) {
 	query := `
 		INSERT INTO reader_item_state (user_id, item_id, read_at, starred_at)
 		SELECT sub.user_id, i.id, ?, NULL
@@ -1198,6 +1201,11 @@ func (s *Store) MarkAllRead(ctx context.Context, userID int64, scope Scope, subI
 		                          AND st.starred_at IS NOT NULL)`
 	default:
 		return 0, fmt.Errorf("%w: unknown scope %q", ErrInvalid, scope)
+	}
+
+	if olderThan > 0 {
+		query += ` AND i.published_at < ?`
+		args = append(args, formatTime(now.Add(-olderThan)))
 	}
 
 	query += ` ON CONFLICT (user_id, item_id) DO UPDATE SET read_at = excluded.read_at

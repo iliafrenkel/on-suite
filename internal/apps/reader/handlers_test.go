@@ -2,6 +2,7 @@ package reader_test
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -844,6 +845,109 @@ func TestMarkAllReadClearsTheFeed(t *testing.T) {
 	}
 	if counts.Total != 0 {
 		t.Errorf("%d items still unread after mark-all-read", counts.Total)
+	}
+}
+
+// seedAged subscribes Alice to one feed holding an item published an hour
+// ago ("fresh") and one published three days ago ("old").
+func seedAged(t *testing.T, s *apptest.Server[*reader.Store]) (subID int64, fresh, old reader.Item) {
+	t.Helper()
+	ctx := context.Background()
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "fresh", Title: "Fresh", PublishedAt: now.Add(-time.Hour)},
+		{GUID: "old", Title: "Old", PublishedAt: now.Add(-72 * time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		switch it.GUID {
+		case "fresh":
+			fresh = it
+		case "old":
+			old = it
+		}
+	}
+	return sub.ID, fresh, old
+}
+
+func TestMarkOlderThanADayReadLeavesFreshItemsUnread(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	subID, fresh, old := seedAged(t, s)
+
+	rec := s.PostHX(t, s.Alice, "/reader/read-all", url.Values{
+		"scope":      {"feed"},
+		"sub":        {itoa(subID)},
+		"older_than": {"day"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("read-all older_than=day returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	if read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, old.ID); err != nil || !read {
+		t.Errorf("three-day-old item read = %v (err %v), want true", read, err)
+	}
+	if read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, fresh.ID); err != nil || read {
+		t.Errorf("hour-old item read = %v (err %v), want false — it is not older than a day", read, err)
+	}
+}
+
+// older_than is a closed set: anything unrecognised is a bad request, not a
+// silent fall-back to marking everything read.
+func TestMarkAllReadRejectsAnUnknownOlderThan(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	subID, fresh, old := seedAged(t, s)
+
+	for _, raw := range []string{"month", "24h", "Day"} {
+		rec := s.PostHX(t, s.Alice, "/reader/read-all", url.Values{
+			"scope":      {"feed"},
+			"sub":        {itoa(subID)},
+			"older_than": {raw},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("older_than=%q returned %d, want 400", raw, rec.Code)
+		}
+	}
+	for _, it := range []reader.Item{fresh, old} {
+		if read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, it.ID); err != nil || read {
+			t.Errorf("%s read = %v (err %v) after rejected requests, want false", it.GUID, read, err)
+		}
+	}
+}
+
+// The older-than options are submit buttons inside the same form as Mark all
+// read, so they carry the list context and work with JavaScript off.
+func TestMarkAllReadSplitButtonOffersOlderThanOptions(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "a")
+
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(subID))
+	doc.MustHave(`form.reader-mark-all input[name=scope]`)
+	doc.MustHave(`form.reader-mark-all button.reader-mark-all-main`)
+	// htmlassert takes one qualifier per compound selector, so match on
+	// name and check value/label per node.
+	got := map[string]string{}
+	for _, btn := range doc.QueryAll(`form.reader-mark-all details.reader-mark-all-menu button[name=older_than]`) {
+		value, _ := htmlassert.Attr(btn, "value")
+		got[value] = strings.TrimSpace(htmlassert.Text(btn))
+	}
+	want := map[string]string{"day": "Older than 1 day", "week": "Older than 1 week"}
+	if !maps.Equal(got, want) {
+		t.Errorf("older_than menu buttons = %v, want %v", got, want)
+	}
+	toggle := doc.MustHave(`form.reader-mark-all details.reader-mark-all-menu summary`)
+	if got, _ := htmlassert.Attr(toggle, "aria-label"); got != "More mark-read options" {
+		t.Errorf("menu toggle aria-label = %q, want %q", got, "More mark-read options")
 	}
 }
 

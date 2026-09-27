@@ -542,14 +542,35 @@ func (a *App) markAllRead(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	olderThan, ok := parseOlderThan(r.PostFormValue("older_than"))
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
 	// The form carries the list it fired from, so the re-render stays there
 	// instead of resetting to All/Unread.
 	lc := formContext(r, 0)
-	if _, err := a.store.MarkAllRead(r.Context(), userID, lc.Scope, lc.SubID, a.store.now()); err != nil {
+	if _, err := a.store.MarkAllRead(r.Context(), userID, lc.Scope, lc.SubID, a.store.now(), olderThan); err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	a.renderIndex(w, r, userID, lc, "")
+}
+
+// parseOlderThan maps the mark-read split button's older_than choice onto a
+// cutoff (#307). A closed set rather than a parsed duration: the menu offers
+// exactly these, and an unexpected value should be a 400, not a guess.
+func parseOlderThan(raw string) (time.Duration, bool) {
+	switch raw {
+	case "":
+		return 0, true
+	case "day":
+		return 24 * time.Hour, true
+	case "week":
+		return 7 * 24 * time.Hour, true
+	default:
+		return 0, false
+	}
 }
 
 // prefs sets the hide-read-feeds preference — a plain POST rather than a
