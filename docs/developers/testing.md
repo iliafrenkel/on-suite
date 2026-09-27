@@ -83,7 +83,7 @@ as `s.Store` so a test can set up data directly. The server then gives you:
 | `s.Post(t, sess, path, form)` | a form POST with the CSRF token attached |
 | `s.Submit(t, sess, path, form, wantLocation)` | a POST that must redirect to `wantLocation` |
 | `s.PostHX` / `s.UploadHX` | the same, sent the way HTMX sends it |
-| `s.Clock.Set(t)` / `s.Clock.Advance(d)` | pin "now" for the app and `s.Store` together |
+| `s.Clock.Set(when)` / `s.Clock.Advance(d)` | pin "now" for the app and `s.Store` together |
 
 [`internal/htmlassert`](../../internal/htmlassert/htmlassert.go) asserts on
 the structure of the HTML, never on strings, so renaming a class or changing

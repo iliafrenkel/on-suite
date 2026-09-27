@@ -12,9 +12,11 @@ together before changing it.*
 - **The platform/app boundary is the whole design.** An app is a package
   under `internal/apps/` implementing `app.App`
   ([`internal/platform/app/app.go`](../../internal/platform/app/app.go)).
-  Adding one means writing that package and adding it to `registeredApps()`
-  in [`cmd/onsuite/main.go`](../../cmd/onsuite/main.go). The platform never
-  imports an app and apps never import each other — an
+  Adding one means writing that package plus one registration line in
+  `registeredApps()` in [`cmd/onsuite/main.go`](../../cmd/onsuite/main.go);
+  a few tests pin the registered-app list too (see
+  [Adding an app, step 5](adding-an-app.md#5-register-it)). The platform
+  never imports an app and apps never import each other — an
   [architecture test](#package-layering) walks the import graph and fails
   the build if either rule breaks.
 - **Optional capabilities are discovered, not declared.** An app that

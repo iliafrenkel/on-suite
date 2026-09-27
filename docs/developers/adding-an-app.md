@@ -3,9 +3,10 @@
 *For a developer writing a new ON app. Read [Architecture](architecture.md)
 first; this page is the practical checklist.*
 
-An app is one package under `internal/apps/` that implements `app.App`, plus
-one line in `registeredApps()`. The platform discovers everything else. The
-smallest real app is ON Paste — keep
+An app is one package under `internal/apps/` that implements `app.App`,
+plus one registration line in `registeredApps()` and a few tests that pin
+the registered-app list (see [step 5](#5-register-it)). The smallest real
+app is ON Paste — keep
 [`internal/apps/paste/paste.go`](../../internal/apps/paste/paste.go) open as
 you read.
 
