@@ -271,30 +271,100 @@ kbd {
 	color: var(--c-text-dim);
 }
 
-.shell-user form { display: inline; }
+/* ---- User menu (#403) ---- */
 
-.shell-settings { position: relative; }
-.shell-settings summary { list-style: none; cursor: pointer; }
-.shell-settings summary::-webkit-details-marker { display: none; }
+/* One button in the header's top right: icon, username, chevron. It opens a
+ * panel holding Account, the display settings and Log out. */
+.shell-user-menu { position: relative; }
+.shell-user-menu summary { list-style: none; cursor: pointer; }
+.shell-user-menu summary::-webkit-details-marker { display: none; }
 
-.shell-settings-menu {
+.shell-user-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	max-width: 14rem;
+	color: var(--c-text);
+}
+
+.shell-user-toggle .toolbar-icon:last-child {
+	width: 0.9rem;
+	height: 0.9rem;
+	color: var(--c-text-dim);
+	transition: transform 120ms ease-out;
+}
+
+.shell-user-menu[open] .shell-user-toggle { background: var(--c-bg-inset); }
+.shell-user-menu[open] .shell-user-toggle .toolbar-icon:last-child { transform: rotate(180deg); }
+
+.shell-user-name {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.shell-user-menu-panel {
 	position: absolute;
 	right: 0;
 	top: calc(100% + var(--s-2));
 	z-index: 10;
-	min-width: 12rem;
-	padding: var(--s-3);
+	display: flex;
+	flex-direction: column;
+	min-width: 14rem;
+	padding: var(--s-1);
 	background: var(--c-bg);
 	border: var(--border);
 	border-radius: var(--radius);
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+	color: var(--c-text);
 }
 
-.shell-settings-menu .field { margin-bottom: var(--s-3); }
-.shell-settings-menu .field:last-child { margin-bottom: 0; }
-.shell-settings-menu .row { flex-wrap: wrap; margin-top: var(--s-1); }
-.shell-settings-menu button[data-theme-value].active,
-.shell-settings-menu button[data-font-value].active {
+.shell-user-menu-panel form { display: block; }
+
+/* Account and Log out: full-width rows, a link and a button that look the
+ * same. */
+.shell-menu-item {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	width: 100%;
+	padding: var(--s-2);
+	border: none;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--c-text);
+	font: inherit;
+	font-size: var(--fs-sm);
+	text-align: left;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.shell-menu-item:hover { background: var(--c-bg-inset); }
+
+.shell-menu-separator {
+	margin: var(--s-1) 0;
+	border: none;
+	border-top: var(--border);
+}
+
+.shell-menu-settings { padding: var(--s-2); }
+
+.shell-menu-heading {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	margin-bottom: var(--s-2);
+	font-size: var(--fs-sm);
+	font-weight: 500;
+}
+
+.shell-menu-settings .field { margin-bottom: var(--s-2); }
+.shell-menu-settings .field:last-child { margin-bottom: 0; }
+.shell-menu-settings .row { flex-wrap: wrap; margin-top: var(--s-1); }
+.shell-menu-settings button[data-theme-value].active,
+.shell-menu-settings button[data-font-value].active {
 	background: var(--c-accent-bg);
 	color: var(--c-accent);
 	border-color: var(--c-accent);
@@ -503,6 +573,25 @@ button, .button {
 .notice-error {
 	background: var(--c-danger-bg);
 	color: var(--c-danger);
+}
+
+/* ---- htmx request indicators ------------------------------------------ */
+
+/* The rules htmx would otherwise inject as an inline <style> on load. The
+ * CSP (style-src 'self') blocks that, so base.html turns the injection off
+ * with includeIndicatorStyles:false and they live here instead (#400). An
+ * .htmx-indicator stays hidden until its request is in flight, whether the
+ * class lands on the indicator itself or on an ancestor. */
+.htmx-indicator {
+	opacity: 0;
+	visibility: hidden;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+	opacity: 1;
+	visibility: visible;
+	transition: opacity 200ms ease-in;
 }
 
 /* ---- Layout helpers used across apps ---------------------------------- */
@@ -869,11 +958,6 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	border: none;
 	border-top: var(--border);
 }
-
-/* The header username is the way into /account (#310): a link, but still
- * reading as the plain name it replaced. */
-.shell-username { color: inherit; text-decoration: none; }
-.shell-username:hover { text-decoration: underline; }
 
 /* ---- Outline (ON Notes) ------------------------------------------------- */
 
@@ -1598,6 +1682,19 @@ input.outline-note:focus { outline: none; }
  * them (#375). */
 .outline-menu-list button[disabled]:hover { background: none; color: var(--c-text); }
 
+/* .outline-menu-list defaults to left:0 and a 16rem min-width, sized for
+ * Notes' wide outline column. This modifier right-anchors it and lets it be
+ * narrower, for a menu at the end of a row in a pane that can get narrow:
+ * Reader's tree pane can be dragged much narrower than 16rem allows, and a
+ * left-anchored menu forced the whole pane into horizontal scroll. Shared
+ * rather than app-owned because platform pages (/admin/users) need it too
+ * (#398). */
+.outline-menu-list-end {
+	left: auto;
+	right: 0;
+	min-width: 8rem;
+}
+
 .outline-menu-label { flex: 1; }
 
 .outline-menu-shortcut {
@@ -1713,6 +1810,10 @@ kbd {
 		flex-wrap: wrap;
 		gap: var(--s-2) var(--s-4);
 	}
+
+	/* The user menu button keeps the name (it is the button's accessible
+	 * name) but gives it less room. */
+	.shell-user-toggle { max-width: 9rem; }
 
 	/* The sidebar has no room to sit beside content at phone width, so it
 	 * always renders in its existing icon-only collapsed state here,
@@ -1927,9 +2028,8 @@ kbd {
 }
 
 /* The label and its "Refreshing…" status stack instead of running the menu
- * row wide enough to wrap. htmx's own default indicator CSS is an inline
- * <style> it injects at runtime, which this app's CSP (style-src 'self')
- * blocks — so the show/hide rule has to live here instead of relying on it. */
+ * row wide enough to wrap. The shared .htmx-indicator rules only fade it in;
+ * display: none on top of them keeps the hidden line from taking up room. */
 .reader-refresh-text {
 	display: flex;
 	flex-direction: column;
@@ -2202,19 +2302,6 @@ kbd {
 	position: absolute;
 	top: var(--s-1);
 	right: var(--s-2);
-}
-
-/* Notes' shared .outline-menu-list defaults to left:0 and a 16rem min-width,
- * sized for its own wider outline column with more than one action in the
- * list. Reader's tree pane can be dragged much narrower, and its per-row menu
- * (Feed URL / Refresh feed / Rename… / Unsubscribe) still fits comfortably
- * narrower than that — left-anchored and 16rem wide, it forced the whole
- * pane into horizontal scroll. Right-anchored and narrower keeps it inside
- * the pane regardless of width. */
-.reader-row-menu-list {
-	left: auto;
-	right: 0;
-	min-width: 8rem;
 }
 
 /* A failing feed is one of the few things that genuinely needs attention, so

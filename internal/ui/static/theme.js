@@ -66,6 +66,24 @@
 		});
 	}
 
+	// The header's user menu (#403) is a plain <details>, so it opens and
+	// works without this. What <details> can't do on its own is close when
+	// you click elsewhere or press Escape, which is what people expect of a
+	// dropdown. Escape hands focus back to the button so keyboard users
+	// aren't left on a now-hidden item.
+	function initUserMenu() {
+		var menu = document.querySelector("[data-shell-user-menu]");
+		if (!menu) return;
+		document.addEventListener("click", function (e) {
+			if (menu.open && !menu.contains(e.target)) menu.open = false;
+		});
+		document.addEventListener("keydown", function (e) {
+			if (e.key !== "Escape" || !menu.open) return;
+			menu.open = false;
+			menu.querySelector("summary").focus();
+		});
+	}
+
 	// The server has no reliable notion of its own origin (it may sit behind
 	// a reverse proxy), so the absolute share URL is built here from
 	// location.origin instead of being rendered server-side.
@@ -280,6 +298,7 @@
 	initThemeSwitch();
 	initFontSwitch();
 	initSidebarToggle();
+	initUserMenu();
 	initCopyLink();
 	initCopyRaw();
 	initCopyText();

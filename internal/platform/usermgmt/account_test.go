@@ -2,9 +2,11 @@ package usermgmt_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apptest"
 )
@@ -27,7 +29,7 @@ func TestTheAccountPageShowsWhoYouAreAndTheHeaderLinksToIt(t *testing.T) {
 	if !strings.Contains(doc.Text(), "ilia") {
 		t.Error("the page does not show the username")
 	}
-	doc.MustHave(`.shell-user a[href="/account"]`)
+	doc.MustHave(`.shell-user-menu a[href="/account"]`)
 	doc.MustHave(`form[action="/account/password"]`)
 }
 
@@ -90,5 +92,70 @@ func TestChangePasswordRejections(t *testing.T) {
 				t.Error("the password changed despite the rejection")
 			}
 		})
+	}
+}
+
+// wrongCurrent submits a password change with a wrong current password.
+func (s *server) wrongCurrent(t *testing.T, sess *session) *httptest.ResponseRecorder {
+	t.Helper()
+	return s.post(t, sess, "/account/password", url.Values{
+		"current": {"not-my-password"}, "new": {"a-brand-new-password"}, "confirm": {"a-brand-new-password"},
+	})
+}
+
+// #397: without a limit, a stolen session cookie allows unlimited guesses at
+// the current password, then a change that signs the real owner out.
+func TestGuessingTheCurrentPasswordIsRateLimited(t *testing.T) {
+	s := newServer(t)
+	for i := range 10 {
+		if rec := s.wrongCurrent(t, s.plain); rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("attempt %d = %d, want 422", i+1, rec.Code)
+		}
+	}
+
+	// Locked out: even the right password is refused, before it is checked.
+	const next = "a-brand-new-password"
+	rec := s.post(t, s.plain, "/account/password", url.Values{
+		"current": {apptest.Password}, "new": {next}, "confirm": {next},
+	})
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("attempt 11 = %d, want 429", rec.Code)
+	}
+	if s.user(t, "ilia").PasswordHash != apptest.PasswordHash {
+		t.Error("the password changed while locked out")
+	}
+	if !strings.Contains(s.logs.String(), "account password rate limit reached") {
+		t.Error("the lockout was not logged")
+	}
+
+	// The limit is per user: another account is unaffected.
+	if rec := s.wrongCurrent(t, s.root); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("another user's attempt = %d, want 422", rec.Code)
+	}
+
+	// And it lifts once the window has passed.
+	s.now = s.now.Add(15*time.Minute + time.Second)
+	rec = s.post(t, s.plain, "/account/password", url.Values{
+		"current": {apptest.Password}, "new": {next}, "confirm": {next},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("after the window = %d, want 303", rec.Code)
+	}
+}
+
+func TestTheRightCurrentPasswordResetsTheCount(t *testing.T) {
+	s := newServer(t)
+	for range 9 {
+		s.wrongCurrent(t, s.plain)
+	}
+	// Right current password, but mismatched new ones: rejected, yet it
+	// proves the caller knows the password, so the count starts over.
+	s.post(t, s.plain, "/account/password", url.Values{
+		"current": {apptest.Password}, "new": {"a-brand-new-password"}, "confirm": {"something-else-entirely"},
+	})
+	for i := range 9 {
+		if rec := s.wrongCurrent(t, s.plain); rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("attempt %d after the reset = %d, want 422", i+1, rec.Code)
+		}
 	}
 }

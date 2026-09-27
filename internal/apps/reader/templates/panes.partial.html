@@ -218,7 +218,7 @@
            button submits the form the ordinary way. */}}
       <details class="outline-menu reader-folder-menu">
         <summary class="outline-menu-toggle quiet" aria-label="Folder actions">{{ticon "more"}}</summary>
-        <div class="outline-menu-list reader-row-menu-list">
+        <div class="outline-menu-list outline-menu-list-end">
           <form method="post" action="/reader/folder/{{.ID}}/delete">
             {{template "reader-ctx" $.List}}
             <button type="submit" class="outline-menu-delete reader-folder-delete"
@@ -263,7 +263,7 @@
   {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .Sub.ID) "N" (index .Tree.Counts.BySub .Sub.ID))}}
   <details class="outline-menu">
     <summary class="outline-menu-toggle quiet" aria-label="Feed actions">{{ticon "more"}}</summary>
-    <div class="outline-menu-list reader-row-menu-list">
+    <div class="outline-menu-list outline-menu-list-end">
       <button type="button" class="reader-copy-feed-url" data-feed-url="{{.Sub.FeedURL}}"
               aria-label="Copy feed URL for {{.Sub.DisplayName}}">Feed URL</button>
       <form method="post" action="/reader/sub/{{.Sub.ID}}/refresh">
@@ -458,7 +458,7 @@
       <button type="submit" class="toolbar-btn reader-mark-all-main">{{ticon "check"}}Mark all read</button>
       <details class="outline-menu reader-mark-all-menu">
         <summary class="toolbar-btn reader-mark-all-toggle" aria-label="More mark-read options">{{ticon "chevron-down"}}</summary>
-        <div class="outline-menu-list reader-row-menu-list">
+        <div class="outline-menu-list outline-menu-list-end">
           <button type="submit" name="older_than" value="day">Older than 1 day</button>
           <button type="submit" name="older_than" value="week">Older than 1 week</button>
         </div>

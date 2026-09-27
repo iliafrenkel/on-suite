@@ -11,6 +11,7 @@ package usermgmt
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
@@ -26,6 +27,9 @@ type Deps struct {
 	Log     *slog.Logger
 	Nav     []render.NavItem
 	Version string
+	// Now is the clock the /account rate limit reads. Nil means the real
+	// clock; tests set it to age attempts out without waiting.
+	Now func() time.Time
 }
 
 // Routes registers every route this package serves. buildStack and the tests
@@ -35,7 +39,10 @@ type Deps struct {
 // unguarded redirect that would let a non-admin tell these paths apart
 // from a genuine 404 (see the /admin registration in buildStack).
 func Routes(mux *http.ServeMux, rec *web.Recorder, authn *web.Auth, d Deps) {
-	h := &handlers{d: d}
+	if d.Now == nil {
+		d.Now = func() time.Time { return time.Now().UTC() }
+	}
+	h := &handlers{d: d, passwordAttempts: web.NewAttemptLimiter()}
 	admin := func(f http.HandlerFunc) http.Handler { return authn.RequireAdmin(f) }
 	user := func(f http.HandlerFunc) http.Handler { return authn.RequireUser(f) }
 
@@ -49,7 +56,12 @@ func Routes(mux *http.ServeMux, rec *web.Recorder, authn *web.Auth, d Deps) {
 	rec.Handle(mux, "POST /account/password", false, user(h.changePassword))
 }
 
-type handlers struct{ d Deps }
+type handlers struct {
+	d Deps
+	// passwordAttempts limits wrong current passwords on /account, per
+	// user id, the same way login limits wrong passwords (#397).
+	passwordAttempts *web.AttemptLimiter
+}
 
 // page builds the shell. activeApp is "admin" for the admin pages, so the
 // sidebar's Admin entry is marked current, and "" for /account.

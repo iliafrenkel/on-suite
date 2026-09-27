@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
@@ -36,8 +37,11 @@ type server struct {
 	users   *auth.Store
 	db      *sql.DB
 	logs    *bytes.Buffer
-	root    *session
-	plain   *session
+	// now is the clock usermgmt reads; advance it to age out rate-limited
+	// attempts.
+	now   time.Time
+	root  *session
+	plain *session
 }
 
 func newServer(t *testing.T) *server {
@@ -72,14 +76,16 @@ func newServer(t *testing.T) *server {
 	csrf := web.NewCSRF(false, errs)
 	authn := web.NewAuth(web.AuthOptions{Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Version: "test"})
 
+	s := &server{users: users, db: handle, logs: logs, now: time.Now().UTC()}
+
 	mux := http.NewServeMux()
 	authn.Routes(mux, nil)
 	usermgmt.Routes(mux, nil, authn, usermgmt.Deps{
 		Users: users, Render: rend, Errors: errs, Log: log, Version: "test",
+		Now: func() time.Time { return s.now },
 	})
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
-
-	s := &server{handler: web.Stack(mux, log, errs, csrf, authn), users: users, db: handle, logs: logs}
+	s.handler = web.Stack(mux, log, errs, csrf, authn)
 
 	if _, err := users.CreateUser(ctx, "root", apptest.PasswordHash, true); err != nil {
 		t.Fatal(err)
