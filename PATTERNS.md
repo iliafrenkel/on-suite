@@ -161,8 +161,9 @@ canonical example's own comment, not here.
   Works with JavaScript off, htmx sends the clicked button's own name/value,
   and it closes because the panes re-render on success — no outside-click or
   Escape handling by design, unlike the JS-driven `.reader-menu` above.
-  `.reader-row-menu-list` right-anchors it in panes narrow enough that
-  Notes' left-anchored default would force horizontal scroll. Canonical:
+  Add the shared `.outline-menu-list-end` modifier to right-anchor it in
+  panes narrow enough that the left-anchored default would force horizontal
+  scroll (reader's row menus, `/admin/users`). Canonical:
   `internal/apps/notes/templates/outline.html`'s outline row menu, reader's
   row/folder menus and its "Mark all read" split button
   (`.reader-mark-all-menu`) in
