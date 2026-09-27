@@ -24,7 +24,9 @@ import (
 // further up is) is judged not worth a recursive CTE in a stats query
 // nobody reads for precision.
 func (st *Store) Stats(ctx context.Context) ([]app.Stat, error) {
-	today := st.now().Format("2006-01-02")
+	// Local, like the outline and due list (handlers.go), so the admin count
+	// agrees with the overdue chips (#379).
+	today := st.now().Local().Format("2006-01-02")
 	var (
 		total, done, overdue, archived, shared int64
 		newest                                 sql.NullString
