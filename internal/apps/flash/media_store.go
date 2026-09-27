@@ -155,15 +155,27 @@ func (st *Store) AttachCardUpload(ctx context.Context, userID, deckID, cardID in
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	hash, err := saveMediaUpload(ctx, tx, kind, contentType, data, st.now())
+	hash, err := attachUpload(ctx, tx, st.now(), userID, deckID, cardID, kind, CardUpload{ContentType: contentType, Data: data})
 	if err != nil {
-		return "", err
-	}
-	if err := setCardMedia(ctx, tx, userID, deckID, cardID, kind, &hash); err != nil {
 		return "", err
 	}
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("flash: attach upload: %w", err)
+	}
+	return hash, nil
+}
+
+// attachUpload is AttachCardUpload's two writes on a caller's open
+// transaction — AttachCardUpload's own, or SaveCardForm's (#363). Pass a
+// *sql.Tx, never the handle: storing and attaching in one transaction is
+// what keeps PurgeOrphanMedia from deleting the row in between (#302.5).
+func attachUpload(ctx context.Context, exec dbExecutor, now time.Time, userID, deckID, cardID int64, kind string, u CardUpload) (string, error) {
+	hash, err := saveMediaUpload(ctx, exec, kind, u.ContentType, u.Data, now)
+	if err != nil {
+		return "", err
+	}
+	if err := setCardMedia(ctx, exec, userID, deckID, cardID, kind, &hash); err != nil {
+		return "", err
 	}
 	return hash, nil
 }
@@ -202,9 +214,9 @@ func (st *Store) SaveMediaFailure(ctx context.Context, hash, msg string, now tim
 //
 // It needs no grace period for a file that is still being attached: every
 // path that creates a row attaches it in the same transaction
-// (AttachCardUpload for the card form, ImportDeck for import-time URLs),
-// and AdoptShare creates none — it copies hashes from cards that exist, and
-// so are in use, inside its own transaction. EnsureMediaURL and
+// (SaveCardForm and AttachCardUpload for uploads, ImportDeck for
+// import-time URLs), and AdoptShare creates none — it copies hashes from
+// cards that exist, and so are in use, inside its own transaction. EnsureMediaURL and
 // SaveMediaUpload store without attaching; only tests call them.
 //
 // SQLite does not give the space back to the filesystem on DELETE: the

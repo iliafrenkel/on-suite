@@ -71,6 +71,20 @@ func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []
 		return err
 	}
 
+	if err := replaceCardTags(ctx, tx, userID, cardID, names); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("flash: set card tags: %w", err)
+	}
+	return nil
+}
+
+// replaceCardTags is SetCardTags' writes without its ownership check or
+// transaction, so SaveCardForm can run them inside its own (#363). The
+// caller must already have confirmed cardID is userID's in the same tx.
+func replaceCardTags(ctx context.Context, tx *sql.Tx, userID, cardID int64, names []string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM flash_card_tags WHERE card_id = ?`, cardID); err != nil {
 		return fmt.Errorf("flash: set card tags: %w", err)
 	}
@@ -97,10 +111,6 @@ func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []
 		userID,
 	); err != nil {
 		return fmt.Errorf("flash: garbage collect tags: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("flash: set card tags: %w", err)
 	}
 	return nil
 }
