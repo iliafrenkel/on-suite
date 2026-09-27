@@ -133,7 +133,7 @@ says) and when it was published. The buttons under the title:
 - **Fetch full article** — see [Reading the whole article](#reading-the-whole-article).
 
 Pictures in articles load through ON Suite rather than straight from the
-website, so the sites you follow don't see when you read.
+website, so the sites you follow don't see your device or your address.
 
 ### Reading the whole article
 
@@ -249,12 +249,15 @@ one.
 3. Choose the file under **OPML file** and click **Import**.
 
 ON Reader tells you what happened, such as **Added 12, 2 already
-subscribed.** Folders in the file become folders in ON Reader. Nothing you
-already follow is removed. The new feeds fill up with articles over the next
-few minutes; choose **Refresh all feeds** if you don't want to wait.
+subscribed, 1 could not be added.** Folders in the file become folders in
+ON Reader. Nothing you already follow is removed. The new feeds fill up with
+articles over the next few minutes; choose **Refresh all feeds** if you
+don't want to wait.
 
 If the file isn't right, you see **That does not look like an OPML file.**
-or **That file is too large to be a subscription list.**
+or **That file is too large to be a subscription list.** If you click
+**Import** without choosing a file, you see **Choose an OPML file to
+import.**
 
 ### Exporting feeds
 
@@ -296,8 +299,8 @@ still has, so they may be a little low.
 
 ## Keyboard shortcuts
 
-These work when you're not typing in a box. Click **···** and choose
-**Keyboard shortcuts** for a quick reminder.
+These work when you're not typing in a box (except `Esc`). Click **···**
+and choose **Keyboard shortcuts** for a quick reminder.
 
 | Key | What it does |
 |-----|--------------|
