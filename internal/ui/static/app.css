@@ -1567,6 +1567,16 @@ input.outline-note { font-size: var(--fs-sm); color: var(--c-text-dim); }
 .outline-field:has(input:focus) input.outline-note { color: var(--c-text-dim); }
 .outline-field:has(input:focus) .outline-rendered { display: none; }
 
+/* The note placeholder ("note") is transparent by default, same as the
+ * input's own text above — otherwise an empty note shows it under nearly
+ * every bullet with a rendered overlay hiding nothing. It only needs to
+ * appear while that specific bullet is being edited, so it keys off
+ * .outline-text:focus-within (title or note) rather than the note input's
+ * own :focus, which would hide it again the moment title editing shifted
+ * focus there. */
+input.outline-note::placeholder { color: transparent; }
+.outline-text:focus-within input.outline-note::placeholder { color: var(--c-text-faint); }
+
 .outline-rendered {
 	display: block;
 	width: 100%;
