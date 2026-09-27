@@ -727,3 +727,9 @@ func TestTheUsersSectionLinksToUserManagement(t *testing.T) {
 	rec := s.get(t, s.admin, "/admin/")
 	htmlassert.Parse(t, rec.Body.String()).MustHave(`#users a[href="/admin/users"]`)
 }
+
+func TestTheJobsSectionLinksToTheJobsPage(t *testing.T) {
+	s := newServer(t)
+	rec := s.get(t, s.admin, "/admin/")
+	htmlassert.Parse(t, rec.Body.String()).MustHave(`#jobs a[href="/admin/jobs"]`)
+}

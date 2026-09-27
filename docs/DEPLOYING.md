@@ -90,6 +90,10 @@ Set `--backup-interval 0` to disable that and drive it externally instead:
 onsuite backup --data-dir /var/lib/onsuite --keep 30
 ```
 
+To take a one-off snapshot from the browser — before an upgrade, say — open
+**Admin → Manage jobs** and press **Run now** on *database snapshot*. It works
+even with `--backup-interval 0`, and it does not change the schedule.
+
 Snapshots use SQLite's `VACUUM INTO`, so they are consistent without taking the
 database offline. **Copying `onsuite.db` with `cp` while the server runs is not
 safe** — use the command.
