@@ -118,8 +118,9 @@ func ensureMediaURL(ctx context.Context, exec dbExecutor, kind, sourceURL string
 // uploading the same file twice reuses one row.
 //
 // The row it leaves is attached to nothing, so the next PurgeOrphanMedia
-// may delete it. The card form uses AttachCardUpload, which stores and
-// attaches in one transaction. This is kept for tests that seed media.
+// may delete it. The card form uses SaveCardForm, which stores and
+// attaches in the same transaction as the card and tag writes. This is
+// kept for tests that seed media.
 func (st *Store) SaveMediaUpload(ctx context.Context, kind, contentType string, data []byte, now time.Time) (string, error) {
 	return saveMediaUpload(ctx, st.db, kind, contentType, data, now)
 }
@@ -155,15 +156,27 @@ func (st *Store) AttachCardUpload(ctx context.Context, userID, deckID, cardID in
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	hash, err := saveMediaUpload(ctx, tx, kind, contentType, data, st.now())
+	hash, err := attachUpload(ctx, tx, st.now(), userID, deckID, cardID, kind, CardUpload{ContentType: contentType, Data: data})
 	if err != nil {
-		return "", err
-	}
-	if err := setCardMedia(ctx, tx, userID, deckID, cardID, kind, &hash); err != nil {
 		return "", err
 	}
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("flash: attach upload: %w", err)
+	}
+	return hash, nil
+}
+
+// attachUpload is AttachCardUpload's two writes on a caller's open
+// transaction — AttachCardUpload's own, or SaveCardForm's (#363). Pass a
+// *sql.Tx, never the handle: storing and attaching in one transaction is
+// what keeps PurgeOrphanMedia from deleting the row in between (#302.5).
+func attachUpload(ctx context.Context, exec dbExecutor, now time.Time, userID, deckID, cardID int64, kind string, u CardUpload) (string, error) {
+	hash, err := saveMediaUpload(ctx, exec, kind, u.ContentType, u.Data, now)
+	if err != nil {
+		return "", err
+	}
+	if err := setCardMedia(ctx, exec, userID, deckID, cardID, kind, &hash); err != nil {
+		return "", err
 	}
 	return hash, nil
 }
@@ -202,10 +215,11 @@ func (st *Store) SaveMediaFailure(ctx context.Context, hash, msg string, now tim
 //
 // It needs no grace period for a file that is still being attached: every
 // path that creates a row attaches it in the same transaction
-// (AttachCardUpload for the card form, ImportDeck for import-time URLs),
-// and AdoptShare creates none — it copies hashes from cards that exist, and
-// so are in use, inside its own transaction. EnsureMediaURL and
-// SaveMediaUpload store without attaching; only tests call them.
+// (SaveCardForm and AttachCardUpload for uploads, ImportDeck for
+// import-time URLs), and AdoptShare creates none — it copies hashes from
+// cards that exist, and so are in use, inside its own transaction.
+// EnsureMediaURL and SaveMediaUpload store without attaching; only tests
+// call them.
 //
 // SQLite does not give the space back to the filesystem on DELETE: the
 // freed pages go on the database's freelist and later writes reuse them.

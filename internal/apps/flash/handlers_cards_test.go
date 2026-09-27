@@ -2,8 +2,11 @@
 package flash_test
 
 import (
+	"context"
+	"database/sql"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +14,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 func TestCreateAndViewCard(t *testing.T) {
@@ -644,5 +648,83 @@ func TestDeckPaneCardsButtonSwapsThePane(t *testing.T) {
 	btn := doc.MustHave(`.flash-deck-toolbar a[href="/flash/` + itoa(deck.ID) + `/cards/"]`)
 	if target, _ := htmlassert.Attr(btn, "hx-target"); target != "#deck-detail" {
 		t.Errorf("Cards button hx-target = %q, want #deck-detail", target)
+	}
+}
+
+// installFailMediaTrigger is card_test.go's failMediaInserts, against a raw
+// handle rather than a store fixture: every flash_media INSERT aborts, so a
+// card-form POST that carries a file fails at its last write step, after
+// the card/tag writes that must then be rolled back with it (#363).
+func installFailMediaTrigger(t *testing.T, handle *sql.DB) {
+	t.Helper()
+	if _, err := handle.ExecContext(context.Background(), `CREATE TRIGGER fail_media BEFORE INSERT ON flash_media
+		BEGIN SELECT RAISE(ABORT, 'boom'); END`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// hasTag reports whether userID has a flash_tags row named name.
+func hasTag(t *testing.T, handle *sql.DB, userID int64, name string) bool {
+	t.Helper()
+	var n int
+	if err := handle.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM flash_tags WHERE user_id = ? AND name = ?`, userID, name).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n != 0
+}
+
+// TestCardFormSaveIsAtomic is the handler-level counterpart to card_test.go's
+// TestSaveCardFormIsAtomic: it pins that createCard/updateCard route a form
+// with a file through SaveCardForm, rather than writing the card row and
+// tags first and attaching media as a separate step, so a failed upload
+// can no longer leave a half-saved card behind (#363).
+func TestCardFormSaveIsAtomic(t *testing.T) {
+	handle, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = handle.Close() }()
+	s := apptest.NewServer(t, flash.New(), flash.NewStore, apptest.WithDatabase(handle))
+	installFailMediaTrigger(t, handle)
+
+	deck, err := s.Store.CreateDeck(t.Context(), s.Alice.User.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/new",
+		url.Values{"card_type": {"basic"}, "front": {"hola"}, "back": {"hello"}, "tags": {"verbs"}},
+		map[string][]byte{"image": onePNG})
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("create with a failing media insert = %d, want 500", rec.Code)
+	}
+	cards, err := s.Store.ListCards(t.Context(), s.Alice.User.ID, deck.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 0 {
+		t.Errorf("deck has %d cards after a failed create, want 0", len(cards))
+	}
+	if hasTag(t, handle, s.Alice.User.ID, "verbs") {
+		t.Error("Alice has tag \"verbs\" after a failed create, want none")
+	}
+
+	c, err := s.Store.CreateCard(t.Context(), s.Alice.User.ID, deck.ID, flash.CardTypeBasic, "hola", "hello", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = postCardForm(t, s, s.Alice, "/flash/"+itoa(deck.ID)+"/cards/"+itoa(c.ID),
+		url.Values{"card_type": {"basic"}, "front": {"adios"}, "back": {"bye"}},
+		map[string][]byte{"image": onePNG})
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("update with a failing media insert = %d, want 500", rec.Code)
+	}
+	got, err := s.Store.CardByID(t.Context(), s.Alice.User.ID, deck.ID, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Front != "hola" {
+		t.Errorf("Front = %q after a failed update, want unchanged %q", got.Front, "hola")
 	}
 }

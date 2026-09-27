@@ -84,29 +84,27 @@ func validateCardNotes(notes string) error {
 	return nil
 }
 
-// CreateCard stores a new card in one of userID's own decks.
+// CreateCard stores a new card in one of userID's own decks. It is
+// SaveCardForm with no tags or media, so its deck check runs inside the
+// same transaction as the insert.
 func (st *Store) CreateCard(ctx context.Context, userID, deckID int64, cardType, front, back, notes string) (Card, error) {
-	if err := ValidateCard(cardType, front, back); err != nil {
-		return Card{}, err
-	}
-	if err := validateCardNotes(notes); err != nil {
-		return Card{}, err
-	}
-	if _, err := st.DeckByID(ctx, userID, deckID); err != nil {
-		return Card{}, err
-	}
+	return st.SaveCardForm(ctx, userID, deckID, 0, CardForm{CardType: cardType, Front: front, Back: back, Notes: notes})
+}
 
-	c := Card{DeckID: deckID, UserID: userID, CardType: cardType, Front: front, Back: back, Notes: notes, CreatedAt: st.now()}
-	err := st.db.QueryRowContext(ctx,
+// insertCard is CreateCard's INSERT against either the handle or a caller's
+// open transaction (see dbExecutor). It does no ownership check of its own.
+func insertCard(ctx context.Context, exec dbExecutor, c Card) (int64, error) {
+	var id int64
+	err := exec.QueryRowContext(ctx,
 		`INSERT INTO flash_cards (deck_id, user_id, card_type, front, back, notes, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 RETURNING id`,
 		c.DeckID, c.UserID, c.CardType, c.Front, c.Back, c.Notes, formatTime(c.CreatedAt),
-	).Scan(&c.ID)
+	).Scan(&id)
 	if err != nil {
-		return Card{}, fmt.Errorf("flash: create card: %w", err)
+		return 0, fmt.Errorf("flash: create card: %w", err)
 	}
-	return c, nil
+	return id, nil
 }
 
 // UpdateCard overwrites userID's own card's editable fields.
@@ -117,29 +115,161 @@ func (st *Store) UpdateCard(ctx context.Context, userID, deckID, id int64, cardT
 	if err := validateCardNotes(notes); err != nil {
 		return Card{}, err
 	}
-
-	res, err := st.db.ExecContext(ctx,
-		`UPDATE flash_cards SET card_type = ?, front = ?, back = ?, notes = ?
-		 WHERE id = ? AND deck_id = ? AND user_id = ?`,
-		cardType, front, back, notes, id, deckID, userID)
-	if err != nil {
-		return Card{}, fmt.Errorf("flash: update card: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return Card{}, fmt.Errorf("flash: update card: %w", err)
-	}
-	if n == 0 {
-		return Card{}, ErrNotFound
+	if err := updateCardRow(ctx, st.db, userID, deckID, id, cardType, front, back, notes); err != nil {
+		return Card{}, err
 	}
 	return st.CardByID(ctx, userID, deckID, id)
 }
 
+// updateCardRow is UpdateCard's UPDATE on any dbExecutor. Its WHERE clause
+// is the ownership check: a card that isn't userID's, or isn't in deckID,
+// matches no row and is ErrNotFound.
+func updateCardRow(ctx context.Context, exec dbExecutor, userID, deckID, id int64, cardType, front, back, notes string) error {
+	res, err := exec.ExecContext(ctx,
+		`UPDATE flash_cards SET card_type = ?, front = ?, back = ?, notes = ?
+		 WHERE id = ? AND deck_id = ? AND user_id = ?`,
+		cardType, front, back, notes, id, deckID, userID)
+	if err != nil {
+		return fmt.Errorf("flash: update card: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("flash: update card: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // CardByID fetches one of userID's own cards, scoped to its deck.
 func (st *Store) CardByID(ctx context.Context, userID, deckID, id int64) (Card, error) {
-	return scanCard(st.db.QueryRowContext(ctx,
+	return cardByID(ctx, st.db, userID, deckID, id)
+}
+
+func cardByID(ctx context.Context, exec dbExecutor, userID, deckID, id int64) (Card, error) {
+	return scanCard(exec.QueryRowContext(ctx,
 		`SELECT id, deck_id, user_id, card_type, front, back, notes, created_at, image_hash, audio_hash
 		 FROM flash_cards WHERE id = ? AND deck_id = ? AND user_id = ?`, id, deckID, userID))
+}
+
+// deckOwned confirms deckID is one of userID's own decks, on any
+// dbExecutor so SaveCardForm can check inside its transaction. As with
+// cardOwner, only sql.ErrNoRows means ErrNotFound; anything else is a real
+// error (#288).
+func deckOwned(ctx context.Context, exec dbExecutor, userID, deckID int64) error {
+	var one int
+	err := exec.QueryRowContext(ctx,
+		`SELECT 1 FROM flash_decks WHERE id = ? AND user_id = ?`, deckID, userID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("flash: deck owner: %w", err)
+	}
+	return nil
+}
+
+// CardUpload is one new image or sound for a card, already checked by the
+// handler (size, sniffed content type).
+type CardUpload struct {
+	ContentType string
+	Data        []byte
+}
+
+// CardForm is everything the card editor submits.
+type CardForm struct {
+	CardType, Front, Back, Notes string
+	Tags                         []string
+	Image, Audio                 *CardUpload // nil = no new file for that kind
+	RemoveImage, RemoveAudio     bool        // ignored for a kind that has a new file (#328)
+}
+
+// SaveCardForm creates (cardID == 0) or updates one of userID's own cards in
+// deckID from the card editor, replacing its tags and applying its media
+// changes, all in one transaction (#363).
+//
+// The card form used to save in three steps — the card row, then its tags,
+// then each media kind — each its own transaction, so a failure at any step
+// after the first (a bad tag write, a failed upload) left a half-saved card:
+// a new card with no tags, or edited text next to the old tags. Now either
+// everything the form submitted lands, or nothing does.
+//
+// Every user-supplied field is validated before the transaction starts, so
+// bad input is ErrInvalid with nothing written. The ownership checks —
+// deckOwned for a new card, updateCardRow's WHERE clause for an existing
+// one — run inside the transaction, never before it, for the reason
+// SetCardTags documents (#294). Nothing in this method may use st.db once
+// the transaction has started: with SetMaxOpenConns(1), that would deadlock
+// waiting for the connection the transaction already holds.
+//
+// A new file for a kind always wins over that kind's Remove flag (#328).
+func (st *Store) SaveCardForm(ctx context.Context, userID, deckID, cardID int64, f CardForm) (Card, error) {
+	if err := ValidateCard(f.CardType, f.Front, f.Back); err != nil {
+		return Card{}, err
+	}
+	if err := validateCardNotes(f.Notes); err != nil {
+		return Card{}, err
+	}
+	if err := ValidateTagNames(f.Tags); err != nil {
+		return Card{}, err
+	}
+
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Card{}, fmt.Errorf("flash: save card: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	id := cardID
+	if id == 0 {
+		if err := deckOwned(ctx, tx, userID, deckID); err != nil {
+			return Card{}, err
+		}
+		id, err = insertCard(ctx, tx, Card{
+			DeckID: deckID, UserID: userID, CardType: f.CardType,
+			Front: f.Front, Back: f.Back, Notes: f.Notes, CreatedAt: st.now(),
+		})
+		if err != nil {
+			return Card{}, err
+		}
+	} else if err := updateCardRow(ctx, tx, userID, deckID, id, f.CardType, f.Front, f.Back, f.Notes); err != nil {
+		return Card{}, err
+	}
+
+	if err := replaceCardTags(ctx, tx, userID, id, f.Tags); err != nil {
+		return Card{}, err
+	}
+
+	media := []struct {
+		kind   string
+		upload *CardUpload
+		remove bool
+	}{
+		{MediaKindImage, f.Image, f.RemoveImage},
+		{MediaKindAudio, f.Audio, f.RemoveAudio},
+	}
+	for _, m := range media {
+		switch {
+		case m.upload != nil:
+			if _, err := attachUpload(ctx, tx, st.now(), userID, deckID, id, m.kind, *m.upload); err != nil {
+				return Card{}, err
+			}
+		case m.remove:
+			if err := setCardMedia(ctx, tx, userID, deckID, id, m.kind, nil); err != nil {
+				return Card{}, err
+			}
+		}
+	}
+
+	c, err := cardByID(ctx, tx, userID, deckID, id)
+	if err != nil {
+		return Card{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Card{}, fmt.Errorf("flash: save card: %w", err)
+	}
+	return c, nil
 }
 
 // ListCards returns userID's cards in one deck, newest first.

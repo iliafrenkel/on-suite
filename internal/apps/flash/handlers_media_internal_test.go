@@ -81,7 +81,7 @@ func TestReadUploadTreatsARealFormFileErrorAsAFailure(t *testing.T) {
 	w := httptest.NewRecorder()
 	up, msg := readUpload(w, r, MediaKindImage, "image", MaxImageFetchBytes)
 	if up != nil {
-		t.Error("readUpload returned a pendingUpload despite the underlying file being gone")
+		t.Error("readUpload returned an upload despite the underlying file being gone")
 	}
 	if msg != "That upload could not be read." {
 		t.Errorf("message = %q, want the real-failure message, not the silent nil, \"\" a missing file gets", msg)

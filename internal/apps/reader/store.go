@@ -998,14 +998,23 @@ func (s *Store) SetFaviconIfEmpty(ctx context.Context, feedID int64, faviconURL 
 	return nil
 }
 
+// rowQuerier is the subset of *sql.DB and *sql.Tx canSeeItem needs, so it can
+// run either against the store's pool or inside a caller's transaction.
+type rowQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 // canSeeItem reports whether a user subscribes to the feed an item belongs to.
 //
 // Item ids are global, so every state change needs this: without it any
 // signed-in user could mark any item in the database read or starred, and the
-// row they wrote would be a durable record that they probed for it.
-func (s *Store) canSeeItem(ctx context.Context, userID, itemID int64) error {
+// row they wrote would be a durable record that they probed for it. It's a
+// plain function, not a Store method, so callers that already hold a
+// transaction can pass it the tx instead of s.db (see SaveFullArticle,
+// ClearFullArticle).
+func canSeeItem(ctx context.Context, q rowQuerier, userID, itemID int64) error {
 	var ok int
-	err := s.db.QueryRowContext(ctx, `
+	err := q.QueryRowContext(ctx, `
 		SELECT 1
 		  FROM reader_items i
 		 WHERE i.id = ?
@@ -1027,7 +1036,7 @@ func (s *Store) canSeeItem(ctx context.Context, userID, itemID int64) error {
 // a row, and a whole-row replace here would silently drop a star every time
 // something was marked read.
 func (s *Store) SetRead(ctx context.Context, userID, itemID int64, read bool, now time.Time) error {
-	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
+	if err := canSeeItem(ctx, s.db, userID, itemID); err != nil {
 		return err
 	}
 	var readAt any
@@ -1047,7 +1056,7 @@ func (s *Store) SetRead(ctx context.Context, userID, itemID int64, read bool, no
 // SetStarred stars or unstars an item, leaving read state alone for the same
 // reason SetRead leaves the star alone.
 func (s *Store) SetStarred(ctx context.Context, userID, itemID int64, starred bool, now time.Time) error {
-	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
+	if err := canSeeItem(ctx, s.db, userID, itemID); err != nil {
 		return err
 	}
 	var starredAt any
@@ -1378,16 +1387,20 @@ func (s *Store) SaveFeedIconFailure(ctx context.Context, hash, msg string, now t
 // reference the same image URL. Retention still frees an image once no row
 // of either source references it, and the proxy serves it with no special
 // case either way.
+//
+// The visibility check runs inside this transaction, first thing after
+// BeginTx, not before it: a check-then-write split by BeginTx would let an
+// unsubscribe land in the gap and write to an item the user no longer sees.
 func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Extracted, now time.Time) error {
-	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
-		return err
-	}
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("reader: begin save full article: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	if err := canSeeItem(ctx, tx, userID, itemID); err != nil {
+		return err
+	}
 
 	// Fetch the fields that feed the search index alongside the new full
 	// article, so the indexed text stays the union of everything (title,
@@ -1430,16 +1443,19 @@ func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Ex
 // deliberate discard nothing has been "tried" in the sense that field means,
 // and the fetchFull backoff check (FullError != "" && recent) must not fire
 // on the very next click just because a fetch happened at some point.
+//
+// As in SaveFullArticle, the visibility check runs inside this transaction
+// so an unsubscribe can't land between the check and the write.
 func (s *Store) ClearFullArticle(ctx context.Context, userID, itemID int64) error {
-	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
-		return err
-	}
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("reader: begin clear full article: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	if err := canSeeItem(ctx, tx, userID, itemID); err != nil {
+		return err
+	}
 
 	// Same search-text recompute SaveFullArticle does, with the full body
 	// dropped back out of the union.
@@ -1501,7 +1517,7 @@ func recordItemImages(ctx context.Context, tx *sql.Tx, itemID int64, images map[
 // SaveFullArticleFailure records why an extraction attempt produced nothing,
 // so the button can explain itself instead of appearing to do nothing.
 func (s *Store) SaveFullArticleFailure(ctx context.Context, userID, itemID int64, msg string, now time.Time) error {
-	if err := s.canSeeItem(ctx, userID, itemID); err != nil {
+	if err := canSeeItem(ctx, s.db, userID, itemID); err != nil {
 		return err
 	}
 	if _, err := s.db.ExecContext(ctx, `

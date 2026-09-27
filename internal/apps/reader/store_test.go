@@ -426,6 +426,86 @@ func TestItemRequiresASubscription(t *testing.T) {
 	}
 }
 
+// TestSaveFullArticleRejectsAnItemTheUserCannotSee pins #372: the visibility
+// check must reject a non-subscriber even though it now runs inside
+// SaveFullArticle's own transaction rather than before it.
+func TestSaveFullArticleRejectsAnItemTheUserCannotSee(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Alice's", PublishedAt: time.Now().UTC(),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = f.store.SaveFullArticle(ctx, f.bob.ID, items[0].ID, reader.Extracted{
+		HTML: "<p>full body</p>", TextLength: 500,
+	}, time.Now().UTC())
+	if !errors.Is(err, reader.ErrNotFound) {
+		t.Fatalf("bob saved a full article on a feed he is not subscribed to: err = %v, want ErrNotFound", err)
+	}
+
+	var fullHTML sql.NullString
+	if err := f.db.QueryRowContext(ctx,
+		`SELECT full_html FROM reader_items WHERE id = ?`, items[0].ID,
+	).Scan(&fullHTML); err != nil {
+		t.Fatal(err)
+	}
+	if fullHTML.String != "" {
+		t.Errorf("full_html = %q, want empty after a rejected save", fullHTML.String)
+	}
+}
+
+// TestClearFullArticleRejectsAnItemTheUserCannotSee pins #372 the same way,
+// for ClearFullArticle.
+func TestClearFullArticleRejectsAnItemTheUserCannotSee(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{
+		GUID: "g1", Title: "Alice's", PublishedAt: time.Now().UTC(),
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := f.store.ItemsForSubscription(ctx, f.alice.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, items[0].ID, reader.Extracted{
+		HTML: "<p>full body</p>", TextLength: 500,
+	}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	err = f.store.ClearFullArticle(ctx, f.bob.ID, items[0].ID)
+	if !errors.Is(err, reader.ErrNotFound) {
+		t.Fatalf("bob cleared alice's full article: err = %v, want ErrNotFound", err)
+	}
+
+	var fullHTML string
+	if err := f.db.QueryRowContext(ctx,
+		`SELECT full_html FROM reader_items WHERE id = ?`, items[0].ID,
+	).Scan(&fullHTML); err != nil {
+		t.Fatal(err)
+	}
+	if fullHTML != "<p>full body</p>" {
+		t.Errorf("full_html = %q, want alice's article unchanged after bob's rejected clear", fullHTML)
+	}
+}
+
 func TestFeedByIDLoadsAFeedRegardlessOfDueStatus(t *testing.T) {
 	f := newStoreFixture(t)
 	ctx := context.Background()
