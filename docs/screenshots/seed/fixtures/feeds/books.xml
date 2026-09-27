@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Demo fixture. DAY-N is replaced by the seed with a date N days (fractions allowed) before now. -->
+<rss version="2.0">
+<channel>
+  <title>Paperback Galaxy</title>
+  <link>https://example.com/paperback-galaxy/</link>
+  <description>Science fiction reviews, reading lists and recommendations.</description>
+  <item>
+    <title>Five hard science fiction novels for a long weekend</title>
+    <link>https://example.com/paperback-galaxy/hard-sf-weekend</link>
+    <guid>https://example.com/paperback-galaxy/hard-sf-weekend</guid>
+    <pubDate>DAY-0.6</pubDate>
+    <description><![CDATA[<p>Real physics, big ideas, and endings that stay with you. Our picks range from a lone astronaut solving problems with chemistry to a generation ship that forgot where it was going.</p>]]></description>
+  </item>
+  <item>
+    <title>Why Hyperion still works thirty-five years later</title>
+    <link>https://example.com/paperback-galaxy/hyperion-revisited</link>
+    <guid>https://example.com/paperback-galaxy/hyperion-revisited</guid>
+    <pubDate>DAY-1.4</pubDate>
+    <description><![CDATA[<p>Seven pilgrims, seven stories, one terrifying destination. The frame-tale structure is the secret: every chapter is a different genre, and the whole is more than its parts.</p>]]></description>
+  </item>
+  <item>
+    <title>Reading science fiction with your kids</title>
+    <link>https://example.com/paperback-galaxy/sf-with-kids</link>
+    <guid>https://example.com/paperback-galaxy/sf-with-kids</guid>
+    <pubDate>DAY-2.2</pubDate>
+    <description><![CDATA[<p>Start with wonder, not war. A list of gentle, curious books for readers aged eight to twelve, and how to talk about the big questions they raise at the dinner table.</p>]]></description>
+  </item>
+  <item>
+    <title>The Dispossessed and the art of the two-planet novel</title>
+    <link>https://example.com/paperback-galaxy/two-planet-novel</link>
+    <guid>https://example.com/paperback-galaxy/two-planet-novel</guid>
+    <pubDate>DAY-3.3</pubDate>
+    <description><![CDATA[<p>Alternating chapters between two worlds lets a novel argue with itself. We look at how the structure carries the book's ideas about freedom and walls.</p>]]></description>
+  </item>
+  <item>
+    <title>Short story roundup: September</title>
+    <link>https://example.com/paperback-galaxy/short-stories-september</link>
+    <guid>https://example.com/paperback-galaxy/short-stories-september</guid>
+    <pubDate>DAY-4.4</pubDate>
+    <description><![CDATA[<p>A lighthouse keeper on a tidally locked world, a translation app that learns to lie, and a heist on a space elevator. Our favourite short fiction from the magazines this month.</p>]]></description>
+  </item>
+  <item>
+    <title>Audiobooks that are better than the page</title>
+    <link>https://example.com/paperback-galaxy/audiobooks</link>
+    <guid>https://example.com/paperback-galaxy/audiobooks</guid>
+    <pubDate>DAY-6.3</pubDate>
+    <description><![CDATA[<p>Some narrators turn a good book into a great one. Six science fiction audiobooks to make the school run or the commute fly by.</p>]]></description>
+  </item>
+  <item>
+    <title>Book club guide: A Fire Upon the Deep</title>
+    <link>https://example.com/paperback-galaxy/fire-upon-the-deep-guide</link>
+    <guid>https://example.com/paperback-galaxy/fire-upon-the-deep-guide</guid>
+    <pubDate>DAY-8.0</pubDate>
+    <description><![CDATA[<p>Discussion questions, a spoiler-free primer on the Zones of Thought, and a few notes on the pack-minded Tines for readers who find them confusing at first.</p>]]></description>
+  </item>
+</channel>
+</rss>
