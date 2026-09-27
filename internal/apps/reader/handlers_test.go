@@ -847,6 +847,83 @@ func TestMarkAllReadClearsTheFeed(t *testing.T) {
 	}
 }
 
+// seedAged subscribes Alice to one feed holding an item published an hour
+// ago ("fresh") and one published three days ago ("old").
+func seedAged(t *testing.T, s *apptest.Server[*reader.Store]) (subID int64, fresh, old reader.Item) {
+	t.Helper()
+	ctx := context.Background()
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "fresh", Title: "Fresh", PublishedAt: now.Add(-time.Hour)},
+		{GUID: "old", Title: "Old", PublishedAt: now.Add(-72 * time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		switch it.GUID {
+		case "fresh":
+			fresh = it
+		case "old":
+			old = it
+		}
+	}
+	return sub.ID, fresh, old
+}
+
+func TestMarkOlderThanADayReadLeavesFreshItemsUnread(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	subID, fresh, old := seedAged(t, s)
+
+	rec := s.PostHX(t, s.Alice, "/reader/read-all", url.Values{
+		"scope":      {"feed"},
+		"sub":        {itoa(subID)},
+		"older_than": {"day"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("read-all older_than=day returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	if read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, old.ID); err != nil || !read {
+		t.Errorf("three-day-old item read = %v (err %v), want true", read, err)
+	}
+	if read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, fresh.ID); err != nil || read {
+		t.Errorf("hour-old item read = %v (err %v), want false — it is not older than a day", read, err)
+	}
+}
+
+// older_than is a closed set: anything unrecognised is a bad request, not a
+// silent fall-back to marking everything read.
+func TestMarkAllReadRejectsAnUnknownOlderThan(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	subID, fresh, old := seedAged(t, s)
+
+	for _, raw := range []string{"month", "24h", "Day"} {
+		rec := s.PostHX(t, s.Alice, "/reader/read-all", url.Values{
+			"scope":      {"feed"},
+			"sub":        {itoa(subID)},
+			"older_than": {raw},
+		})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("older_than=%q returned %d, want 400", raw, rec.Code)
+		}
+	}
+	for _, it := range []reader.Item{fresh, old} {
+		if read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, it.ID); err != nil || read {
+			t.Errorf("%s read = %v (err %v) after rejected requests, want false", it.GUID, read, err)
+		}
+	}
+}
+
 func TestStarredScopeHasItsOwnPage(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
