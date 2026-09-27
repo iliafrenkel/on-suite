@@ -1,6 +1,7 @@
 package web
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -170,8 +171,14 @@ func TestFontsAreEmbedded(t *testing.T) {
 	}
 	for _, want := range []string{
 		"fonts/inter.woff2",
+		"fonts/inter-cyrillic.woff2",
+		"fonts/inter-cyrillic-ext.woff2",
 		"fonts/jetbrains-mono.woff2",
+		"fonts/jetbrains-mono-cyrillic.woff2",
+		"fonts/jetbrains-mono-cyrillic-ext.woff2",
 		"fonts/source-serif-4.woff2",
+		"fonts/source-serif-4-cyrillic.woff2",
+		"fonts/source-serif-4-cyrillic-ext.woff2",
 		"fonts/ia-writer-duo-s-regular.woff2",
 		"fonts/ia-writer-duo-s-bold.woff2",
 		"fonts/ia-writer-duo-s-italic.woff2",
@@ -179,6 +186,28 @@ func TestFontsAreEmbedded(t *testing.T) {
 	} {
 		if !strings.Contains(strings.Join(a.Names(), ","), want) {
 			t.Errorf("%s is not embedded; got %v", want, a.Names())
+		}
+	}
+}
+
+func TestAppCSSHasCyrillicFontRanges(t *testing.T) {
+	data, err := fs.ReadFile(ui.Static(), "app.css")
+	if err != nil {
+		t.Fatalf("ReadFile(app.css): %v", err)
+	}
+	css := string(data)
+	for _, want := range []string{
+		"/static/fonts/inter-cyrillic.woff2",
+		"/static/fonts/inter-cyrillic-ext.woff2",
+		"/static/fonts/jetbrains-mono-cyrillic.woff2",
+		"/static/fonts/jetbrains-mono-cyrillic-ext.woff2",
+		"/static/fonts/source-serif-4-cyrillic.woff2",
+		"/static/fonts/source-serif-4-cyrillic-ext.woff2",
+		"unicode-range: U+0460-052F",
+		"unicode-range: U+0301, U+0400-045F",
+	} {
+		if !strings.Contains(css, want) {
+			t.Errorf("app.css missing expected font rule: %s", want)
 		}
 	}
 }
