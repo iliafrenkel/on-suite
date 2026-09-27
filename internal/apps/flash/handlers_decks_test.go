@@ -630,23 +630,16 @@ func TestSnoozeDaysMustBeBetweenOneAndAYear(t *testing.T) {
 		})
 	}
 
-	before := time.Now().UTC()
+	t0 := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(t0)
 	s.Submit(t, s.Alice, path, url.Values{"days": {"365"}}, "/flash/"+itoa(deck.ID))
-	after := time.Now().UTC()
 
 	d, err := s.Store.DeckByID(t.Context(), s.Alice.User.ID, deck.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.SnoozedUntil == nil {
-		t.Error("365 days: deck is not snoozed")
-	} else {
-		// The snoozed time should be approximately 365 days in the future
-		// from when the request was made (within a few seconds).
-		minExpected := before.AddDate(0, 0, 365)
-		maxExpected := after.AddDate(0, 0, 365)
-		if d.SnoozedUntil.Before(minExpected) || d.SnoozedUntil.After(maxExpected) {
-			t.Errorf("365 days: snoozed until %v, want between %v and %v", d.SnoozedUntil, minExpected, maxExpected)
-		}
+	want := t0.AddDate(0, 0, 365)
+	if d.SnoozedUntil == nil || !d.SnoozedUntil.Equal(want) {
+		t.Errorf("365 days: snoozed until %v, want %v", d.SnoozedUntil, want)
 	}
 }

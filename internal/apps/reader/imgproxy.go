@@ -86,7 +86,7 @@ func (a *App) image(w http.ResponseWriter, r *http.Request) {
 	// this an image that failed once from a DNS blip would 404 for the
 	// household forever.
 	if img.ErrorCount >= maxImageFetchAttempts ||
-		(img.ErrorCount > 0 && time.Since(img.FetchedAt) < imageRetryBackoff) {
+		(img.ErrorCount > 0 && a.store.now().Sub(img.FetchedAt) < imageRetryBackoff) {
 		a.deps.Errors.Status(w, r, http.StatusNotFound)
 		return
 	}
@@ -102,7 +102,7 @@ func (a *App) image(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.deps.Log.Info("reader image fetch failed", "src", img.SrcURL, "error", err)
-		if err := a.store.SaveImageFailure(r.Context(), hash, err.Error(), time.Now().UTC()); err != nil {
+		if err := a.store.SaveImageFailure(r.Context(), hash, err.Error(), a.store.now()); err != nil {
 			a.deps.Log.Error("reader recording an image failure failed", "error", err)
 		}
 		// 404 rather than 502: the browser shows the alt text, which is the
@@ -138,7 +138,7 @@ func (a *App) fetchImage(r *http.Request, img Image) (Image, error) {
 		return Image{}, errors.New("reader: response is not an image (" + ct + ")")
 	}
 
-	if err := a.store.SaveImageBytes(r.Context(), img.Hash, ct, res.Body, time.Now().UTC()); err != nil {
+	if err := a.store.SaveImageBytes(r.Context(), img.Hash, ct, res.Body, a.store.now()); err != nil {
 		return Image{}, err
 	}
 	img.ContentType = ct

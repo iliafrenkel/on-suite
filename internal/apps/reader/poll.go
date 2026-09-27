@@ -92,7 +92,7 @@ func (p *Poller) PollDue(ctx context.Context) error {
 	}
 	defer p.polling.Store(false)
 
-	now := time.Now().UTC()
+	now := p.store.now()
 	feeds, err := p.store.DueFeeds(ctx, now, pollBatch)
 	if err != nil {
 		return err
@@ -144,7 +144,7 @@ func (p *Poller) FetchNow(ctx context.Context, feedID int64) error {
 
 // pollOne fetches, parses and stores one feed, recording the outcome either way.
 func (p *Poller) pollOne(ctx context.Context, f Feed) {
-	now := time.Now().UTC()
+	now := p.store.now()
 	target := f.ResolvedURL
 	if target == "" {
 		target = f.URL

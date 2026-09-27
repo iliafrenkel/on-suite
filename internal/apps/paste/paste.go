@@ -61,6 +61,9 @@ func (a *App) Templates() fs.FS {
 func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.deps = deps
 	a.store = NewStore(deps.DB)
+	if deps.Now != nil {
+		a.store.SetClock(deps.Now)
+	}
 
 	css, err := HighlightCSS()
 	if err != nil {

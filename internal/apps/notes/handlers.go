@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -141,7 +140,7 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		a.deps.Errors.Internal(w, r, err)
 		return
 	}
-	view.DueCount = DueBadgeCount(dueRows, time.Now())
+	view.DueCount = DueBadgeCount(dueRows, a.store.now().Local())
 
 	flat, err := a.store.Outline(r.Context(), userID, rootID, showCompleted, query != "")
 	if err != nil {
@@ -162,7 +161,7 @@ func (a *App) renderOutline(w http.ResponseWriter, r *http.Request, rootID int64
 		view.HiddenCount = len(flat) - len(visible)
 	}
 	visible = filterToMatches(visible, matched)
-	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"), matched, searchTerms(query))
+	view.Rows = nest(visible, rootID, view.CSRFToken, a.store.now().Local().Format("2006-01-02"), matched, searchTerms(query))
 
 	page := a.deps.Page(r, title)
 	page.Data = view
@@ -231,7 +230,7 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 		return
 	}
 	visible := hideDone(flat, showCompleted)
-	view.DueCount = DueBadgeCount(dueRows, time.Now())
+	view.DueCount = DueBadgeCount(dueRows, a.store.now().Local())
 
 	var matched map[int64]bool
 	if query != "" {
@@ -245,7 +244,7 @@ func (a *App) renderOutlineFragment(w http.ResponseWriter, r *http.Request, user
 		view.HiddenCount = len(flat) - len(visible)
 	}
 	visible = filterToMatches(visible, matched)
-	view.Rows = nest(visible, rootID, view.CSRFToken, time.Now().Format("2006-01-02"), matched, searchTerms(query))
+	view.Rows = nest(visible, rootID, view.CSRFToken, a.store.now().Local().Format("2006-01-02"), matched, searchTerms(query))
 	if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "outline-swap", view); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
@@ -477,7 +476,7 @@ func (a *App) setText(w http.ResponseWriter, r *http.Request) {
 			OOB:           true,
 			RenderedTitle: Render(title),
 			RenderedNote:  Render(note),
-			Overdue:       n.DueOn != "" && n.DueOn < time.Now().Format("2006-01-02"),
+			Overdue:       n.DueOn != "" && n.DueOn < a.store.now().Local().Format("2006-01-02"),
 		}
 		if err := a.deps.Render.Fragment(w, http.StatusOK, "notes/outline", "text-update", row); err != nil {
 			a.deps.Errors.Internal(w, r, err)
@@ -750,7 +749,7 @@ func (a *App) buildDueView(ctx context.Context, userID int64, query string) (due
 			Snippet:   noteOnlySnippet(n, terms),
 		}
 	}
-	return dueView{Groups: GroupByDue(rows, time.Now()), Query: query, SearchAction: "/notes/due"}, nil
+	return dueView{Groups: GroupByDue(rows, a.store.now().Local()), Query: query, SearchAction: "/notes/due"}, nil
 }
 
 // noteOnlySnippet is Due/Archive's issue #86 indicator: a highlighted

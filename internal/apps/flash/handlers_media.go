@@ -82,7 +82,7 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 	// immediately inside the backoff window — a failure older than the
 	// backoff window, under the cap, falls through to a real retry.
 	if m.ErrorCount >= maxMediaFetchAttempts ||
-		(m.ErrorCount > 0 && time.Since(m.FetchedAt) < mediaRetryBackoff) {
+		(m.ErrorCount > 0 && a.store.now().Sub(m.FetchedAt) < mediaRetryBackoff) {
 		a.deps.Errors.Status(w, r, http.StatusNotFound)
 		return
 	}

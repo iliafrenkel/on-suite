@@ -1421,15 +1421,16 @@ func TestASecondSubscriberSeesNoBacklogUnderAnyFilter(t *testing.T) {
 	now := time.Now().UTC()
 
 	// The cutoff compares an item's fetched_at with a subscription's added_at,
-	// both of which the store stamps from its own clock. Setting added_at
-	// directly is what makes "alice was subscribed when this was fetched, bob
-	// was not" a fact of the fixture rather than a race on wall-clock order.
+	// both of which the store stamps from its own clock. Pinning s.Clock
+	// around each Subscribe call is what makes "alice was subscribed when
+	// this was fetched, bob was not" a fact of the fixture rather than a race
+	// on wall-clock order.
+	s.Clock.Set(now.Add(-2 * time.Hour))
 	aliceSub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fetchedAt := now.Add(-time.Hour)
-	setAddedAt(t, s, aliceSub.ID, now.Add(-2*time.Hour))
 
 	if _, err := s.Store.SaveItems(ctx, aliceSub.FeedID, []reader.ParsedItem{{
 		GUID:        "old",
@@ -1438,11 +1439,11 @@ func TestASecondSubscriberSeesNoBacklogUnderAnyFilter(t *testing.T) {
 	}}, fetchedAt); err != nil {
 		t.Fatal(err)
 	}
+	s.Clock.Set(now)
 	bobSub, err := s.Store.Subscribe(ctx, s.Bob.User.ID, "https://example.com/feed.xml", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	setAddedAt(t, s, bobSub.ID, now)
 
 	for _, filter := range []string{"unread", "all"} {
 		doc := s.Get(t, s.Bob, "/reader/feed/"+itoa(bobSub.ID)+"?filter="+filter)
@@ -1453,18 +1454,6 @@ func TestASecondSubscriberSeesNoBacklogUnderAnyFilter(t *testing.T) {
 		if n := len(doc.QueryAll(".reader-row")); n != 1 {
 			t.Errorf("filter=%s shows alice %d items, want 1 — the cutoff must not hide the original subscriber's own backlog", filter, n)
 		}
-	}
-}
-
-// setAddedAt pins when a subscription started, the way retention_test.go does,
-// so a cutoff test does not depend on the order two wall-clock reads happen to
-// land in.
-func setAddedAt(t *testing.T, s *apptest.Server[*reader.Store], subID int64, at time.Time) {
-	t.Helper()
-	if _, err := s.Store.DB().ExecContext(context.Background(),
-		`UPDATE reader_subs SET added_at = ? WHERE id = ?`,
-		db.FormatTime(at.UTC()), subID); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -2585,6 +2574,30 @@ func TestNormalOpenStillMarksRead(t *testing.T) {
 	}
 	if !read {
 		t.Error("a normal open no longer marks the article read")
+	}
+}
+
+// TestMarkReadUsesTheAppClock pins s.Clock rather than the wall clock, so the
+// stamped read_at proves the handler reads Deps.Now through the store instead
+// of calling time.Now() itself (#357).
+func TestMarkReadUsesTheAppClock(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	_, items := seedOne(t, s, "g1")
+
+	t0 := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	s.Clock.Set(t0)
+
+	s.PostHX(t, s.Alice, "/reader/item/"+itoa(items[0].ID)+"/read", url.Values{})
+
+	var readAt string
+	if err := s.Store.DB().QueryRowContext(ctx,
+		`SELECT read_at FROM reader_item_state WHERE user_id = ? AND item_id = ?`,
+		s.Alice.User.ID, items[0].ID).Scan(&readAt); err != nil {
+		t.Fatal(err)
+	}
+	if want := db.FormatTime(t0); readAt != want {
+		t.Errorf("read_at = %q, want %q (the pinned app clock)", readAt, want)
 	}
 }
 

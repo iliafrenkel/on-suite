@@ -89,7 +89,7 @@ func (a *App) stats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page := a.deps.Page(r, "Reading stats")
-	page.Data = buildStatsView(days, feeds, counts)
+	page.Data = buildStatsView(days, feeds, counts, a.store.now())
 	if err := a.deps.Render.Page(w, http.StatusOK, "reader/stats", page); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
@@ -315,7 +315,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		return
 	}
 	listTitleStr := listTitle(lc.Scope, sub)
-	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID), search)
+	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID), search, a.store.now())
 	view.List.HideRead = opts.HideRead
 	// The currently-open article's row is highlighted in the list, the same
 	// way the tree highlights the selected feed — real item ids start at 1,
@@ -414,7 +414,7 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, userID, item
 	// star and mark-unread POST here too, and only lc's hidden "view" field
 	// survives that round trip — the query string does not (issue #232).
 	showFull := lc.View != "feed"
-	art := viewArticle(item, page.Shell, lc, showFull)
+	art := viewArticle(item, page.Shell, lc, showFull, a.store.now())
 
 	// Anything that did not come from htmx is a plain browser navigation and
 	// gets the whole page back: a form submission from the star or unread
@@ -487,7 +487,7 @@ func (a *App) article(w http.ResponseWriter, r *http.Request) {
 	// article so that moving with j/k is instant, and arrowing past something
 	// must not mark it read. The real open, when it happens, marks it.
 	if r.URL.Query().Get("prefetch") != "1" {
-		if err := a.store.SetRead(r.Context(), userID, itemID, true, time.Now().UTC()); err != nil {
+		if err := a.store.SetRead(r.Context(), userID, itemID, true, a.store.now()); err != nil {
 			a.fail(w, r, err)
 			return
 		}
@@ -506,7 +506,7 @@ func (a *App) setRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	read := strings.HasSuffix(r.URL.Path, "/read")
-	if err := a.store.SetRead(r.Context(), userID, itemID, read, time.Now().UTC()); err != nil {
+	if err := a.store.SetRead(r.Context(), userID, itemID, read, a.store.now()); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -530,7 +530,7 @@ func (a *App) toggleStar(w http.ResponseWriter, r *http.Request) {
 	// ItemState reports false for an item that does not exist or is not
 	// visible, so SetStarred's own visibility check is what turns that into a
 	// 404 rather than silently starring nothing.
-	if err := a.store.SetStarred(r.Context(), userID, itemID, !starred, time.Now().UTC()); err != nil {
+	if err := a.store.SetStarred(r.Context(), userID, itemID, !starred, a.store.now()); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -545,7 +545,7 @@ func (a *App) markAllRead(w http.ResponseWriter, r *http.Request) {
 	// The form carries the list it fired from, so the re-render stays there
 	// instead of resetting to All/Unread.
 	lc := formContext(r, 0)
-	if _, err := a.store.MarkAllRead(r.Context(), userID, lc.Scope, lc.SubID, time.Now().UTC()); err != nil {
+	if _, err := a.store.MarkAllRead(r.Context(), userID, lc.Scope, lc.SubID, a.store.now()); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -1031,7 +1031,7 @@ func (a *App) fetchFull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A recent failure is re-shown, not retried — see fullArticleRetryBackoff.
-	if item.FullError != "" && time.Since(item.FullFetchedAt) < fullArticleRetryBackoff {
+	if item.FullError != "" && a.store.now().Sub(item.FullFetchedAt) < fullArticleRetryBackoff {
 		a.renderArticle(w, r, userID, itemID)
 		return
 	}
@@ -1066,7 +1066,7 @@ func (a *App) clearFull(w http.ResponseWriter, r *http.Request) {
 // recordFullFailure stores a failure, logging rather than surfacing an error if
 // even that fails — the user is about to get a rendered pane either way.
 func (a *App) recordFullFailure(r *http.Request, userID, itemID int64, msg string) {
-	if err := a.store.SaveFullArticleFailure(r.Context(), userID, itemID, msg, time.Now().UTC()); err != nil {
+	if err := a.store.SaveFullArticleFailure(r.Context(), userID, itemID, msg, a.store.now()); err != nil {
 		a.deps.Log.Error("reader recording a full-article failure failed", "error", err)
 	}
 }
@@ -1108,5 +1108,5 @@ func (a *App) extractInto(r *http.Request, userID int64, item Item) error {
 	}
 	a.deps.Log.Info("reader extracted a full article",
 		"url", item.URL, "chars", ex.TextLength, "images", len(ex.Images))
-	return a.store.SaveFullArticle(r.Context(), userID, item.ID, ex, time.Now().UTC())
+	return a.store.SaveFullArticle(r.Context(), userID, item.ID, ex, a.store.now())
 }
