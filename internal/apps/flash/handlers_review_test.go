@@ -874,6 +874,8 @@ func TestUndoFromSummaryBringsCardBackAndReducesTally(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t0 := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	s.Clock.Set(t0)
 
 	graded := s.PostHX(t, s.Alice, "/flash/review/grade?deck="+itoa(deck.ID), url.Values{"card_id": {itoa(c.ID)}, "rating": {"3"}})
 	gradedDoc := htmlassert.Parse(t, graded.Body.String())
@@ -894,7 +896,7 @@ func TestUndoFromSummaryBringsCardBackAndReducesTally(t *testing.T) {
 		t.Errorf("announce after undo = %q, want %q", got, "Card 1 of 1")
 	}
 
-	newCount, reviewCount, err := s.Store.DailyCounts(t.Context(), s.Alice.User.ID, deck.ID, time.Now().UTC())
+	newCount, reviewCount, err := s.Store.DailyCounts(t.Context(), s.Alice.User.ID, deck.ID, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
