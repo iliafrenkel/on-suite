@@ -174,12 +174,40 @@
 		return null; // further back reads more clearly as an absolute date
 	}
 
-	function initRelativeTimes() {
-		document.querySelectorAll("time[datetime]").forEach(function (el) {
+	// shortRelativeTime is relativeTime's compact form, for a
+	// data-relative="short" <time> in a dense list (ON Paste's, issue
+	// #393): "5m", "3h", "2d". Past a week it defers to the server's own
+	// short date, like relativeTime.
+	function shortRelativeTime(then, now) {
+		var minutes = Math.floor((now - then) / 60000);
+		if (minutes < 1) return "now";
+		if (minutes < 60) return minutes + "m";
+		var hours = Math.floor(minutes / 60);
+		if (hours < 24) return hours + "h";
+		var days = Math.floor(hours / 24);
+		if (days < 7) return days + "d";
+		return null;
+	}
+
+	// root defaults to the whole document; htmx:load below passes just the
+	// content a swap brought in, which would otherwise keep the server's
+	// absolute timestamp until the next full page load.
+	function applyRelativeTimes(root) {
+		var times = Array.prototype.slice.call(root.querySelectorAll("time[datetime]"));
+		if (root.matches && root.matches("time[datetime]")) times.push(root);
+		times.forEach(function (el) {
 			var then = new Date(el.getAttribute("datetime"));
 			if (isNaN(then.getTime())) return;
-			var label = relativeTime(then, new Date());
+			var format = el.getAttribute("data-relative") === "short" ? shortRelativeTime : relativeTime;
+			var label = format(then, new Date());
 			if (label) el.textContent = label;
+		});
+	}
+
+	function initRelativeTimes() {
+		applyRelativeTimes(document);
+		document.addEventListener("htmx:load", function (e) {
+			applyRelativeTimes(e.detail.elt);
 		});
 	}
 

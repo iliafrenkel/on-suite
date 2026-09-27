@@ -628,19 +628,74 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 
 /* ---- Snippet list ------------------------------------------------------ */
 
-.list-head { justify-content: space-between; }
+.list-head { justify-content: space-between; margin-bottom: var(--s-2); }
 .list-head h1, .list-head h2 { margin: 0; }
 
 .snippet-list { margin: 0; padding: 0; list-style: none; }
 
+/* Issue #393: rows used to be ~116px tall — the <li> and the .snippet-row
+ * link inside it each carried their own padding, around three full-size
+ * lines — so a large screen showed about six. The link's padding alone now
+ * spaces a row; the <li>'s 1px keeps a hovered row's background off the
+ * separator. */
 .snippet-list li {
-	padding: var(--s-3) 0;
+	padding: 1px 0;
 	border-bottom: var(--border);
 }
 
 .snippet-list li:last-child { border-bottom: none; }
-.snippet-list a { font-weight: 600; }
-.snippet-list p { margin: var(--s-1) 0 0; }
+.snippet-list p { margin: 0; }
+
+/* One line: the title takes whatever the pills and date leave, and is the
+ * only part that truncates. */
+.snippet-row-head {
+	display: flex;
+	align-items: center;
+	gap: var(--s-1);
+	min-width: 0;
+}
+
+.snippet-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--fs-sm);
+	font-weight: 600;
+}
+
+.snippet-pill {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	padding: 0 var(--s-1);
+	border: 1px solid var(--c-border);
+	border-radius: 999px;
+	background: var(--c-bg-subtle);
+	color: var(--c-text-dim);
+	font-size: var(--fs-2xs);
+	font-weight: 400;
+	line-height: 1.5;
+	white-space: nowrap;
+}
+.snippet-pill-shared {
+	border-color: var(--c-border-firm);
+	background: var(--c-accent-attention-bg);
+}
+.snippet-pill .chip-icon {
+	width: 0.9em;
+	height: 0.9em;
+}
+
+.snippet-date {
+	flex: none;
+	margin-left: var(--s-1);
+	color: var(--c-text-faint);
+	font-size: var(--fs-xs);
+	font-weight: 400;
+	white-space: nowrap;
+}
 
 .snippet-preview {
 	font-family: var(--font-mono);
@@ -648,16 +703,7 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	color: var(--c-text-dim);
-	font-size: var(--fs-base);
-	font-weight: 400;
-}
-
-/* Distinct from .snippet-preview on purpose: at equal size and colour, the
- * language/lines/date line read as more of the snippet's own text rather
- * than metadata about it. */
-.snippet-meta {
 	font-size: var(--fs-xs);
-	color: var(--c-text-faint);
 	font-weight: 400;
 }
 
@@ -685,7 +731,7 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 
 .snippet-row {
 	display: block;
-	padding: var(--s-2);
+	padding: var(--s-1) var(--s-2);
 	margin: 0 calc(var(--s-2) * -1);
 	border-radius: var(--radius);
 	text-decoration: none;
@@ -696,24 +742,9 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 .snippet-row-active:hover {
 	background: var(--c-accent-bg);
 }
-.snippet-row-active .snippet-row-head span:first-child { color: var(--c-accent); }
+.snippet-row-active .snippet-title { color: var(--c-accent); }
 
 .paste-back-btn { display: none; }
-
-.tag {
-	padding: 0 var(--s-1);
-	border: 1px solid var(--c-border-firm);
-	border-radius: var(--radius);
-	color: var(--c-text-dim);
-	background-color: var(--c-accent-attention-bg);
-	font-size: var(--fs-xs);
-	font-weight: 400;
-	font-variant: small-caps;
-}
-.tag .chip-icon {
-    width: 0.75em;
-    height: 0.75em;
-}
 
 /* ---- Admin --------------------------------------------------------------- */
 

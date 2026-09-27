@@ -141,18 +141,19 @@
 	{{range .Items}}
 	{{$s := .Snippet}}
 	<li>
+		{{/* Issue #393: one head line (title, then the metadata as small
+		     pills and a short date) plus the one-line preview. The title is
+		     the only part that shrinks: it truncates with an ellipsis before
+		     any pill does. */}}
 		<a class="snippet-row{{if eq $s.ID $.ActiveID}} snippet-row-active{{end}}" href="/paste/{{$s.ID}}" hx-get="/paste/{{$s.ID}}" hx-target="#detail" hx-push-url="true">
-			<div class="row snippet-row-head">
-				<span>{{$s.DisplayTitle}}</span>
-				{{if $s.Shared}}<span class="tag" title="Shared with a public link">
-				<svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-				shared</span>{{end}}
+			<div class="snippet-row-head">
+				<span class="snippet-title">{{$s.DisplayTitle}}</span>
+				{{if $s.Shared}}<span class="snippet-pill snippet-pill-shared" title="Shared with a public link"><svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg><span class="visually-hidden">Shared</span></span>{{end}}
+				{{if .Language}}<span class="snippet-pill snippet-pill-lang">{{.Language}}</span>{{end}}
+				<span class="snippet-pill snippet-pill-lines">{{$s.LinesLabel}}</span>
+				<time class="snippet-date" datetime="{{$s.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{$s.CreatedAt.Format "2 Jan 2006 15:04"}}" data-relative="short">{{.Date}}</time>
 			</div>
 			<p class="snippet-preview">{{.Preview}}</p>
-			<p class="snippet-meta">
-				{{.Language}} · {{$s.LinesLabel}} ·
-				<time datetime="{{$s.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{$s.CreatedAt.Format "2 Jan 2006 15:04"}}">{{$s.CreatedAt.Format "2 Jan 2006 15:04"}}</time>
-			</p>
 		</a>
 	</li>
 	{{end}}
