@@ -1056,3 +1056,71 @@ func TestUpToDateMergeOfferCountsZero(t *testing.T) {
 		t.Errorf("preview = %+v, want a merge of 0 cards and no samples", p)
 	}
 }
+
+// TestSharesPickLatestByIDWhenTheClockStepsBack is #367: a wall-clock step
+// backwards (NTP correction, VM resume) must not make an older share look
+// newer. Share ids are monotonic, so "latest" and "newest first" follow them.
+func TestSharesPickLatestByIDWhenTheClockStepsBack(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	at := func(hour int) {
+		f.store.SetClock(func() time.Time { return time.Date(2026, 9, 24, hour, 0, 0, 0, time.UTC) })
+	}
+	carol, err := auth.NewStore(f.db).CreateUser(ctx, "carol", apptest.PasswordHash, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d2, err := f.store.CreateDeck(ctx, f.alice.ID, "French", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Bob says no thanks at 12:00; the clock then steps back and he is
+	// offered the deck again "at 11:00".
+	at(12)
+	first, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.DeclineShare(ctx, f.bob.ID, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	at(11)
+	again, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Later still, but stamped earlier: Carol gets the deck, Bob gets French.
+	at(10)
+	toCarol, err := f.store.ShareDeck(ctx, f.alice.ID, d.ID, carol.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	french, err := f.store.ShareDeck(ctx, f.alice.ID, d2.ID, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	shares, err := f.store.SharesForDeck(ctx, f.alice.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shares) != 2 || shares[0].ID != toCarol.ID || shares[1].ID != again.ID {
+		t.Fatalf("SharesForDeck = %+v, want [carol's #%d, bob's re-offer #%d]", shares, toCarol.ID, again.ID)
+	}
+	if shares[1].Status != flash.ShareStatusPending {
+		t.Errorf("Bob's latest status = %q, want pending (the re-offer, not the earlier decline)", shares[1].Status)
+	}
+
+	offers, err := f.store.SharesForRecipient(ctx, f.bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(offers) != 2 || offers[0].ID != french.ID || offers[1].ID != again.ID {
+		t.Fatalf("SharesForRecipient = %+v, want [french #%d, spanish #%d]", offers, french.ID, again.ID)
+	}
+}

@@ -504,8 +504,10 @@ func freeDeckName(ctx context.Context, tx *sql.Tx, userID int64, base, sharer st
 // offer rather than being an answer, so revoked rows are skipped, and a
 // revoked re-offer leaves the person showing their last real answer
 // ("added" / "said no thanks"). Someone whose only offers were all revoked
-// isn't listed. "Latest" is created_at DESC, id DESC, so rows with equal
-// timestamps still resolve the same way every time. ShareDeck never creates
+// isn't listed. "Latest" is the highest id, not created_at: ids are
+// monotonic and share rows are only deleted with their deck, while a clock
+// stepping backwards could make an older row's timestamp look newer (#367).
+// ShareDeck never creates
 // a second pending row for the same triple, so a pending row is always its
 // recipient's latest one. That makes a waiting row's ID the pending share
 // Revoke has to target.
@@ -516,11 +518,11 @@ func (st *Store) SharesForDeck(ctx context.Context, fromUserID, deckID int64) ([
 	rows, err := st.db.QueryContext(ctx,
 		`SELECT id, deck_id, from_user_id, to_user_id, status, adopted_deck_id, created_at, responded_at
 		   FROM (SELECT id, deck_id, from_user_id, to_user_id, status, adopted_deck_id, created_at, responded_at,
-		                ROW_NUMBER() OVER (PARTITION BY to_user_id ORDER BY created_at DESC, id DESC) AS rn
+		                ROW_NUMBER() OVER (PARTITION BY to_user_id ORDER BY id DESC) AS rn
 		           FROM flash_shares
 		          WHERE deck_id = ? AND from_user_id = ? AND status <> ?)
 		  WHERE rn = 1
-		  ORDER BY created_at DESC, id DESC`,
+		  ORDER BY id DESC`,
 		deckID, fromUserID, ShareStatusRevoked)
 	if err != nil {
 		return nil, fmt.Errorf("flash: shares for deck: %w", err)
@@ -562,7 +564,7 @@ type ShareOffer struct {
 }
 
 // SharesForRecipient lists every pending offer addressed to toUserID, newest
-// first — the recipient's gift rows.
+// (highest id, as in SharesForDeck) first — the recipient's gift rows.
 func (st *Store) SharesForRecipient(ctx context.Context, toUserID int64) ([]ShareOffer, error) {
 	rows, err := st.db.QueryContext(ctx,
 		`SELECT s.id, s.deck_id, s.from_user_id, s.to_user_id, s.status, s.adopted_deck_id, s.created_at, s.responded_at,
@@ -574,7 +576,7 @@ func (st *Store) SharesForRecipient(ctx context.Context, toUserID int64) ([]Shar
 		   FROM flash_shares s
 		   JOIN flash_decks d ON d.id = s.deck_id
 		  WHERE s.to_user_id = ? AND s.status = ?
-		  ORDER BY s.created_at DESC, s.id DESC`,
+		  ORDER BY s.id DESC`,
 		ShareStatusAdopted, toUserID, ShareStatusPending)
 	if err != nil {
 		return nil, fmt.Errorf("flash: shares for recipient: %w", err)
