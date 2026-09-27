@@ -42,7 +42,7 @@ func TestFlashRegistersTheDailyMediaPurge(t *testing.T) {
 // half: a deck delete leaves an orphan flash_tags row (the cascade only
 // removes flash_card_tags), and the same job must sweep it too.
 func TestMediaPurgeJobRunsAgainstTheAppsOwnStore(t *testing.T) {
-	s, a := newServerWithApp(t)
+	s, a, _ := newServerWithApp(t)
 	ctx := t.Context()
 
 	orphan, err := s.Store.SaveMediaUpload(ctx, flash.MediaKindImage, "image/png", onePNG, time.Now().UTC())
@@ -57,7 +57,9 @@ func TestMediaPurgeJobRunsAgainstTheAppsOwnStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kept, err := s.Store.AttachCardUpload(ctx, s.Alice.User.ID, deck.ID, c.ID, flash.MediaKindImage, "image/png", onePNG2)
+	kept, err := applyCardForm(t, ctx, s.Store, s.Alice.User.ID, deck.ID, c, flash.CardForm{
+		Image: &flash.CardUpload{ContentType: "image/png", Data: onePNG2},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +72,7 @@ func TestMediaPurgeJobRunsAgainstTheAppsOwnStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Store.SetCardTags(ctx, s.Alice.User.ID, tagCard.ID, []string{"orphaned-by-deck"}); err != nil {
+	if _, err := applyCardForm(t, ctx, s.Store, s.Alice.User.ID, tagDeck.ID, tagCard, flash.CardForm{Tags: []string{"orphaned-by-deck"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Store.DeleteDeck(ctx, s.Alice.User.ID, tagDeck.ID); err != nil {
@@ -93,7 +95,7 @@ func TestMediaPurgeJobRunsAgainstTheAppsOwnStore(t *testing.T) {
 	if _, err := s.Store.MediaByHash(ctx, orphan); !errors.Is(err, flash.ErrNotFound) {
 		t.Errorf("orphan after the job: err = %v, want ErrNotFound", err)
 	}
-	if _, err := s.Store.MediaByHash(ctx, kept); err != nil {
+	if _, err := s.Store.MediaByHash(ctx, *kept.ImageHash); err != nil {
 		t.Errorf("attached image after the job: %v", err)
 	}
 	// If the job already swept the orphaned tag, nothing is left for

@@ -20,26 +20,27 @@ func mediaRowCount(t *testing.T, f *fixture) int {
 	return n
 }
 
-func TestAttachCardUploadStoresAndAttachesTogether(t *testing.T) {
+// TestSaveCardFormAttachesAndStoresTogether is what used to be
+// TestAttachCardUploadStoresAndAttachesTogether: SaveCardForm's Audio field
+// stores a new upload and attaches it in the same call (#382).
+func TestSaveCardFormAttachesAndStoresTogether(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	d, c := purgeCard(t, f)
 
-	hash, err := f.store.AttachCardUpload(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindAudio, "audio/mpeg", []byte("fake mp3 bytes"))
+	got, err := applyCardForm(t, ctx, f.store, f.alice.ID, d.ID, c, flash.CardForm{
+		Audio: &flash.CardUpload{ContentType: "audio/mpeg", Data: []byte("fake mp3 bytes")},
+	})
 	if err != nil {
-		t.Fatalf("AttachCardUpload: %v", err)
+		t.Fatalf("SaveCardForm: %v", err)
 	}
-	got, err := f.store.CardByID(ctx, f.alice.ID, d.ID, c.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.AudioHash == nil || *got.AudioHash != hash {
-		t.Errorf("AudioHash = %v, want %q", got.AudioHash, hash)
+	if got.AudioHash == nil {
+		t.Fatal("AudioHash is nil; the upload was not attached")
 	}
 	if got.ImageHash != nil {
 		t.Errorf("ImageHash = %v, want nil (only audio was attached)", got.ImageHash)
 	}
-	m, err := f.store.MediaByHash(ctx, hash)
+	m, err := f.store.MediaByHash(ctx, *got.AudioHash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,23 +49,26 @@ func TestAttachCardUploadStoresAndAttachesTogether(t *testing.T) {
 	}
 }
 
-// TestAttachCardUploadThatCannotAttachLeavesNoRow: the insert and the
-// attach are one unit, so a failed attach leaves no orphan behind.
-func TestAttachCardUploadThatCannotAttachLeavesNoRow(t *testing.T) {
+// TestSaveCardFormThatCannotAttachLeavesNoRow is what used to be
+// TestAttachCardUploadThatCannotAttachLeavesNoRow's ownership half: the
+// insert and the attach are one unit, so a failed attach leaves no orphan
+// behind. Its "unknown media kind" half had no equivalent to retarget:
+// SaveCardForm only ever calls the unexported setCardMedia with
+// MediaKindImage or MediaKindAudio, so an arbitrary kind can no longer reach
+// that check through any exported API (#382).
+func TestSaveCardFormThatCannotAttachLeavesNoRow(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	d, c := purgeCard(t, f)
 
 	// Bob can't attach to Alice's card.
-	if _, err := f.store.AttachCardUpload(ctx, f.bob.ID, d.ID, c.ID, flash.MediaKindImage, "image/png", onePNG); !errors.Is(err, flash.ErrNotFound) {
+	if _, err := applyCardForm(t, ctx, f.store, f.bob.ID, d.ID, c, flash.CardForm{
+		Image: &flash.CardUpload{ContentType: "image/png", Data: onePNG},
+	}); !errors.Is(err, flash.ErrNotFound) {
 		t.Fatalf("attach to someone else's card: err = %v, want ErrNotFound", err)
 	}
-	// There is no such media kind.
-	if _, err := f.store.AttachCardUpload(ctx, f.alice.ID, d.ID, c.ID, "video", "video/mp4", onePNG); !errors.Is(err, flash.ErrInvalid) {
-		t.Fatalf("unknown kind: err = %v, want ErrInvalid", err)
-	}
 	if n := mediaRowCount(t, f); n != 0 {
-		t.Errorf("flash_media has %d rows after two failed attaches, want 0", n)
+		t.Errorf("flash_media has %d rows after a failed attach, want 0", n)
 	}
 }
 
@@ -80,15 +84,17 @@ func TestReattachingAnOrphanedFileSurvivesThePurge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hash, err := f.store.AttachCardUpload(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindImage, "image/png", onePNG)
+	got, err := applyCardForm(t, ctx, f.store, f.alice.ID, d.ID, c, flash.CardForm{
+		Image: &flash.CardUpload{ContentType: "image/png", Data: onePNG},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hash != orphan {
-		t.Fatalf("same bytes produced a different hash: %q vs %q", hash, orphan)
+	if got.ImageHash == nil || *got.ImageHash != orphan {
+		t.Fatalf("same bytes produced a different hash: %v vs %q", got.ImageHash, orphan)
 	}
 	purge(t, f, 0)
-	if !mediaExists(t, f, hash) {
+	if !mediaExists(t, f, orphan) {
 		t.Fatal("the re-attached file was purged")
 	}
 }
@@ -97,7 +103,9 @@ func TestReattachingAnOrphanedFileSurvivesThePurge(t *testing.T) {
 // the purge running continuously, every attach must still succeed. When the
 // store and the attach were two statements, the purge could take the one
 // connection between them, delete the just-stored row, and the attach then
-// failed its foreign key.
+// failed its foreign key. SaveCardForm's Image field now runs the same
+// attachUpload helper AttachCardUpload used to, so this still pins that
+// guarantee (#382).
 func TestPurgeRunningAlongsideAttachesNeverBreaksOne(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -125,13 +133,15 @@ func TestPurgeRunningAlongsideAttachesNeverBreaksOne(t *testing.T) {
 		// A distinct file each time, so each attach inserts a fresh row and
 		// orphans the previous one for the purge to chew on.
 		data := append(bytes.Clone(onePNG), byte(i), byte(i>>8))
-		hash, err := f.store.AttachCardUpload(ctx, f.alice.ID, d.ID, c.ID, flash.MediaKindImage, "image/png", data)
+		got, err := applyCardForm(t, ctx, f.store, f.alice.ID, d.ID, c, flash.CardForm{
+			Image: &flash.CardUpload{ContentType: "image/png", Data: data},
+		})
 		if err != nil {
 			close(stop)
 			<-done
 			t.Fatalf("attach %d with the purge running: %v", i, err)
 		}
-		last = hash
+		last = *got.ImageHash
 	}
 	close(stop)
 	if err := <-done; err != nil {

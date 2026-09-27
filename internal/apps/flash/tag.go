@@ -43,47 +43,16 @@ func ValidateTagNames(names []string) error {
 	return nil
 }
 
-// SetCardTags replaces cardID's whole tag set with names, creating any tag
-// that does not exist yet for userID. It fails with ErrNotFound if the card
-// is not userID's own.
-//
-// The ownership check runs inside the same transaction as the writes (via
-// cardOwner(ctx, tx, ...)), not before it, for the same reason as GradeCard
-// and UndoLastGrade (#294, #288): with one database connection, a check
-// before BeginTx hands the connection back in between, letting a concurrent
-// DeleteCard of the same card run to completion in that gap — SetCardTags'
-// own writes would then hit a card that no longer exists, surfacing as a
-// raw foreign-key error instead of ErrNotFound. Nothing in this method may
-// use st.db once the transaction has started: with SetMaxOpenConns(1), that
-// would deadlock waiting for the connection the transaction already holds.
-func (st *Store) SetCardTags(ctx context.Context, userID, cardID int64, names []string) error {
-	if err := ValidateTagNames(names); err != nil {
-		return err
-	}
-
-	tx, err := st.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("flash: set card tags: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := cardOwner(ctx, tx, userID, cardID); err != nil {
-		return err
-	}
-
-	if err := replaceCardTags(ctx, tx, userID, cardID, names); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("flash: set card tags: %w", err)
-	}
-	return nil
-}
-
-// replaceCardTags is SetCardTags' writes without its ownership check or
-// transaction, so SaveCardForm can run them inside its own (#363). The
-// caller must already have confirmed cardID is userID's in the same tx.
+// replaceCardTags replaces cardID's whole tag set with names, creating any
+// tag that does not exist yet for userID, against a caller's open
+// transaction (SaveCardForm's) so the write lands atomically with the rest
+// of the card save (#363). The caller must already have confirmed cardID is
+// userID's in the same tx — for the same reason as GradeCard and
+// UndoLastGrade (#294, #288): with one database connection
+// (SetMaxOpenConns(1)), an ownership check before the transaction hands the
+// connection back in between, letting a concurrent DeleteCard of the same
+// card run to completion in that gap, so the check must run inside the same
+// transaction as the writes it guards.
 func replaceCardTags(ctx context.Context, tx *sql.Tx, userID, cardID int64, names []string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM flash_card_tags WHERE card_id = ?`, cardID); err != nil {
 		return fmt.Errorf("flash: set card tags: %w", err)
@@ -117,8 +86,8 @@ func replaceCardTags(ctx context.Context, tx *sql.Tx, userID, cardID int64, name
 
 // upsertCardTags finds-or-creates each of userID's tags by name and links
 // cardID to them, using tx directly rather than opening its own transaction
-// — so it can run either as SetCardTags' own transaction or inside a caller's
-// existing one (e.g. ImportDeck's).
+// — so it can run either inside replaceCardTags' transaction or a caller's
+// own (e.g. ImportDeck's).
 func upsertCardTags(ctx context.Context, tx *sql.Tx, userID, cardID int64, names []string) error {
 	seen := make(map[string]bool)
 	for _, raw := range names {

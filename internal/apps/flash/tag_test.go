@@ -60,8 +60,8 @@ func TestSetAndFetchCardTags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := f.store.SetCardTags(ctx, f.alice.ID, card.ID, []string{"greetings", "beginner"}); err != nil {
-		t.Fatalf("SetCardTags: %v", err)
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, deck.ID, card, flash.CardForm{Tags: []string{"greetings", "beginner"}}); err != nil {
+		t.Fatalf("SaveCardForm: %v", err)
 	}
 	got, err := f.store.TagsForCard(ctx, f.alice.ID, card.ID)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestSetAndFetchCardTags(t *testing.T) {
 	}
 
 	// Replacing the set drops "beginner" entirely.
-	if err := f.store.SetCardTags(ctx, f.alice.ID, card.ID, []string{"greetings"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, deck.ID, card, flash.CardForm{Tags: []string{"greetings"}}); err != nil {
 		t.Fatal(err)
 	}
 	got, err = f.store.TagsForCard(ctx, f.alice.ID, card.ID)
@@ -95,7 +95,7 @@ func TestSetCardTagsRejectsSomeoneElsesCard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.bob.ID, card.ID, []string{"hijacked"}); err == nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.bob.ID, deck.ID, card, flash.CardForm{Tags: []string{"hijacked"}}); err == nil {
 		t.Error("bob was able to tag alice's card")
 	}
 }
@@ -119,10 +119,10 @@ func TestCardsByTagIsCrossDeckAndOwnerScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.alice.ID, cardA.ID, []string{"hard"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, deckA.ID, cardA, flash.CardForm{Tags: []string{"hard"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.alice.ID, cardB.ID, []string{"hard"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, deckB.ID, cardB, flash.CardForm{Tags: []string{"hard"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -173,10 +173,10 @@ func TestCardTagsInDeck(t *testing.T) {
 	if _, err := f.store.CreateCard(ctx, f.alice.ID, d.ID, flash.CardTypeBasic, "untagged", "x", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.alice.ID, c1.ID, []string{"phrases", "greetings"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, d.ID, c1, flash.CardForm{Tags: []string{"phrases", "greetings"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetCardTags(ctx, f.alice.ID, c2.ID, []string{"food"}); err != nil {
+	if _, err := applyCardForm(t, ctx, f.store, f.alice.ID, d.ID, c2, flash.CardForm{Tags: []string{"food"}}); err != nil {
 		t.Fatal(err)
 	}
 

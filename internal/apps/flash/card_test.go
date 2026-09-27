@@ -3,6 +3,7 @@ package flash_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"testing"
@@ -10,6 +11,37 @@ import (
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 )
+
+// applyCardForm re-saves cardID's existing fields through SaveCardForm,
+// changing only what form itself sets (Tags/Image/Audio/RemoveImage/
+// RemoveAudio) — Front/Back/Notes/CardType always come from c, not the
+// caller. SetCardTags, SetCardMedia, AttachCardUpload and UpdateCard used to
+// give tests a one-call way to change just tags or just media; now that the
+// card form only ever saves through SaveCardForm (#363), this is that same
+// one-call shape for tests (#382).
+func applyCardForm(t *testing.T, ctx context.Context, store *flash.Store, userID, deckID int64, c flash.Card, form flash.CardForm) (flash.Card, error) {
+	t.Helper()
+	form.CardType, form.Front, form.Back, form.Notes = c.CardType, c.Front, c.Back, c.Notes
+	return store.SaveCardForm(ctx, userID, deckID, c.ID, form)
+}
+
+// setCardMediaHash points cardID's image or audio column directly at an
+// already-existing flash_media hash. SaveCardForm can only attach a new
+// upload's bytes (it hashes them itself via SaveMediaUpload), so it cannot
+// express attaching media that already exists under a known hash — the
+// shape SetCardMedia used to serve for tests seeding URL-sourced or shared
+// media (#382).
+func setCardMediaHash(t *testing.T, db *sql.DB, cardID int64, kind string, hash *string) {
+	t.Helper()
+	column := "image_hash"
+	if kind == flash.MediaKindAudio {
+		column = "audio_hash"
+	}
+	if _, err := db.ExecContext(context.Background(),
+		`UPDATE flash_cards SET `+column+` = ? WHERE id = ?`, hash, cardID); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestCreateAndFetchCard(t *testing.T) {
 	f := newFixture(t)
@@ -133,7 +165,10 @@ func TestCardOwnerScoping(t *testing.T) {
 	}
 }
 
-func TestUpdateCard(t *testing.T) {
+// TestSaveCardFormUpdateKeepsCreatedAt pins what used to be UpdateCard's own
+// test: updating a card's fields through SaveCardForm changes Front/Back/
+// Notes but must never touch CreatedAt (#382).
+func TestSaveCardFormUpdateKeepsCreatedAt(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
@@ -142,26 +177,25 @@ func TestUpdateCard(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a card
 	created, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "original q", "original a", "original note")
 	if err != nil {
 		t.Fatal(err)
 	}
 	originalCreatedAt := created.CreatedAt
 
-	// Update the card
-	updated, err := f.store.UpdateCard(ctx, f.alice.ID, deck.ID, created.ID, flash.CardTypeBasic, "new q", "new a", "new note")
+	updated, err := f.store.SaveCardForm(ctx, f.alice.ID, deck.ID, created.ID, flash.CardForm{
+		CardType: flash.CardTypeBasic, Front: "new q", Back: "new a", Notes: "new note",
+	})
 	if err != nil {
-		t.Fatalf("UpdateCard: %v", err)
+		t.Fatalf("SaveCardForm: %v", err)
 	}
 	if updated.Front != "new q" || updated.Back != "new a" || updated.Notes != "new note" {
-		t.Errorf("UpdateCard = %+v, fields not updated", updated)
+		t.Errorf("SaveCardForm update = %+v, fields not updated", updated)
 	}
 	if !updated.CreatedAt.Equal(originalCreatedAt) {
 		t.Errorf("CreatedAt changed: got %v, want %v", updated.CreatedAt, originalCreatedAt)
 	}
 
-	// Verify fresh fetch also has new values
 	fetched, err := f.store.CardByID(ctx, f.alice.ID, deck.ID, created.ID)
 	if err != nil {
 		t.Fatalf("CardByID: %v", err)
@@ -171,36 +205,11 @@ func TestUpdateCard(t *testing.T) {
 	}
 }
 
-func TestUpdateCardRejectsSomeoneElsesDeck(t *testing.T) {
-	f := newFixture(t)
-	ctx := context.Background()
-
-	// Create deck and card as alice
-	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "alice's", "", flash.DefaultDeckColor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	created, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "original", "x", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Try to update as bob
-	if _, err := f.store.UpdateCard(ctx, f.bob.ID, deck.ID, created.ID, flash.CardTypeBasic, "hijacked", "y", ""); !errors.Is(err, flash.ErrNotFound) {
-		t.Errorf("UpdateCard as another user = %v, want ErrNotFound", err)
-	}
-
-	// Verify alice's card is unchanged
-	fetched, err := f.store.CardByID(ctx, f.alice.ID, deck.ID, created.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fetched.Front != "original" || fetched.Back != "x" {
-		t.Errorf("card was modified: %+v", fetched)
-	}
-}
-
-func TestUpdateCardRejectsInvalidInput(t *testing.T) {
+// TestSaveCardFormUpdateRejectsInvalidInput is what used to be
+// UpdateCardRejectsInvalidInput: TestSaveCardFormValidates (below) only
+// covers create (cardID == 0); an update's invalid input must be rejected,
+// leaving the existing card untouched, the same way (#382).
+func TestSaveCardFormUpdateRejectsInvalidInput(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
@@ -213,9 +222,11 @@ func TestUpdateCardRejectsInvalidInput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Try to update with empty back for basic card type (invalid)
-	if _, err := f.store.UpdateCard(ctx, f.alice.ID, deck.ID, created.ID, flash.CardTypeBasic, "q", "", ""); !errors.Is(err, flash.ErrInvalid) {
-		t.Errorf("UpdateCard with invalid input = %v, want ErrInvalid", err)
+	// Empty back for a basic card type is invalid.
+	if _, err := f.store.SaveCardForm(ctx, f.alice.ID, deck.ID, created.ID, flash.CardForm{
+		CardType: flash.CardTypeBasic, Front: "q", Back: "",
+	}); !errors.Is(err, flash.ErrInvalid) {
+		t.Errorf("SaveCardForm update with invalid input = %v, want ErrInvalid", err)
 	}
 
 	// Verify card is unchanged

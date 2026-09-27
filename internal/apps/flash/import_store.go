@@ -77,14 +77,12 @@ func (st *Store) ImportDeck(ctx context.Context, userID int64, name, description
 		if err != nil {
 			return Deck{}, fmt.Errorf("flash: import deck: %w", err)
 		}
-		// upsertCardTags (tag.go) is SetCardTags' insert logic, run against
-		// the transaction ImportDeck already holds. SetCardTags cannot be
-		// called directly here: it opens (and commits) its own transaction
-		// via st.db, and flash's SQLite handle is opened with a single
-		// connection (internal/platform/db.Open sets MaxOpenConns(1)), so a
-		// second BeginTx from inside an already-open transaction would
-		// deadlock waiting for a connection the first transaction is still
-		// holding.
+		// upsertCardTags (tag.go) is replaceCardTags' insert logic without
+		// its DELETE-then-garbage-collect steps, which a freshly imported
+		// card needs neither of: there are no existing tags to replace, and
+		// calling replaceCardTags per card would re-run its whole-account GC
+		// sweep once per card instead of not at all. It runs directly
+		// against the transaction ImportDeck already holds.
 		if err := upsertCardTags(ctx, tx, userID, cardID, c.Tags); err != nil {
 			return Deck{}, err
 		}
