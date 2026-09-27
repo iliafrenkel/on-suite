@@ -2,6 +2,7 @@ package reader_test
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -921,6 +922,32 @@ func TestMarkAllReadRejectsAnUnknownOlderThan(t *testing.T) {
 		if read, _, err := s.Store.ItemState(ctx, s.Alice.User.ID, it.ID); err != nil || read {
 			t.Errorf("%s read = %v (err %v) after rejected requests, want false", it.GUID, read, err)
 		}
+	}
+}
+
+// The older-than options are submit buttons inside the same form as Mark all
+// read, so they carry the list context and work with JavaScript off.
+func TestMarkAllReadSplitButtonOffersOlderThanOptions(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "a")
+
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(subID))
+	doc.MustHave(`form.reader-mark-all input[name=scope]`)
+	doc.MustHave(`form.reader-mark-all button.reader-mark-all-main`)
+	// htmlassert takes one qualifier per compound selector, so match on
+	// name and check value/label per node.
+	got := map[string]string{}
+	for _, btn := range doc.QueryAll(`form.reader-mark-all details.reader-mark-all-menu button[name=older_than]`) {
+		value, _ := htmlassert.Attr(btn, "value")
+		got[value] = strings.TrimSpace(htmlassert.Text(btn))
+	}
+	want := map[string]string{"day": "Older than 1 day", "week": "Older than 1 week"}
+	if !maps.Equal(got, want) {
+		t.Errorf("older_than menu buttons = %v, want %v", got, want)
+	}
+	toggle := doc.MustHave(`form.reader-mark-all details.reader-mark-all-menu summary`)
+	if got, _ := htmlassert.Attr(toggle, "aria-label"); got != "More mark-read options" {
+		t.Errorf("menu toggle aria-label = %q, want %q", got, "More mark-read options")
 	}
 }
 

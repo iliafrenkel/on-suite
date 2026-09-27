@@ -130,6 +130,9 @@ var toolbarIcons = map[string]template.HTML{
 		<path d="M19 12H5"/>
 		<path d="M12 19l-7-7 7-7"/>
 	</svg>`,
+	"chevron-down": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M6 9l6 6 6-6"/>
+	</svg>`,
 	"share": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<circle cx="18" cy="5" r="3"/>
 		<circle cx="6" cy="12" r="3"/>
