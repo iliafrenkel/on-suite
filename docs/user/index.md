@@ -9,10 +9,10 @@ can't see it in ON Suite unless you choose to share it.
 ON Suite is one place for your notes, snippets, news feeds and study cards.
 You sign in once and move freely between four apps:
 
-- **ON Notes** — organise notes and to-do lists in one outline.
-- **ON Paste** — keep and share snippets of text or code.
-- **ON Reader** — follow your favourite websites and read what's new.
-- **ON Flash** — make flash card decks and study them.
+- **[ON Notes](notes.md)** — organise notes and to-do lists in one outline.
+- **[ON Paste](paste.md)** — keep and share snippets of text or code.
+- **[ON Reader](reader.md)** — follow your favourite websites and read what's new.
+- **[ON Flash](flash.md)** — make flash card decks and study them.
 
 ## Signing in
 
@@ -23,7 +23,7 @@ You sign in once and move freely between four apps:
 3. Click **Sign in**.
 
 There's no way to sign up yourself. The person who runs your ON Suite (the
-admin) creates your account and gives you your username and first password.
+[admin](admin.md)) creates your account and gives you your username and first password.
 If you forget your password, ask them to reset it.
 
 If you see **That username or password is incorrect.**, check the spelling
@@ -63,7 +63,8 @@ After signing in you land on the dashboard, your home page.
   ON Suite logo to return to the dashboard.
 
 If you're an admin, you also see **Admin** at the bottom of the sidebar.
-Other people don't see it.
+Other people don't see it. The [Admin guide](admin.md) explains what's
+there.
 
 ## The user menu
 
@@ -108,11 +109,11 @@ signed in on will ask for the new password.
 
 These guides explain everything each app can do:
 
-- ON Notes — outlines, tasks, due dates and sharing.
-- ON Paste — saving and sharing snippets.
-- ON Reader — following feeds and reading articles.
-- ON Flash — making decks and studying cards.
-- Admin — managing accounts and the server (for admins only).
+- [ON Notes](notes.md) — outlines, tasks, due dates and sharing.
+- [ON Paste](paste.md) — saving and sharing snippets.
+- [ON Reader](reader.md) — following feeds and reading articles.
+- [ON Flash](flash.md) — making decks and studying cards.
+- [Admin](admin.md) — managing accounts and the server (for admins only).
 
 If something doesn't work the way a guide says, tell the person who runs
 your ON Suite, and mention the version number from the footer.

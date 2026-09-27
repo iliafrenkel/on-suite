@@ -289,8 +289,8 @@ Copies and exports include done and archived bullets. Done bullets end with
 archiving aren't included.
 
 The admin can also export all your ON Suite data, including your notes, as
-a single file for you. Ask them if you'd like a complete copy (the Admin
-guide explains how).
+a single file for you. Ask them if you'd like a complete copy (the
+[Admin guide](admin.md#exporting-someones-data) explains how).
 
 ## Importing an outline
 

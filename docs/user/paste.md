@@ -153,6 +153,7 @@ old link stays dead, so only people you give the new link to can read it.
 
 ON Paste doesn't have an export button. The admin can export all your ON
 Suite data, including your snippets, as a single file for you. Ask them if
-you'd like a copy (the Admin guide explains how).
+you'd like a copy (the
+[Admin guide](admin.md#exporting-someones-data) explains how).
 
 Back to [all guides](index.md).

@@ -268,8 +268,8 @@ another feed reader, or keep it as a backup. It lists your feeds only, not
 the articles or what you've read.
 
 The admin can also export all your ON Suite data, including your feeds, as
-a single file for you. Ask them if you'd like a complete copy (the Admin
-guide explains how).
+a single file for you. Ask them if you'd like a complete copy (the
+[Admin guide](admin.md#exporting-someones-data) explains how).
 
 ## Reading stats
 
