@@ -3,6 +3,7 @@ package flash_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -404,5 +405,55 @@ func TestCardsDueTodayIsUncappedUnlikeDueQueue(t *testing.T) {
 	}
 	if due != 3 {
 		t.Errorf("CardsDueToday = %d, want 3 (uncapped)", due)
+	}
+}
+
+// TestReviewCountsAreIndexedByUserAndDay pins migration 0014 (#365): the
+// all-decks stats reads (Streak, RetentionRate, DailyReviewCounts,
+// TodayTally without a deck) filter flash_review_counts by user_id and day,
+// which the (user_id, deck_id, day) primary key can't seek on past its
+// first column.
+func TestReviewCountsAreIndexedByUserAndDay(t *testing.T) {
+	f := newFixture(t)
+	var def string
+	err := f.db.QueryRowContext(context.Background(),
+		`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'flash_review_counts' AND name = ?`,
+		"flash_review_counts_user_day_idx").Scan(&def)
+	if err != nil {
+		t.Fatalf("index on flash_review_counts(user_id, day): %v", err)
+	}
+	if !strings.Contains(def, "user_id, day") {
+		t.Errorf("index def = %q, want it on (user_id, day)", def)
+	}
+}
+
+// TestStreakIgnoresDaysAfterNow: Streak walks back from now, so a review
+// stamped later than now (a clock that has since stepped back) neither
+// starts nor extends the streak.
+func TestStreakIgnoresDaysAfterNow(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	deck, err := f.store.CreateDeck(ctx, f.alice.ID, "Spanish", "", flash.DefaultDeckColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := f.store.CreateCard(ctx, f.alice.ID, deck.ID, flash.CardTypeBasic, "a", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	day1 := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	for _, at := range []time.Time{day1, day1.AddDate(0, 0, 1), day1.AddDate(0, 0, 5)} {
+		if _, err := f.store.GradeCard(ctx, f.alice.ID, card.ID, flash.RatingGood, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// now = day2: day1 and day2 count; day6 is in the future and is ignored.
+	streak, err := f.store.Streak(ctx, f.alice.ID, day1.AddDate(0, 0, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if streak != 2 {
+		t.Errorf("streak = %d, want 2", streak)
 	}
 }

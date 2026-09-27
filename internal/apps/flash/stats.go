@@ -11,37 +11,42 @@ import (
 // at the most recent day with a review, if today has none yet), on which
 // userID reviewed at least one card in any deck. A single day with zero
 // reviews anywhere breaks the chain.
+//
+// It reads review days newest-first (the (user_id, day) index, migration
+// 0014) and stops at the first gap, so it touches the streak's own days
+// plus one, not the user's whole history (#365). Days after now are never
+// read: a review stamped by a clock that has since stepped back can't start
+// or extend a streak.
 func (st *Store) Streak(ctx context.Context, userID int64, now time.Time) (int, error) {
+	cursor := now.UTC().Truncate(24 * time.Hour)
 	rows, err := st.db.QueryContext(ctx, `
         SELECT DISTINCT day FROM flash_review_counts
-        WHERE user_id = ? AND (new_count + review_count) > 0`, userID)
+        WHERE user_id = ? AND day <= ? AND (new_count + review_count) > 0
+        ORDER BY day DESC`, userID, formatDay(cursor))
 	if err != nil {
 		return 0, fmt.Errorf("flash: streak: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	days := map[string]bool{}
+	count := 0
 	for rows.Next() {
 		var day string
 		if err := rows.Scan(&day); err != nil {
 			return 0, fmt.Errorf("flash: streak: %w", err)
 		}
-		days[day] = true
+		if count == 0 && day != formatDay(cursor) {
+			// Today has no review yet — that alone must not break a streak
+			// that is still alive as of yesterday.
+			cursor = cursor.AddDate(0, 0, -1)
+		}
+		if day != formatDay(cursor) {
+			break
+		}
+		count++
+		cursor = cursor.AddDate(0, 0, -1)
 	}
 	if err := rows.Err(); err != nil {
 		return 0, fmt.Errorf("flash: streak: %w", err)
-	}
-
-	cursor := now.UTC().Truncate(24 * time.Hour)
-	if !days[formatDay(cursor)] {
-		// Today has no review yet — that alone must not break a streak that
-		// is still alive as of yesterday.
-		cursor = cursor.AddDate(0, 0, -1)
-	}
-	count := 0
-	for days[formatDay(cursor)] {
-		count++
-		cursor = cursor.AddDate(0, 0, -1)
 	}
 	return count, nil
 }
