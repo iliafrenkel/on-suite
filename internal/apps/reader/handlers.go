@@ -545,7 +545,7 @@ func (a *App) markAllRead(w http.ResponseWriter, r *http.Request) {
 	// The form carries the list it fired from, so the re-render stays there
 	// instead of resetting to All/Unread.
 	lc := formContext(r, 0)
-	if _, err := a.store.MarkAllRead(r.Context(), userID, lc.Scope, lc.SubID, a.store.now()); err != nil {
+	if _, err := a.store.MarkAllRead(r.Context(), userID, lc.Scope, lc.SubID, a.store.now(), 0); err != nil {
 		a.fail(w, r, err)
 		return
 	}

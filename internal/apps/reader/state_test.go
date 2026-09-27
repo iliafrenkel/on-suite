@@ -3,6 +3,8 @@ package reader_test
 import (
 	"context"
 	"errors"
+	"slices"
+	"sort"
 	"testing"
 	"time"
 
@@ -364,7 +366,7 @@ func TestMarkAllReadIsScopedAndDoesNotTouchOtherUsers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n, err := f.store.MarkAllRead(ctx, f.alice.ID, reader.ScopeFeed, aliceSub.ID, now)
+	n, err := f.store.MarkAllRead(ctx, f.alice.ID, reader.ScopeFeed, aliceSub.ID, now, 0)
 	if err != nil {
 		t.Fatalf("MarkAllRead: %v", err)
 	}
@@ -386,5 +388,128 @@ func TestMarkAllReadIsScopedAndDoesNotTouchOtherUsers(t *testing.T) {
 	}
 	if bobCounts.BySub[bobSub.ID] != 2 {
 		t.Errorf("bob has %d unread; alice's mark-all-read must not touch his state", bobCounts.BySub[bobSub.ID])
+	}
+}
+
+// unreadGUIDs lists which of a subscription's items the user has not read,
+// by GUID, so a test can say exactly which articles a cutoff left alone.
+func unreadGUIDs(t *testing.T, f *storeFixture, userID, subID int64) []string {
+	t.Helper()
+	ctx := context.Background()
+	items, err := f.store.ItemsForSubscription(ctx, userID, subID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, it := range items {
+		read, _, err := f.store.ItemState(ctx, userID, it.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !read {
+			out = append(out, it.GUID)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// The cutoff is on published_at and strict: an item published exactly at
+// now-olderThan is not "older than" it and stays unread.
+func TestMarkAllReadOlderThanOnlyMarksItemsPublishedBeforeTheCutoff(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		olderThan  time.Duration
+		wantMarked int
+		wantUnread []string
+	}{
+		{"no cutoff", 0, 4, nil},
+		{"day", 24 * time.Hour, 2, []string{"at-day", "fresh"}},
+		{"week", 7 * 24 * time.Hour, 1, []string{"at-day", "fresh", "three-days"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newStoreFixture(t)
+			ctx := context.Background()
+			sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := time.Now().UTC()
+			if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+				{GUID: "fresh", Title: "Fresh", PublishedAt: now.Add(-time.Hour)},
+				{GUID: "at-day", Title: "Exactly a day", PublishedAt: now.Add(-24 * time.Hour)},
+				{GUID: "three-days", Title: "Three days", PublishedAt: now.Add(-72 * time.Hour)},
+				{GUID: "ten-days", Title: "Ten days", PublishedAt: now.Add(-240 * time.Hour)},
+			}, now); err != nil {
+				t.Fatal(err)
+			}
+
+			n, err := f.store.MarkAllRead(ctx, f.alice.ID, reader.ScopeFeed, sub.ID, now, tc.olderThan)
+			if err != nil {
+				t.Fatalf("MarkAllRead: %v", err)
+			}
+			if n != tc.wantMarked {
+				t.Errorf("marked %d, want %d", n, tc.wantMarked)
+			}
+			if got := unreadGUIDs(t, f, f.alice.ID, sub.ID); !slices.Equal(got, tc.wantUnread) {
+				t.Errorf("unread after cutoff = %v, want %v", got, tc.wantUnread)
+			}
+		})
+	}
+}
+
+// The cutoff narrows the scope; it must not widen it. All covers every
+// subscription, Starred only starred items — old unstarred ones stay unread.
+func TestMarkAllReadOlderThanRespectsAllAndStarredScopes(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	one, err := f.store.Subscribe(ctx, f.alice.ID, "https://one.example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := f.store.Subscribe(ctx, f.alice.ID, "https://two.example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	for _, sub := range []reader.Subscription{one, two} {
+		if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+			{GUID: "new", Title: "New", PublishedAt: now.Add(-time.Hour)},
+			{GUID: "old", Title: "Old", PublishedAt: now.Add(-48 * time.Hour)},
+			{GUID: "old-starred", Title: "Old starred", PublishedAt: now.Add(-48 * time.Hour)},
+		}, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, err := f.store.ItemsForSubscription(ctx, f.alice.ID, one.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.GUID == "old-starred" {
+			if err := f.store.SetStarred(ctx, f.alice.ID, it.ID, true, now); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	if _, err := f.store.MarkAllRead(ctx, f.alice.ID, reader.ScopeStarred, 0, now, 24*time.Hour); err != nil {
+		t.Fatalf("MarkAllRead starred: %v", err)
+	}
+	if got, want := unreadGUIDs(t, f, f.alice.ID, one.ID), []string{"new", "old"}; !slices.Equal(got, want) {
+		t.Errorf("feed one after starred cutoff: unread = %v, want %v", got, want)
+	}
+	if got, want := unreadGUIDs(t, f, f.alice.ID, two.ID), []string{"new", "old", "old-starred"}; !slices.Equal(got, want) {
+		t.Errorf("feed two after starred cutoff: unread = %v, want %v (nothing there is starred)", got, want)
+	}
+
+	if _, err := f.store.MarkAllRead(ctx, f.alice.ID, reader.ScopeAll, 0, now, 24*time.Hour); err != nil {
+		t.Fatalf("MarkAllRead all: %v", err)
+	}
+	for _, sub := range []reader.Subscription{one, two} {
+		if got, want := unreadGUIDs(t, f, f.alice.ID, sub.ID), []string{"new"}; !slices.Equal(got, want) {
+			t.Errorf("sub %d after all-scope cutoff: unread = %v, want %v", sub.ID, got, want)
+		}
 	}
 }
