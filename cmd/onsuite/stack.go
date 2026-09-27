@@ -13,6 +13,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
 	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
+	"github.com/iliafrenkel/on-suite/internal/platform/usermgmt"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 	"github.com/iliafrenkel/on-suite/internal/ui"
 )
@@ -115,6 +116,18 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	}))
 	routes.Handle(mux, "GET /admin", false, adminHandler)
 	routes.Handle(mux, "GET /admin/{$}", false, adminHandler)
+
+	// User management changes accounts, so it lives beside the read-only
+	// admin page rather than inside it (#310).
+	usermgmt.Routes(mux, routes, authn, usermgmt.Deps{
+		Users:   deps.Users,
+		Render:  rend,
+		Errors:  errs,
+		Log:     deps.Log,
+		Nav:     deps.Registry.NavItems(),
+		Version: deps.Version,
+	})
+
 	routes.Handle(mux, "GET /{$}", false, authn.RequireUser(homeHandler(deps, rend, errs)))
 	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
 

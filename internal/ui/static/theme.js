@@ -157,6 +157,19 @@
 		});
 	}
 
+	// A value already in the page (the one-time password on /admin/users,
+	// #310), so there is nothing to fetch, unlike initCopyRaw. Delegated
+	// for the same reason as initCopyLink.
+	function initCopyText() {
+		document.addEventListener("click", function (e) {
+			var btn = e.target.closest("[data-copy-text]");
+			if (!btn) return;
+			copyText(btn.getAttribute("data-copy-text"))
+				.then(function () { flashLabel(btn, "Copied"); })
+				.catch(function () { flashLabel(btn, "Copy failed"); });
+		});
+	}
+
 	// The server renders an absolute timestamp so the page is correct with
 	// JS disabled; this replaces it with a relative one for anything recent
 	// enough that "how long ago" is more useful than a clock reading. The
@@ -269,6 +282,7 @@
 	initSidebarToggle();
 	initCopyLink();
 	initCopyRaw();
+	initCopyText();
 	initRelativeTimes();
 	initConfirm();
 })();
