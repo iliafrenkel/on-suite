@@ -44,9 +44,40 @@ GitHub Release — there's no separate release script or manual build step.
    ```bash
    ./scripts/next-version.sh
    # v0.4.0
-   git tag -a v0.4.0 -m "v0.4.0"
-   git push origin v0.4.0
    ```
+
+   Then write the release's friendly name and summary into the tag's
+   message. The first line is the name; after a blank line, a few plain,
+   friendly sentences about what changed. They become the release's title
+   and the text above its generated changelog:
+
+   ```bash
+   git tag -a v1.1.0 -F - <<'EOF'
+   ON Flash - Major UI update
+
+   Flash cards are beautiful again! Plus, a lot of bug fixes, accessibility
+   and performance improvements.
+   EOF
+   git push origin v1.1.0
+   ```
+
+   The release then reads:
+
+   ```markdown
+   # ON Flash - Major UI update (v1.1.0)
+
+   Flash cards are beautiful again! Plus, a lot of bug fixes, accessibility
+   and performance improvements.
+
+   ## Changelog
+   ...
+   ```
+
+   A tag whose message is just the version (`git tag -a v1.1.1 -m v1.1.1`)
+   gets a plain `v1.1.1` title and no summary, which is fine for a small
+   patch. Check the message before pushing with `git show v1.1.0`. Once the
+   tag is pushed, fix a typo by editing the GitHub Release text instead of
+   re-tagging.
 
    The tag must start with `v` — that's what the workflow's `on.push.tags:
    ['v*']` filter matches.
@@ -74,7 +105,8 @@ GitHub Release — there's no separate release script or manual build step.
      [`CONTRIBUTING.md`](../CONTRIBUTING.md#commit-messages) for the type-to-section
      mapping. Commits starting with `docs:` or `test:`, and merge commits,
      are dropped entirely,
-   - publish everything as a GitHub Release named after the tag.
+   - publish everything as a GitHub Release, titled and introduced by the
+     tag's message (see step 2).
 
 `actions/checkout` and `goreleaser-action` use `permissions: contents:
 write` as before. Signing needs one more: `permissions: id-token: write`,

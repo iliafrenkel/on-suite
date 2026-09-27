@@ -107,6 +107,22 @@ signs:
       - "${artifact}"
     artifacts: checksum
 
+# The release's friendly name and summary come from the annotated tag's
+# message: its first line is the name ("ON Flash - Major UI update"), the
+# rest a few plain sentences about what changed. Both sit above the
+# generated changelog below. A tag whose message is just the version (every
+# tag before v1.1.0, or a quick `-m v1.2.3`) gets a plain title and no header.
+# See docs/RELEASING.md.
+release:
+  name_template: >-
+    {{ if eq .TagSubject .Tag }}{{ .Tag }}{{ else }}{{ .TagSubject }} ({{ .Tag }}){{ end }}
+  header: |
+    {{- if ne .TagSubject .Tag }}
+    # {{ .TagSubject }} ({{ .Tag }})
+
+    {{ .TagBody }}
+    {{- end }}
+
 changelog:
   use: git
   sort: asc
