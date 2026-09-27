@@ -451,20 +451,16 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 		reject(userMessage(err))
 		return
 	}
-	c, err := a.store.CreateCard(r.Context(), userID, deck.ID, cardType, front, back, notes)
+	c, err := a.store.SaveCardForm(r.Context(), userID, deck.ID, 0, CardForm{
+		CardType: cardType, Front: front, Back: back, Notes: notes, Tags: tagList,
+		Image: uploads.Image, Audio: uploads.Audio,
+		RemoveImage: uploads.RemoveImage, RemoveAudio: uploads.RemoveAudio,
+	})
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
 			reject(userMessage(err))
 			return
 		}
-		a.fail(w, r, err)
-		return
-	}
-	if err := a.store.SetCardTags(r.Context(), userID, c.ID, tagList); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	if err := a.saveCardUploads(r.Context(), userID, deck.ID, c.ID, uploads); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -491,12 +487,7 @@ func (a *App) createCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Push-Url", cardBasePath(deck.ID)+strconv.FormatInt(c.ID, 10))
-	saved, err := a.store.CardByID(r.Context(), userID, deck.ID, c.ID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, a.viewCardDetail(r, deck, saved, "", ""))
+	a.renderCardDetailWithList(w, r, userID, deck, http.StatusCreated, a.viewCardDetail(r, deck, c, "", ""))
 }
 
 func (a *App) editCardForm(w http.ResponseWriter, r *http.Request) {
@@ -585,25 +576,16 @@ func (a *App) updateCard(w http.ResponseWriter, r *http.Request) {
 		a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags, q, tag))
 		return
 	}
-	updated, err := a.store.UpdateCard(r.Context(), userID, deck.ID, id, cardType, front, back, notes)
+	updated, err := a.store.SaveCardForm(r.Context(), userID, deck.ID, id, CardForm{
+		CardType: cardType, Front: front, Back: back, Notes: notes, Tags: tagList,
+		Image: uploads.Image, Audio: uploads.Audio,
+		RemoveImage: uploads.RemoveImage, RemoveAudio: uploads.RemoveAudio,
+	})
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
 			a.renderCardIndex(w, r, userID, deck, http.StatusBadRequest, a.editCardDetail(r, deck, c, userMessage(err), cardType, front, back, notes, tags, q, tag))
 			return
 		}
-		a.fail(w, r, err)
-		return
-	}
-	if err := a.store.SetCardTags(r.Context(), userID, updated.ID, tagList); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	if err := a.saveCardUploads(r.Context(), userID, deck.ID, id, uploads); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	updated, err = a.store.CardByID(r.Context(), userID, deck.ID, id)
-	if err != nil {
 		a.fail(w, r, err)
 		return
 	}

@@ -142,18 +142,14 @@ func (a *App) writeMedia(w http.ResponseWriter, r *http.Request, m Media) {
 	}
 }
 
-// pendingUpload is one checked, not-yet-saved media file from a card form.
-type pendingUpload struct {
-	Kind        string // MediaKindImage or MediaKindAudio
-	ContentType string // sniffed, never the client's claim
-	Data        []byte
-}
-
 // cardUploads is a card form's whole media part. It is read and checked
 // before anything is written, so a bad file can never leave a
-// half-updated card behind (UI overhaul spec §4).
+// half-updated card behind (UI overhaul spec §4). Image/Audio are
+// *CardUpload (Task 2's type, card.go) so they drop straight into a
+// CardForm — SaveCardForm is what actually applies them, in the same
+// transaction as the card and tag writes (#363).
 type cardUploads struct {
-	Image, Audio             *pendingUpload // nil = no new file for that kind
+	Image, Audio             *CardUpload // nil = no new file for that kind
 	RemoveImage, RemoveAudio bool
 }
 
@@ -189,7 +185,7 @@ func readCardUploads(w http.ResponseWriter, r *http.Request) (cardUploads, strin
 	// read every file part unconditionally, whether or not that kind's
 	// Remove flag is set, so a new file is neither dropped nor lets a bad
 	// file slip past validation just because Remove happened to be ticked.
-	// saveCardUploads is what actually applies Remove only when no new file
+	// SaveCardForm is what actually applies Remove only when no new file
 	// came in for that kind.
 	var msg string
 	if u.Image, msg = readUpload(w, r, MediaKindImage, "image", MaxImageFetchBytes); msg != "" {
@@ -204,7 +200,7 @@ func readCardUploads(w http.ResponseWriter, r *http.Request) (cardUploads, strin
 // readUpload reads and checks one optional file part. No part at all (or
 // an empty one — a file input left blank) is not an error: it returns nil
 // and "".
-func readUpload(w http.ResponseWriter, r *http.Request, kind, field string, maxBytes int64) (*pendingUpload, string) {
+func readUpload(w http.ResponseWriter, r *http.Request, kind, field string, maxBytes int64) (*CardUpload, string) {
 	file, header, err := r.FormFile(field)
 	if err != nil {
 		// http.ErrMissingFile (no part with this name — a file input left
@@ -236,34 +232,5 @@ func readUpload(w http.ResponseWriter, r *http.Request, kind, field string, maxB
 	if !contentTypeMatchesKind(ct, kind) {
 		return nil, "That file does not look like " + kind + " content."
 	}
-	return &pendingUpload{Kind: kind, ContentType: ct, Data: data}, ""
-}
-
-// saveCardUploads applies checked uploads to a card that now exists: a new
-// file of a kind always wins over that kind's Remove flag (#328) — Remove
-// only takes effect when no new file came in for that kind. Each new file
-// is stored and attached in one transaction (AttachCardUpload).
-func (a *App) saveCardUploads(ctx context.Context, userID, deckID, cardID int64, u cardUploads) error {
-	for _, m := range []struct {
-		kind   string
-		remove bool
-		up     *pendingUpload
-	}{
-		{MediaKindImage, u.RemoveImage, u.Image},
-		{MediaKindAudio, u.RemoveAudio, u.Audio},
-	} {
-		switch {
-		case m.up != nil:
-			// One transaction for store + attach, so the daily orphan purge
-			// can never delete the file in between (#302.5).
-			if _, err := a.store.AttachCardUpload(ctx, userID, deckID, cardID, m.kind, m.up.ContentType, m.up.Data); err != nil {
-				return err
-			}
-		case m.remove:
-			if err := a.store.SetCardMedia(ctx, userID, deckID, cardID, m.kind, nil); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return &CardUpload{ContentType: ct, Data: data}, ""
 }
