@@ -27,7 +27,7 @@ func TestTheAccountPageShowsWhoYouAreAndTheHeaderLinksToIt(t *testing.T) {
 	if !strings.Contains(doc.Text(), "ilia") {
 		t.Error("the page does not show the username")
 	}
-	doc.MustHave(`.shell-user a[href="/account"]`)
+	doc.MustHave(`.shell-user-menu a[href="/account"]`)
 	doc.MustHave(`form[action="/account/password"]`)
 }
 

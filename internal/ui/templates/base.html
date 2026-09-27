@@ -62,31 +62,40 @@
 		<div class="conn-indicator" data-conn-indicator role="img" data-status="online" title="All changes are saving normally" aria-label="Online — all changes are saving normally">
 			<div class="conn-dot" aria-hidden="true"></div>
 		</div>
-		<a class="shell-username" href="/account" title="Account">{{.Shell.Username}}</a>
-		<details class="shell-settings">
-			<summary class="quiet button" aria-label="Display settings"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></summary>
-			<div class="shell-settings-menu">
-				<div class="field">
-					<span class="faint">Theme</span>
-					<div class="row" data-theme-switch>
-						<button type="button" class="button quiet" data-theme-value="light">Light</button>
-						<button type="button" class="button quiet" data-theme-value="dark">Dark</button>
+		{{/* Everything the signed-in user can do from the header, behind one
+		     button (#403). A plain <details>, so it opens and the forms work
+		     with JavaScript off; theme.js only adds closing it on an outside
+		     click or Escape. */}}
+		<details class="shell-user-menu" data-shell-user-menu>
+			<summary class="quiet button shell-user-toggle">{{ticon "user"}}<span class="shell-user-name">{{.Shell.Username}}</span>{{ticon "chevron-down"}}</summary>
+			<div class="shell-user-menu-panel">
+				<a class="shell-menu-item" href="/account">{{ticon "user"}}<span>Account</span></a>
+				<hr class="shell-menu-separator">
+				<div class="shell-menu-settings" role="group" aria-labelledby="shell-menu-settings-label">
+					<span class="shell-menu-heading" id="shell-menu-settings-label">{{ticon "settings"}}Display</span>
+					<div class="field">
+						<span class="faint">Theme</span>
+						<div class="row" data-theme-switch>
+							<button type="button" class="button quiet" data-theme-value="light">Light</button>
+							<button type="button" class="button quiet" data-theme-value="dark">Dark</button>
+						</div>
+					</div>
+					<div class="field">
+						<span class="faint">Font</span>
+						<div class="row" data-font-switch>
+							<button type="button" class="button quiet" data-font-value="default">Default</button>
+							<button type="button" class="button quiet" data-font-value="serif">Serif</button>
+							<button type="button" class="button quiet" data-font-value="duo">Duo</button>
+						</div>
 					</div>
 				</div>
-				<div class="field">
-					<span class="faint">Font</span>
-					<div class="row" data-font-switch>
-						<button type="button" class="button quiet" data-font-value="default">Default</button>
-						<button type="button" class="button quiet" data-font-value="serif">Serif</button>
-						<button type="button" class="button quiet" data-font-value="duo">Duo</button>
-					</div>
-				</div>
+				<hr class="shell-menu-separator">
+				<form method="post" action="/logout">
+					<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+					<button type="submit" class="shell-menu-item">{{ticon "log-out"}}<span>Log out</span></button>
+				</form>
 			</div>
 		</details>
-		<form method="post" action="/logout">
-			<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
-			<button type="submit" class="quiet" aria-label="Log out"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button>
-		</form>
 	</div>
 	{{end}}
 </header>
