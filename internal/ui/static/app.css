@@ -505,6 +505,25 @@ button, .button {
 	color: var(--c-danger);
 }
 
+/* ---- htmx request indicators ------------------------------------------ */
+
+/* The rules htmx would otherwise inject as an inline <style> on load. The
+ * CSP (style-src 'self') blocks that, so base.html turns the injection off
+ * with includeIndicatorStyles:false and they live here instead (#400). An
+ * .htmx-indicator stays hidden until its request is in flight, whether the
+ * class lands on the indicator itself or on an ancestor. */
+.htmx-indicator {
+	opacity: 0;
+	visibility: hidden;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+	opacity: 1;
+	visibility: visible;
+	transition: opacity 200ms ease-in;
+}
+
 /* ---- Layout helpers used across apps ---------------------------------- */
 
 .stack > * + * { margin-top: var(--s-3); }
@@ -1940,9 +1959,8 @@ kbd {
 }
 
 /* The label and its "Refreshing…" status stack instead of running the menu
- * row wide enough to wrap. htmx's own default indicator CSS is an inline
- * <style> it injects at runtime, which this app's CSP (style-src 'self')
- * blocks — so the show/hide rule has to live here instead of relying on it. */
+ * row wide enough to wrap. The shared .htmx-indicator rules only fade it in;
+ * display: none on top of them keeps the hidden line from taking up room. */
 .reader-refresh-text {
 	display: flex;
 	flex-direction: column;
