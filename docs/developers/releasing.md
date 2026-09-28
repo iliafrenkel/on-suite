@@ -87,8 +87,8 @@ since the last tag, the same classification `.goreleaser.yaml`'s
    - re-run `go mod tidy` and `go test ./... -race` as a final gate
      ([`.goreleaser.yaml`](../../.goreleaser.yaml) `before.hooks`),
    - cross-compile `onsuite` for `linux/amd64`, `linux/arm64`, `darwin/arm64`,
-     `windows/amd64` with `CGO_ENABLED=0`, stamping the tag into
-     `main.version`,
+     `windows/amd64` with `CGO_ENABLED=0`, stamping the version (the tag
+     without its leading `v`, so `2.0.0`) into `main.version`,
    - package each binary into a `.tar.gz` (`.zip` for Windows) alongside
      `README.md`, `LICENSE`, `docs/self-hosting/deploying.md`, and
      `docs/self-hosting/onsuite.service`, plus a `checksums.txt`,
@@ -142,7 +142,7 @@ a checksums file:
 ```bash
 cosign verify --certificate-identity-regexp 'https://github.com/iliafrenkel/on-suite/.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/iliafrenkel/on-suite:v2.0.0
+  ghcr.io/iliafrenkel/on-suite:2.0.0
 ```
 
 ## If something goes wrong

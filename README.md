@@ -96,8 +96,9 @@ Then open <http://localhost:8080/> and sign in. You can invite everyone else
 from **Admin → Manage users**.
 
 Rather not use Docker? Every [release](https://github.com/iliafrenkel/on-suite/releases)
-has a ready-built binary for Linux (including Raspberry Pi), macOS and
-Windows. For a real server — systemd, TLS, backups and upgrades — follow the
+has a ready-built binary for 64-bit Linux (including 64-bit Raspberry Pi
+OS), Apple-silicon Macs and 64-bit Windows. For a real server — systemd,
+TLS, backups and upgrades — follow the
 [self-hosting guide](docs/self-hosting/deploying.md).
 
 ## Documentation

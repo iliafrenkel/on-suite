@@ -49,6 +49,11 @@ on-suite/
 ├── docs/
 │   ├── developers/               this guide, plus releasing.md
 │   ├── self-hosting/             deploying.md and the systemd unit
+│   ├── user/                     end-user guides, one per app plus admin; planned for in-app help (#309)
+│   │   └── images/               the guides' screenshots
+│   ├── screenshots/              regenerates every screenshot; README.md says how
+│   │   ├── seed/                 a fresh data directory with demo accounts and content
+│   │   └── capture/              headless Chrome over DevTools; shots.go lists every shot
 │   ├── images/                   screenshots used by the README
 │   ├── superpowers/              historical design specs and implementation plans
 │   ├── doc.go                    makes docs a Go package, so its tests run with go test ./...
@@ -99,6 +104,7 @@ after the app.
 | an app's JavaScript | `internal/apps/<app>/static/`; platform scripts in `internal/ui/static/` |
 | a command-line command | `run` in `cmd/onsuite/main.go`, then `user.go`, `export.go`, `backup.go`, `serve.go` |
 | a flag or env var | `internal/platform/config/config.go` |
+| an app's user guide | `docs/user/<app>.md`, screenshots in `docs/user/images/` (regenerate via `docs/screenshots/`) |
 | a background job | `registerMaintenance` in `cmd/onsuite/backup.go`, or an app's `Jobs` method |
 
 **Next:** [Adding an app](adding-an-app.md)

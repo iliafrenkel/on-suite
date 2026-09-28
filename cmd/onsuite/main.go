@@ -15,7 +15,8 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
 
-// version is overwritten at build time with -ldflags "-X main.version=v1.2.3".
+// version is overwritten at build time with -ldflags "-X main.version=1.2.3";
+// releases stamp the tag without its leading v.
 var version = "dev"
 
 func main() {

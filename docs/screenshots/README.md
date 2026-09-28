@@ -38,8 +38,9 @@ before writing a setup script.
 From the repository root:
 
 ```bash
-# The version shown in screenshot footers; bump it per release.
-VERSION=v2.0.0
+# The version shown in screenshot footers; bump it per release. No leading
+# v: releases stamp the tag without it, so real footers read "2.0.0".
+VERSION=2.0.0
 SEED=$(mktemp -d)/demo
 go run ./docs/screenshots/seed --data-dir $SEED
 go build -ldflags "-X main.version=$VERSION" -o $SEED/onsuite ./cmd/onsuite

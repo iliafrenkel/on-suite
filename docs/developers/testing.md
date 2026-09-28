@@ -145,8 +145,8 @@ real password. If you build your own fixture user, store
 ## The architecture test
 
 [`internal/arch/arch_test.go`](../../internal/arch/arch_test.go) parses the
-imports of every Go file in the repository and turns the design's rules into
-failing tests:
+imports of every Go file in the repository outside `docs/` and turns the
+design's rules into failing tests:
 
 | Test | Rule |
 | --- | --- |

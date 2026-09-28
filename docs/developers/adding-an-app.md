@@ -249,6 +249,12 @@ list of registered apps and will fail until you add yours:
 Give the app an icon in `internal/ui/icons.go`, keyed by its ID. Without one
 the sidebar and dashboard fall back to a generic tile.
 
+Add the app to the list in
+[`docs/screenshots/seed/seed.go`](../screenshots/seed/seed.go) as well — it
+repeats `registeredApps()`, which can't be imported from package `main` —
+and seed some demo content for it there, so the
+[documentation screenshots](../screenshots/README.md) can show it.
+
 ### 6. Optional capabilities
 
 Implement any of these on `*App` and the platform picks them up by type

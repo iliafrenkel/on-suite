@@ -184,7 +184,7 @@ from a package to what it imports (simplified: indirect arrows are left
 out, and the notes say what each package must *not* import):
 
 ```text
-cmd/onsuite                     wires everything; the only importer of apps
+cmd/onsuite                     wires everything; the only production importer of apps
    │
    ├──► internal/apps/{flash,notes,paste,reader}
    │         never import each other; import only platform/* and ui
@@ -211,5 +211,10 @@ cmd/onsuite                     wires everything; the only importer of apps
 `TestHTMLAssertIsTestOnly` and `TestAppTestIsTestOnly` keep the leaf and
 test-only packages honest. [Testing](testing.md#the-architecture-test) lists
 the rest.
+
+The one other importer of the apps is the screenshot seed,
+[`docs/screenshots/seed`](../screenshots/seed/), which uses their stores to
+create demo content. It isn't shipped, and the architecture test skips
+`docs/`.
 
 **Next:** [Repository layout](repository-layout.md)

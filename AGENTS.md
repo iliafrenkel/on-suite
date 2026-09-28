@@ -203,7 +203,10 @@ type-to-section table and the `feat`-vs-`refactor` distinction.
 ## Other docs worth knowing about
 
 - [PATTERNS.md](PATTERNS.md) — index of recurring, deliberate patterns; check it before writing new code.
-- `docs/user/` — end-user guides, one per app plus admin (being written for #308).
+- [docs/user/](docs/user/index.md) — end-user guides, one per app plus admin.
+  A UI change updates the matching `docs/user/<app>.md` and re-shoots the
+  affected screenshots ([docs/screenshots/README.md](docs/screenshots/README.md));
+  the guides stay plain Markdown — no raw HTML, no `../` links.
 - [docs/self-hosting/deploying.md](docs/self-hosting/deploying.md) — systemd, TLS, backups, upgrades, Docker.
 - [docs/developers/](docs/developers/index.md) — the developer guide:
   [getting started](docs/developers/getting-started.md),

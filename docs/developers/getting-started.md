@@ -108,7 +108,8 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o onsuite ./cmd/onsuite
 ```
 
 Release builds (via GoReleaser) also stamp the version with
-`-ldflags "-X main.version=v1.2.3"`; see [Releasing](releasing.md).
+`-ldflags "-X main.version=1.2.3"` — the tag without its `v`; see
+[Releasing](releasing.md).
 
 ## The full check
 

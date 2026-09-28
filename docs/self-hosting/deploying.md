@@ -1,14 +1,37 @@
 # Deploying ON Suite
 
 > New here? Start with the [main README](../../README.md) for what ON Suite is.
-> To build it from source, see the [developer guide](../developers/getting-started.md).
+> For working on the code, see the
+> [developer guide](https://github.com/iliafrenkel/on-suite/blob/main/docs/developers/getting-started.md).
 > This guide covers running it somewhere real.
 
 ON Suite is one static binary plus one data directory. The data directory holds
 the database, the backups and, if you use built-in TLS, the certificates —
 copying it is a complete backup of the system.
 
-## Build
+## Install from a release
+
+Download the archive for your server from the
+[releases page](https://github.com/iliafrenkel/on-suite/releases). Archives
+are named `on-suite_<version>_<os>_<arch>`: `.tar.gz` for `linux_amd64`,
+`linux_arm64` (64-bit Raspberry Pi OS included) and `darwin_arm64`, and
+`.zip` for `windows_amd64`. To confirm it was built by this project's release
+workflow, see
+[Verifying a release](https://github.com/iliafrenkel/on-suite/blob/main/docs/developers/releasing.md#verifying-a-release)
+(optional).
+
+The archive holds the binary, this guide and the systemd unit. Unpack it on
+the server and install both:
+
+```bash
+tar -xzf on-suite_2.0.0_linux_arm64.tar.gz
+sudo install -m 0755 onsuite /usr/local/bin/onsuite
+sudo install -m 0644 docs/self-hosting/onsuite.service /etc/systemd/system/ && sudo systemctl daemon-reload
+```
+
+## Build from source
+
+Alternatively, build the binary yourself from a checkout of the repository:
 
 ```bash
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
@@ -18,8 +41,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
 
 `CGO_ENABLED=0` works because the SQLite driver is pure Go. The result has no
 dynamic library dependencies and runs on any kernel of the right architecture.
-
-## Install
+Copy it and the systemd unit to the server:
 
 ```bash
 scp onsuite server:/tmp/onsuite
@@ -27,6 +49,8 @@ ssh server 'sudo install -m 0755 /tmp/onsuite /usr/local/bin/onsuite'
 scp docs/self-hosting/onsuite.service server:/tmp/
 ssh server 'sudo install -m 0644 /tmp/onsuite.service /etc/systemd/system/ && sudo systemctl daemon-reload'
 ```
+
+## Create the first account
 
 Create the first account before starting the service, so there is never a
 window in which the suite is running with no accounts:
@@ -152,8 +176,9 @@ onsuite export ilia --data-dir /var/lib/onsuite --out ilia.json
 
 Plain JSON, readable without this software. Shared ON Notes bullets keep
 their share link in the file, so treat the file as private. ON Paste's
-share links aren't included; use a snapshot if you need a fully
-restorable copy.
+share links aren't included, and neither are ON Flash decks yet
+([#426](https://github.com/iliafrenkel/on-suite/issues/426)); use a
+snapshot if you need a fully restorable copy.
 
 ## Checking on it
 
