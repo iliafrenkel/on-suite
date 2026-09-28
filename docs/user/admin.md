@@ -50,8 +50,9 @@ delete your own account.
 - **Settings** — every setting ON Suite is running with. The **Source**
   column says where each value came from: **flag** (typed on the command
   that starts ON Suite), **environment** (set in the server's
-  environment) or **default** (you didn't set it). **What it does**
-  explains each one.
+  environment), **default** (you didn't set it) or **derived** (worked
+  out from another setting, such as TLS). **What it does** explains each
+  one.
 - **Jobs** — a summary of the background jobs (see
   [Background jobs](#background-jobs)).
 - **Apps** — numbers from each app (see
@@ -60,7 +61,7 @@ delete your own account.
   **Live sessions**. A session is one browser where someone is signed in,
   so one person on a laptop and a phone has two. **Expired, not swept**
   counts old sessions that have run out but haven't been cleared away yet;
-  the *sweep expired sessions* job removes them. The table lists each
+  the **sweep expired sessions** job removes them. The table lists each
   account with its role, the date it was created and its live sessions.
 - **Routes** — every web address ON Suite answers, and whether each one
   is **public** (anyone can open it, such as the sign-in page and shared
@@ -107,8 +108,8 @@ end of a row for that person's menu. Your own row, marked **(you)**, has an
 ON Suite makes up a password for them and shows it at the top of the page,
 such as **Password for sasha:** followed by the password. Click **Copy**
 and pass it on to them. As the page says, **This is the only time it is
-shown.** Once you leave the page, nobody can see it again. Ask them to change it to one of
-their own on their **Account** page.
+shown.** Once you leave the page, nobody can see it again. Ask them to
+change it to one of their own on their **Account** page.
 
 If the username is already in use, you see **The username "sasha" is
 already taken.** Choose another.
@@ -189,7 +190,8 @@ The jobs are:
   ones whose turn has come.
 - **purge old articles** — once a day, records ON Reader's reading
   stats, deletes read, unstarred articles published more than 60 days
-  ago, and keeps ON Reader's search up to date.
+  ago along with any cached images no article uses any more, and keeps
+  ON Reader's search up to date.
 - **purge orphan media and tags** — once a day, deletes ON Flash pictures,
   sounds and tags that no card uses any more.
 
@@ -200,8 +202,9 @@ Click **Run now** next to a job to start it straight away, for example
 **running** until it finishes, and the page updates by itself. Running a
 job by hand doesn't change its **Next run**.
 
-If you click **Run now** on a job that's already running, you see a
-message such as **database snapshot is already running.**
+**Run now** is disabled while its job is already running. If someone else
+starts it just before you, or your page is simply out of date, clicking it
+anyway shows a message such as **database snapshot is already running.**
 
 Running **refresh feeds** does the same as **Refresh all feeds** in ON
 Reader: it checks only the feeds that are due. To check one particular
@@ -253,9 +256,11 @@ onsuite backup --data-dir /var/lib/onsuite
 ```
 
 This saves a copy of the whole database into the backups folder, just like
-the **database snapshot** job. Add `--keep 30` to keep only the newest 30
-copies, or `--out` and a file name to save the copy somewhere else. It's
-safe to run while ON Suite is running. The self-hosting guide explains
+the **database snapshot** job — but without `--keep`, it keeps every
+snapshot forever, unlike the job's own default of keeping only 7. Add
+`--keep 30` to keep only the newest 30 copies, or `--out` and a file name
+to save the copy somewhere else. It's safe to run while ON Suite is
+running. The self-hosting guide explains
 [backups and restoring](https://github.com/iliafrenkel/on-suite/blob/main/docs/self-hosting/deploying.md#backups).
 
 ### Exporting someone's data
@@ -265,8 +270,9 @@ onsuite export sam --data-dir /var/lib/onsuite --out sam.json
 ```
 
 This writes one person's ON Notes, ON Paste and ON Reader data into a
-single file you can give them. It doesn't include ON Flash decks yet, or
-any shared links. See
+single file you can give them. It doesn't include ON Flash decks yet.
+Shared ON Notes bullets keep their share link in the file, so treat the
+file as private; ON Paste's share links aren't included. See
 [Exporting your data](https://github.com/iliafrenkel/on-suite/blob/main/docs/self-hosting/deploying.md#exporting-your-data).
 
 Back to [all guides](index.md).

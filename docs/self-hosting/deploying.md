@@ -149,8 +149,9 @@ account.
 onsuite export ilia --data-dir /var/lib/onsuite --out ilia.json
 ```
 
-Plain JSON, readable without this software. Share links are deliberately
-excluded, because a share link is a credential; use a snapshot if you need a
+Plain JSON, readable without this software. Shared ON Notes bullets keep
+their share link in the file, so treat the file as private. ON Paste's
+share links aren't included; use a snapshot if you need a fully
 restorable copy.
 
 ## Checking on it
