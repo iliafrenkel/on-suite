@@ -1,8 +1,8 @@
 # ON Suite
 
 A small, self-hosted set of everyday apps for you and the people you trust —
-one binary, one database file. You can run it publicly or locally on your
-computer.
+one binary, one database file. Run it on a public server or just on your
+own computer.
 
 <p align="center">
   <picture>
@@ -14,7 +14,7 @@ computer.
 ## Why ON Suite
 
 My motivation for creating ON Suite is simple. I was using
-[Workflowy](https://workflowy.com/) as an outliner/notetaker,
+[WorkFlowy](https://workflowy.com/) as an outliner and note-taker,
 [Yarr](https://github.com/nkanaev/yarr/) as an RSS reader,
 [Anki](https://apps.ankiweb.net/) for flash cards, and a number of Pastebin
 clones to share text between computers and people. They are all excellent!
@@ -22,11 +22,12 @@ But I wanted something simple, something I can host myself, and something
 that is _all in one place_.
 
 ON Suite is a handful of small apps — notes, snippets, news feeds and flash
-cards — all in one private website. It is built for a small group of people.
-A family, group of friends, small team. It can probably support a few hundred
-people, maybe even several thousands. But it is not an alternative to SaaS like
-Gmail. Accounts have to be manually created, there is no public sign-up, and
-nobody else can see what you make in ON Suite unless you choose to share it.
+cards — all on one private website. It is built for a small group of
+people: a family, a group of friends, a small team. It can probably support a
+few hundred people, maybe even several thousand. But it is not an alternative
+to SaaS products like Gmail. Accounts are created by an admin, there is no
+public sign-up, and nobody else can see what you make in ON Suite unless you
+choose to share it.
 
 Most self-hosted app suites are either a pile of Docker Compose services,
 each with its own database, or a SaaS product wearing a self-host badge. ON
@@ -35,7 +36,7 @@ else to run: no database server, no containers to wire together. It runs the
 same way on a Raspberry Pi as it does on a laptop, and copying that one
 directory is a complete backup.
 
-If you're looking for a SaaS-scale platform, with thousands of users and
+If you're looking for a SaaS-scale platform, with millions of users and
 multi-tenant hardening, this isn't it. It's the opposite bet, optimised for
 "one binary, one data directory, nothing else to run."
 
@@ -96,8 +97,8 @@ summary. [Read the ON Reader guide →](docs/user/reader.md)
 Flash cards for learning things by heart — words for a trip, times tables,
 race circuits. ON Flash shows you a few cards each day: the hard ones come
 back often, the easy ones less and less. You can give a copy of a deck to
-someone else in your ON Suite instance. [Read the ON Flash guide
-→](docs/user/flash.md)
+someone else in your ON Suite instance.
+[Read the ON Flash guide →](docs/user/flash.md)
 
 ## Run it
 
