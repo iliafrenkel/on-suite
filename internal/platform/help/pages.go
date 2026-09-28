@@ -41,8 +41,12 @@ var order = []struct{ Slug, Label string }{
 
 // Page is one rendered user guide.
 type Page struct {
-	Slug, Label, Title string
-	HTML               template.HTML
+	Slug, Label string
+	// Title is the guide's first H1, used only to check every guide starts
+	// with one (TestTheRealGuidesLoad); the handler titles pages from Label,
+	// not this field.
+	Title string
+	HTML  template.HTML
 }
 
 // Pages holds every rendered guide, cached at startup.
@@ -139,8 +143,19 @@ func sanitizer() *bluemonday.Policy {
 	return pol
 }
 
+// firstHeading returns the guide's first top-level (# ) heading, skipping
+// any that appear inside a fenced (```) code block — a guide showing, say,
+// "# not a title" as an example must not be mistaken for its real title.
 func firstHeading(src []byte) string {
+	inFence := false
 	for _, line := range strings.Split(string(src), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
 		if strings.HasPrefix(line, "# ") {
 			return strings.TrimSpace(strings.TrimPrefix(line, "# "))
 		}

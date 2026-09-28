@@ -163,6 +163,20 @@ func TestLoadRejectsRawHTML(t *testing.T) {
 	}
 }
 
+// TestFirstHeadingSkipsFencedCodeBlocks proves a `# ` line inside a fenced
+// code block isn't mistaken for the guide's title.
+func TestFirstHeadingSkipsFencedCodeBlocks(t *testing.T) {
+	fsys := minimalFS()
+	fsys["index.md"] = &fstest.MapFile{Data: []byte("```\n# not a title\n```\n\n# Welcome\n\nSome text.\n")}
+	p, err := Load(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.List()[0].Title; got != "Welcome" {
+		t.Errorf("Title = %q, want %q", got, "Welcome")
+	}
+}
+
 func TestLoadFailsOnMissingImagesDir(t *testing.T) {
 	fsys := minimalFS()
 	delete(fsys, "images/a.png")

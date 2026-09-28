@@ -192,15 +192,49 @@ func TestUIIsALeaf(t *testing.T) {
 	}
 }
 
-// TestDocsIsALeaf: docs only embeds the user guides. If it imports anything
-// from the module, documentation has started to depend on code.
+// TestDocsIsALeaf: docs (the embed package itself — docs/embed.go and any
+// other non-test .go file directly in docs/, not the docs/screenshots/...
+// tree, which is its own main package) only embeds the user guides. scan
+// drops stdlib and third-party imports as "not our concern", which would
+// let docs import, say, net/http without this failing — that isn't the
+// actual constraint, so this test parses docs/*.go itself and asserts every
+// import is one of embed, io/fs.
 func TestDocsIsALeaf(t *testing.T) {
-	imports := scan(t)
-	if _, ok := imports.prod["docs"]; !ok {
-		t.Fatal("docs was not scanned")
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if deps := imports.prod["docs"]; len(deps) != 0 {
-		t.Errorf("docs imports %v; it must be a leaf", deps)
+	docsDir := filepath.Join(root, "docs")
+	entries, err := os.ReadDir(docsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	allowed := map[string]bool{"embed": true, "io/fs": true}
+	fset := token.NewFileSet()
+	seen := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		seen++
+		path := filepath.Join(docsDir, e.Name())
+		f, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, spec := range f.Imports {
+			imported, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !allowed[imported] {
+				t.Errorf("docs/%s imports %q; docs must be a leaf (embed, io/fs only)", e.Name(), imported)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no non-test .go files found directly in docs/; the scan is broken, not the code")
 	}
 }
 
@@ -285,6 +319,10 @@ func TestScanSeesTheRealTree(t *testing.T) {
 // all use this to enforce that a third-party dependency accepted "behind one
 // file" stays there: a second importer is a new decision, made deliberately,
 // not by drift.
+//
+// It skips _test.go files: containment rules are about production code, and
+// a test may legitimately need the library to exercise the one file that
+// imports it (or to assert, as this package does, that nothing else does).
 func importersOf(t *testing.T, libPrefix string) []string {
 	t.Helper()
 
