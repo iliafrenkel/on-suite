@@ -113,6 +113,10 @@ docker exec -it onsuite /onsuite user add ilia --admin --data-dir /data
 Then open <http://localhost:8080/> and sign in. You can invite everyone else
 from **Admin → Manage users**.
 
+Just want it on your own computer, like any other app? Follow
+[Running ON Suite on your own computer](docs/self-hosting/running-locally.md):
+download it, make a launcher, and double-click to start.
+
 Rather not use Docker? Every [release](https://github.com/iliafrenkel/on-suite/releases)
 has a ready-built binary for 64-bit Linux (including 64-bit Raspberry Pi
 OS), Apple-silicon Macs and 64-bit Windows. For a real server — systemd,
@@ -124,6 +128,7 @@ TLS, backups and upgrades — follow the
 | Guide | What's in it |
 |---|---|
 | [User guides](docs/user/index.md) | Using each app |
+| [On your own computer](docs/self-hosting/running-locally.md) | Running ON Suite locally, like an app, on macOS, Linux or Windows |
 | [Self-hosting](docs/self-hosting/deploying.md) | Installing, TLS, backups, upgrades, Docker |
 | [Developers](docs/developers/index.md) | Building, architecture, adding an app, testing, releasing |
 | [Contributing](CONTRIBUTING.md) | Ground rules for issues and pull requests |

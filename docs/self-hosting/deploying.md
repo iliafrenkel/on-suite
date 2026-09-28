@@ -3,7 +3,8 @@
 > New here? Start with the [main README](../../README.md) for what ON Suite is.
 > For working on the code, see the
 > [developer guide](https://github.com/iliafrenkel/on-suite/blob/main/docs/developers/getting-started.md).
-> This guide covers running it somewhere real.
+> This guide covers running it on a server. Just want it on your own
+> computer? See [Running ON Suite on your own computer](running-locally.md).
 
 ON Suite is one static binary plus one data directory. The data directory holds
 the database, the backups and, if you use built-in TLS, the certificates —

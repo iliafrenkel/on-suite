@@ -46,6 +46,7 @@ archives:
       - README.md
       - LICENSE
       - docs/self-hosting/deploying.md
+      - docs/self-hosting/running-locally.md
       - docs/self-hosting/onsuite.service
 
 # One multi-platform image built from the linux binaries in `builds` above —

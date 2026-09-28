@@ -48,7 +48,7 @@ on-suite/
 │   └── arch/                     tests that enforce the import boundaries and containment rules
 ├── docs/
 │   ├── developers/               this guide, plus releasing.md
-│   ├── self-hosting/             deploying.md and the systemd unit
+│   ├── self-hosting/             deploying.md, running-locally.md, the systemd unit
 │   ├── user/                     end-user guides, one per app plus admin; planned for in-app help (#309)
 │   │   └── images/               the guides' screenshots
 │   ├── screenshots/              regenerates every screenshot; README.md says how

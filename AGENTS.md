@@ -208,6 +208,7 @@ type-to-section table and the `feat`-vs-`refactor` distinction.
   affected screenshots ([docs/screenshots/README.md](docs/screenshots/README.md));
   the guides stay plain Markdown — no raw HTML, no `../` links.
 - [docs/self-hosting/deploying.md](docs/self-hosting/deploying.md) — systemd, TLS, backups, upgrades, Docker.
+- [docs/self-hosting/running-locally.md](docs/self-hosting/running-locally.md) — running it on your own computer with an OS launcher.
 - [docs/developers/](docs/developers/index.md) — the developer guide:
   [getting started](docs/developers/getting-started.md),
   [architecture](docs/developers/architecture.md),
