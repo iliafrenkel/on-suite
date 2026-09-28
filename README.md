@@ -15,8 +15,8 @@ one binary, one SQLite file.
 ON Suite is a handful of small apps — notes, snippets, news feeds and flash
 cards — that a household shares from one private website. It is built for a
 household, not a company: the author plus a few family and friends. Accounts
-are invite-only, there is no public sign-up, and everything you make stays
-private unless you choose to share it.
+are invite-only, there is no public sign-up, and nobody else can see what
+you make in ON Suite unless you choose to share it.
 
 Most self-hosted app suites are either a pile of Docker Compose services,
 each with its own database, or a SaaS product wearing a self-host badge. ON

@@ -1,7 +1,8 @@
 # Deploying ON Suite
 
-> New here? Start with the [main README](../../README.md) for what ON Suite is
-> and how to build it. This guide covers running it somewhere real.
+> New here? Start with the [main README](../../README.md) for what ON Suite is.
+> To build it from source, see the [developer guide](../developers/getting-started.md).
+> This guide covers running it somewhere real.
 
 ON Suite is one static binary plus one data directory. The data directory holds
 the database, the backups and, if you use built-in TLS, the certificates —
@@ -178,7 +179,7 @@ docker exec -it onsuite /onsuite user add ilia --admin --data-dir /data
 ```
 
 Pin a specific version instead of `latest` by tag, e.g.
-`ghcr.io/iliafrenkel/on-suite:v0.2.0`. To build the image yourself instead:
+`ghcr.io/iliafrenkel/on-suite:2.0.0` (image tags have no leading `v`). To build the image yourself instead:
 
 ```bash
 docker build --build-arg VERSION=$(git describe --tags --always) -t onsuite .
