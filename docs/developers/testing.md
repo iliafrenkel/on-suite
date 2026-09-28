@@ -163,6 +163,11 @@ design's rules into failing tests:
 | `TestAppsReadTheirStoreClock` | apps call `time.Now`/`Since`/`Until` only in their `store.go` |
 | `TestScanSeesTheRealTree` | the scan itself found the packages it should |
 
+The three containment checks (`TestReadabilityIsContained`,
+`TestFSRSIsContained`, `TestGoldmarkIsContained`) apply to production code
+only: they skip `_test.go` files, so a test is free to import the library
+itself.
+
 If you move imports around anywhere under `internal/`, run
 `go test ./internal/arch/` first — it tells you straight away if you've
 crossed a boundary.
