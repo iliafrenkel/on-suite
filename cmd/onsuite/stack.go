@@ -7,10 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iliafrenkel/on-suite/docs"
 	"github.com/iliafrenkel/on-suite/internal/platform/admin"
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
+	"github.com/iliafrenkel/on-suite/internal/platform/help"
 	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
 	"github.com/iliafrenkel/on-suite/internal/platform/jobsadmin"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
@@ -141,6 +143,19 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 			Version: deps.Version,
 		})
 	}
+
+	// The user guides, public so they work signed out (#309).
+	helpPages, err := help.Load(docs.User())
+	if err != nil {
+		return nil, err
+	}
+	help.Routes(mux, routes, help.Deps{
+		Pages:   helpPages,
+		Render:  rend,
+		Errors:  errs,
+		Nav:     deps.Registry.NavItems(),
+		Version: deps.Version,
+	})
 
 	routes.Handle(mux, "GET /{$}", false, authn.RequireUser(homeHandler(deps, rend, errs)))
 	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
