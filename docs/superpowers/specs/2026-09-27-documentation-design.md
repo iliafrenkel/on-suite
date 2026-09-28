@@ -156,6 +156,11 @@ above Account. The target is context-aware: inside an app it links to
 account, admin pages, help itself) it links to `/help`. The target comes from
 the shell data the layout already receives, so apps don't have to change.
 
+**Amendment (2026-09-28, #309):** built as **Help below Account**, not above
+— it reads more naturally as the last item before Display and Log out.
+Admin pages (`admin`/`jobsadmin`/`usermgmt`) set `ActiveApp` to `"admin"`,
+so their Help link is `/help/admin`, not the plain `/help` described above.
+
 ## Screenshots
 
 - `docs/screenshots/` holds a repeatable demo seed: a small Go program run

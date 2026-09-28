@@ -70,10 +70,13 @@ there.
 
 Click your name in the top right corner to open the user menu.
 
-![The user menu open, showing Account, Display and Log out](images/user-menu.png)
+![The user menu open, showing Account, Help, Display and Log out](images/user-menu.png)
 
 - **Account** — your account details and password (see
   [Your account](#your-account)).
+- **Help** — opens this guide. If you're inside an app (ON Paste, ON Notes,
+  ON Reader, ON Flash or Admin), it opens straight to that app's guide;
+  elsewhere it opens the welcome guide.
 - **Display** — change how ON Suite looks:
   - **Theme:** **Light** or **Dark**.
   - **Font:** **Default**, **Serif** (a classic book style) or **Duo** (a

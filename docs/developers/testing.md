@@ -145,7 +145,7 @@ real password. If you build your own fixture user, store
 ## The architecture test
 
 [`internal/arch/arch_test.go`](../../internal/arch/arch_test.go) parses the
-imports of every Go file in the repository outside `docs/` and turns the
+imports of every Go file in the repository, including `docs/`, and turns the
 design's rules into failing tests:
 
 | Test | Rule |
@@ -154,12 +154,19 @@ design's rules into failing tests:
 | `TestPlatformDoesNotImportApps` | `internal/platform/*` and `internal/ui` never import an app |
 | `TestLayering` | the platform's internal order — see [Package layering](architecture.md#package-layering) |
 | `TestUIIsALeaf` | `internal/ui` imports nothing from the module |
+| `TestDocsIsALeaf` | `docs` imports nothing from the module — documentation never depends on code |
 | `TestHTMLAssertIsTestOnly`, `TestAppTestIsTestOnly` | only `_test.go` files import the test helpers |
 | `TestReadabilityIsContained` | go-readability is imported only by `internal/apps/reader/extract.go` |
 | `TestFSRSIsContained` | go-fsrs is imported only by `internal/apps/flash/fsrs.go` |
+| `TestGoldmarkIsContained` | goldmark is imported only by `internal/platform/help/pages.go` |
 | `TestRFC3339IsContained` | no stored time formatted as RFC 3339 outside a short allow-list |
 | `TestAppsReadTheirStoreClock` | apps call `time.Now`/`Since`/`Until` only in their `store.go` |
 | `TestScanSeesTheRealTree` | the scan itself found the packages it should |
+
+The three containment checks (`TestReadabilityIsContained`,
+`TestFSRSIsContained`, `TestGoldmarkIsContained`) apply to production code
+only: they skip `_test.go` files, so a test is free to import the library
+itself.
 
 If you move imports around anywhere under `internal/`, run
 `go test ./internal/arch/` first — it tells you straight away if you've

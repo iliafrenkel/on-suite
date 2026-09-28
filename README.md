@@ -127,7 +127,7 @@ TLS, backups and upgrades — follow the
 
 | Guide | What's in it |
 |---|---|
-| [User guides](docs/user/index.md) | Using each app |
+| [User guides](docs/user/index.md) | Using each app — also built into ON Suite under **Help** |
 | [On your own computer](docs/self-hosting/running-locally.md) | Running ON Suite locally, like an app, on macOS, Linux or Windows |
 | [Self-hosting](docs/self-hosting/deploying.md) | Installing, TLS, backups, upgrades, Docker |
 | [Developers](docs/developers/index.md) | Building, architecture, adding an app, testing, releasing |

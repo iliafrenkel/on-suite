@@ -49,7 +49,10 @@ carefully — changing it later means migrating data.
 ## A minimal app
 
 Here is ON Hello, a complete app in three files. Registered in `main.go`, it
-builds, serves `/hello/` and passes the test in [step 7](#7-tests).
+builds, serves `/hello/` and passes the test in [step 7](#7-tests). It skips
+the user guide [step 5](#5-register-it) also requires — this walkthrough
+never actually adds `hello.New()` to `registeredApps()`, so
+`TestBuildStackServesHelpForEveryRegisteredApp` never looks for one.
 
 `internal/apps/hello/hello.go`:
 
@@ -249,6 +252,18 @@ list of registered apps and will fail until you add yours:
 Give the app an icon in `internal/ui/icons.go`, keyed by its ID. Without one
 the sidebar and dashboard fall back to a generic tile.
 
+Write a user guide, `docs/user/<id>.md`, following the existing guides'
+outline (see [ON Paste's](../user/paste.md) for the shape, and
+[docs/screenshots/README.md](../screenshots/README.md) for how to add
+screenshots to it). List it in `order` in
+[`internal/platform/help/pages.go`](../../internal/platform/help/pages.go),
+as `{"<id>", "ON …"}` — `Load` refuses to start if a guide's `.md` file isn't
+listed there, or if a listed page's `.md` file is missing. Link the new guide
+from [`docs/user/index.md`](../user/index.md) too.
+`TestBuildStackServesHelpForEveryRegisteredApp` in
+[`cmd/onsuite/stack_help_test.go`](../../cmd/onsuite/stack_help_test.go)
+fails until every registered app resolves `/help/<id>`.
+
 Add the app to the list in
 [`docs/screenshots/seed/seed.go`](../screenshots/seed/seed.go) as well — it
 repeats `registeredApps()`, which can't be imported from package `main` —
@@ -313,7 +328,9 @@ func TestIndexGreetsTheSignedInUser(t *testing.T) {
 | `TestAppsReadTheirStoreClock` | app code calls `time.Now`/`Since`/`Until` outside the listed store files |
 | `TestRFC3339IsContained` | you format a stored time with `time.RFC3339`/`RFC3339Nano` |
 | `TestEveryUserColumnCascadesFromUsers` | a `user_id` column lacks `ON DELETE CASCADE` |
-| `TestReadabilityIsContained`, `TestFSRSIsContained` | you import go-readability or go-fsrs outside their one allowed file |
+| `TestReadabilityIsContained`, `TestFSRSIsContained`, `TestGoldmarkIsContained` | you import go-readability, go-fsrs or goldmark outside their one allowed file |
+| `TestDocsIsALeaf` | `docs/embed.go` imports anything but `embed`/`io/fs` |
+| `TestBuildStackServesHelpForEveryRegisteredApp` | your app has no `docs/user/<id>.md` guide, or it's missing from `order` in `internal/platform/help/pages.go` |
 | `Meta.Validate`, `Registry.Mount` (at startup) | bad ID or name, no templates, no routes |
 
 **Next:** [Testing](testing.md)

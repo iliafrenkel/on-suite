@@ -1,7 +1,10 @@
 .git
 .github
 dist
-docs
+docs/*
+!docs/embed.go
+!docs/doc.go
+!docs/user
 data
 *.db
 *.db-wal

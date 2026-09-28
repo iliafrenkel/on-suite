@@ -38,7 +38,8 @@ on-suite/
 │   │   ├── jobs/                 interval scheduler with run history and on-demand Trigger
 │   │   ├── admin/                read-only admin dashboard at /admin/
 │   │   ├── usermgmt/             /admin/users and /account
-│   │   └── jobsadmin/            /admin/jobs with Run now
+│   │   ├── jobsadmin/            /admin/jobs with Run now
+│   │   └── help/                 renders docs/user's guides at /help, /help/{slug}; only importer of goldmark
 │   ├── ui/                       embedded shell: base.html and platform pages, app.css, fonts, HTMX, icons
 │   │   ├── static/               app.css, htmx.min.js, platform scripts, favicons
 │   │   │   └── fonts/            self-hosted web fonts
@@ -49,7 +50,7 @@ on-suite/
 ├── docs/
 │   ├── developers/               this guide, plus releasing.md
 │   ├── self-hosting/             deploying.md, running-locally.md, the systemd unit
-│   ├── user/                     end-user guides, one per app plus admin; planned for in-app help (#309)
+│   ├── user/                     end-user guides, one per app plus admin; served at /help (internal/platform/help)
 │   │   └── images/               the guides' screenshots
 │   ├── screenshots/              regenerates every screenshot; README.md says how
 │   │   ├── seed/                 a fresh data directory with demo accounts and content
@@ -57,6 +58,7 @@ on-suite/
 │   ├── images/                   screenshots used by the README
 │   ├── superpowers/              historical design specs and implementation plans
 │   ├── doc.go                    makes docs a Go package, so its tests run with go test ./...
+│   ├── embed.go                  //go:embed user — the guides compiled into the binary; docs.User() feeds help.Load
 │   └── links_test.go             checks every link, image and #anchor in the docs
 ├── scripts/next-version.sh       suggests the next release tag from commit history
 ├── .github/workflows/            ci.yml (the checks) and release.yml (tagged releases)
@@ -104,7 +106,7 @@ after the app.
 | an app's JavaScript | `internal/apps/<app>/static/`; platform scripts in `internal/ui/static/` |
 | a command-line command | `run` in `cmd/onsuite/main.go`, then `user.go`, `export.go`, `backup.go`, `serve.go` |
 | a flag or env var | `internal/platform/config/config.go` |
-| an app's user guide | `docs/user/<app>.md`, screenshots in `docs/user/images/` (regenerate via `docs/screenshots/`) |
+| an app's user guide | `docs/user/<app>.md`, screenshots in `docs/user/images/` (regenerate via `docs/screenshots/`); served at `/help/<app>` by `internal/platform/help` |
 | a background job | `registerMaintenance` in `cmd/onsuite/backup.go`, or an app's `Jobs` method |
 
 **Next:** [Adding an app](adding-an-app.md)

@@ -28,6 +28,19 @@ type pkgImports struct {
 	test map[string][]string
 }
 
+// skipDir reports whether a directory with this name should be excluded from
+// every tree walk in this file: version control and build output are not
+// source; testdata is deliberately-malformed fixtures, not real packages; and
+// .claude can hold whole git worktrees of this repo checked out by agent
+// sessions, which would otherwise make the walk count every package twice.
+func skipDir(name string) bool {
+	switch name {
+	case ".git", ".claude", "dist", "testdata":
+		return true
+	}
+	return false
+}
+
 func scan(t *testing.T) pkgImports {
 	t.Helper()
 
@@ -48,8 +61,7 @@ func scan(t *testing.T) pkgImports {
 			return err
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "docs", "dist":
+			if skipDir(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -180,6 +192,52 @@ func TestUIIsALeaf(t *testing.T) {
 	}
 }
 
+// TestDocsIsALeaf: docs (the embed package itself — docs/embed.go and any
+// other non-test .go file directly in docs/, not the docs/screenshots/...
+// tree, which is its own main package) only embeds the user guides. scan
+// drops stdlib and third-party imports as "not our concern", which would
+// let docs import, say, net/http without this failing — that isn't the
+// actual constraint, so this test parses docs/*.go itself and asserts every
+// import is one of embed, io/fs.
+func TestDocsIsALeaf(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	docsDir := filepath.Join(root, "docs")
+	entries, err := os.ReadDir(docsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	allowed := map[string]bool{"embed": true, "io/fs": true}
+	fset := token.NewFileSet()
+	seen := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		seen++
+		path := filepath.Join(docsDir, e.Name())
+		f, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, spec := range f.Imports {
+			imported, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !allowed[imported] {
+				t.Errorf("docs/%s imports %q; docs must be a leaf (embed, io/fs only)", e.Name(), imported)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no non-test .go files found directly in docs/; the scan is broken, not the code")
+	}
+}
+
 // TestHTMLAssertIsTestOnly. The helper lives in a normal package so several
 // test packages can share it, which means only this check stops it being used
 // in production code. internal/apptest is exempted, not just internal/
@@ -233,6 +291,10 @@ func TestScanSeesTheRealTree(t *testing.T) {
 		"internal/platform/admin",
 		"internal/platform/usermgmt",
 		"internal/platform/jobsadmin",
+		"internal/platform/help",
+		"docs",
+		"docs/screenshots/seed",
+		"docs/screenshots/capture",
 	} {
 		if _, ok := imports.prod[want]; !ok {
 			t.Errorf("package %q was not scanned; known packages: %d", want, len(imports.prod))
@@ -250,16 +312,24 @@ func TestScanSeesTheRealTree(t *testing.T) {
 	}
 }
 
-// TestReadabilityIsContained: go-readability brings two unmaintained
-// transitive modules, and R4's plan accepted it only on the condition that it
-// stays behind one file. A second importer makes it load-bearing, which is a
-// different decision and should be made deliberately.
-func TestReadabilityIsContained(t *testing.T) {
+// importersOf walks the module tree and returns every non-test .go file that
+// imports libPrefix itself or a subpackage of it (import == libPrefix or
+// import starts with libPrefix+"/"), as paths relative to the module root.
+// TestReadabilityIsContained, TestFSRSIsContained and TestGoldmarkIsContained
+// all use this to enforce that a third-party dependency accepted "behind one
+// file" stays there: a second importer is a new decision, made deliberately,
+// not by drift.
+//
+// It skips _test.go files: containment rules are about production code, and
+// a test may legitimately need the library to exercise the one file that
+// imports it (or to assert, as this package does, that nothing else does).
+func importersOf(t *testing.T, libPrefix string) []string {
+	t.Helper()
+
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	const lib = "github.com/go-shiori/go-readability"
 
 	var importers []string
 	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -267,13 +337,12 @@ func TestReadabilityIsContained(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "docs", "dist", "testdata":
+			if skipDir(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if !strings.HasSuffix(d.Name(), ".go") {
+		if !strings.HasSuffix(d.Name(), ".go") || strings.HasSuffix(d.Name(), "_test.go") {
 			return nil
 		}
 		// A parse failure here is unrelated to what this test checks — a
@@ -289,9 +358,13 @@ func TestReadabilityIsContained(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if imported == lib {
+			if imported == libPrefix || strings.HasPrefix(imported, libPrefix+"/") {
+				// A file can import several of the library's subpackages
+				// (e.g. goldmark plus goldmark/ast, goldmark/parser, ...);
+				// count it once, not once per matching import.
 				rel, _ := filepath.Rel(root, path)
 				importers = append(importers, filepath.ToSlash(rel))
+				break
 			}
 		}
 		return nil
@@ -299,7 +372,15 @@ func TestReadabilityIsContained(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return importers
+}
 
+// TestReadabilityIsContained: go-readability brings two unmaintained
+// transitive modules, and R4's plan accepted it only on the condition that it
+// stays behind one file. A second importer makes it load-bearing, which is a
+// different decision and should be made deliberately.
+func TestReadabilityIsContained(t *testing.T) {
+	importers := importersOf(t, "github.com/go-shiori/go-readability")
 	want := []string{"internal/apps/reader/extract.go"}
 	if !slices.Equal(importers, want) {
 		t.Errorf("go-readability is imported by %v, want only %v", importers, want)
@@ -313,50 +394,20 @@ func TestReadabilityIsContained(t *testing.T) {
 // deliberately, the same rule TestReadabilityIsContained enforces for
 // go-readability.
 func TestFSRSIsContained(t *testing.T) {
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	const lib = "github.com/open-spaced-repetition/go-fsrs/v4"
-
-	var importers []string
-	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "docs", "dist", "testdata":
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(d.Name(), ".go") {
-			return nil
-		}
-		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
-		if err != nil {
-			return nil
-		}
-		for _, spec := range f.Imports {
-			imported, err := strconv.Unquote(spec.Path.Value)
-			if err != nil {
-				return err
-			}
-			if imported == lib {
-				rel, _ := filepath.Rel(root, path)
-				importers = append(importers, filepath.ToSlash(rel))
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	importers := importersOf(t, "github.com/open-spaced-repetition/go-fsrs/v4")
 	want := []string{"internal/apps/flash/fsrs.go"}
 	if !slices.Equal(importers, want) {
 		t.Errorf("go-fsrs is imported by %v, want only %v", importers, want)
+	}
+}
+
+// TestGoldmarkIsContained: goldmark was accepted for in-app help only
+// (#309); a second importer is a new decision, like go-readability's.
+func TestGoldmarkIsContained(t *testing.T) {
+	importers := importersOf(t, "github.com/yuin/goldmark")
+	want := []string{"internal/platform/help/pages.go"}
+	if !slices.Equal(importers, want) {
+		t.Errorf("goldmark is imported by %v, want only %v", importers, want)
 	}
 }
 
@@ -392,8 +443,7 @@ func TestRFC3339IsContained(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "docs", "dist", "testdata":
+			if skipDir(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil

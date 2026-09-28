@@ -74,6 +74,7 @@
 			<summary class="quiet button shell-user-toggle">{{ticon "user"}}<span class="shell-user-name">{{.Shell.Username}}</span>{{ticon "chevron-down"}}</summary>
 			<div class="shell-user-menu-panel">
 				<a class="shell-menu-item" href="/account">{{ticon "user"}}<span>Account</span></a>
+				<a class="shell-menu-item" href="/help{{with .Shell.ActiveApp}}/{{.}}{{end}}">{{ticon "help"}}<span>Help</span></a>
 				<hr class="shell-menu-separator">
 				<div class="shell-menu-settings" role="group" aria-labelledby="shell-menu-settings-label">
 					<span class="shell-menu-heading" id="shell-menu-settings-label">{{ticon "settings"}}Display</span>

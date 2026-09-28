@@ -44,6 +44,15 @@ together before changing it.*
   `usermgmt` (`/admin/users` and `/account`) and `jobsadmin`
   (`/admin/jobs`, with a **Run now** button). The admin routes answer a
   non-admin with the same 404 as a URL that doesn't exist.
+- **In-app help is also a platform package, not an app**:
+  `internal/platform/help` renders `docs/user`'s Markdown guides to HTML
+  once at startup (`help.Load`) and serves the cached result at `/help` and
+  `/help/{slug}`. Every help route is public — the guides hold nothing
+  private, and a signed-out visitor is exactly who may need them. It is the
+  only package that imports `github.com/yuin/goldmark`, enforced by
+  `TestGoldmarkIsContained`. A guide change needs a rebuild before it shows
+  up at `/help`, since the Markdown is compiled into the binary
+  (`docs/embed.go`), not read from disk at request time.
 
 ## How a request flows
 
@@ -189,7 +198,7 @@ cmd/onsuite                     wires everything; the only production importer o
    ├──► internal/apps/{flash,notes,paste,reader}
    │         never import each other; import only platform/* and ui
    │
-   ├──► admin · usermgmt · jobsadmin      platform pages
+   ├──► admin · usermgmt · jobsadmin · help      platform pages
    │         │
    ▼         ▼
    app       App interface, Router, Registry, Deps

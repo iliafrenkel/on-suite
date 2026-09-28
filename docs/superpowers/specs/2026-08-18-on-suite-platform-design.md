@@ -134,6 +134,11 @@ Per-app dependencies are added only when that app is built:
 ON Reader. `golang.org/x/net` is a test-only dependency used to parse HTML in
 handler tests and does not count against this budget.
 
+**Amendment (2026-09-28, #309):** added `github.com/yuin/goldmark` as a
+platform dependency — Markdown rendering for the in-app help served at
+`/help`. It is contained to `internal/platform/help`; no other package may
+import it, enforced by `TestGoldmarkIsContained`.
+
 The build is `go build ./cmd/onsuite`. There is nothing else to install.
 
 **Rejected: templ.** It is genuinely better than `html/template` — type-safe
