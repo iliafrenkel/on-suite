@@ -95,6 +95,33 @@ func TestPageRendersADocumentWithTheShell(t *testing.T) {
 	}
 }
 
+// TestUserMenuHelpLinkFollowsTheActiveApp covers #309: the user menu's Help
+// item opens the guide for whichever app is active, and the welcome guide
+// when no app is active (e.g. /account, the dashboard, /help itself).
+func TestUserMenuHelpLinkFollowsTheActiveApp(t *testing.T) {
+	r := testRenderer(t)
+	for active, want := range map[string]string{
+		"":      "/help",
+		"notes": "/help/notes",
+		"flash": "/help/flash",
+		"admin": "/help/admin",
+	} {
+		rec := httptest.NewRecorder()
+		err := r.Page(rec, http.StatusOK, "error", render.Page{
+			Shell: render.Shell{LoggedIn: true, Username: "ilia", CSRFToken: "tok", ActiveApp: active},
+			Data:  map[string]any{"Status": 404, "Title": "Not found", "Message": "x"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc := htmlassert.Parse(t, rec.Body.String())
+		link := doc.MustHave(`.shell-user-menu-panel a[href="` + want + `"]`)
+		if got := htmlassert.Text(link); got != "Help" {
+			t.Errorf("active %q: Help link text = %q", active, got)
+		}
+	}
+}
+
 // TestShellPutsUserActionsBehindOneMenu covers #403: the top right holds the
 // connectivity dot and a single user menu, and everything else (Account,
 // Log out, theme and font) lives inside that menu.
