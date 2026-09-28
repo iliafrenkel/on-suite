@@ -9,6 +9,7 @@ package help
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -105,8 +106,10 @@ func Load(fsys fs.FS) (*Pages, error) {
 		p.list = append(p.list, pg)
 		p.bySlug[e.Slug] = pg
 	}
-	if fi, err := fs.Stat(fsys, "images"); err != nil || !fi.IsDir() {
+	if fi, err := fs.Stat(fsys, "images"); err != nil {
 		return nil, fmt.Errorf("help: images directory missing: %w", err)
+	} else if !fi.IsDir() {
+		return nil, errors.New("help: images is not a directory")
 	}
 	if p.images, err = fs.Sub(fsys, "images"); err != nil {
 		return nil, err
