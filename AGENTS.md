@@ -70,9 +70,11 @@ all commands (`serve`, `user`, `export`, `backup`, `version`).
 **The platform/app boundary is the whole design.** An app is a package under
 `internal/apps/` implementing `app.App` ([internal/platform/app/app.go](internal/platform/app/app.go)):
 `Meta()`, `Migrations() fs.FS`, `Mount(r *Router, deps Deps)`. Adding an app
-means writing that package and adding one line to `registeredApps()` in
-[cmd/onsuite/main.go](cmd/onsuite/main.go) — nothing else changes. Two rules
-are enforced by a test, not just convention, in
+means writing that package plus one registration line in
+`registeredApps()` in [cmd/onsuite/main.go](cmd/onsuite/main.go); a few
+tests pin the registered-app list and need updating too (see
+[docs/developers/adding-an-app.md](docs/developers/adding-an-app.md), step
+5). Two rules are enforced by a test, not just convention, in
 [internal/arch/arch_test.go](internal/arch/arch_test.go):
 - **Apps never import each other.**
 - **The platform never imports an app.** Apps import only `internal/platform/*`
@@ -133,9 +135,12 @@ add` reads from a terminal with echo disabled, or from stdin for scripted
 setup.
 
 **Frontend**: HTMX (vendored under `internal/ui/static/`, never loaded from
-a CDN) is the only JS. A strict CSP forbids inline `<script>` and `style=`
-anywhere, which HTMX satisfies since `hx-*` are plain HTML attributes.
-Templates are Go `html/template`, composed by `internal/platform/render`.
+a CDN) plus a handful of small hand-written platform scripts
+(`internal/ui/static/*.js`) and per-app scripts (`internal/apps/*/static/`)
+is the whole of the JS — all served as plain files, embedded, no build
+step. A strict CSP forbids inline `<script>` and `style=` anywhere, which
+HTMX satisfies since `hx-*` are plain HTML attributes. Templates are Go
+`html/template`, composed by `internal/platform/render`.
 
 **Optional app capabilities are discovered by type assertion, not interface
 bloat**: an app implementing `Templates() fs.FS` gets its templates mounted;
@@ -185,8 +190,11 @@ type-to-section table and the `feat`-vs-`refactor` distinction.
 - No Node, no npm, no JS build step.
 - Platform dependencies are capped by design (currently
   `modernc.org/sqlite`, `golang.org/x/crypto`, `golang.org/x/term`,
-  `golang.org/x/net`); adding a new one is a spec change, not just an
-  implementation detail.
+  `golang.org/x/net`, `github.com/alecthomas/chroma/v2`,
+  `github.com/mmcdole/gofeed`, `github.com/microcosm-cc/bluemonday`,
+  `github.com/go-shiori/go-readability`,
+  `github.com/open-spaced-repetition/go-fsrs/v4`); adding a new one is a
+  spec change, not just an implementation detail.
 - Migrations are forward-only — no down migrations.
 - This is a personal project with an opinionated design — open an issue or
   discussion before a large PR, especially anything touching a dependency,
@@ -195,6 +203,17 @@ type-to-section table and the `feat`-vs-`refactor` distinction.
 ## Other docs worth knowing about
 
 - [PATTERNS.md](PATTERNS.md) — index of recurring, deliberate patterns; check it before writing new code.
-- [docs/DEPLOYING.md](docs/DEPLOYING.md) — systemd, TLS, backups, upgrades, Docker.
-- [docs/RELEASING.md](docs/RELEASING.md) — cutting a tagged release.
-- [docs/superpowers/plans/](docs/superpowers/plans/) — task-by-task implementation plans per build phase.
+- [docs/user/](docs/user/index.md) — end-user guides, one per app plus admin.
+  A UI change updates the matching `docs/user/<app>.md` and re-shoots the
+  affected screenshots ([docs/screenshots/README.md](docs/screenshots/README.md));
+  the guides stay plain Markdown — no raw HTML, no `../` links.
+- [docs/self-hosting/deploying.md](docs/self-hosting/deploying.md) — systemd, TLS, backups, upgrades, Docker.
+- [docs/self-hosting/running-locally.md](docs/self-hosting/running-locally.md) — running it on your own computer with an OS launcher.
+- [docs/developers/](docs/developers/index.md) — the developer guide:
+  [getting started](docs/developers/getting-started.md),
+  [architecture](docs/developers/architecture.md),
+  [repository layout](docs/developers/repository-layout.md),
+  [adding an app](docs/developers/adding-an-app.md),
+  [testing](docs/developers/testing.md) and
+  [releasing](docs/developers/releasing.md).
+- [docs/superpowers/](docs/superpowers/) — historical design specs and task-by-task implementation plans.

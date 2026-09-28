@@ -1,0 +1,40 @@
+{
+  "mqtt": {
+    "broker": "mqtt.local",
+    "port": 1883,
+    "clientId": "home-controller"
+  },
+  "devices": [
+    {
+      "id": "living-room-lamp",
+      "type": "switch",
+      "topic": "home/livingroom/lamp",
+      "friendlyName": "Living room lamp"
+    },
+    {
+      "id": "kids-nightlight",
+      "type": "dimmer",
+      "topic": "home/kidsroom/nightlight",
+      "friendlyName": "Kids nightlight",
+      "defaultBrightness": 20
+    },
+    {
+      "id": "front-door-sensor",
+      "type": "contact",
+      "topic": "home/frontdoor/contact",
+      "friendlyName": "Front door"
+    }
+  ],
+  "automations": [
+    {
+      "name": "Nightlight on at dusk",
+      "trigger": { "type": "sun", "event": "sunset", "offsetMinutes": 15 },
+      "action": { "device": "kids-nightlight", "set": "on" }
+    },
+    {
+      "name": "Lamp off at midnight",
+      "trigger": { "type": "time", "at": "00:00" },
+      "action": { "device": "living-room-lamp", "set": "off" }
+    }
+  ]
+}

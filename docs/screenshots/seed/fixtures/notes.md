@@ -1,0 +1,51 @@
+- Home renovation
+  Kitchen first, then the girls' room. Budget lives in the spreadsheet on the shared drive.
+  - Get three quotes for the kitchen benchtop @DUE-2
+  - Pick a paint colour for the girls' room #kids @DUE+2
+    - Order sample pots: "Sea Salt" and "Warm Linen" [x]
+    - Paint test patches on the north wall
+  - Book the electrician for the extra power points @DUE+4
+  - Replace the leaking laundry tap [x]
+  - Measure the hallway for a runner rug [x]
+  - Clean out the gutters before storm season #errand @DUE+9
+  - Ideas
+    - Pendant lights over the bench
+    - Pull-out pantry drawers
+- Reading list #books
+  - The Left Hand of Darkness [x]
+  - Hyperion
+    Re-read before starting The Fall of Hyperion. The Consul's story is still the best one.
+  - A Fire Upon the Deep
+  - The Dispossessed [x]
+  - Children of Time
+  - Project Hail Mary #audiobook
+  - Recommendations from the club
+    - Blindsight
+    - The Three-Body Problem [x]
+    - Station Eleven
+- Trip to Japan
+  Two weeks in April for the cherry blossoms. Everyone needs a passport renewal check before we book anything.
+  - Before we go
+    - Check passport expiry dates for all four of us @DUE+1
+    - Book flights Melbourne to Tokyo [x]
+    - Buy JR Pass or IC cards? Compare prices @DUE+5
+    - Pocket Wi-Fi or eSIM
+  - Tokyo (days 1 to 5)
+    - teamLab Planets for the girls
+    - Tsukiji outer market breakfast
+    - Day trip to Kamakura
+  - Kyoto (days 6 to 10)
+    - Fushimi Inari early in the morning, before the crowds
+    - Arashiyama bamboo grove
+    - Stay in a ryokan for at least one night
+  - Osaka (days 11 to 14)
+    - Dotonbori street food
+    - Universal Studios day #kids
+- Work
+  - Weekly sync with the platform team #meeting @DUE+0
+    - Agenda: backup restore drill results
+    - Agenda: on-call rota for the long weekend
+  - Write up the incident review for last Tuesday @DUE-1
+  - Rotate the staging TLS certificates @DUE+3
+  - Q3 planning offsite #meeting [x]
+  - Draft onboarding checklist for new starters

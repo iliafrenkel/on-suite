@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Demo fixture. DAY-N is replaced by the seed with a date N days (fractions allowed) before now. -->
+<rss version="2.0">
+<channel>
+  <title>The Byte Log</title>
+  <link>https://example.com/byte-log/</link>
+  <description>Practical notes on software, home labs and the tools in between.</description>
+  <item>
+    <title>SQLite in WAL mode: what actually changes</title>
+    <link>https://example.com/byte-log/sqlite-wal-mode</link>
+    <guid>https://example.com/byte-log/sqlite-wal-mode</guid>
+    <author>editor@example.com (The Byte Log)</author>
+    <pubDate>DAY-0.2</pubDate>
+    <description><![CDATA[<p>Write-ahead logging lets readers keep reading while a writer commits, which is exactly what a small self-hosted app wants. We walk through checkpoints, the <code>-wal</code> file, and why a single connection is often the simplest safe choice.</p><p>Plus: how to take a consistent backup without stopping the server.</p>]]></description>
+  </item>
+  <item>
+    <title>The 3-2-1 backup rule for a house full of devices</title>
+    <link>https://example.com/byte-log/three-two-one-backups</link>
+    <guid>https://example.com/byte-log/three-two-one-backups</guid>
+    <pubDate>DAY-0.9</pubDate>
+    <description><![CDATA[<p>Three copies, two kinds of media, one off-site. It sounds like enterprise advice, but it maps neatly onto a NAS, an external drive in a drawer, and a cheap object-storage bucket.</p><ul><li>Automate the first two.</li><li>Test a restore every quarter.</li><li>Write down where the keys are.</li></ul>]]></description>
+  </item>
+  <item>
+    <title>Keeping a Raspberry Pi 5 cool and quiet</title>
+    <link>https://example.com/byte-log/pi5-cooling</link>
+    <guid>https://example.com/byte-log/pi5-cooling</guid>
+    <pubDate>DAY-1.6</pubDate>
+    <description><![CDATA[<p>The official active cooler is good, but a passive aluminium case is silent and keeps sustained workloads under the throttling point in most rooms. We measured both over a week of running a home server.</p>]]></description>
+  </item>
+  <item>
+    <title>Why your Wi-Fi slows down at 7pm</title>
+    <link>https://example.com/byte-log/evening-wifi</link>
+    <guid>https://example.com/byte-log/evening-wifi</guid>
+    <pubDate>DAY-2.4</pubDate>
+    <description><![CDATA[<p>Everyone on your street starts streaming at once. Channel congestion, band steering and a router in the wrong cupboard all play a part. A ten-minute survey with a free analyser app usually finds the fix.</p>]]></description>
+  </item>
+  <item>
+    <title>Passkeys for the whole family, one year on</title>
+    <link>https://example.com/byte-log/family-passkeys</link>
+    <guid>https://example.com/byte-log/family-passkeys</guid>
+    <pubDate>DAY-3.5</pubDate>
+    <description><![CDATA[<p>What worked, what confused the kids, and the one account recovery scare that made us print a set of backup codes and put them in the safe.</p>]]></description>
+  </item>
+  <item>
+    <title>Server-rendered HTML is having a moment</title>
+    <link>https://example.com/byte-log/server-rendered-html</link>
+    <guid>https://example.com/byte-log/server-rendered-html</guid>
+    <pubDate>DAY-4.8</pubDate>
+    <description><![CDATA[<p>Small libraries that swap fragments of HTML over the wire have made plain server-side templates feel modern again. A look at the patterns that keep such apps fast: out-of-band swaps, history support, and progressive enhancement.</p>]]></description>
+  </item>
+  <item>
+    <title>Self-hosting an RSS reader in 2026</title>
+    <link>https://example.com/byte-log/self-hosted-rss</link>
+    <guid>https://example.com/byte-log/self-hosted-rss</guid>
+    <pubDate>DAY-6.1</pubDate>
+    <description><![CDATA[<p>Feeds never went away. With a single binary and a SQLite file you can follow a hundred sites without an algorithm deciding what you see first.</p>]]></description>
+  </item>
+  <item>
+    <title>Context cancellation in Go, explained with a kettle</title>
+    <link>https://example.com/byte-log/go-context-kettle</link>
+    <guid>https://example.com/byte-log/go-context-kettle</guid>
+    <pubDate>DAY-8.3</pubDate>
+    <description><![CDATA[<p>You put the kettle on, then the phone rings. A friendly walk through <code>context.WithCancel</code>, deadlines, and why every blocking call in a server should take a context.</p>]]></description>
+  </item>
+</channel>
+</rss>

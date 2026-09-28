@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Demo fixture. DAY-N is replaced by the seed with a date N days (fractions allowed) before now. -->
+<rss version="2.0">
+<channel>
+  <title>Pit Wall Weekly</title>
+  <link>https://example.com/pit-wall/</link>
+  <description>Strategy, tech and circuit guides for Formula 1 fans.</description>
+  <item>
+    <title>Suzuka preview: the figure-eight that rewards commitment</title>
+    <link>https://example.com/pit-wall/suzuka-preview</link>
+    <guid>https://example.com/pit-wall/suzuka-preview</guid>
+    <pubDate>DAY-0.1</pubDate>
+    <description><![CDATA[<p>The Esses punish a car that is nervous on turn-in, and 130R still separates the brave from the rest. What to watch for in practice, and why tyre degradation will decide the strategy.</p>]]></description>
+  </item>
+  <item>
+    <title>The undercut, explained with lap times</title>
+    <link>https://example.com/pit-wall/undercut-explained</link>
+    <guid>https://example.com/pit-wall/undercut-explained</guid>
+    <pubDate>DAY-0.8</pubDate>
+    <description><![CDATA[<p>Pit first, use the grip of fresh tyres, and be ahead when your rival comes out of the pits. We work through a real-looking stint to show when the undercut works, and when the overcut wins instead.</p>]]></description>
+  </item>
+  <item>
+    <title>Active aero in the new regulations: a plain-English guide</title>
+    <link>https://example.com/pit-wall/active-aero</link>
+    <guid>https://example.com/pit-wall/active-aero</guid>
+    <pubDate>DAY-1.9</pubDate>
+    <description><![CDATA[<p>Movable wings on straights, more downforce in corners. Here is how the modes work, what drivers control, and what it means for overtaking.</p>]]></description>
+  </item>
+  <item>
+    <title>How to read a tyre strategy graphic</title>
+    <link>https://example.com/pit-wall/tyre-graphics</link>
+    <guid>https://example.com/pit-wall/tyre-graphics</guid>
+    <pubDate>DAY-2.7</pubDate>
+    <description><![CDATA[<p>Colours for compounds, bar lengths for stints, and the little numbers that tell you how old each set is. Once you can read these, a race broadcast makes a lot more sense.</p>]]></description>
+  </item>
+  <item>
+    <title>Albert Park by the numbers</title>
+    <link>https://example.com/pit-wall/albert-park-numbers</link>
+    <guid>https://example.com/pit-wall/albert-park-numbers</guid>
+    <pubDate>DAY-3.9</pubDate>
+    <description><![CDATA[<p>A street-park hybrid around a lake in Melbourne: fourteen corners, fast chicanes, and a surface that evolves hugely over the weekend. A lap, corner by corner.</p>]]></description>
+  </item>
+  <item>
+    <title>Why teams bring different wings to every track</title>
+    <link>https://example.com/pit-wall/wing-levels</link>
+    <guid>https://example.com/pit-wall/wing-levels</guid>
+    <pubDate>DAY-5.5</pubDate>
+    <description><![CDATA[<p>Monaco wants all the downforce it can get; Monza wants almost none. The trade-off between cornering grip and straight-line speed, with a few examples from this season.</p>]]></description>
+  </item>
+  <item>
+    <title>Safety cars, virtual safety cars and red flags</title>
+    <link>https://example.com/pit-wall/safety-cars</link>
+    <guid>https://example.com/pit-wall/safety-cars</guid>
+    <pubDate>DAY-7.0</pubDate>
+    <description><![CDATA[<p>Three ways to neutralise a race, each with different rules for pit stops and gaps. A quick guide so the next one does not leave you confused.</p>]]></description>
+  </item>
+  <item>
+    <title>Night races: what changes under the lights</title>
+    <link>https://example.com/pit-wall/night-races</link>
+    <guid>https://example.com/pit-wall/night-races</guid>
+    <pubDate>DAY-9.4</pubDate>
+    <description><![CDATA[<p>Track temperature drops as the evening goes on, and so does grip. Teams plan brake cooling and tyre warm-up around a moving target.</p>]]></description>
+  </item>
+</channel>
+</rss>

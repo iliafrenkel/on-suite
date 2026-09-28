@@ -1,0 +1,20 @@
+Home network notes
+==================
+
+Router admin page: http://192.168.1.1 (credentials are in the password manager)
+ISP support line: on the sticker under the modem
+
+Networks
+- Home        5 GHz + 2.4 GHz, band steering on
+- Home-IoT    2.4 GHz only, for the smart plugs and the robot vacuum
+- Home-Guest  isolated, 20 Mbps cap, password changes every quarter
+
+Fixed addresses
+- 192.168.1.10  NAS
+- 192.168.1.20  Raspberry Pi (ON Suite, Pi-hole)
+- 192.168.1.30  printer in the study
+
+If the internet drops
+1. Check the modem lights: DSL should be solid, not blinking.
+2. Power-cycle the modem, wait two minutes, then the router.
+3. Still down? Check the ISP status page from a phone on mobile data.

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Demo fixture. DAY-N is replaced by the seed with a date N days (fractions allowed) before now. -->
+<rss version="2.0">
+<channel>
+  <title>Orbital Notes</title>
+  <link>https://example.com/orbital-notes/</link>
+  <description>Space news and backyard astronomy from the Southern Hemisphere.</description>
+  <item>
+    <title>Spotting the International Space Station from the suburbs</title>
+    <link>https://example.com/orbital-notes/iss-spotting</link>
+    <guid>https://example.com/orbital-notes/iss-spotting</guid>
+    <pubDate>DAY-0.4</pubDate>
+    <description><![CDATA[<p>It is the brightest thing moving across the sky after sunset, and you need nothing more than a pass-prediction app and a clear western horizon. This week has three good evening passes.</p>]]></description>
+  </item>
+  <item>
+    <title>The Orionids peak this month: how to watch</title>
+    <link>https://example.com/orbital-notes/orionids</link>
+    <guid>https://example.com/orbital-notes/orionids</guid>
+    <pubDate>DAY-1.2</pubDate>
+    <description><![CDATA[<p>Debris from Halley's Comet gives us a steady shower in late October. From southern latitudes the radiant rises after midnight, so the best viewing is in the hours before dawn.</p>]]></description>
+  </item>
+  <item>
+    <title>Finding the Southern Cross, and the pointers that lead to it</title>
+    <link>https://example.com/orbital-notes/southern-cross</link>
+    <guid>https://example.com/orbital-notes/southern-cross</guid>
+    <pubDate>DAY-2.9</pubDate>
+    <description><![CDATA[<p>A beginner's guide to the constellation on the flag. Look for the two bright pointer stars first; the cross itself is smaller than most people expect.</p>]]></description>
+  </item>
+  <item>
+    <title>Reading an exoplanet spectrum without a physics degree</title>
+    <link>https://example.com/orbital-notes/exoplanet-spectra</link>
+    <guid>https://example.com/orbital-notes/exoplanet-spectra</guid>
+    <pubDate>DAY-3.7</pubDate>
+    <description><![CDATA[<p>When a planet crosses its star, a sliver of starlight passes through its atmosphere. The dips in that light tell us which molecules are there. We decode one chart, step by step.</p>]]></description>
+  </item>
+  <item>
+    <title>Why reusable rockets land on barges</title>
+    <link>https://example.com/orbital-notes/barge-landings</link>
+    <guid>https://example.com/orbital-notes/barge-landings</guid>
+    <pubDate>DAY-5.2</pubDate>
+    <description><![CDATA[<p>Flying back to the launch site costs fuel that could have gone into payload. Landing downrange at sea is the compromise, and the numbers behind it are surprisingly simple.</p>]]></description>
+  </item>
+  <item>
+    <title>A cheap first telescope for kids that actually gets used</title>
+    <link>https://example.com/orbital-notes/first-telescope</link>
+    <guid>https://example.com/orbital-notes/first-telescope</guid>
+    <pubDate>DAY-6.6</pubDate>
+    <description><![CDATA[<p>Skip the department-store refractor with the wobbly tripod. A small tabletop reflector shows the rings of Saturn and the craters of the Moon, and it sets up in a minute.</p>]]></description>
+  </item>
+  <item>
+    <title>What the Moon's far side really looks like</title>
+    <link>https://example.com/orbital-notes/far-side</link>
+    <guid>https://example.com/orbital-notes/far-side</guid>
+    <pubDate>DAY-9.0</pubDate>
+    <description><![CDATA[<p>It is not dark, just unseen from here. Fewer maria, more craters, and a thicker crust: a short tour of the hemisphere that always faces away from us.</p>]]></description>
+  </item>
+</channel>
+</rss>
