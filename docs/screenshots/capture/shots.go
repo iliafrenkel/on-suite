@@ -1,7 +1,5 @@
 package main
 
-// shots is every screenshot the documentation uses. Each guide task adds its
-// own; keep them grouped by guide and in page order.
 // readerScrollToActive scrolls the article list so the open article sits
 // near the top, two rows down, instead of cut off at the bottom.
 const readerScrollToActive = `
@@ -9,6 +7,12 @@ const readerScrollToActive = `
 		const i = rows.indexOf(document.querySelector('.reader-row.is-active'));
 		document.querySelector('.reader-list').scrollTop = rows[i - 2].offsetTop - rows[0].offsetTop + 8;`
 
+// shots is every screenshot the documentation uses. Each guide task adds its
+// own; keep them grouped by guide and in page order.
+//
+// Several URLs name seeded rows by ID (/paste/3, /notes/25, /flash/2, ...).
+// TestShotIDsPointAtTheIntendedItems in ../seed/seed_test.go pins what each
+// ID must be; update it when adding or changing one here.
 var shots = []shot{
 	// docs/user/index.md
 	{Name: "docs/user/images/login.png", URL: "/login", Anon: true, Width: 1280, Height: 640},

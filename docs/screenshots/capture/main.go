@@ -186,8 +186,12 @@ func checkPage(b *browser, s shot) error {
 	if err != nil {
 		return err
 	}
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("page check returned %T, want a JSON string", v)
+	}
 	var got struct{ Path, Theme string }
-	if err := json.Unmarshal([]byte(v.(string)), &got); err != nil {
+	if err := json.Unmarshal([]byte(str), &got); err != nil {
 		return err
 	}
 	if !s.Anon && got.Path == "/login" && !strings.HasPrefix(s.URL, "/login") {

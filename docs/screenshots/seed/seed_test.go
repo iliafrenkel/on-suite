@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -150,6 +152,81 @@ func TestSeedFillsEveryApp(t *testing.T) {
 	}
 	if streak, err := fs.Streak(ctx, demo.ID, now); err != nil || streak < 3 {
 		t.Errorf("flash streak = %d, %v; want >= 3", streak, err)
+	}
+}
+
+// shotIDs is what each seeded row ID used in a URL in
+// ../capture/shots.go must be, keyed by app. The seed hands out IDs in
+// fixture order, so reordering or adding fixtures can shift them; this map
+// makes that a test failure instead of a silently wrong screenshot. Change
+// it together with shots.go.
+var shotIDs = map[string]map[int64]string{
+	"paste":  {3: "Home server docker-compose", 7: "Japan trip packing list", 8: "Retry with backoff"},
+	"notes":  {25: "Before we go"},
+	"reader": {10: "The Orionids peak this month: how to watch"},
+	"flash":  {1: "Japanese travel phrases", 2: "F1 circuits"},
+}
+
+// shotIDRe finds the seeded IDs in shots.go URLs: /paste/3, /notes/25,
+// /reader/item/10, /flash/2/cards/, /flash/review/2.
+var shotIDRe = regexp.MustCompile(`URL: "/(paste|notes|reader/item|flash(?:/review)?)/(\d+)`)
+
+func TestShotIDsPointAtTheIntendedItems(t *testing.T) {
+	src, err := os.ReadFile("../capture/shots.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches := shotIDRe.FindAllStringSubmatch(string(src), -1)
+	if len(matches) == 0 {
+		t.Fatal("found no seeded IDs in shots.go; has the URL format changed?")
+	}
+	for _, m := range matches {
+		appID := strings.SplitN(m[1], "/", 2)[0]
+		id, _ := strconv.ParseInt(m[2], 10, 64)
+		if _, ok := shotIDs[appID][id]; !ok {
+			t.Errorf("shots.go uses %s ID %d, which shotIDs doesn't list; add what it should show", appID, id)
+		}
+	}
+
+	ctx := context.Background()
+	dir := t.TempDir()
+	if _, err := Seed(ctx, dir, time.Date(2026, 9, 28, 9, 30, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	handle, err := db.Open(dbPath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = handle.Close() }()
+	demo, err := auth.NewStore(handle).UserByUsername(ctx, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lookup := map[string]func(int64) (string, error){
+		"paste": func(id int64) (string, error) {
+			s, err := paste.NewStore(handle).ByID(ctx, demo.ID, id)
+			return s.Title, err
+		},
+		"notes": func(id int64) (string, error) {
+			n, err := notes.NewStore(handle).ByID(ctx, demo.ID, id)
+			return n.Title, err
+		},
+		"reader": func(id int64) (string, error) {
+			it, err := reader.NewStore(handle).Item(ctx, demo.ID, id)
+			return it.Title, err
+		},
+		"flash": func(id int64) (string, error) {
+			d, err := flash.NewStore(handle).DeckByID(ctx, demo.ID, id)
+			return d.Name, err
+		},
+	}
+	for appID, ids := range shotIDs {
+		for id, want := range ids {
+			if got, err := lookup[appID](id); err != nil || got != want {
+				t.Errorf("%s ID %d = %q, %v; shots.go expects %q", appID, id, got, err, want)
+			}
+		}
 	}
 }
 

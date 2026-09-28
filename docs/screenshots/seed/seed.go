@@ -64,7 +64,10 @@ func Seed(ctx context.Context, dataDir string, now time.Time) (string, error) {
 	}
 	defer func() { _ = handle.Close() }()
 
-	// The same apps and migrations cmd/onsuite's openDatabase applies.
+	// The same apps and migrations cmd/onsuite's openDatabase applies. This
+	// list duplicates registeredApps() in cmd/onsuite/main.go, which is
+	// unexported in a main package and so can't be imported: keep the two in
+	// step when adding an app.
 	reg, err := app.NewRegistry(flash.New(), notes.New(), paste.New(), reader.New())
 	if err != nil {
 		return "", err

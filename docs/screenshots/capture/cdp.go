@@ -40,6 +40,11 @@ func chromePath() (string, error) {
 	return "", errors.New("capture: Chrome not found; set $CHROME")
 }
 
+// devToolsOrigin is the Origin the DevTools WebSocket is dialled with, and
+// the only one Chrome is told to accept (--remote-allow-origins compares it
+// exactly, so no trailing slash).
+const devToolsOrigin = "http://127.0.0.1"
+
 // launch starts Chrome with a throwaway profile. The DevTools port is 0, so
 // Chrome picks a free one and writes it to DevToolsActivePort in the
 // profile — no fixed port to collide with another run or a desktop Chrome.
@@ -56,7 +61,7 @@ func launch(started func(*browser)) (*browser, error) {
 	}
 	profile := filepath.Join(tmp, "profile")
 	cmd := exec.Command(path, "--headless=new", "--remote-debugging-port=0",
-		"--remote-allow-origins=*", "--user-data-dir="+profile,
+		"--remote-allow-origins="+devToolsOrigin, "--user-data-dir="+profile,
 		"--hide-scrollbars", "--force-device-scale-factor=1", "--no-first-run",
 		"--no-default-browser-check", "about:blank")
 	if err := cmd.Start(); err != nil {
@@ -97,7 +102,7 @@ func launch(started func(*browser)) (*browser, error) {
 	}
 	for _, t := range targets {
 		if t.Type == "page" {
-			b.conn, err = websocket.Dial(t.WebSocketDebuggerURL, "", "http://127.0.0.1/")
+			b.conn, err = websocket.Dial(t.WebSocketDebuggerURL, "", devToolsOrigin)
 			if err != nil {
 				b.close()
 				return nil, err
