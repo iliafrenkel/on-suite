@@ -17,14 +17,14 @@ My motivation for creating ON Suite is simple. I was using
 [Workflowy](https://workflowy.com/) as an outliner/notetaker,
 [Yarr](https://github.com/nkanaev/yarr/) as an RSS reader,
 [Anki](https://apps.ankiweb.net/) for flash cards, and a number of Pastebin
-clones to share text between compputers and people. They are all excellent!
+clones to share text between computers and people. They are all excellent!
 But I wanted something simple, something I can host myself, and something
 that is _all in one place_.
 
 ON Suite is a handful of small apps — notes, snippets, news feeds and flash
 cards — all in one private website. It is built for a small group of people.
 A family, group of friends, small team. It can probably support a few hundred
-peopl, maybe even several thousands. But it is not an alternative to SaaS like
+people, maybe even several thousands. But it is not an alternative to SaaS like
 Gmail. Accounts have to be manually created, there is no public sign-up, and
 nobody else can see what you make in ON Suite unless you choose to share it.
 
@@ -48,7 +48,7 @@ Sign in once and move freely between four apps.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-notes-dark.png">
-    <img src="docs/images/app-notes-light.png" alt="ON Notes: an outline of home renovation tasks with tags and due dates, and a reading list" width="49%">
+    <img src="docs/images/app-notes-light.png" alt="ON Notes: an outline of home renovation tasks with tags and due dates, and a reading list">
   </picture>
 </p>
 
@@ -62,7 +62,7 @@ and share any part of the outline with a link.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-paste-dark.png">
-    <img src="docs/images/app-paste-light.png" alt="ON Paste: a list of snippets on the left and a Markdown packing list open on the right" width="49%">
+    <img src="docs/images/app-paste-light.png" alt="ON Paste: a list of snippets on the left and a Markdown packing list open on the right">
   </picture>
 </p>
 
@@ -75,7 +75,7 @@ any snippet with a link. [Read the ON Paste guide →](docs/user/paste.md)
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-reader-dark.png">
-    <img src="docs/images/app-reader-light.png" alt="ON Reader: feeds in folders on the left, the list of articles in the middle and an open article on the right" width="49%">
+    <img src="docs/images/app-reader-light.png" alt="ON Reader: feeds in folders on the left, the list of articles in the middle and an open article on the right">
   </picture>
 </p>
 
@@ -89,7 +89,7 @@ summary. [Read the ON Reader guide →](docs/user/reader.md)
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-flash-dark.png">
-    <img src="docs/images/app-flash-light.png" alt="ON Flash: a list of colour-coded decks and a grid of cards from the F1 circuits deck" width="49%">
+    <img src="docs/images/app-flash-light.png" alt="ON Flash: a list of colour-coded decks and a grid of cards from the F1 circuits deck">
   </picture>
 </p>
 
