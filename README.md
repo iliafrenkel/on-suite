@@ -1,235 +1,113 @@
 # ON Suite
 
-ON Suite is a self-hosted suite of small web applications for personal use —
-one account, one shell, one SQLite file, one Go binary. Each app carries the
-"ON" prefix: ON Paste, ON Notes, ON Reader, ON Flash.
-
-It is built for a household, not a company: the author plus a handful of
-family and friends, invite-only, no public sign-up, no multi-tenant hardening.
-If you're looking for a SaaS-scale platform this isn't it — it's the opposite
-bet, optimised for "one binary, one data directory, nothing else to run."
+A small, self-hosted set of everyday apps for you and the people you trust —
+one binary, one SQLite file.
 
 <p align="center">
-  <img src="docs/images/dashboard.png" alt="ON Suite dashboard with its app tiles" width="49%">
-  <img src="docs/images/paste-snippet.png" alt="An ON Paste snippet with syntax highlighting" width="49%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
+    <img src="docs/images/hero-light.png" alt="The ON Suite dashboard, with a card for each app: ON Notes, ON Paste, ON Reader and ON Flash" width="100%">
+  </picture>
 </p>
 
-Of the four apps the "ON" prefix is reserved for, all four are built and
-registered today. **ON Paste** holds snippets of code or text, with syntax
-highlighting and shareable links. **ON Notes** is a hierarchical outliner —
-one infinite tree per account, with zoom, collapse, every structural
-operation including mouse drag-to-move, a full keyboard layer, inline
-Markdown (bold, links, `#tags`), done/due tracking with a cross-tree
-due-date view, full-text search with ancestor breadcrumbs, archiving,
-Markdown/JSON export and import, and public read-only share links. **ON
-Reader** is a feed reader — subscriptions and folders, full-article
-extraction, search and keyboard navigation, OPML import/export and feed
-discovery, and a reading-stats page with daily trend charts. **ON Flash**
-is a flash-card app, still being built out — deck and card CRUD with
-per-card tags and a cross-deck tag filter so far, with review/scheduling
-still to come.
+## Why ON Suite
 
-## Is this for you?
+ON Suite is a handful of small apps — notes, snippets, news feeds and flash
+cards — that a household shares from one private website. It is built for a
+household, not a company: the author plus a few family and friends. Accounts
+are invite-only, there is no public sign-up, and everything you make stays
+private unless you choose to share it.
 
-- **You want to self-host something small for yourself and a few people you
-  trust**, and you'd rather manage one binary and one SQLite file than a pile
-  of Docker Compose services. → Read [Getting started](#getting-started)
-  below, then [Deploying](docs/self-hosting/deploying.md).
-- **You want to run it, and maybe also change it or add an app.** → Same
-  starting point, then [Contributing](CONTRIBUTING.md) for the ground rules
-  (no CGO, no Node, the platform/app boundary) before you dive into the code.
-- **You're just browsing.** → The rest of this README explains what it is and
-  why it's built this way; no need to go further unless something here is
-  useful to you.
+Most self-hosted app suites are either a pile of Docker Compose services,
+each with its own database, or a SaaS product wearing a self-host badge. ON
+Suite is neither. It is one Go binary and one data directory, with nothing
+else to run: no database server, no containers to wire together. It runs the
+same way on a Raspberry Pi as it does on a laptop, and copying that one
+directory is a complete backup.
 
-## Getting started
+If you're looking for a SaaS-scale platform, with thousands of users and
+multi-tenant hardening, this isn't it. It's the opposite bet, optimised for
+"one binary, one data directory, nothing else to run."
 
-Requirements: Go 1.26 or newer, and nothing else — no Docker, no Node, no
-database server to install. SQLite is a pure-Go dependency
-(`modernc.org/sqlite`), so `CGO_ENABLED=0` always holds.
+## The apps
 
-```bash
-git clone https://github.com/iliafrenkel/on-suite.git
-cd on-suite
-go build ./cmd/onsuite
-```
+Sign in once and move freely between four apps.
 
-Create the first account (prompts for a password, twice, without echoing it):
+### ON Notes
 
-```bash
-./onsuite user add ilia --admin --data-dir ./data
-```
+All your notes and to-do lists in one outline, where any bullet can have
+bullets of its own. Tick things off, give them due dates, search everything,
+and share any part of the outline with a link.
+[Read the ON Notes guide →](docs/user/notes.md)
 
-Start the server:
+### ON Paste
 
-```bash
-./onsuite serve --data-dir ./data
-```
+A place for bits of text you want to find again — a packing list, the Wi-Fi
+settings, a config file or a piece of code, with colour highlighting. Share
+any snippet with a link. [Read the ON Paste guide →](docs/user/paste.md)
 
-Every flag has an `ONSUITE_*` environment variable equivalent (e.g.
-`--addr` / `ONSUITE_ADDR`, `--data-dir` / `ONSUITE_DATA_DIR`). Run
-`./onsuite serve -h` for the full list, or `./onsuite help` for all commands.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-notes-dark.png">
+    <img src="docs/images/app-notes-light.png" alt="ON Notes: an outline of home renovation tasks with tags and due dates, and a reading list" width="49%">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-paste-dark.png">
+    <img src="docs/images/app-paste-light.png" alt="ON Paste: a list of snippets on the left and a Markdown packing list open on the right" width="49%">
+  </picture>
+</p>
 
-Confirm it's up, then open `http://localhost:8080/` in a browser:
+### ON Reader
 
-```bash
-curl -s localhost:8080/healthz
-```
+The newest articles from your favourite websites in one place, so you don't
+have to visit each site to see what's new. Sort feeds into folders, star
+what you want to keep and fetch the full article when a feed only sends a
+summary. [Read the ON Reader guide →](docs/user/reader.md)
 
-You'll be redirected to `/login`; sign in with the account you just created
-and you'll land on the dashboard, with your username and a working log-out
-button in the top bar, and ON Notes and ON Paste in the app switcher.
+### ON Flash
 
-Cross-compiling for a Linux server from any machine needs nothing extra,
-since there's no CGO to worry about:
+Flash cards for learning things by heart — words for a trip, times tables,
+race circuits. ON Flash shows you a few cards each day: the hard ones come
+back often, the easy ones less and less. You can give a copy of a deck to
+someone else in your household. [Read the ON Flash guide →](docs/user/flash.md)
 
-```bash
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o onsuite ./cmd/onsuite
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-reader-dark.png">
+    <img src="docs/images/app-reader-light.png" alt="ON Reader: feeds in folders on the left, the list of articles in the middle and an open article on the right" width="49%">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-flash-dark.png">
+    <img src="docs/images/app-flash-light.png" alt="ON Flash: a list of colour-coded decks and a grid of cards from the F1 circuits deck" width="49%">
+  </picture>
+</p>
 
-**Running this somewhere real?** See [Deploying ON Suite](docs/self-hosting/deploying.md)
-for a systemd unit, choosing between a reverse proxy and built-in TLS,
-backups and restores, upgrades, and a Docker option.
+## Run it
 
-## Why
-
-Most self-hosted app suites are either a pile of Docker Compose services each
-with their own database, or a SaaS product wearing a self-host badge. ON Suite
-is neither: one Go binary, one SQLite file, no Node, no npm, no JavaScript
-build step, no CGO. `go build ./cmd/onsuite` is the entire build, and the
-result runs the same way on a Raspberry Pi as it does on a laptop.
-
-## Design at a glance
-
-- **One binary, one module.** Every app is compiled in and always enabled;
-  there is no plugin loading and no per-app deployment.
-- **One SQLite file**, opened with `journal_mode=WAL`, `busy_timeout=5000`,
-  `foreign_keys=ON`, and a single connection (`SetMaxOpenConns(1)`), which
-  trades write concurrency this deployment will never need for eliminating
-  "database is locked" as a class of bug.
-- **Forward-only migrations**, embedded with `go:embed`, applied in a
-  transaction at startup. Each app owns and numbers its own migrations under
-  its own namespace (`paste:0001`), so apps never coordinate schema changes
-  with each other.
-- **The platform never imports an app, and apps never import each other.**
-  Apps import only `internal/platform/*` and `internal/ui`. An architecture
-  test walks the whole import graph and fails the build if either rule is
-  broken.
-- **Argon2id passwords, invite-only accounts.** No public registration.
-  Passwords are never passed as a CLI flag (visible in `ps` and shell
-  history) — `onsuite user add` reads from a terminal with echo disabled, or
-  from stdin for scripted setup.
-- **Sessions with throttled sliding expiry.** A session lives 30 days from
-  last use, renewed at most once a day per session rather than on every
-  request.
-- **A route is private unless it explicitly opts out.** Every app gets a
-  router whose `Handle` requires a signed-in user by default; making a route
-  anonymous means calling `Public`, which is a visible, greppable decision.
-  A wrong password and an unknown username get byte-identical wording and
-  status, so a login attempt can't be used to enumerate accounts.
-- **A strict Content-Security-Policy forbids inline script and style
-  anywhere.** HTMX (vendored, never loaded from a CDN) works fine under it
-  because `hx-*` are HTML attributes, not inline script.
-
-The full rationale for these choices — including what's deliberately left
-out (multi-tenancy, metrics, a job scheduler, full-text search) and why — is
-in the [design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md).
-
-## Repository layout
-
-```
-on-suite/
-├── cmd/onsuite/               # the single binary: command dispatch, serve, backup, export, user add
-├── internal/
-│   ├── apps/
-│   │   ├── notes/             # ON Notes: a hierarchical outliner
-│   │   └── paste/             # ON Paste: snippets, sharing, syntax highlighting
-│   ├── platform/
-│   │   ├── config/            # flags + ONSUITE_* env -> Config
-│   │   ├── db/                # SQLite open/pragmas, migration runner, backup
-│   │   ├── auth/               # Argon2id hashing, users, sessions
-│   │   ├── render/             # template registry, layout composition (imports nothing else)
-│   │   ├── web/                # request context, middleware, CSRF, login/logout, static assets
-│   │   └── app/                # the App interface, default-deny Router, registry
-│   ├── ui/                    # go:embed'd CSS, vendored HTMX, HTML templates (a leaf package)
-│   ├── htmlassert/             # test-only HTML structure assertions
-│   └── arch/                  # one test enforcing the import-boundary rules above
-├── docs/
-│   ├── self-hosting/
-│   │   ├── deploying.md         # running it somewhere real
-│   │   └── onsuite.service      # systemd unit
-│   ├── developers/
-│   │   └── releasing.md        # how to cut a tagged release
-│   ├── images/                 # screenshots used in this README
-│   └── superpowers/
-│       ├── specs/              # the design document
-│       └── plans/              # task-by-task implementation plans
-├── CONTRIBUTING.md             # ground rules for contributing or forking
-├── Dockerfile / .dockerignore  # scratch-based container image, optional
-├── Dockerfile.release          # goreleaser's image: packages a prebuilt binary
-└── .goreleaser.yaml            # cross-compiled release builds, incl. the docker image
-```
-
-Adding an app (ON Reader, ON Flash, or anything else) means writing
-a package under `internal/apps/` that implements the `App` interface and
-adding one line to `registeredApps()` in `cmd/onsuite/main.go` — nothing else
-in the platform changes. See [Contributing](CONTRIBUTING.md) for the rest of
-the ground rules.
-
-## Status
-
-The three planned build phases are complete.
-
-| Plan | Delivers | Status |
-|---|---|---|
-| 1 — Platform core | Config, SQLite + migrations, Argon2id auth, sessions, `onsuite user add` | **Done** |
-| 2 — Web plumbing and app framework | Templates, middleware, CSRF, login, the `App` interface and router | **Done** |
-| 3 — ON Paste and operations | The first real app, backup, TLS, packaging, CI | **Done** |
-
-Work since then is per-app rather than per-phase. ON Notes was built in ten
-small chunks under
-[`docs/superpowers/specs/2026-08-25-on-notes-design.md`](docs/superpowers/specs/2026-08-25-on-notes-design.md) —
-N1 (schema and store) through N10 (polish: the admin dashboard card and
-mouse drag-to-move) — and all ten are done. ON Reader was built in seven
-phases under
-[`docs/superpowers/specs/2026-09-09-on-reader-design.md`](docs/superpowers/specs/2026-09-09-on-reader-design.md) —
-R1 (subscriptions and the three-pane reader) through R7 (reading-stats page,
-admin card, and `onsuite export` participation) — and all seven are done.
-
-See [the roadmap](docs/superpowers/plans/2026-08-18-on-suite-00-roadmap.md)
-for the full task list and the [design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md)
-for the design this project is being built against. Plan-by-plan write-ups
-live under [`docs/superpowers/plans/`](docs/superpowers/plans/).
-
-## Versioning
-
-Releases follow [semver](https://semver.org), pre-1.0 (`0.MINOR.PATCH`):
-major stays `0` until all four apps exist and feel solid, not on a fixed
-schedule. Until then, a new feature and a breaking change both bump minor
-(there's nowhere else for "breaking" to signal while major is pinned at
-`0`); anything else release-worthy bumps patch. See
-[`docs/developers/releasing.md`](docs/developers/releasing.md) for the full
-rule and the tagging steps.
-
-## Testing
+With Docker, start the server and create the first account (it asks for a
+password):
 
 ```bash
-go build ./... && go vet ./... && go test ./... -race
+docker run -d --name onsuite -p 8080:8080 -v onsuite-data:/data ghcr.io/iliafrenkel/on-suite:latest
+docker exec -it onsuite /onsuite user add ilia --admin --data-dir /data
 ```
 
-This is expected to stay green on every commit. Store-layer tests run
-against a real SQLite file in a temp directory rather than a mock or
-`:memory:` database, because the interesting bugs live in the SQL and in WAL
-behaviour that `:memory:` doesn't reproduce.
+Then open <http://localhost:8080/> and sign in. You can invite everyone else
+from **Admin → Manage users**.
+
+Rather not use Docker? Every [release](https://github.com/iliafrenkel/on-suite/releases)
+has a ready-built binary for Linux (including Raspberry Pi), macOS and
+Windows. For a real server — systemd, TLS, backups and upgrades — follow the
+[self-hosting guide](docs/self-hosting/deploying.md).
 
 ## Documentation
 
-| Doc | For |
+| Guide | What's in it |
 |---|---|
-| [Deploying ON Suite](docs/self-hosting/deploying.md) | Running it on a real server: systemd, TLS, backups, upgrades, Docker |
-| [Releasing](docs/developers/releasing.md) | Cutting and verifying a tagged release (maintainers) |
-| [Contributing](CONTRIBUTING.md) | Ground rules for contributing or forking |
-| [Design spec](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md) | The full architecture and rationale |
+| [User guides](docs/user/index.md) | Using each app |
+| [Self-hosting](docs/self-hosting/deploying.md) | Installing, TLS, backups, upgrades, Docker |
+| [Developers](docs/developers/index.md) | Building, architecture, adding an app, testing, releasing |
+| [Contributing](CONTRIBUTING.md) | Ground rules for issues and pull requests |
 
 ## License
 

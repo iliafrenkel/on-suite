@@ -2,6 +2,13 @@ package main
 
 // shots is every screenshot the documentation uses. Each guide task adds its
 // own; keep them grouped by guide and in page order.
+// readerScrollToActive scrolls the article list so the open article sits
+// near the top, two rows down, instead of cut off at the bottom.
+const readerScrollToActive = `
+		const rows = [...document.querySelectorAll('.reader-row')];
+		const i = rows.indexOf(document.querySelector('.reader-row.is-active'));
+		document.querySelector('.reader-list').scrollTop = rows[i - 2].offsetTop - rows[0].offsetTop + 8;`
+
 var shots = []shot{
 	// docs/user/index.md
 	{Name: "docs/user/images/login.png", URL: "/login", Anon: true, Width: 1280, Height: 640},
@@ -35,10 +42,7 @@ var shots = []shot{
 
 	// docs/user/reader.md
 	// Item 10 is already read in the seed, so opening it changes no counts.
-	{Name: "docs/user/images/reader-three-pane.png", URL: "/reader/item/10?scope=all&filter=all", Height: 600, Setup: `
-		const rows = [...document.querySelectorAll('.reader-row')];
-		const i = rows.indexOf(document.querySelector('.reader-row.is-active'));
-		document.querySelector('.reader-list').scrollTop = rows[i - 2].offsetTop - rows[0].offsetTop + 8;`},
+	{Name: "docs/user/images/reader-three-pane.png", URL: "/reader/item/10?scope=all&filter=all", Height: 600, Setup: readerScrollToActive},
 	{Name: "docs/user/images/reader-add-feed.png", URL: "/reader/", Height: 480, Setup: `
 		document.getElementById('add-feed-dialog').showModal();
 		document.getElementById('feed-url').value = 'https://example.org/';
@@ -74,4 +78,18 @@ var shots = []shot{
 	{Name: "docs/user/images/admin-users.png", URL: "/admin/users", Height: 720, Setup: `
 		document.querySelector('tr[data-user="sam"] details.usermgmt-menu').open = true;`},
 	{Name: "docs/user/images/admin-jobs.png", URL: "/admin/jobs", Height: 770},
+
+	// README.md — the hero and one thumbnail per app, light and dark, at the
+	// default 1280×800 (thumbnails show at about half width).
+	// The hero is the dashboard, cropped: it shows all four apps at a glance.
+	{Name: "docs/images/hero-light.png", URL: "/", Height: 440},
+	{Name: "docs/images/hero-dark.png", URL: "/", Height: 440, Theme: "dark"},
+	{Name: "docs/images/app-paste-light.png", URL: "/paste/7"},
+	{Name: "docs/images/app-paste-dark.png", URL: "/paste/7", Theme: "dark"},
+	{Name: "docs/images/app-notes-light.png", URL: "/notes/"},
+	{Name: "docs/images/app-notes-dark.png", URL: "/notes/", Theme: "dark"},
+	{Name: "docs/images/app-reader-light.png", URL: "/reader/item/10?scope=all&filter=all", Setup: readerScrollToActive},
+	{Name: "docs/images/app-reader-dark.png", URL: "/reader/item/10?scope=all&filter=all", Theme: "dark", Setup: readerScrollToActive},
+	{Name: "docs/images/app-flash-light.png", URL: "/flash/2/cards/"},
+	{Name: "docs/images/app-flash-dark.png", URL: "/flash/2/cards/", Theme: "dark"},
 }
