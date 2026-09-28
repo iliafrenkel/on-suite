@@ -96,7 +96,8 @@ summary. [Read the ON Reader guide →](docs/user/reader.md)
 Flash cards for learning things by heart — words for a trip, times tables,
 race circuits. ON Flash shows you a few cards each day: the hard ones come
 back often, the easy ones less and less. You can give a copy of a deck to
-someone else in your household. [Read the ON Flash guide →](docs/user/flash.md)
+someone else in your ON Suite instance. [Read the ON Flash guide
+→](docs/user/flash.md)
 
 ## Run it
 
