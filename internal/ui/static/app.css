@@ -3606,4 +3606,6 @@ input.flash-tag-entry:focus { outline: none; }
 	.help { grid-template-columns: minmax(0, 1fr); gap: var(--s-4); }
 	.help-nav { position: static; }
 	.help-nav ul { flex-direction: row; flex-wrap: wrap; }
+	/* A wide table scrolls inside itself instead of widening the page. */
+	.help-body table { display: block; overflow-x: auto; }
 }

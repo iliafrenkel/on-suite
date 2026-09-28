@@ -22,6 +22,7 @@ func TestHelpPageRendersInTheShellWithASidebar(t *testing.T) {
 	s := newServer(t)
 	d := doc(t, s.get(t, s.user, "/help/notes"))
 	d.MustHave(".shell-bar")
+	d.MustHave(".shell-user") // signed in, the visitor keeps their user menu
 	d.MustHave(".help-nav")
 	cur := d.MustHave(`.help-nav a[aria-current="page"]`)
 	if href, _ := htmlassert.Attr(cur, "href"); href != "/help/notes" {
