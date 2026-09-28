@@ -34,6 +34,7 @@ These are non-negotiable. Most are enforced by a test, not just a convention.
   | `github.com/microcosm-cc/bluemonday` | ON Reader's HTML sanitising |
   | `github.com/go-shiori/go-readability` | ON Reader's full-article extraction — allowed in one file only |
   | `github.com/open-spaced-repetition/go-fsrs/v4` | ON Flash's review scheduling — allowed in one file only |
+  | `github.com/yuin/goldmark` | Markdown rendering for the in-app help at `/help` — allowed only in `internal/platform/help`, enforced by `TestGoldmarkIsContained` |
 
 - **Migrations are forward-only.** There are no down migrations; a mistake
   is fixed by a new migration.
