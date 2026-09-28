@@ -95,12 +95,18 @@ func Load(fsys fs.FS) (*Pages, error) {
 		if err := md.Convert(src, &buf, parser.WithContext(ctx)); err != nil {
 			return nil, fmt.Errorf("help: render %s: %w", e.Slug, err)
 		}
+		if bytes.Contains(buf.Bytes(), []byte("raw HTML omitted")) {
+			return nil, fmt.Errorf("help: %s contains raw HTML; guides must be plain Markdown", e.Slug)
+		}
 		pg := Page{
 			Slug: e.Slug, Label: e.Label, Title: firstHeading(src),
 			HTML: template.HTML(policy.SanitizeBytes(buf.Bytes())), // #nosec G203 -- sanitised
 		}
 		p.list = append(p.list, pg)
 		p.bySlug[e.Slug] = pg
+	}
+	if fi, err := fs.Stat(fsys, "images"); err != nil || !fi.IsDir() {
+		return nil, fmt.Errorf("help: images directory missing: %w", err)
 	}
 	if p.images, err = fs.Sub(fsys, "images"); err != nil {
 		return nil, err
@@ -168,12 +174,16 @@ func rewriteLink(dest string) string {
 	if err != nil || u.Scheme != "" || u.Host != "" {
 		return dest
 	}
+	clean := path.Clean(u.Path)
+	if clean == "." || strings.HasPrefix(clean, "..") {
+		return dest
+	}
 	var out string
 	switch {
-	case strings.HasPrefix(u.Path, "images/"):
-		out = "/help/" + path.Clean(u.Path)
-	case strings.HasSuffix(u.Path, ".md") && !strings.Contains(u.Path, "/"):
-		name := strings.TrimSuffix(u.Path, ".md")
+	case strings.HasPrefix(clean, "images/"):
+		out = "/help/" + clean
+	case strings.HasSuffix(clean, ".md") && !strings.Contains(clean, "/"):
+		name := strings.TrimSuffix(clean, ".md")
 		out = "/help/" + name
 		if name == "index" {
 			out = "/help"

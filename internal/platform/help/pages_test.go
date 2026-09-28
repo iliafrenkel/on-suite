@@ -36,6 +36,10 @@ func TestRewriteLink(t *testing.T) {
 		"/already/absolute":           "/already/absolute",
 		"mailto:x@example.com":        "mailto:x@example.com",
 		"":                            "",
+		"./notes.md":                  "/help/notes",
+		"./images/a.png":              "/help/images/a.png",
+		"images/../../x.png":          "images/../../x.png",
+		"sub/notes.md":                "sub/notes.md",
 	} {
 		if got := rewriteLink(in); got != want {
 			t.Errorf("rewriteLink(%q) = %q, want %q", in, got, want)
@@ -148,9 +152,22 @@ func TestTheRealGuidesLoad(t *testing.T) {
 		if pg.Title == "" || len(pg.HTML) == 0 {
 			t.Errorf("%s: empty title or body", pg.Slug)
 		}
-		if strings.Contains(string(pg.HTML), "raw HTML omitted") {
-			t.Errorf("%s: contains raw HTML goldmark dropped", pg.Slug)
-		}
+	}
+}
+
+func TestLoadRejectsRawHTML(t *testing.T) {
+	fsys := minimalFS()
+	fsys["index.md"] = &fstest.MapFile{Data: []byte("# Welcome\n\nSome <b>x</b> text.\n")}
+	if _, err := Load(fsys); err == nil {
+		t.Error("Load succeeded with raw HTML in a guide; guides must be plain Markdown")
+	}
+}
+
+func TestLoadFailsOnMissingImagesDir(t *testing.T) {
+	fsys := minimalFS()
+	delete(fsys, "images/a.png")
+	if _, err := Load(fsys); err == nil {
+		t.Error("Load succeeded without an images/ directory")
 	}
 }
 
