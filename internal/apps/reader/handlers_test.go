@@ -3028,6 +3028,131 @@ func TestRenameFeedControlUpdatesTheDisplayName(t *testing.T) {
 	}
 }
 
+func TestMoveFeedControlMovesTheFeedToAnotherFolder(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	news, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "News")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tech, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Tech")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", &news.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	doc.MustHave("button.reader-sub-move")
+	selected := doc.MustHave("dialog#move-feed-dialog-" + itoa(sub.ID) + " option[selected]")
+	if got, _ := htmlassert.Attr(selected, "value"); got != itoa(news.ID) {
+		t.Errorf("preselected folder = %q, want the feed's current folder %d", got, news.ID)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/move", url.Values{
+		"folder_id": {itoa(tech.ID)},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("move returned %d: %s", rec.Code, rec.Body.String())
+	}
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, folder := range tree.Folders {
+		if folder.ID == tech.ID && len(folder.Subs) == 1 && folder.Subs[0].ID == sub.ID {
+			return
+		}
+	}
+	t.Errorf("feed is not in Tech after the move: %+v", tree)
+}
+
+func TestMoveFeedToNoFolder(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	news, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "News")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", &news.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/move", url.Values{"folder_id": {""}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("move returned %d: %s", rec.Code, rec.Body.String())
+	}
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 1 || tree.Root[0].ID != sub.ID {
+		t.Errorf("feed is not at the root after moving to no folder: %+v", tree)
+	}
+}
+
+// With no folders there is nowhere to move a feed to, so the menu item would
+// only open a dialog with a single "(no folder)" choice.
+func TestMoveFeedControlIsHiddenWithoutFolders(t *testing.T) {
+	s := newServer(t)
+	if _, err := s.Store.Subscribe(context.Background(), s.Alice.User.ID, "https://example.com/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/reader/")
+	doc.MustNotHave("button.reader-sub-move")
+}
+
+func TestMoveFeedRejectsAMalformedFolder(t *testing.T) {
+	s := newServer(t)
+	sub, err := s.Store.Subscribe(context.Background(), s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(sub.ID)+"/move", url.Values{"folder_id": {"abc"}})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("move with folder_id=abc returned %d, want 400", rec.Code)
+	}
+}
+
+// Neither another user's subscription nor another user's folder can be a
+// side of a move.
+func TestMoveFeedIsScopedToTheOwner(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	bobSub, err := s.Store.Subscribe(ctx, s.Bob.User.ID, "https://example.com/bob.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobFolder, err := s.Store.CreateFolder(ctx, s.Bob.User.ID, "Bob's")
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliceSub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/alice.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		subID int64
+		body  url.Values
+	}{
+		{"bob's subscription", bobSub.ID, url.Values{"folder_id": {""}}},
+		{"into bob's folder", aliceSub.ID, url.Values{"folder_id": {itoa(bobFolder.ID)}}},
+	} {
+		rec := s.PostHX(t, s.Alice, "/reader/sub/"+itoa(tc.subID)+"/move", tc.body)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s: move returned %d, want 404", tc.name, rec.Code)
+		}
+	}
+}
+
 // TestRenameFeedIsScopedToTheOwner guards against renaming (and disclosing
 // the existence of) somebody else's subscription id.
 func TestRenameFeedIsScopedToTheOwner(t *testing.T) {

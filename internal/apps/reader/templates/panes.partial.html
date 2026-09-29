@@ -244,8 +244,8 @@
 {{end}}
 
 {{/* sub-row is one feed row in the tree: its name/link, unread count, the
-     per-row "..." menu (Feed URL / Refresh feed / Rename… / Unsubscribe), and
-     the rename dialog. Shared by both loops in "tree" above — feeds nested in
+     per-row "..." menu (Feed URL / Refresh feed / Rename… / Move to folder… /
+     Unsubscribe), and the rename and move dialogs. Shared by both loops in "tree" above — feeds nested in
      a folder and feeds at the root render identically, so this used to be
      duplicated verbatim in each. .Sub is the Subscription; .Tree and .List
      are passed through unchanged (no longer reached via $, since they arrive
@@ -274,6 +274,12 @@
       </form>
       <button type="button" class="reader-sub-rename" data-open-dialog="rename-feed-dialog-{{.Sub.ID}}"
               aria-label="Rename {{.Sub.DisplayName}}">Rename&hellip;</button>
+      {{/* Only once a folder exists: with none, the dialog could offer
+           nothing but "(no folder)", where the feed already is (#420). */}}
+      {{if .Tree.Folders}}
+      <button type="button" class="reader-sub-move" data-open-dialog="move-feed-dialog-{{.Sub.ID}}"
+              aria-label="Move {{.Sub.DisplayName}} to another folder">Move to folder&hellip;</button>
+      {{end}}
       <form method="post" action="/reader/sub/{{.Sub.ID}}/delete">
         {{template "reader-ctx" .List}}
         <button type="submit" class="outline-menu-delete reader-sub-delete"
@@ -297,6 +303,28 @@
       </div>
     </form>
   </dialog>
+  {{if .Tree.Folders}}
+  {{$sub := .Sub}}
+  <dialog id="move-feed-dialog-{{.Sub.ID}}" class="reader-dialog">
+    <button type="button" class="reader-dialog-close" aria-label="Close">{{ticon "close"}}</button>
+    <h2>Move feed</h2>
+    <form method="post" action="/reader/sub/{{.Sub.ID}}/move"
+          hx-post="/reader/sub/{{.Sub.ID}}/move" hx-target="#reader-panes" hx-swap="outerHTML">
+      {{template "reader-ctx" .List}}
+      <label for="move-folder-{{.Sub.ID}}">Folder</label>
+      <select id="move-folder-{{.Sub.ID}}" name="folder_id">
+        <option value=""{{if not .Sub.FolderID}} selected{{end}}>(no folder)</option>
+        {{range .Tree.Folders}}
+          <option value="{{.ID}}"{{if $sub.InFolder .ID}} selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+      <div class="dialog-actions">
+        <button type="submit" class="button">Move</button>
+        <button type="button" class="reader-dialog-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  {{end}}
 </li>
 {{end}}
 
