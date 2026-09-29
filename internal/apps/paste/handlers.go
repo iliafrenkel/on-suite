@@ -129,16 +129,21 @@ func shareURL(s Snippet) string {
 	return "/paste/s/" + s.ShareSlug
 }
 
-// userMessage strips the error's package prefix so the wording reads as a
-// sentence to the person who typed the form.
+// userMessage strips the error's package prefix and ensures the wording
+// reads as a full sentence with a trailing period.
 func userMessage(err error) string {
 	msg := err.Error()
 	for _, prefix := range []string{"paste: invalid snippet: ", "paste: "} {
 		if len(msg) > len(prefix) && msg[:len(prefix)] == prefix {
-			return upperFirst(msg[len(prefix):])
+			msg = msg[len(prefix):]
+			break
 		}
 	}
-	return upperFirst(msg)
+	msg = upperFirst(msg)
+	if msg != "" && !strings.HasSuffix(msg, ".") {
+		msg += "."
+	}
+	return msg
 }
 
 func upperFirst(s string) string {

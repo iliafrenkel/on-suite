@@ -684,6 +684,10 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	flex-direction: column;
 	gap: var(--s-2);
 }
+.paste-detail-header h1,
+.paste-detail-header p {
+	margin: 0;
+}
 
 .paste-toolbar-actions {
 	display: flex;
