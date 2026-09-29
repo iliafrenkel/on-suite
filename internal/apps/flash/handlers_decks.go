@@ -3,6 +3,7 @@ package flash
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -698,6 +699,33 @@ func (a *App) editDeckForm(w http.ResponseWriter, r *http.Request) {
 	}
 	a.renderDeckIndex(w, r, userID, http.StatusOK,
 		a.editDeckDetail(r, d, "", d.Name, d.Description, d.Color, strconv.Itoa(d.NewCardsPerDay), reviewsStr))
+}
+
+// exportDeck downloads one deck as an Import-format JSON file (#426). The
+// filename is generic on purpose, like Notes' notes-export.md: never one
+// derived from the deck's own name.
+func (a *App) exportDeck(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.deckIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	file, err := a.store.DeckExport(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	body, err := json.MarshalIndent(file, "", "  ")
+	if err != nil {
+		a.deps.Errors.Internal(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="flash-deck.json"`)
+	_, _ = w.Write(append(body, '\n'))
 }
 
 // parseDeckSettings turns the edit form's two pace fields into

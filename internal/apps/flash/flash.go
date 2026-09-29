@@ -159,6 +159,9 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /import", a.importDeck)
 	r.HandleFunc("GET /{deckID}", a.deckIndex)
 	r.HandleFunc("GET /edit/{deckID}", a.editDeckForm)
+	// Literal first, like edit/{deckID}: a /{deckID}/export pattern would
+	// overlap /edit/{deckID} on "/edit/export", and the mux panics on that.
+	r.HandleFunc("GET /export/{deckID}", a.exportDeck)
 	r.HandleFunc("POST /{deckID}", a.updateDeck)
 	r.HandleFunc("POST /{deckID}/delete", a.deleteDeck)
 

@@ -306,8 +306,6 @@ go from cards written by an AI chat, or by hand.
 
 ![The Import a deck page, with three numbered steps: Copy the prompt, Ask your AI, and Paste the answer below](images/flash-import.png)
 
-ON Flash doesn't have a way to export your decks yet.
-
 ### With an AI chat
 
 ON Flash has a ready-made prompt: a message that tells an AI exactly how to
@@ -382,6 +380,29 @@ can fix it. For example:
   or muddled. Copy it again, or ask the AI to try again.
 - A message starting with **Card 3:** — something is wrong with that card,
   such as a question and answer card without a back.
+
+## Exporting a deck
+
+To keep a copy of a deck, or give it to someone who uses ON Flash
+elsewhere, open the deck and click **Export** in its toolbar. Your browser
+saves a file called `flash-deck.json`, usually in your Downloads folder.
+
+The file is in the same format **Import** reads. To bring the deck back,
+open the file in a text editor, copy everything in it, and paste it into
+**Import**. If the deck is still in your list, change the name after
+`"name":` first, since two decks can't share a name.
+
+The file has the deck's name, description and cards: fronts and backs,
+notes, tags, and any pictures or sounds added from a web address. It
+doesn't include:
+
+- your review progress, so imported cards start fresh;
+- pictures or sounds you uploaded from your own device, since Import can
+  only fetch them from a web address. The cards themselves are still there.
+
+The admin can also export all your ON Flash decks, with your review
+progress, as part of a single file with the rest of your ON Suite data (the
+[Admin guide](admin.md#exporting-someones-data) explains how).
 
 ## Your stats
 

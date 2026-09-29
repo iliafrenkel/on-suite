@@ -289,7 +289,7 @@ dates, written as `@2026-09-29`. Archived bullets are left out, along with
 everything under them; to include one, [restore it](#archiving) first.
 Folding and sharing aren't included.
 
-The admin can also export your ON Notes, ON Paste and ON Reader data as a
+The admin can also export your ON Notes, ON Paste, ON Reader and ON Flash data as a
 single file for you. Ask them if you'd like a complete copy (the
 [Admin guide](admin.md#exporting-someones-data) explains how).
 

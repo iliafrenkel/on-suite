@@ -188,9 +188,9 @@ onsuite export ilia --data-dir /var/lib/onsuite --out ilia.json
 
 Plain JSON, readable without this software. Shared ON Notes bullets keep
 their share link in the file, so treat the file as private. ON Paste's
-share links aren't included, and neither are ON Flash decks yet
-([#426](https://github.com/iliafrenkel/on-suite/issues/426)); use a
-snapshot if you need a fully restorable copy.
+share links aren't included, and neither are the files uploaded to ON Flash
+cards (cards keep the web address of any picture or sound added from one);
+use a snapshot if you need a fully restorable copy.
 
 ## Checking on it
 
