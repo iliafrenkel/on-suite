@@ -478,6 +478,28 @@ func TestFolderCreateFormAddsAFolder(t *testing.T) {
 	}
 }
 
+// Issue #419: creating a folder with an existing name must not 500.
+func TestFolderCreateFormRejectsDuplicate(t *testing.T) {
+	s := newServer(t)
+
+	// First creation succeeds.
+	rec := s.PostHX(t, s.Alice, "/reader/folder", url.Values{"name": {"Tech"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("initial create folder returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Duplicate creation must not 500, but render a friendly validation message.
+	rec = s.PostHX(t, s.Alice, "/reader/folder", url.Values{"name": {"Tech"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("duplicate create folder returned %d: %s", rec.Code, rec.Body.String())
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	errNotice := doc.MustHave(".notice-error")
+	if got := htmlassert.Text(errNotice); !strings.Contains(got, "You already have a folder with that name.") {
+		t.Errorf("error notice = %q, want 'You already have a folder with that name.'", got)
+	}
+}
+
 // TestFolderDeleteControlRemovesAFolder pins the missing delete-folder
 // control.
 func TestFolderDeleteControlRemovesAFolder(t *testing.T) {

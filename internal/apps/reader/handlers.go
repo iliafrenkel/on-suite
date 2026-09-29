@@ -878,12 +878,17 @@ func (a *App) createFolder(w http.ResponseWriter, r *http.Request) {
 	}
 	lc := formContext(r, 0)
 	if _, err := a.store.CreateFolder(r.Context(), userID, r.FormValue("name")); err != nil {
-		if errors.Is(err, ErrInvalid) {
+		switch {
+		case errors.Is(err, ErrFolderExists):
+			a.renderIndex(w, r, userID, lc, "You already have a folder with that name.")
+			return
+		case errors.Is(err, ErrInvalid):
 			a.renderIndex(w, r, userID, lc, "A folder needs a name.")
 			return
+		default:
+			a.fail(w, r, err)
+			return
 		}
-		a.fail(w, r, err)
-		return
 	}
 	a.renderIndex(w, r, userID, lc, "")
 }
