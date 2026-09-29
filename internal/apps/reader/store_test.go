@@ -238,6 +238,35 @@ func TestDeleteFolderKeepsItsSubscriptions(t *testing.T) {
 	}
 }
 
+func TestCreateFolderDuplicateAndEmpty(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	// Empty name rejected with ErrInvalid.
+	if _, err := f.store.CreateFolder(ctx, f.alice.ID, "   "); !errors.Is(err, reader.ErrInvalid) {
+		t.Errorf("CreateFolder(empty) err = %v, want ErrInvalid", err)
+	}
+
+	// Creating first folder succeeds.
+	if _, err := f.store.CreateFolder(ctx, f.alice.ID, "Tech"); err != nil {
+		t.Fatalf("CreateFolder(Tech): %v", err)
+	}
+
+	// Same name for the same user fails with ErrFolderExists and ErrInvalid.
+	_, err := f.store.CreateFolder(ctx, f.alice.ID, "Tech")
+	if !errors.Is(err, reader.ErrFolderExists) {
+		t.Errorf("CreateFolder duplicate err = %v, want ErrFolderExists", err)
+	}
+	if !errors.Is(err, reader.ErrInvalid) {
+		t.Errorf("CreateFolder duplicate err = %v, want ErrInvalid", err)
+	}
+
+	// Different user can use the same folder name.
+	if _, err := f.store.CreateFolder(ctx, f.bob.ID, "Tech"); err != nil {
+		t.Errorf("CreateFolder for bob with same name failed: %v", err)
+	}
+}
+
 func TestTreeIsScopedToOneUser(t *testing.T) {
 	f := newStoreFixture(t)
 	ctx := context.Background()
