@@ -299,8 +299,11 @@
 		// Space is special-cased: any other key (e.g. ArrowLeft/ArrowRight/E)
 		// must still reach the switch below even while focus sits on the
 		// checkbox, or those shortcuts would stop working after a click.
+		// Only the review card refuses to flip back (see flipReview): once
+		// the answer shows, its grade buttons are live. The card page's
+		// viewer toggles both ways, whether it was clicked or not (#425).
 		if (e.key === " " && e.target.classList && e.target.classList.contains("flash-flip")) {
-			if (e.target.checked) e.preventDefault();
+			if (e.target.checked && e.target.closest("#review-card")) e.preventDefault();
 			return;
 		}
 		if (isTyping(e.target)) return;
