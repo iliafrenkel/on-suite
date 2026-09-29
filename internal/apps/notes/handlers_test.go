@@ -3851,6 +3851,29 @@ func TestZoomedBannerShowsTheShareLinkWhenShared(t *testing.T) {
 	doc.MustHave("[data-copy-link]")
 }
 
+// Share lands the user zoomed into the bullet, whose heading has no bullet
+// menu, so the banner itself must offer Stop sharing (#417). It is a plain
+// form, like the row menu's own Unshare button: unshare redirects to the
+// shared node's page, which only a real navigation can land on.
+func TestZoomedBannerOffersStopSharing(t *testing.T) {
+	s := newServer(t)
+	id := s.seed(t, s.Alice, notes.RootID, "shared")
+	if _, err := s.Store.Share(context.Background(), s.Alice.User.ID, id); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/notes/"+itoa(id))
+	form := doc.MustHave(`.notice form[action="/notes/` + itoa(id) + `/unshare"]`)
+	if _, ok := htmlassert.Attr(form, "hx-post"); ok {
+		t.Error("the Stop sharing form must not be an htmx request")
+	}
+	root := doc.MustHave(`.notice form input[name="root"]`)
+	if got, _ := htmlassert.Attr(root, "value"); got != itoa(id) {
+		t.Errorf("Stop sharing form's root = %q, want %q (land back on this bullet)", got, itoa(id))
+	}
+	doc.MustHave(`.notice form button[type="submit"]`)
+}
+
 func TestZoomedBannerShowsNoShareLinkWhenNotShared(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.Alice, notes.RootID, "not shared")
