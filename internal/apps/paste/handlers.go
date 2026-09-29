@@ -159,7 +159,8 @@ type listItem struct {
 	Preview string
 	// Language is the language pill's label, "" for "Detect automatically"
 	// — too long for a pill, and it says nothing about the snippet itself
-	// (issue #393). The detail pane still shows the full label.
+	// (issue #393). The detail pane and share page show the detected
+	// language (or nothing if undetected; issue #413).
 	Language string
 	// Date is CreatedAt as shortDate renders it. theme.js replaces it with
 	// a short relative form ("5m", "3d") when it is recent enough.
@@ -224,11 +225,12 @@ type indexView struct {
 
 // viewDetail builds the detail pane's view-mode data for one snippet.
 func (a *App) viewDetail(r *http.Request, s Snippet) detailView {
+	hl, lang := HighlightWithLanguage(s.Body, s.Language)
 	return detailView{
 		Mode:      modeView,
 		Snippet:   s,
-		Highlight: Highlight(s.Body, s.Language),
-		Language:  LanguageLabel(s.Language),
+		Highlight: hl,
+		Language:  lang,
 		RawURL:    "/paste/raw/" + strconv.FormatInt(s.ID, 10),
 		ShareURL:  shareURL(s),
 		CSRFToken: web.CSRFToken(r.Context()),
@@ -565,11 +567,12 @@ func (a *App) viewShared(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Robots-Tag", "noindex")
 
+	hl, lang := HighlightWithLanguage(s.Body, s.Language)
 	page := a.deps.Page(r, s.DisplayTitle())
 	page.Data = viewModel{
 		Snippet:   s,
-		Highlight: Highlight(s.Body, s.Language),
-		Language:  LanguageLabel(s.Language),
+		Highlight: hl,
+		Language:  lang,
 		RawURL:    "/paste/s/" + s.ShareSlug + "/raw",
 		Owner:     false,
 	}

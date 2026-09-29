@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"strings"
 	"sync"
 
+	"github.com/alecthomas/chroma/v2"
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
@@ -80,6 +82,83 @@ func LanguageLabel(v string) string {
 	return "Plain text"
 }
 
+// resolveLexer finds the Chroma lexer and the display label for a snippet.
+//
+// If language is non-empty, the user chose it explicitly; it returns that
+// language's lexer and LanguageLabel.
+//
+// If language is empty ("Detect automatically"), it analyses the body.
+// When Chroma detects a language, it maps that lexer to an offered choice's
+// label (e.g. "Shell" for bash) or Chroma's lexer name if not in the list.
+// If no language was detected (or it matched fallback/plaintext), it falls
+// back to lexers.Fallback and returns "" so the template can omit the label
+// (issue #413).
+func resolveLexer(body, language string) (chroma.Lexer, string) {
+	if language != "" {
+		lexer := lexers.Get(language)
+		if lexer == nil {
+			lexer = lexers.Fallback
+		}
+		return lexer, LanguageLabel(language)
+	}
+
+	lexer := lexers.Analyse(body)
+	if lexer == nil || lexer == lexers.Fallback {
+		return lexers.Fallback, ""
+	}
+
+	cfg := lexer.Config()
+	if cfg == nil || cfg.Name == "fallback" || strings.EqualFold(cfg.Name, "plaintext") {
+		return lexers.Fallback, ""
+	}
+
+	// Match against our curated language choices to prefer our label.
+	for _, l := range languageChoices {
+		if l.Value == "" {
+			continue
+		}
+		if strings.EqualFold(cfg.Name, l.Label) || strings.EqualFold(cfg.Name, l.Value) {
+			return lexer, l.Label
+		}
+		for _, alias := range cfg.Aliases {
+			if strings.EqualFold(alias, l.Value) {
+				return lexer, l.Label
+			}
+		}
+	}
+
+	return lexer, cfg.Name
+}
+
+// DisplayLanguage returns the user-facing label for a snippet's language.
+// If language is set explicitly, it returns that language's label.
+// If language is empty ("Detect automatically"), it returns the detected
+// language's display label, or "" if no language could be detected (issue #413).
+func DisplayLanguage(body, language string) string {
+	_, label := resolveLexer(body, language)
+	return label
+}
+
+// HighlightWithLanguage tokenises and highlights body using either the explicit
+// language or the language detected from body, returning both the safe HTML
+// markup and the user-facing language label (or "" if undetected; issue #413).
+func HighlightWithLanguage(body, language string) (template.HTML, string) {
+	lexer, label := resolveLexer(body, language)
+	return formatLexer(lexer, body), label
+}
+
+// Highlight renders body as highlighted HTML.
+//
+// The result is template.HTML, meaning it is inserted without escaping. That is
+// safe because Chroma escapes the source it tokenises — `<b>` in a snippet
+// becomes `&lt;b&gt;`. TestHighlightEscapesHTML guards exactly that, and it is
+// the reason this function is the only place in the suite that returns
+// pre-trusted markup.
+func Highlight(body, language string) template.HTML {
+	html, _ := HighlightWithLanguage(body, language)
+	return html
+}
+
 const (
 	// Chroma style names. Both are needed because the stylesheet carries a
 	// light and a dark variant.
@@ -109,21 +188,7 @@ func htmlFormatter() *chromahtml.Formatter {
 	return formatter
 }
 
-// Highlight renders body as highlighted HTML.
-//
-// The result is template.HTML, meaning it is inserted without escaping. That is
-// safe because Chroma escapes the source it tokenises — `<b>` in a snippet
-// becomes `&lt;b&gt;`. TestHighlightEscapesHTML guards exactly that, and it is
-// the reason this function is the only place in the suite that returns
-// pre-trusted markup.
-func Highlight(body, language string) template.HTML {
-	lexer := lexers.Get(language)
-	if lexer == nil && language == "" {
-		lexer = lexers.Analyse(body)
-	}
-	if lexer == nil {
-		lexer = lexers.Fallback
-	}
+func formatLexer(lexer chroma.Lexer, body string) template.HTML {
 
 	iterator, err := lexer.Tokenise(nil, body)
 	if err != nil {

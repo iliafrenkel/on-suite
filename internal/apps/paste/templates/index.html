@@ -32,7 +32,7 @@
 	<div class="paste-detail-header">
 		<h1>{{.Snippet.DisplayTitle}}</h1>
 		<p class="faint">
-			{{.Language}} · {{.Snippet.LinesLabel}} · saved
+			{{if .Language}}{{.Language}} · {{end}}{{.Snippet.LinesLabel}} · saved
 			<time datetime="{{.Snippet.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{.Snippet.CreatedAt.Format "2 Jan 2006 15:04"}}">{{.Snippet.CreatedAt.Format "2 Jan 2006 15:04"}}</time>
 		</p>
 		<div class="paste-toolbar-actions">
