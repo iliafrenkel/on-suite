@@ -88,10 +88,10 @@ config files are easier to read. The colours follow your light or dark
 theme.
 
 **Detect automatically** is the default: ON Paste looks at your text and
-makes its best guess. The snippet's details still say **Detect
-automatically**. If the colours look wrong, click **Edit** and pick the
-language yourself. For ordinary writing, such as a list or a note, choose
-**Plain text**.
+makes its best guess. The snippet's details show the detected language (or
+leave it off if no language was recognized). If the colours look wrong,
+click **Edit** and pick the language yourself. For ordinary writing, such
+as a list or a note, choose **Plain text**.
 
 The **Language** menu offers:
 

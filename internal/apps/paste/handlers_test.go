@@ -1328,7 +1328,88 @@ func assertOnlyKnownOOBIsOOB(t *testing.T, body string) {
 	}
 }
 
+// Issue #413: When a snippet's language is "Detect automatically" (""),
+// the detail pane and public share page should display the detected language,
+// or nothing if no language was detected, rather than "Detect automatically".
+
+func TestDetailViewShowsDetectedLanguage(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Go code", "", "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n")
+
+	doc := s.Get(t, s.Alice, "/paste/"+itoa(id))
+	header := htmlassert.Text(doc.MustHave(".paste-detail-header p"))
+
+	if strings.Contains(header, "Detect automatically") {
+		t.Errorf("detail header contains 'Detect automatically': %q", header)
+	}
+	if !strings.HasPrefix(header, "Go · ") {
+		t.Errorf("detail header = %q, want it to start with 'Go · '", header)
+	}
+}
+
+func TestDetailViewHidesLanguageWhenUndetected(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Grocery list", "", "Milk\nEggs\nBread\n")
+
+	doc := s.Get(t, s.Alice, "/paste/"+itoa(id))
+	header := htmlassert.Text(doc.MustHave(".paste-detail-header p"))
+
+	if strings.Contains(header, "Detect automatically") {
+		t.Errorf("detail header contains 'Detect automatically': %q", header)
+	}
+	if strings.HasPrefix(header, "· ") {
+		t.Errorf("detail header has leading interpunct: %q", header)
+	}
+	if !strings.HasPrefix(header, "3 lines · saved") {
+		t.Errorf("detail header = %q, want it to start with '3 lines · saved'", header)
+	}
+}
+
+func TestSharedViewShowsDetectedLanguage(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Script", "", "#!/bin/bash\necho hello\n")
+	slug := s.shareAndGetSlug(t, s.Alice, id)
+
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /paste/s/%s = %d", slug, rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	header := htmlassert.Text(doc.MustHave(".snippet-head p"))
+
+	if strings.Contains(header, "Detect automatically") {
+		t.Errorf("shared header contains 'Detect automatically': %q", header)
+	}
+	if !strings.HasPrefix(header, "Shell · ") {
+		t.Errorf("shared header = %q, want it to start with 'Shell · '", header)
+	}
+}
+
+func TestSharedViewHidesLanguageWhenUndetected(t *testing.T) {
+	s := newServer(t)
+	id := s.createSnippet(t, s.Alice, "Notes", "", "Plain text note without code\n")
+	slug := s.shareAndGetSlug(t, s.Alice, id)
+
+	rec := s.Do(t, nil, httptest.NewRequest("GET", "/paste/s/"+slug, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /paste/s/%s = %d", slug, rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	header := htmlassert.Text(doc.MustHave(".snippet-head p"))
+
+	if strings.Contains(header, "Detect automatically") {
+		t.Errorf("shared header contains 'Detect automatically': %q", header)
+	}
+	if strings.HasPrefix(header, "· ") {
+		t.Errorf("shared header has leading interpunct: %q", header)
+	}
+	if !strings.HasPrefix(header, "1 line · shared from ON Paste") {
+		t.Errorf("shared header = %q, want it to start with '1 line · shared from ON Paste'", header)
+	}
+}
+
 func itoa(n int64) string {
+
 	if n == 0 {
 		return "0"
 	}

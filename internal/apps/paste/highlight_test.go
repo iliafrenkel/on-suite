@@ -132,3 +132,62 @@ func TestIsLanguage(t *testing.T) {
 		}
 	}
 }
+
+func TestDisplayLanguage(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		language string
+		want     string
+	}{
+		{
+			name:     "explicit go",
+			body:     "x := 1",
+			language: "go",
+			want:     "Go",
+		},
+		{
+			name:     "explicit plaintext",
+			body:     "package main",
+			language: "plaintext",
+			want:     "Plain text",
+		},
+		{
+			name:     "explicit bash uses curated label",
+			body:     "echo hi",
+			language: "bash",
+			want:     "Shell",
+		},
+		{
+			name:     "auto-detect bash",
+			body:     "#!/bin/bash\necho hello\n",
+			language: "",
+			want:     "Shell",
+		},
+		{
+			name:     "auto-detect go",
+			body:     "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n",
+			language: "",
+			want:     "Go",
+		},
+		{
+			name:     "auto-detect plaintext returns empty",
+			body:     "Just a shopping list:\n- milk\n- eggs\n",
+			language: "",
+			want:     "",
+		},
+		{
+			name:     "auto-detect empty body returns empty",
+			body:     "",
+			language: "",
+			want:     "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := paste.DisplayLanguage(tt.body, tt.language); got != tt.want {
+				t.Errorf("DisplayLanguage(%q, %q) = %q, want %q", tt.body, tt.language, got, tt.want)
+			}
+		})
+	}
+}
