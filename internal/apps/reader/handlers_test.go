@@ -84,8 +84,26 @@ func TestIndexShowsAnEmptyState(t *testing.T) {
 	s := newServer(t)
 
 	doc := s.Get(t, s.Alice, "/reader/")
-	if !strings.Contains(strings.ToLower(doc.Text()), "no feeds") {
-		t.Errorf("empty state does not tell the user what to do:\n%s", doc.Text())
+	p := doc.MustHave(".reader-tree p.empty")
+	text := htmlassert.Text(p)
+	if strings.Contains(text, "above") {
+		t.Errorf("empty state still mentions 'above': %q", text)
+	}
+	if !strings.Contains(text, "Add feed") || !strings.Contains(text, "···") {
+		t.Errorf("empty state does not guide the user to the ··· menu and Add feed: %q", text)
+	}
+}
+
+func TestShortcutsDialogListsAllSupportedKeys(t *testing.T) {
+	s := newServer(t)
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	dialog := doc.MustHave("#shortcuts-dialog")
+	text := htmlassert.Text(dialog)
+	for _, want := range []string{"j / k", "o / Enter", "m", "s", "r", "/", "Esc", "← / →"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("shortcuts dialog missing key %q; text = %q", want, text)
+		}
 	}
 }
 

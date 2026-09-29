@@ -198,7 +198,7 @@
        still deserves to be shown (and deletable), so the folder/root loops
        below are not gated on Empty the way the hint paragraph is. */}}
   {{if .Tree.Empty}}
-    <p class="empty">No feeds yet. Paste a feed address above to start.</p>
+    <p class="empty">No feeds yet. Click &#8220;···&#8221; in the toolbar and choose &#8220;Add feed…&#8221; to start.</p>
   {{end}}
   {{if .Tree.HiddenAll}}
     <p class="empty">Everything is read. Turn off &#8220;hide read&#8221; in the toolbar to see all your feeds.</p>
@@ -388,6 +388,8 @@
     <dt>s</dt><dd>star</dd>
     <dt>r</dt><dd>refresh feeds</dd>
     <dt>/</dt><dd>search</dd>
+    <dt>Esc</dt><dd>close dialog or menu, leave search</dd>
+    <dt>← / →</dt><dd>resize pane (when divider is focused)</dd>
   </dl>
 </dialog>
 
