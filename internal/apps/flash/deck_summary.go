@@ -239,15 +239,15 @@ func parseNullTime(s sql.NullString) (*time.Time, error) {
 // is nothing useful to say (no cards, or nothing scheduled at all). Only
 // meaningful when s.ReviewNow is 0 and the deck is not snoozed.
 //
-// Days are UTC calendar days, the same day boundary flash_review_counts and
-// the daily limits use (formatDay).
+// Days are the server's local calendar days, the same day boundary
+// flash_review_counts and the daily limits use (formatDay).
 func nextCardsLabel(s DeckSummary, now time.Time) string {
 	switch {
 	case s.CardCount == 0:
 		return ""
 	case s.DueTotal > s.DueToday || s.NewUnseen > s.NewToday:
 		// Cards are waiting but today's limits hold them back; the budgets
-		// reset at the next UTC day.
+		// reset at the next local day.
 		return "Next cards tomorrow"
 	case s.NextDueAt == nil:
 		return ""

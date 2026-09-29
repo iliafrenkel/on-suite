@@ -18,7 +18,7 @@ import (
 // load-bearing: a review stamped by a clock that has since stepped back
 // would otherwise be the first row and zero the walk.
 func (st *Store) Streak(ctx context.Context, userID int64, now time.Time) (int, error) {
-	cursor := now.UTC().Truncate(24 * time.Hour)
+	cursor := startOfDay(now)
 	rows, err := st.db.QueryContext(ctx, `
         SELECT DISTINCT day FROM flash_review_counts
         WHERE user_id = ? AND day <= ? AND (new_count + review_count) > 0
@@ -126,7 +126,7 @@ func (st *Store) DailyReviewCounts(ctx context.Context, userID int64, days int, 
 	if days <= 0 {
 		return nil, nil
 	}
-	end := now.UTC().Truncate(24 * time.Hour)
+	end := startOfDay(now)
 	start := end.AddDate(0, 0, -(days - 1))
 
 	rows, err := st.db.QueryContext(ctx, `

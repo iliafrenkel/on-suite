@@ -7,6 +7,10 @@ import (
 	"io"
 	"os"
 	"strings"
+	// Embeds Go's zone database (~450KB), so TZ works in the scratch Docker
+	// image, which has no /usr/share/zoneinfo. Calendar days follow the local
+	// zone (#424), so without it a container would always count in UTC.
+	_ "time/tzdata"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"

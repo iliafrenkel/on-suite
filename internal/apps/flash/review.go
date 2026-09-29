@@ -9,10 +9,22 @@ import (
 	"time"
 )
 
-// formatDay is flash_review_counts' calendar-day convention: a plain UTC
-// date, coarser than this package's usual db.TimeLayout timestamps, because a
-// daily counter only ever needs to compare "same day or not."
-func formatDay(t time.Time) string { return t.UTC().Format("2006-01-02") }
+// formatDay is flash_review_counts' calendar-day convention: the server's
+// local date (time.Local, set by TZ), coarser than this package's usual
+// db.TimeLayout timestamps, because a daily counter only ever needs to
+// compare "same day or not." Local rather than UTC so limits, streaks and
+// the chart roll over at the household's midnight, not at 00:00 UTC (#424) —
+// the same one-timezone-per-deployment rule ON Notes' due dates follow.
+func formatDay(t time.Time) string { return t.Local().Format("2006-01-02") }
+
+// startOfDay is local midnight at the start of t's formatDay day. Streak and
+// DailyReviewCounts walk days from it with AddDate, which keeps landing on
+// midnight across a DST change; Truncate(24*time.Hour) would not, since it
+// always cuts at UTC midnight.
+func startOfDay(t time.Time) time.Time {
+	y, m, d := t.Local().Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.Local)
+}
 
 // CardState returns cardID's current schedule for userID, and whether it has
 // ever been reviewed. A never-reviewed card returns a fresh cardSchedule
@@ -696,7 +708,7 @@ type ReviewTally struct {
 	Again, Hard, Good, Easy int
 }
 
-// TodayTally sums flash_review_counts for now's UTC day, for one of
+// TodayTally sums flash_review_counts for now's local day, for one of
 // userID's decks or (deckID nil) all of them. It reads the same counters
 // DueQueue's daily limits use, so it survives a reload and needs no
 // per-session state.

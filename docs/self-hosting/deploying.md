@@ -101,6 +101,17 @@ answers ACME challenges and redirects to HTTPS. If port 80 is unavailable, pass
 alone. Both ports are privileged, so the unit needs
 `AmbientCapabilities=CAP_NET_BIND_SERVICE`.
 
+## Time zone
+
+Anything that works in calendar days follows the server's time zone: ON Notes'
+due dates, ON Flash's daily limits, streak and Reviews-per-day chart, and ON
+Reader's daily stats. The day rolls over at the server's midnight, so set the
+server to the household's zone. On a normal Linux host that is the system
+zone (`timedatectl set-timezone Australia/Melbourne`). The `TZ` environment
+variable overrides it, e.g. `Environment=TZ=Australia/Melbourne` in the
+systemd unit. The binary carries its own zone database, so this works on any
+host.
+
 ## Backups
 
 The server snapshots itself every 24 hours by default, keeping 7 snapshots in
@@ -203,6 +214,9 @@ need to build one yourself:
 docker run -d --name onsuite -p 8080:8080 -v onsuite-data:/data ghcr.io/iliafrenkel/on-suite:latest
 docker exec -it onsuite /onsuite user add ilia --admin --data-dir /data
 ```
+
+A container has no system time zone of its own, so it runs in UTC unless you
+pass one with `-e TZ=Australia/Melbourne` (see [Time zone](#time-zone)).
 
 Pin a specific version instead of `latest` by tag, e.g.
 `ghcr.io/iliafrenkel/on-suite:2.0.0` (image tags have no leading `v`). To build the image yourself instead:
