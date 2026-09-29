@@ -117,6 +117,30 @@ to generate, store, or rotate. Pushing the Docker image needs a third:
 `permissions: packages: write`, and the workflow logs in to GHCR with the
 same `GITHUB_TOKEN` — no separate registry credential to manage.
 
+## Cleaning up old releases
+
+[`.github/workflows/cleanup.yml`](../../.github/workflows/cleanup.yml) keeps
+the 10 newest GitHub Releases (by publish date) and the 10 newest Docker
+images (by push date, plus `latest`), and deletes the rest. It runs
+automatically after every successful Release run. **Git tags are never
+deleted**, so an old release can be re-created from its tag by re-running
+the Release workflow on it.
+
+Each image is a multi-arch index with one untagged image per platform and a
+cosign signature (`sha256-<digest>.sig`), so a plain "keep the newest N
+package versions" would break the kept images. The workflow uses
+[`dataaxiom/ghcr-cleanup-action`](https://github.com/dataaxiom/ghcr-cleanup-action),
+which deletes platform images and signatures only together with the image
+they belong to.
+
+To run it by hand, open **Actions → Cleanup → Run workflow**. It's a dry run
+by default: the log lists what it would delete and nothing changes. Untick
+**Only log what would be deleted** for a real run.
+
+If deleting images fails with a permissions error, give the repository admin
+access to the package: **Packages → on-suite → Package settings → Manage
+Actions access**, and set this repository's role to **Admin**.
+
 ## Verifying a release
 
 Anyone downloading a release can confirm it was actually built by this

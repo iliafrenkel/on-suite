@@ -1,0 +1,80 @@
+name: Cleanup
+
+# Keeps the GitHub Releases and the GHCR image down to the newest few. It runs
+# after every successful Release, and by hand from the Actions tab, where it
+# defaults to a dry run that only logs what it would delete.
+#
+# Git tags are never deleted: a release can always be re-created from its tag
+# by re-running Release on it.
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only log what would be deleted
+        type: boolean
+        default: true
+
+permissions: {}
+
+# Two runs racing would try to delete the same releases twice.
+concurrency:
+  group: cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    # A failed or cancelled release must not trim anything.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # delete releases
+      packages: write # delete image versions
+    env:
+      KEEP: 10
+      # Automatic runs are real; a manual run is a dry run unless unticked.
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    steps:
+      - name: Delete all but the newest releases (tags are kept)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # Newest first by publish date; drafts are left alone.
+          old=$(gh release list --limit 1000 --json tagName,publishedAt,isDraft |
+            jq -r --argjson keep "$KEEP" \
+              'map(select(.isDraft | not)) | sort_by(.publishedAt) | reverse | .[$keep:][].tagName')
+          if [ -z "$old" ]; then
+            echo "Nothing to delete: $KEEP or fewer releases."
+            exit 0
+          fi
+          for tag in $old; do
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "Would delete release $tag"
+            else
+              # No --cleanup-tag: the git tag stays.
+              gh release delete "$tag" --yes
+              echo "Deleted release $tag"
+            fi
+          done
+
+      # Each release pushes a multi-arch index, one untagged image per
+      # platform and a cosign signature tag (sha256-<digest>.sig). A plain
+      # "keep the newest N versions" would delete the platform images or
+      # signatures behind a kept tag; this action treats those as children
+      # of the image they belong to and deletes them only with it.
+      - name: Delete all but the newest images
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          package: on-suite
+          keep-n-tagged: ${{ env.KEEP }}
+          # latest always points at the newest release's image.
+          exclude-tags: latest
+          delete-untagged: true
+          # Signatures whose image is already gone.
+          delete-orphaned-images: true
+          validate: true
+          dry-run: ${{ env.DRY_RUN }}
