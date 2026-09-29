@@ -152,7 +152,7 @@ old link stays dead, so only people you give the new link to can read it.
 ## Exporting your snippets
 
 ON Paste doesn't have an export button. The admin can export your ON
-Notes, ON Paste and ON Reader data as a single file for you. Ask them if
+Notes, ON Paste, ON Reader and ON Flash data as a single file for you. Ask them if
 you'd like a copy (the
 [Admin guide](admin.md#exporting-someones-data) explains how).
 

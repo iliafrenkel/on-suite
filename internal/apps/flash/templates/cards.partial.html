@@ -12,6 +12,9 @@
 	<div class="notes-toolbar-actions">
 		<a class="toolbar-btn{{if eq .Active "cards"}} toolbar-btn-active{{end}}" href="/flash/{{.Deck.ID}}/cards/" hx-get="/flash/{{.Deck.ID}}/cards/" hx-target="#deck-detail" hx-push-url="true">{{ticon "cards"}}Cards</a>
 		<a class="toolbar-btn" href="/flash/edit/{{.Deck.ID}}" hx-get="/flash/edit/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "edit"}}Edit</a>
+		{{/* A plain download, no hx-get: the response is a file, not a pane
+		     (#426). */}}
+		<a class="toolbar-btn" href="/flash/export/{{.Deck.ID}}" download>{{ticon "export"}}Export</a>
 		{{with .View}}{{if .ShareRecipients}}
 		<details class="flash-share-menu"{{if .ShareOpen}} open{{end}}>
 			<summary class="toolbar-btn">{{ticon "share"}}Share</summary>
