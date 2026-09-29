@@ -494,7 +494,7 @@ main:has(.reader-panes) { max-width: none; padding: 0;}
 
 label { display: block; margin-bottom: var(--s-1); font-size: var(--fs-sm); color: var(--c-text-dim); }
 
-input[type="text"], input[type="password"], textarea, select {
+input[type="text"], input[type="password"], input[type="url"], textarea, select {
 	width: 100%;
 	padding: var(--s-2);
 	background: var(--c-bg);
@@ -2138,6 +2138,10 @@ kbd {
 
 .reader-dialog h2 {
 	margin-top: 0;
+}
+
+.reader-dialog label:not(:first-of-type) {
+	margin-top: var(--s-3);
 }
 
 .reader-dialog-close {
