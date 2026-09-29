@@ -130,6 +130,13 @@ func (s Subscription) FaviconPath() string {
 	return "/reader/favicon/" + FaviconHash(s.FaviconURL)
 }
 
+// InFolder reports whether the subscription is filed under folderID — the
+// move dialog's cue for which folder to preselect. FolderID is a pointer,
+// which a template's eq cannot compare.
+func (s Subscription) InFolder(folderID int64) bool {
+	return s.FolderID != nil && *s.FolderID == folderID
+}
+
 // DisplayName is the override when set, then the feed's own title, then the
 // URL — so a feed that has never been polled successfully is still nameable.
 func (s Subscription) DisplayName() string {
@@ -421,6 +428,33 @@ func (s *Store) RenameSubscription(ctx context.Context, userID, subID int64, tit
 	n, err := res.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("reader: rename subscription rows: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// MoveSubscription puts a subscription in another folder, or at the root of
+// the tree when folderID is nil (#420). It is the same subscription row
+// afterwards, so its read and starred state come along, unlike unsubscribing
+// and re-adding. The folder must be userID's own as well: folder_id's foreign
+// key only checks that the folder exists, so without the EXISTS a move could
+// file a feed under someone else's folder. Either ownership check failing is
+// ErrNotFound, exactly like a subscription that does not exist.
+func (s *Store) MoveSubscription(ctx context.Context, userID, subID int64, folderID *int64) error {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE reader_subs SET folder_id = ?
+		 WHERE id = ? AND user_id = ?
+		   AND (? IS NULL OR EXISTS (
+		        SELECT 1 FROM reader_folders WHERE id = ? AND user_id = ?))`,
+		folderID, subID, userID, folderID, folderID, userID)
+	if err != nil {
+		return fmt.Errorf("reader: move subscription: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reader: move subscription rows: %w", err)
 	}
 	if n == 0 {
 		return ErrNotFound

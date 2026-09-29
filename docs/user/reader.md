@@ -88,8 +88,11 @@ Folders keep related feeds together, such as "News" or "Hobbies".
 - **To make a folder:** click **···** in the toolbar, choose **New
   folder…**, type a **Folder name** and click **Create folder**.
 - **To put a feed in a folder:** choose the folder when you add the feed.
-  At the moment, ON Reader can't move a feed to a different folder once it's
-  added.
+- **To move a feed to another folder:** point at the feed, click **···**
+  next to its name and choose **Move to folder…**. Pick a **Folder**, or
+  **(no folder)** to take it out of one, and click **Move**. Its read and
+  starred articles stay as they were. The option appears once you have at
+  least one folder.
 - **To fold a folder away:** click its name. Click it again to open it.
 - **To delete a folder:** point at it, click **···** next to its name and
   choose **Delete**. ON Reader asks **Delete the folder “Hobbies”? Its feeds
@@ -111,6 +114,8 @@ Point at a feed and click **···** to open its menu:
 - **Rename…** — give the feed a name you prefer. Type it in **Name** and
   click **Rename**. To go back to the feed's own name, clear the box and
   click **Rename**.
+- **Move to folder…** — put the feed in another folder, or in none. See
+  [Folders](#folders).
 - **Unsubscribe** — stop following the feed. ON Reader asks you to confirm,
   for example **Unsubscribe from “Pit Wall Weekly”?** Click **Confirm**. The
   feed and its articles disappear from your lists, including any articles
