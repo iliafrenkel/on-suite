@@ -3279,6 +3279,40 @@ func TestExportOfASubtree(t *testing.T) {
 	}
 }
 
+// Archived is as good as deleted, and the Markdown format has no archived
+// marker, so an export that kept them would bring them back as ordinary
+// bullets on import (#418). They are left out, subtree and all; the JSON
+// backup (App.Export) still carries them.
+func TestExportLeavesOutArchivedBulletsAndTheirSubtrees(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	parent := s.seed(t, s.Alice, notes.RootID, "parent")
+	s.seed(t, s.Alice, parent, "kept child")
+	archivedChild := s.seed(t, s.Alice, parent, "archived child")
+	s.seed(t, s.Alice, archivedChild, "under archived child")
+	archivedTop := s.seed(t, s.Alice, notes.RootID, "archived top")
+	s.seed(t, s.Alice, archivedTop, "under archived top")
+	s.seed(t, s.Alice, notes.RootID, "last")
+	for _, id := range []int64{archivedChild, archivedTop} {
+		if err := s.Store.SetArchived(ctx, s.Alice.User.ID, id, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, tc := range []struct{ path, want string }{
+		{"/notes/export", "- parent\n  - kept child\n- last\n"},
+		{"/notes/export?root=" + itoa(parent), "- parent\n  - kept child\n"},
+	} {
+		rec := s.Do(t, s.Alice, httptest.NewRequest("GET", tc.path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200", tc.path, rec.Code)
+		}
+		if got := rec.Body.String(); got != tc.want {
+			t.Errorf("GET %s body = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
 func TestExportOnAnotherUsersRootIs404(t *testing.T) {
 	s := newServer(t)
 	id := s.seed(t, s.Bob, notes.RootID, "bob's")

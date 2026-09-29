@@ -284,9 +284,10 @@ simple bullet list format that other apps understand (called Markdown).
   file called `notes-export.md`. Your browser saves it, usually in your
   Downloads folder.
 
-Copies and exports include done and archived bullets. Done bullets end with
-`[x]` and due dates are written as `@2026-09-29`. Folding, sharing and
-archiving aren't included.
+Copies and exports include done bullets, which end with `[x]`, and due
+dates, written as `@2026-09-29`. Archived bullets are left out, along with
+everything under them; to include one, [restore it](#archiving) first.
+Folding and sharing aren't included.
 
 The admin can also export your ON Notes, ON Paste and ON Reader data as a
 single file for you. Ask them if you'd like a complete copy (the
