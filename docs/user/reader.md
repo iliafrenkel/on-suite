@@ -75,6 +75,8 @@ If something goes wrong, a message appears above the panes:
   instead.
 - **That address could not be reached.** — the site didn't answer. Check the
   address, or try again later.
+- **That folder no longer exists.** — the folder you picked was deleted,
+  perhaps in another tab, after you opened the box. Choose another folder.
 
 If someone else in your household already follows the same feed, you only
 see its articles from now on, not the ones that arrived before you added it.
