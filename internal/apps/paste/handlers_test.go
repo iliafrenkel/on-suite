@@ -489,13 +489,14 @@ func TestCreateRejectsBadInput(t *testing.T) {
 	s := newServer(t)
 
 	tests := []struct {
-		name string
-		form url.Values
+		name        string
+		form        url.Values
+		wantMessage string
 	}{
-		{"empty body", url.Values{"title": {"t"}, "language": {"go"}, "body": {""}}},
-		{"whitespace body", url.Values{"title": {"t"}, "language": {"go"}, "body": {"  \n"}}},
-		{"unknown language", url.Values{"title": {"t"}, "language": {"klingon"}, "body": {"x\n"}}},
-		{"oversized title", url.Values{"title": {strings.Repeat("a", paste.MaxTitleRunes+1)}, "language": {"go"}, "body": {"x\n"}}},
+		{"empty body", url.Values{"title": {"t"}, "language": {"go"}, "body": {""}}, "The snippet is empty."},
+		{"whitespace body", url.Values{"title": {"t"}, "language": {"go"}, "body": {"  \n"}}, "The snippet is empty."},
+		{"unknown language", url.Values{"title": {"t"}, "language": {"klingon"}, "body": {"x\n"}}, "That is not a language I know."},
+		{"oversized title", url.Values{"title": {strings.Repeat("a", paste.MaxTitleRunes+1)}, "language": {"go"}, "body": {"x\n"}}, "The title is longer than 120 characters."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -504,7 +505,12 @@ func TestCreateRejectsBadInput(t *testing.T) {
 				t.Fatal("the snippet was created")
 			}
 			doc := htmlassert.Parse(t, rec.Body.String())
-			doc.MustHave(".notice-error")
+			notice := doc.MustHave(".notice-error")
+			if tt.wantMessage != "" {
+				if got := strings.TrimSpace(htmlassert.Text(notice)); got != tt.wantMessage {
+					t.Errorf("notice = %q, want %q", got, tt.wantMessage)
+				}
+			}
 			// The form must come back populated, or the user loses their work.
 			doc.MustHave("textarea[name=body]")
 		})
@@ -1190,7 +1196,10 @@ func TestSaveEditRejectsBadInputAndStaysInEditMode(t *testing.T) {
 		t.Fatal("an empty body was accepted")
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustHave(".notice-error")
+	notice := doc.MustHave(".notice-error")
+	if got := strings.TrimSpace(htmlassert.Text(notice)); got != "The snippet is empty." {
+		t.Errorf("notice = %q, want %q", got, "The snippet is empty.")
+	}
 	doc.MustHave("textarea[name=body]")
 }
 

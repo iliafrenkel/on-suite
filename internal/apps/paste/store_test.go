@@ -391,26 +391,31 @@ func TestDeletingAUserRemovesTheirSnippets(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	tests := []struct {
-		name    string
-		title   string
-		body    string
-		wantErr bool
+		name        string
+		title       string
+		body        string
+		wantErr     bool
+		wantMessage string
 	}{
-		{"ordinary", "hello", "some text\n", false},
-		{"empty title is allowed", "", "some text\n", false},
-		{"empty body", "t", "", true},
-		{"whitespace-only body", "t", "   \n\t\n", true},
-		{"title at the limit", strings.Repeat("a", paste.MaxTitleRunes), "x\n", false},
-		{"title over the limit", strings.Repeat("a", paste.MaxTitleRunes+1), "x\n", true},
-		{"unicode title counted in runes", strings.Repeat("é", paste.MaxTitleRunes), "x\n", false},
-		{"body over the limit", "t", strings.Repeat("x", paste.MaxBodyBytes+1), true},
-		{"invalid utf-8 body", "t", string([]byte{0xff, 0xfe}), true},
+		{"ordinary", "hello", "some text\n", false, ""},
+		{"empty title is allowed", "", "some text\n", false, ""},
+		{"empty body", "t", "", true, "paste: invalid snippet: the snippet is empty"},
+		{"whitespace-only body", "t", "   \n\t\n", true, "paste: invalid snippet: the snippet is empty"},
+		{"title at the limit", strings.Repeat("a", paste.MaxTitleRunes), "x\n", false, ""},
+		{"title over the limit", strings.Repeat("a", paste.MaxTitleRunes+1), "x\n", true, "paste: invalid snippet: the title is longer than 120 characters"},
+		{"unicode title counted in runes", strings.Repeat("é", paste.MaxTitleRunes), "x\n", false, ""},
+		{"body over the limit", "t", strings.Repeat("x", paste.MaxBodyBytes+1), true, "paste: invalid snippet: the snippet is larger than 256 KiB"},
+		{"invalid utf-8 body", "t", string([]byte{0xff, 0xfe}), true, "paste: invalid snippet: the snippet is not valid UTF-8"},
+		{"invalid utf-8 title", string([]byte{0xff, 0xfe}), "x\n", true, "paste: invalid snippet: the title is not valid UTF-8"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := paste.Validate(tt.title, tt.body)
 			if tt.wantErr && !errors.Is(err, paste.ErrInvalid) {
 				t.Errorf("Validate = %v, want ErrInvalid", err)
+			}
+			if tt.wantErr && tt.wantMessage != "" && err.Error() != tt.wantMessage {
+				t.Errorf("Validate = %q, want %q", err.Error(), tt.wantMessage)
 			}
 			if !tt.wantErr && err != nil {
 				t.Errorf("Validate rejected a valid snippet: %v", err)

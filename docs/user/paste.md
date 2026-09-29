@@ -43,9 +43,9 @@ Click **Cancel** instead to leave without saving.
 If something's wrong, a message appears above the form and your text stays
 where it is so you can fix it:
 
-- **The snippet is empty** — the **Snippet** box needs some text.
-- **The title is longer than 120 characters** — shorten the title.
-- **The snippet is larger than 256 KiB** — the text is too big for one
+- **The snippet is empty.** — the **Snippet** box needs some text.
+- **The title is longer than 120 characters.** — shorten the title.
+- **The snippet is larger than 256 KiB.** — the text is too big for one
   snippet. That's a very long document; split it into a few snippets.
 
 ## Finding your snippets
