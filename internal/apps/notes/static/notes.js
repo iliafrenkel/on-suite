@@ -847,6 +847,55 @@
 		});
 	}
 
+	// ---- file import: surface a server-side rejection ----------------------
+	//
+	// POST /notes/import answers a file that is too large or fails
+	// ParseMarkdown with a 400, which swap:false turns into no visible change
+	// at all — the same gap initPasteErrors closes for /paste (issue #416).
+	function showImportError(status) {
+		var outline = document.getElementById("outline");
+		var n = notices();
+		if (!n) return;
+		n.show(outline, "notes-import-error", status === undefined
+			? "You're offline: that couldn't be imported. Try again once you're back online."
+			: status >= 500
+				? "Something went wrong importing that file. Try again."
+				: "Couldn't import that file: it doesn't look like a valid outline, or it's too large.");
+	}
+
+	function clearImportError() {
+		var n = notices();
+		if (n) n.clear("notes-import-error");
+	}
+
+	function initImportErrors() {
+		if (!document.getElementById("outline")) return;
+		document.body.addEventListener("htmx:responseError", function (evt) {
+			if (requestPath(evt).indexOf("/notes/import") === -1) return;
+			showImportError(evt.detail && evt.detail.xhr && evt.detail.xhr.status);
+		});
+		// See initPasteErrors' identical htmx:sendError handler.
+		document.body.addEventListener("htmx:sendError", function (evt) {
+			if (requestPath(evt).indexOf("/notes/import") === -1) return;
+			showImportError(undefined);
+		});
+		// See initPasteErrors' identical afterSwap handler.
+		document.body.addEventListener("htmx:afterSwap", function (evt) {
+			if (evt && evt.detail && evt.detail.target && evt.detail.target.id === "outline") {
+				clearImportError();
+			}
+		});
+		// Browsers fire no change event when the same file is picked twice in
+		// a row, so without this, fixing a rejected file and choosing it again
+		// would silently do nothing. Cleared once the request is over, success
+		// or failure, so htmx has long since read the form.
+		document.body.addEventListener("htmx:afterRequest", function (evt) {
+			if (requestPath(evt).indexOf("/notes/import") === -1) return;
+			var input = document.getElementById("notes-import-file");
+			if (input) input.value = "";
+		});
+	}
+
 	// Marks <html> once JS is confirmed running, so app.css can hide
 	// no-JS-only fallback markup (e.g. the notes-import form's real submit
 	// button — see outline.html and the ".js .notes-import button" rule)
@@ -981,6 +1030,7 @@
 	initPasteErrors();
 	initDragToMove();
 	initMoveErrors();
+	initImportErrors();
 	initImportAutoSubmit();
 	initSaveStatusTracking();
 })();
