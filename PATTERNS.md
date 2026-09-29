@@ -31,8 +31,8 @@ canonical example's own comment, not here.
   call `OnSuite.notices.show`/`.clear` to insert/remove a
   `.notice.notice-error` element, clearing it on the next successful swap
   of the same target. Canonical: `internal/ui/static/htmx-notices.js`,
-  used by `internal/apps/notes/static/notes.js`'s `initPasteErrors` and
-  `initMoveErrors`.
+  used by `internal/apps/notes/static/notes.js`'s `initPasteErrors`,
+  `initMoveErrors` and `initImportErrors`.
 
 - **View-model projection instead of embedding a domain struct** — reach for
   this whenever a struct is rendered somewhere less trusted than where it
