@@ -17,7 +17,8 @@ import (
 // not exclude an archived one, and does not honour the show-completed
 // preference. It is empty for an empty tree and for a root that does not
 // exist or is not userID's: a caller that needs to tell those apart calls
-// ByID.
+// ByID. The JSON backup (App.Export) uses it as is; the Markdown download
+// passes it through withoutArchived first (#418).
 //
 // The recursive descent's owner-matching mirrors Outline's own, for the
 // same reason given there: parent_id is a plain foreign key, not a
@@ -61,6 +62,28 @@ func (st *Store) Export(ctx context.Context, userID, rootID int64) ([]Node, erro
 		return nil, fmt.Errorf("notes: export: %w", err)
 	}
 	return out, nil
+}
+
+// withoutArchived drops every archived node from flat (Store.Export's
+// pre-order, depth-tagged output) along with its whole subtree (#418).
+// Archived is as good as deleted: the Markdown format has no archived
+// marker, so keeping them would bring them back as ordinary bullets on
+// import. Someone who wants one exported restores it first.
+func withoutArchived(flat []Node) []Node {
+	out := make([]Node, 0, len(flat))
+	skipBelow := -1 // depth of the archived node being skipped, or -1
+	for _, n := range flat {
+		if skipBelow >= 0 && n.Depth > skipBelow {
+			continue
+		}
+		skipBelow = -1
+		if n.Archived {
+			skipBelow = n.Depth
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
 }
 
 // ExportMarkdown renders flat (pre-order, depth-tagged) nodes as spec

@@ -888,7 +888,8 @@ func (a *App) restore(w http.ResponseWriter, r *http.Request) {
 }
 
 // export downloads userID's whole tree, or one subtree, as spec §14's
-// Markdown outline format.
+// Markdown outline format, leaving archived bullets out (withoutArchived).
+// Copy as Markdown fetches this same URL.
 func (a *App) export(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -914,7 +915,7 @@ func (a *App) export(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="notes-export.md"`)
-	_, _ = w.Write([]byte(ExportMarkdown(flat)))
+	_, _ = w.Write([]byte(ExportMarkdown(withoutArchived(flat))))
 }
 
 // exportRootFrom parses export's ?root= query parameter: RootID (the
