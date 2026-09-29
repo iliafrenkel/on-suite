@@ -1178,11 +1178,17 @@ func (s *Store) UnreadCounts(ctx context.Context, userID int64) (Counts, error) 
 
 	// Starred is counted separately rather than folded into the grouped query
 	// above, which counts only unread items — a starred article that has been
-	// read still belongs in the Starred node.
+	// read still belongs in the Starred node. It joins through reader_subs
+	// with ItemsForScope's own added_at cutoff so the count and the Starred
+	// list agree: a star row outlives an unsubscribe whenever someone else
+	// still follows the feed, and must stop counting then (#423).
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT count(*)
 		  FROM reader_item_state st
-		 WHERE st.user_id = ? AND st.starred_at IS NOT NULL`,
+		  JOIN reader_items i ON i.id = st.item_id
+		  JOIN reader_subs sub ON sub.feed_id = i.feed_id AND sub.user_id = st.user_id
+		 WHERE st.user_id = ? AND st.starred_at IS NOT NULL
+		   AND i.fetched_at >= sub.added_at`,
 		userID).Scan(&out.Starred); err != nil {
 		return Counts{}, fmt.Errorf("reader: starred count: %w", err)
 	}

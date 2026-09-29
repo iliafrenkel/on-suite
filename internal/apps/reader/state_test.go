@@ -346,6 +346,71 @@ func TestUnreadCountsIncludeEmptySubscriptions(t *testing.T) {
 	}
 }
 
+// The Starred count must agree with the Starred list, which is bounded by the
+// user's subscriptions. Unsubscribing from a feed somebody else still follows
+// keeps the feed, its items and the user's star rows, so a count that only
+// looks at star rows kept counting articles the list no longer shows (#423).
+func TestStarredCountMatchesTheStarredListAfterUnsubscribe(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	aliceSub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Subscribe(ctx, f.bob.ID, "https://example.com/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := f.store.SaveItems(ctx, aliceSub.FeedID, []reader.ParsedItem{
+		{GUID: "a", Title: "A", PublishedAt: now.Add(-2 * time.Hour)},
+		{GUID: "b", Title: "B", PublishedAt: now.Add(-time.Hour)},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeFeed, aliceSub.ID, reader.FilterAll, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if err := f.store.SetStarred(ctx, f.alice.ID, it.ID, true, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	assertStarredAgrees := func(step string, want int) {
+		t.Helper()
+		counts, err := f.store.UnreadCounts(ctx, f.alice.ID)
+		if err != nil {
+			t.Fatalf("%s: UnreadCounts: %v", step, err)
+		}
+		listed, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeStarred, 0, reader.FilterAll, "", 50)
+		if err != nil {
+			t.Fatalf("%s: ItemsForScope: %v", step, err)
+		}
+		if counts.Starred != len(listed) {
+			t.Errorf("%s: Starred count = %d but the Starred list shows %d", step, counts.Starred, len(listed))
+		}
+		if want >= 0 && counts.Starred != want {
+			t.Errorf("%s: Starred count = %d, want %d", step, counts.Starred, want)
+		}
+	}
+
+	assertStarredAgrees("while subscribed", 2)
+
+	if err := f.store.Unsubscribe(ctx, f.alice.ID, aliceSub.ID); err != nil {
+		t.Fatal(err)
+	}
+	assertStarredAgrees("after unsubscribing", 0)
+
+	// Re-subscribing gives a fresh added_at, and the list hides items fetched
+	// before it; whatever the list shows, the count must say the same.
+	if _, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil); err != nil {
+		t.Fatal(err)
+	}
+	assertStarredAgrees("after re-subscribing", -1)
+}
+
 func TestMarkAllReadIsScopedAndDoesNotTouchOtherUsers(t *testing.T) {
 	f := newStoreFixture(t)
 	ctx := context.Background()
