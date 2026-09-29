@@ -29,3 +29,13 @@ func TestNextCardsLabel(t *testing.T) {
 		}
 	}
 }
+
+// "Tomorrow" is the next local day (#424): 11 pm tonight to 1 am is
+// tomorrow even though, at UTC+10, both instants fall on one UTC date.
+func TestNextCardsLabelUsesTheLocalDay(t *testing.T) {
+	now := time.Date(2026, 9, 25, 23, 0, 0, 0, time.Local)
+	next := time.Date(2026, 9, 26, 1, 0, 0, 0, time.Local)
+	if got := nextCardsLabel(DeckSummary{CardCount: 5, NextDueAt: &next}, now); got != "Next cards tomorrow" {
+		t.Errorf("nextCardsLabel = %q, want %q", got, "Next cards tomorrow")
+	}
+}

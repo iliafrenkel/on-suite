@@ -360,3 +360,60 @@ func TestSubscriptionVisibilityCutoffAgreesAcrossQueries(t *testing.T) {
 		t.Errorf("RecordDailyStats: post-subscription day = (fetched=%d, hasRow=%v), want (1, true)", fetched, hasRow)
 	}
 }
+
+// A stats day is the server's local calendar day, not the UTC one (#424).
+// main_test.go pins time.Local to Australia/Melbourne (UTC+10 in September),
+// where 8:30 am on 25 Sep is still 24 Sep in UTC, so a UTC day would file
+// this morning's activity under yesterday.
+func TestDailyStatsFollowTheLocalDay(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	local := func(day, hour, minute int) time.Time {
+		return time.Date(2026, 9, day, hour, minute, 0, 0, time.Local)
+	}
+	now := local(25, 12, 0)
+
+	f.store.SetClock(func() time.Time { return local(20, 12, 0) })
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.store.SetClock(func() time.Time { return now })
+
+	// Yesterday evening and this morning, local — the same UTC date.
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "yesterday", Title: "Y", PublishedAt: local(24, 19, 0)},
+	}, local(24, 20, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{
+		{GUID: "today", Title: "T", PublishedAt: local(25, 8, 0)},
+	}, local(25, 8, 30)); err != nil {
+		t.Fatal(err)
+	}
+	items, err := f.store.ItemsForScope(ctx, f.alice.ID, reader.ScopeAll, 0, reader.FilterAll, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.SetRead(ctx, f.alice.ID, items[0].ID, true, local(25, 9, 0)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.RecordDailyStats(ctx, now); err != nil {
+		t.Fatalf("RecordDailyStats: %v", err)
+	}
+	days, err := f.store.DailyStats(ctx, f.alice.ID, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := days[len(days)-1]
+	if !today.Day.Equal(local(25, 0, 0)) {
+		t.Errorf("today = %v, want local midnight of 25 Sep", today.Day)
+	}
+	if today.Fetched != 1 {
+		t.Errorf("Fetched = %d, want 1: only this morning's article arrived today", today.Fetched)
+	}
+	if today.Read != 1 {
+		t.Errorf("Read = %d, want 1: the 9 am read was today", today.Read)
+	}
+}

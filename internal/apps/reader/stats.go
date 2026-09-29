@@ -10,10 +10,21 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
 
-// dayFormat is the key format for reader_daily_stats. Date-only and UTC, so
-// lexical order is chronological order and a day means the same thing in
-// January and July.
+// dayFormat is the key format for reader_daily_stats. Date-only, so lexical
+// order is chronological order. The date is the server's local one
+// (time.Local, set by TZ), so a stats day runs from the household's midnight
+// to the next rather than from 00:00 UTC (#424) — the same rule ON Notes' due
+// dates and ON Flash's daily limits follow.
 const dayFormat = "2006-01-02"
+
+// localDay is the local midnight that starts t's day, and the one that
+// starts the next. AddDate keeps landing on midnight across a DST change;
+// Truncate(24*time.Hour) would not, since it always cuts at UTC midnight.
+func localDay(t time.Time) (start, next time.Time) {
+	y, m, d := t.Local().Date()
+	start = time.Date(y, m, d, 0, 0, 0, 0, time.Local)
+	return start, start.AddDate(0, 0, 1)
+}
 
 // DayStat is one day's numbers for one user.
 type DayStat struct {
@@ -32,7 +43,12 @@ type DayStat struct {
 // articles a later chart would need, which is the entire reason this table
 // exists.
 func (s *Store) RecordDailyStats(ctx context.Context, day time.Time) error {
-	key := day.UTC().Format(dayFormat)
+	start, next := localDay(day)
+	key := start.Format(dayFormat)
+	// Timestamps are stored as fixed-width UTC text (db.FormatTime), so the
+	// local day is a half-open range of them; SQLite's date() would bucket by
+	// the UTC date instead.
+	from, until := formatTime(start), formatTime(next)
 
 	// One statement per user rather than a single grouped INSERT, because the
 	// backlog figure is UnreadCounts' own predicate and duplicating that SQL
@@ -72,14 +88,15 @@ func (s *Store) RecordDailyStats(ctx context.Context, day time.Time) error {
 			SELECT count(*)
 			  FROM reader_items i
 			  JOIN reader_subs sub ON sub.feed_id = i.feed_id AND sub.user_id = ?
-			 WHERE i.fetched_at >= sub.added_at AND date(i.fetched_at) = ?`,
-			userID, key).Scan(&fetched); err != nil {
+			 WHERE i.fetched_at >= sub.added_at
+			   AND i.fetched_at >= ? AND i.fetched_at < ?`,
+			userID, from, until).Scan(&fetched); err != nil {
 			return fmt.Errorf("reader: count fetched for stats: %w", err)
 		}
 		if err := s.db.QueryRowContext(ctx, `
 			SELECT count(*) FROM reader_item_state
-			 WHERE user_id = ? AND read_at IS NOT NULL AND date(read_at) = ?`,
-			userID, key).Scan(&read); err != nil {
+			 WHERE user_id = ? AND read_at >= ? AND read_at < ?`,
+			userID, from, until).Scan(&read); err != nil {
 			return fmt.Errorf("reader: count read for stats: %w", err)
 		}
 
@@ -107,6 +124,12 @@ func (s *Store) RecordDailyStats(ctx context.Context, day time.Time) error {
 // cannot be reconstructed even approximately once retention has removed the
 // read articles, and a plausible-looking wrong number is worse than an absent
 // one.
+//
+// Unlike RecordDailyStats it still buckets by UTC date (SQLite's date()), so a
+// reconstructed day can be off by the zone's offset. It only ever fills days
+// with no measured row, and marks them reconstructed; bucketing by local day
+// here would need SQLite's 'localtime' modifier, which does not see Go's
+// embedded zone database, or every timestamp pulled into Go (#424).
 func (s *Store) BackfillDailyStats(ctx context.Context) (int, error) {
 	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO reader_daily_stats (day, user_id, fetched, read, backlog, reconstructed)
@@ -147,7 +170,7 @@ func (s *Store) DailyStats(ctx context.Context, userID int64, days int) ([]DaySt
 	if days <= 0 {
 		return nil, nil
 	}
-	end := s.now().Truncate(24 * time.Hour)
+	end, _ := localDay(s.now())
 	start := end.AddDate(0, 0, -(days - 1))
 
 	rows, err := s.db.QueryContext(ctx, `
