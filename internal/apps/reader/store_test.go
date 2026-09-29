@@ -897,3 +897,38 @@ func TestMoveSubscriptionIsScopedToTheOwner(t *testing.T) {
 		t.Errorf("a refused move changed the tree: %+v", tree)
 	}
 }
+
+// folder_id's foreign key only checks that a folder exists, so Subscribe
+// checks it is the subscriber's own, as MoveSubscription does (#439). A
+// folder that is gone and one that is someone else's are the same error,
+// and neither leaves a subscription behind.
+func TestStoreSubscribeRefusesAFolderThatIsNotTheUsers(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	bobFolder, err := f.store.CreateFolder(ctx, f.bob.ID, "Bob's")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone := bobFolder.ID + 100
+
+	for _, tc := range []struct {
+		name     string
+		folderID int64
+	}{
+		{"another user's folder", bobFolder.ID},
+		{"a folder that does not exist", gone},
+	} {
+		id := tc.folderID
+		if _, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", &id); !errors.Is(err, reader.ErrNoSuchFolder) {
+			t.Errorf("%s: Subscribe = %v, want ErrNoSuchFolder", tc.name, err)
+		}
+	}
+	tree, err := f.store.Tree(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 0 || len(tree.Folders) != 0 {
+		t.Errorf("a refused Subscribe left something behind: %+v", tree)
+	}
+}

@@ -224,6 +224,12 @@ var ErrInvalid = errors.New("reader: invalid input")
 // that already exists for that user (issue #419).
 var ErrFolderExists = errors.New("reader: folder already exists")
 
+// ErrNoSuchFolder is returned by Subscribe for a folder that is not one of
+// the subscriber's own, whether it belongs to someone else or does not exist
+// at all — deliberately the same error, so neither case tells a caller
+// whether another user has that folder (issue #439).
+var ErrNoSuchFolder = errors.New("reader: no such folder")
+
 // Subscribe adds a subscription, creating the shared feed row if this is the
 // first subscriber. It is idempotent: subscribing twice returns the existing
 // subscription rather than failing, because the UI's "add feed" box is exactly
@@ -240,6 +246,21 @@ func (s *Store) Subscribe(ctx context.Context, userID int64, rawURL string, fold
 		return Subscription{}, fmt.Errorf("reader: begin subscribe: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// folder_id's foreign key only checks that the folder exists, not whose
+	// it is, so ownership is checked here, before anything is written — the
+	// same rule MoveSubscription applies (#439).
+	if folderID != nil {
+		var owned bool
+		if err := tx.QueryRowContext(ctx,
+			`SELECT EXISTS (SELECT 1 FROM reader_folders WHERE id = ? AND user_id = ?)`,
+			*folderID, userID).Scan(&owned); err != nil {
+			return Subscription{}, fmt.Errorf("reader: check folder: %w", err)
+		}
+		if !owned {
+			return Subscription{}, ErrNoSuchFolder
+		}
+	}
 
 	// A new feed is due immediately, so adding one shows articles on the next
 	// tick rather than in half an hour.

@@ -592,6 +592,46 @@ func TestAddFeedFormHasFolderPicker(t *testing.T) {
 	}
 }
 
+// The folder picker only lists the user's own folders, so a foreign
+// folder_id means a crafted request, and a missing one a folder deleted in
+// another tab while the dialog was open. Both get the same message, which
+// says nothing about whether the folder exists for someone else (#439).
+func TestSubscribeRefusesAFolderThatIsNotTheUsers(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+
+	bobFolder, err := s.Store.CreateFolder(ctx, s.Bob.User.ID, "Bob's")
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(fixture(t, "rss2.xml"))
+	}))
+	defer origin.Close()
+	a.AllowPrivateFetchesForTest()
+
+	for _, folderID := range []int64{bobFolder.ID, bobFolder.ID + 100} {
+		rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{
+			"url":       {origin.URL + "/feed.xml"},
+			"folder_id": {itoa(folderID)},
+		})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("folder %d: subscribe returned %d, want 200 with a message", folderID, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "That folder no longer exists.") {
+			t.Errorf("folder %d: response has no folder message:\n%s", folderID, rec.Body.String())
+		}
+	}
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 0 {
+		t.Errorf("a refused subscribe still added the feed: %+v", tree.Root)
+	}
+}
+
 // TestFailingSubscriptionShowsAMarker pins DoD item 2: a persistently-failing
 // feed (which the poller already backs off correctly, per poll_test.go) must
 // be visible in the tree, not silently invisible.

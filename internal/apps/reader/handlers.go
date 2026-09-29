@@ -644,8 +644,15 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 
 	sub, err := a.store.Subscribe(r.Context(), userID, feedURL, folderParam(r))
 	if err != nil {
-		if errors.Is(err, ErrInvalidURL) {
+		switch {
+		case errors.Is(err, ErrInvalidURL):
 			a.renderIndex(w, r, userID, lc, "That is not a feed address.")
+			return
+		case errors.Is(err, ErrNoSuchFolder):
+			// The picker lists only the user's own folders, so this is one
+			// deleted in another tab since the dialog opened, or a crafted
+			// folder_id; one message covers both without saying which.
+			a.renderIndex(w, r, userID, lc, "That folder no longer exists.")
 			return
 		}
 		a.fail(w, r, err)
