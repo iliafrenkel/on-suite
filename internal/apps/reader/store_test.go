@@ -805,3 +805,95 @@ func TestTreeLoadsFaviconURL(t *testing.T) {
 		t.Errorf("Tree did not load FaviconURL: %+v", tree.Root)
 	}
 }
+
+// Moving a feed keeps the subscription itself, so its read and starred
+// state survive; unsubscribing and re-adding, the only way before #420,
+// threw that away.
+func TestMoveSubscriptionMovesBetweenFoldersAndToTheRoot(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	news, err := f.store.CreateFolder(ctx, f.alice.ID, "News")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tech, err := f.store.CreateFolder(ctx, f.alice.ID, "Tech")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", &news.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	folderOf := func() *int64 {
+		t.Helper()
+		tree, err := f.store.Tree(ctx, f.alice.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, folder := range tree.Folders {
+			for _, s := range folder.Subs {
+				if s.ID == sub.ID {
+					id := folder.ID
+					return &id
+				}
+			}
+		}
+		for _, s := range tree.Root {
+			if s.ID == sub.ID {
+				return nil
+			}
+		}
+		t.Fatal("subscription is missing from the tree")
+		return nil
+	}
+
+	if err := f.store.MoveSubscription(ctx, f.alice.ID, sub.ID, &tech.ID); err != nil {
+		t.Fatalf("MoveSubscription(Tech): %v", err)
+	}
+	if got := folderOf(); got == nil || *got != tech.ID {
+		t.Errorf("after moving to Tech, folder = %v, want %d", got, tech.ID)
+	}
+
+	if err := f.store.MoveSubscription(ctx, f.alice.ID, sub.ID, nil); err != nil {
+		t.Fatalf("MoveSubscription(root): %v", err)
+	}
+	if got := folderOf(); got != nil {
+		t.Errorf("after moving to the root, folder = %d, want none", *got)
+	}
+}
+
+func TestMoveSubscriptionIsScopedToTheOwner(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	aliceFolder, err := f.store.CreateFolder(ctx, f.alice.ID, "Alice's")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobFolder, err := f.store.CreateFolder(ctx, f.bob.ID, "Bob's")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", &aliceFolder.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.MoveSubscription(ctx, f.bob.ID, sub.ID, &bobFolder.ID); !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("MoveSubscription(bob, alice's sub) = %v, want ErrNotFound", err)
+	}
+	// A folder id is as much somebody's property as a subscription id: the
+	// foreign key alone would happily accept Bob's.
+	if err := f.store.MoveSubscription(ctx, f.alice.ID, sub.ID, &bobFolder.ID); !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("MoveSubscription(alice, into bob's folder) = %v, want ErrNotFound", err)
+	}
+	tree, err := f.store.Tree(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Folders) != 1 || len(tree.Folders[0].Subs) != 1 {
+		t.Errorf("a refused move changed the tree: %+v", tree)
+	}
+}

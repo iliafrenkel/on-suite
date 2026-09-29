@@ -871,6 +871,38 @@ func (a *App) renameSub(w http.ResponseWriter, r *http.Request) {
 	a.renderIndex(w, r, userID, lc, "")
 }
 
+// moveSub files a subscription under another folder, or at the root of the
+// tree for an empty folder_id (#420). Unlike folderParam, which subscribe
+// uses and which quietly treats anything unparseable as "no folder", a
+// malformed folder_id is a 400 here: a move that silently landed at the root
+// would look like it had worked. Another user's subscription or folder is a
+// 404, via MoveSubscription's ErrNotFound.
+func (a *App) moveSub(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	subID, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	var folderID *int64
+	if raw := r.FormValue("folder_id"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id <= 0 {
+			a.deps.Errors.Status(w, r, http.StatusBadRequest)
+			return
+		}
+		folderID = &id
+	}
+	lc := formContext(r, 0)
+	if err := a.store.MoveSubscription(r.Context(), userID, subID, folderID); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.renderIndex(w, r, userID, lc, "")
+}
+
 func (a *App) createFolder(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
