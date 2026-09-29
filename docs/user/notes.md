@@ -360,10 +360,10 @@ changes, so a shared shopping list stays up to date as you tick things off.
 
 ### Stopping sharing
 
-Go up one level, or click **All notes**, since the zoomed-in heading you
-land on after sharing has no bullet menu of its own. Then choose
-**Stop sharing** from the bullet's menu. The link stops working
-immediately: anyone who tries it sees **404 — Not found**.
+Click **Stop sharing** next to **Copy link** in the banner above the
+zoomed-in bullet, or choose **Stop sharing** from the bullet's menu one
+level up. The link stops working immediately: anyone who tries it sees
+**404 — Not found**.
 
 If you share the bullet again later, it gets a brand-new link. The old link
 stays dead, so only people you give the new link to can read it.

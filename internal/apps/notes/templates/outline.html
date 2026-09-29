@@ -146,7 +146,19 @@
 {{if .Root.Shared}}
 <div class="notice row">
 	<span>Anyone with this link can read this bullet and its subtree: <a href="{{.ShareURL}}">{{.ShareURL}}</a></span>
-	<button type="button" class="button" data-copy-link="{{.ShareURL}}">Copy link</button>
+	<div class="row">
+		<button type="button" class="button" data-copy-link="{{.ShareURL}}">Copy link</button>
+		{{/* The zoomed heading has no bullet menu, so Stop sharing lives here
+		     too (#417). No hx-post, like the row menu's own Unshare: unshare
+		     redirects to this bullet's page, and only a real navigation lands
+		     there with the banner gone. focus_id is left out (so RootID): there
+		     is no row text to save alongside it. */}}
+		<form method="post" action="/notes/{{.Root.ID}}/unshare">
+			<input type="hidden" name="{{csrfField}}" value="{{.CSRFToken}}">
+			<input type="hidden" name="root" value="{{.Root.ID}}">
+			<button type="submit" class="button">Stop sharing</button>
+		</form>
+	</div>
 </div>
 {{end}}
 <h1>{{.Root.DisplayTitleHTML}}</h1>
