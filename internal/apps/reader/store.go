@@ -172,6 +172,17 @@ func parseTime(s string) time.Time {
 	return t
 }
 
+// isUniqueViolation avoids importing the driver package just to read an error
+// code. Matching on the message is unattractive but keeps this package free
+// of a driver dependency, and the substring is stable in SQLite. Mirrors
+// internal/platform/auth/store.go's own isUniqueViolation; that package
+// cannot be imported here for this alone (apps never import each other, and
+// this is platform-internal), so it is an independent implementation with
+// the same justification.
+func isUniqueViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
 // NormalizeFeedURL trims a feed URL and rejects anything that is not an
 // absolute http or https URL. Normalising here rather than at each call site
 // is what makes "one row per feed URL" actually hold.
@@ -201,6 +212,10 @@ var ErrInvalidURL = errors.New("reader: invalid feed URL")
 // separate from ErrInvalidURL so a handler can put the message on the right
 // form field instead of guessing.
 var ErrInvalid = errors.New("reader: invalid input")
+
+// ErrFolderExists is returned when attempting to create a folder with a name
+// that already exists for that user (issue #419).
+var ErrFolderExists = errors.New("reader: folder already exists")
 
 // Subscribe adds a subscription, creating the shared feed row if this is the
 // first subscriber. It is idempotent: subscribing twice returns the existing
@@ -343,6 +358,9 @@ func (s *Store) CreateFolder(ctx context.Context, userID int64, name string) (Fo
 		VALUES (?, ?, (SELECT coalesce(max(position), 0) + 1 FROM reader_folders WHERE user_id = ?))`,
 		userID, name, userID)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return Folder{}, fmt.Errorf("%w: %w: %q", ErrInvalid, ErrFolderExists, name)
+		}
 		return Folder{}, fmt.Errorf("reader: insert folder: %w", err)
 	}
 	id, err := res.LastInsertId()
