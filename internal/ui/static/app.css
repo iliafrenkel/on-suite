@@ -477,7 +477,11 @@ kbd {
 	text-align: center;
 }
 
-main { padding: var(--s-6) var(--s-5); max-width: var(--content-max); margin: 0 auto; width: 100%; }
+/* min-width: 0 because main is a flex item in .app-shell: the default
+ * min-width: auto stops it shrinking below its content, so one long snippet
+ * line held it at the full 75rem and scrolled the page sideways whenever
+ * the viewport was narrower than that plus the sidebar (#411). */
+main { padding: var(--s-6) var(--s-5); max-width: var(--content-max); margin: 0 auto; width: 100%; min-width: 0; }
 /* Reader's three-pane layout is the one page in the suite that wants edge-to-
  * edge width rather than a comfortable reading measure — the whole point of
  * the resizable layout is that the reading pane gets whatever room the
@@ -833,7 +837,10 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 }
 .snippet-row-active .snippet-title { color: var(--c-accent); }
 
-.paste-back-btn { display: none; }
+/* Doubled with .toolbar-btn so it beats that rule's display: inline-flex,
+ * which comes later in this file (#412); the max-width:640px rule below
+ * uses the same selector to show it again. */
+.toolbar-btn.paste-back-btn { display: none; }
 
 /* ---- Admin --------------------------------------------------------------- */
 
@@ -1870,7 +1877,7 @@ kbd {
 	#paste-detail-open:checked ~ .paste-detail-pane {
 		display: block;
 	}
-	.paste-back-btn {
+	.toolbar-btn.paste-back-btn {
 		display: inline-flex;
 	}
 
