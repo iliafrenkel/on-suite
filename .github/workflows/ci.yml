@@ -14,7 +14,61 @@ permissions:
   contents: read
 
 jobs:
+  # Decides whether the heavy jobs need to run. A PR that only touches
+  # Markdown, docs/ or LICENSE gets the docs job instead; pushes to main
+  # always run everything.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+
+      - id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$BASE_SHA"...HEAD)
+          echo "Changed files:"
+          echo "$changed"
+          # docs/ counts as docs even though it holds Go code (the /help
+          # embed, the links test, the screenshot tools): the docs job's
+          # go test ./docs/... covers all of it.
+          code=$(echo "$changed" | grep -Ev '(\.md$|^docs/|^LICENSE$)' || true)
+          if [ -n "$code" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # The docs-only stand-in for test: docs/user is embedded in the binary and
+  # links_test.go checks every relative link, so docs changes aren't
+  # untested, they just don't need the full suite.
+  docs:
+    needs: changes
+    if: needs.changes.outputs.code == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: test docs
+        run: go test ./docs/... -count=1
+
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,6 +111,8 @@ jobs:
         run: go test ./... -race -count=1
 
   build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -86,6 +142,8 @@ jobs:
         run: go build -trimpath -o /dev/null ./cmd/onsuite
 
   docker:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -93,3 +151,22 @@ jobs:
         run: docker build --build-arg VERSION=ci -t onsuite:ci .
       - name: the image runs
         run: docker run --rm onsuite:ci version
+
+  # The one required status check. Skipped jobs count as passing, so a
+  # docs-only PR goes green without the heavy jobs, while any failure or
+  # cancellation (including in changes itself) turns this red. Requiring
+  # this instead of each job also means adding or renaming a job never
+  # needs a branch-protection change.
+  ci-ok:
+    needs: [changes, docs, test, build, docker]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: all jobs passed or were skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          case " $RESULTS " in
+            *" failure "*|*" cancelled "*) exit 1 ;;
+          esac
