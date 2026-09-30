@@ -22,6 +22,11 @@ Full rationale for every design choice below lives in
 `main` is protected — always work on a branch and open a PR, never commit or
 push directly to `main`.
 
+Agents open PRs but never merge them. Agent sessions run as the
+`iliafrenkel-claude` GitHub account, and a human reviews, approves and
+merges every PR. Don't run `gh pr merge`, enable auto-merge, or approve
+your own PRs.
+
 Before writing new code, check [PATTERNS.md](PATTERNS.md) — an index of
 recurring patterns this codebase already has a deliberate answer for
 (error-surfacing, view-model projection, store test conventions, and more).
