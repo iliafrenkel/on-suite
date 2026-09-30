@@ -184,6 +184,22 @@ notes section a commit lands in — see
 [CONTRIBUTING.md](CONTRIBUTING.md#commit-messages) for the full
 type-to-section table and the `feat`-vs-`refactor` distinction.
 
+## Issues
+
+Follow-ups and bugs are tracked as GitHub issues. Titles start with the area,
+e.g. `reader: Mark all read ignores the active search`. Give every issue
+three labels:
+
+- **Type:** one of `bug`, `feature`, `chore`, `documentation` (add
+  `accessibility` too when it applies).
+- **Priority:** `priority: high` (do next), `priority: medium` (do soon) or
+  `priority: low` (nice to have).
+- **Effort:** `effort: small` (about an hour), `effort: medium` (about a
+  session) or `effort: large` (several sessions).
+
+Use `wontfix` when closing something that won't be done. There are no area
+labels — the title prefix covers that.
+
 ## Constraints (from CONTRIBUTING.md)
 
 - No CGO, ever — every dependency must be pure Go.
