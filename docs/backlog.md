@@ -152,3 +152,4 @@ becomes a higher-stakes security boundary than ON Paste's.
     require signing), so it's a plan-wording issue more than a missed
     requirement: either add a signing step or adjust the project's stated
     claims to match what's actually shipped.
+
