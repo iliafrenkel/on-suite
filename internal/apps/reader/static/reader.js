@@ -173,17 +173,16 @@
 	}
 
 	function syncPaneWidths() {
-		var row = document.getElementById("reader-panes-row");
-		if (!row) return;
+		var root = document.documentElement;
 		if (!DESKTOP_QUERY.matches) {
-			row.style.removeProperty("--reader-tree-w");
-			row.style.removeProperty("--reader-list-w");
+			root.style.removeProperty("--reader-tree-w");
+			root.style.removeProperty("--reader-list-w");
 			return;
 		}
 		var stored = loadPaneWidths();
 		if (!stored) return;
-		row.style.setProperty("--reader-tree-w", clampPx(stored.tree, "tree") + "px");
-		row.style.setProperty("--reader-list-w", clampPx(stored.list, "list") + "px");
+		root.style.setProperty("--reader-tree-w", clampPx(stored.tree, "tree") + "px");
+		root.style.setProperty("--reader-list-w", clampPx(stored.list, "list") + "px");
 	}
 
 	function clampPx(rawPx, key) {
@@ -195,12 +194,11 @@
 	function initResizablePanes() {
 		var row = document.getElementById("reader-panes-row");
 		if (!row) return;
-		syncPaneWidths();
 
 		var dragging = null; // { key: "tree"|"list", startX, startWidth }
 
 		function setWidth(key, px) {
-			row.style.setProperty("--reader-" + key + "-w", clampPx(px, key) + "px");
+			document.documentElement.style.setProperty("--reader-" + key + "-w", clampPx(px, key) + "px");
 		}
 
 		row.querySelectorAll(".pane-gutter").forEach(function (gutter) {
@@ -243,8 +241,6 @@
 		}
 		row.addEventListener("pointerup", endDrag);
 		row.addEventListener("pointercancel", endDrag);
-
-		DESKTOP_QUERY.addEventListener("change", syncPaneWidths);
 	}
 
 	// --- Favicon fallback ------------------------------------------------
@@ -267,23 +263,99 @@
 		img.remove();
 	}, true);
 
-	document.addEventListener("DOMContentLoaded", initResizablePanes);
-	// A panes-wide swap (subscribing, refreshing, deleting, or just picking a
-	// feed or filter) replaces #reader-panes-row outerHTML-style, wiping any
-	// inline custom properties JS had set — without re-running this, the
-	// layout would silently fall back to the CSS defaults on the very next
-	// feed click.
-	//
-	// This has to run on "htmx:afterSettle", not "htmx:afterSwap": htmx's
-	// own settle step reverts "style" (along with class/width/height, see
-	// htmx.config.attributesToSettle) on the swapped element back to
-	// whatever the pre-swap element had, which is nothing — so a width set
-	// during afterSwap survives only until settle finishes a moment later
-	// and silently wipes it. Confirmed live: with this on afterSwap, a
-	// dragged width reappeared for a single frame and then reset the first
-	// time any filter/feed link was clicked.
+	// The widths live on <html>, not on #reader-panes-row: the row is inside
+	// every full panes swap, and a width kept on it was wiped on each one and
+	// only restored once htmx settled, so all three panes visibly snapped to
+	// the CSS defaults and back (issue #453). Nothing swaps <html>, so this
+	// runs once per page load, and so does the media-query listener — it used
+	// to be added again on every swap.
+	document.addEventListener("DOMContentLoaded", function () {
+		syncPaneWidths();
+		DESKTOP_QUERY.addEventListener("change", syncPaneWidths);
+		initResizablePanes();
+	});
+	// A full panes swap (subscribing, refreshing, deleting and the other tree
+	// edits) replaces #reader-panes-row and its gutters, so their drag and
+	// keyboard listeners have to be bound again. The widths themselves live on
+	// <html> and survive the swap. A list-only swap leaves the row alone and
+	// needs none of this.
 	document.addEventListener("htmx:afterSettle", function (e) {
 		if (e.target && e.target.id === "reader-panes") initResizablePanes();
+	});
+
+	// --- Tree sync after a list-only swap --------------------------------
+	//
+	// A list navigation (a feed, All/Starred, a filter, a search, Mark all
+	// read) swaps only #reader-list, so the tree keeps its DOM: collapsed
+	// folders, its scroll position and its favicons all survive (issue #453).
+	// What a full render would have drawn differently in the tree arrives on
+	// the new list as data-*: which list is selected, and, with "hide read"
+	// on, which feeds and folders the server's filtered tree dropped. This
+	// copies that across and decides nothing itself. It can only remove feeds;
+	// one that has to come back is handled by the X-Reader-Tree fallback below.
+	function idList(el, name) {
+		return (el.getAttribute(name) || "").split(" ").filter(Boolean);
+	}
+
+	function removeById(prefix) {
+		return function (id) {
+			var el = document.getElementById(prefix + id);
+			if (el) el.remove();
+		};
+	}
+
+	// The tree's and the dialogs' forms each carry the list on screen in
+	// their reader-ctx hidden fields, so a rename or refresh re-renders the
+	// list the reader is looking at. A list-only swap does not re-render
+	// them, so without this they would still name the list from the last
+	// full render, and renaming a feed after clicking All would land the
+	// panes back on the previous feed. The article pane is skipped: it is
+	// empty after a list swap, and an open article's forms carry their own
+	// context (including "view").
+	var CTX_FIELDS = { scope: "data-scope", sub: "data-sub", filter: "data-filter", q: "data-q" };
+
+	function syncTree() {
+		var list = document.getElementById("reader-list");
+		if (!list) return;
+		var scope = list.getAttribute("data-scope");
+		var activeRow = scope === "feed" ? "reader-sub-" + list.getAttribute("data-sub") : "";
+		document.querySelectorAll(".reader-tree .reader-sub").forEach(function (row) {
+			row.classList.toggle("is-active", row.id === activeRow);
+		});
+		document.querySelectorAll(".reader-tree-nav a[data-scope]").forEach(function (link) {
+			link.classList.toggle("toolbar-btn-active", link.getAttribute("data-scope") === scope);
+		});
+		idList(list, "data-hidden-subs").forEach(removeById("reader-sub-"));
+		idList(list, "data-hidden-folders").forEach(removeById("reader-folder-"));
+		var panes = document.getElementById("reader-panes");
+		if (panes) {
+			Object.keys(CTX_FIELDS).forEach(function (name) {
+				var value = list.getAttribute(CTX_FIELDS[name]) || "";
+				panes.querySelectorAll('input[type="hidden"][name="' + name + '"]').forEach(function (input) {
+					if (!input.closest("#reader-article")) input.value = value;
+				});
+			});
+		}
+	}
+
+	// A list-only swap cannot add a feed to the tree, only take one away. So
+	// every list request says which feeds the tree has, and when the server
+	// would show one it lacks (a hidden feed that has unread items again, or a
+	// subscription made elsewhere), it answers with the whole panes instead.
+	document.addEventListener("htmx:configRequest", function (e) {
+		if (!e.detail.target || e.detail.target.id !== "reader-list") return;
+		var ids = [];
+		document.querySelectorAll(".reader-tree .reader-sub").forEach(function (row) {
+			ids.push(row.id.replace("reader-sub-", ""));
+		});
+		e.detail.headers["X-Reader-Tree"] = ids.join(" ");
+	});
+
+	// Read the list back by id rather than off the event: after an outerHTML
+	// swap, the element the event names is not guaranteed to be the one now
+	// in the document.
+	document.addEventListener("htmx:afterSettle", function (e) {
+		if (e.target && e.target.id === "reader-list") syncTree();
 	});
 
 	function press(selector) {
@@ -329,10 +401,11 @@
 		if (link) highlightRow(link);
 	});
 
-	// A new list means new ids: anything prefetched against the old one is
-	// stale, and keeping it would swap the wrong article into the pane.
+	// A new list means new ids, whether it came with the whole panes or alone:
+	// anything prefetched against the old one is stale, and keeping it would
+	// swap the wrong article into the pane.
 	document.addEventListener("htmx:afterSwap", function (e) {
-		if (e.target && e.target.id === "reader-panes") {
+		if (e.target && (e.target.id === "reader-panes" || e.target.id === "reader-list")) {
 			prefetched = Object.create(null);
 		}
 	});

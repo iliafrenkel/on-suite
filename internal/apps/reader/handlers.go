@@ -268,6 +268,10 @@ func (a *App) renderIndexWithNotice(w http.ResponseWriter, r *http.Request, user
 	})
 }
 
+// treeHeader is the request header reader.js sends on list requests, listing
+// the subscription ids its tree currently has (space separated).
+const treeHeader = "X-Reader-Tree"
+
 // renderPanes draws the reader panes according to the listContext and renderOptions.
 func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, lc listContext, opts renderOptions) {
 	ctx := r.Context()
@@ -317,6 +321,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	listTitleStr := listTitle(lc.Scope, sub)
 	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID), search, a.store.now())
 	view.List.HideRead = opts.HideRead
+	view.List.HiddenSubs, view.List.HiddenFolders = view.Tree.HiddenSubs, view.Tree.HiddenFolders
 	// The currently-open article's row is highlighted in the list, the same
 	// way the tree highlights the selected feed — real item ids start at 1,
 	// so 0 (art's zero value when nothing is open) correctly highlights
@@ -341,7 +346,29 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		// Always 200 for a fragment: htmx's default responseHandling only
 		// swaps 2xx/3xx, so a 400 would silently discard the re-rendered form
 		// and its error message.
-		if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "panes-oob", view); err != nil {
+		// A list navigation targets #reader-list and gets only the list and
+		// its out-of-band companions back (issue #453); every other htmx
+		// request still changes the tree and gets the whole panes.
+		//
+		// A list-only swap can take feeds out of the tree (hide read) but
+		// never add one. reader.js therefore names the feeds its tree has in
+		// treeHeader, and when this render would show one it lacks (a hidden
+		// feed with unread items again, a subscription made elsewhere) the
+		// answer is the whole panes, retargeted at #reader-panes. An absent
+		// header keeps the plain list swap; a present but empty one means the
+		// tree has no feeds at all.
+		block := "panes-oob"
+		if web.HTMXTarget(r) == "reader-list" {
+			block = "list-swap"
+			if have := r.Header.Values(treeHeader); len(have) > 0 && view.Tree.hasSubsBeyond(strings.Fields(strings.Join(have, " "))) {
+				block = "panes-oob"
+				w.Header().Set("HX-Retarget", "#reader-panes")
+				w.Header().Set("HX-Reswap", "outerHTML")
+			} else {
+				view.Article.OOB = true
+			}
+		}
+		if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", block, view); err != nil {
 			a.deps.Errors.Internal(w, r, err)
 		}
 		return

@@ -3211,3 +3211,314 @@ func TestRenameFeedIsScopedToTheOwner(t *testing.T) {
 		t.Errorf("renaming another user's subscription returned %d, want 404", rec.Code)
 	}
 }
+
+// TestReaderPageCarriesTheTargetedSwapHooks pins the ids and data attributes
+// the list-only swap (issue #453) relies on. Every piece "list-swap" updates
+// out of band needs a stable id that is present even when it is empty — an
+// element missing from the page cannot be swapped back in later — and the
+// tree needs ids and data-scope so reader.js can move the highlight without
+// the tree being re-rendered.
+func TestReaderPageCarriesTheTargetedSwapHooks(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Blogs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", &folder.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(sub.ID))
+
+	list := doc.MustHave("#reader-list")
+	if got, _ := htmlassert.Attr(list, "data-scope"); got != "feed" {
+		t.Errorf("#reader-list data-scope = %q, want feed", got)
+	}
+	if got, _ := htmlassert.Attr(list, "data-sub"); got != itoa(sub.ID) {
+		t.Errorf("#reader-list data-sub = %q, want %d", got, sub.ID)
+	}
+	doc.MustHave("#reader-toolbar")
+	if _, ok := htmlassert.Attr(doc.MustHave("#reader-banner"), "hidden"); !ok {
+		t.Error("#reader-banner with no message is not hidden")
+	}
+	if _, ok := htmlassert.Attr(doc.MustHave("#reader-tree-hidden-all"), "hidden"); !ok {
+		t.Error("#reader-tree-hidden-all is not hidden with hide-read off")
+	}
+	row := doc.MustHave("#reader-sub-" + itoa(sub.ID))
+	if got, _ := htmlassert.Attr(row, "class"); !strings.Contains(got, "is-active") {
+		t.Errorf("selected feed row class = %q, want is-active", got)
+	}
+	doc.MustHave("#reader-folder-" + itoa(folder.ID))
+	for _, scope := range []string{"all", "starred"} {
+		doc.MustHave(`.reader-tree-nav a[data-scope="` + scope + `"]`)
+	}
+	if got, _ := htmlassert.Attr(doc.MustHave("#reader-article"), "hx-swap-oob"); got != "" {
+		t.Errorf("full page #reader-article hx-swap-oob = %q, want none", got)
+	}
+}
+
+// TestListCarriesTheFeedsHideReadDropped pins the data reader.js uses to keep
+// a tree it no longer re-renders in step with "hide read" (issue #453): the
+// list names every feed and folder the server's filtered tree dropped.
+func TestListCarriesTheFeedsHideReadDropped(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Blogs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", &folder.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{GUID: "g1", Title: "Only item"}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetRead(ctx, s.Alice.User.ID, items[0].ID, true, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/reader/", nil)
+	req.AddCookie(&http.Cookie{Name: reader.HideReadCookie, Value: "1"})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	list := htmlassert.Parse(t, rec.Body.String()).MustHave("#reader-list")
+	if got, _ := htmlassert.Attr(list, "data-hidden-subs"); got != itoa(sub.ID) {
+		t.Errorf("data-hidden-subs = %q, want %d", got, sub.ID)
+	}
+	if got, _ := htmlassert.Attr(list, "data-hidden-folders"); got != itoa(folder.ID) {
+		t.Errorf("data-hidden-folders = %q, want %d", got, folder.ID)
+	}
+
+	if _, ok := htmlassert.Attr(htmlassert.Parse(t, rec.Body.String()).MustHave("#reader-tree-hidden-all"), "hidden"); ok {
+		t.Error("hide-read with every feed read: #reader-tree-hidden-all is hidden")
+	}
+
+	plainDoc := s.Get(t, s.Alice, "/reader/")
+	if _, ok := htmlassert.Attr(plainDoc.MustHave("#reader-tree-hidden-all"), "hidden"); !ok {
+		t.Error("hide-read off: #reader-tree-hidden-all is not hidden")
+	}
+	plain := plainDoc.MustHave("#reader-list")
+	if got, _ := htmlassert.Attr(plain, "data-hidden-subs"); got != "" {
+		t.Errorf("hide-read off: data-hidden-subs = %q, want empty", got)
+	}
+}
+
+// TestListCarriesItsFilterAndQueryForTheCtxSync pins what reader.js copies into
+// the tree's and dialogs' hidden reader-ctx fields after a list-only swap: the
+// values on #reader-list must equal the list's own fresh reader-ctx.
+func TestListCarriesItsFilterAndQueryForTheCtxSync(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "g1")
+
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(subID)+"?filter=all&q=go")
+	list := doc.MustHave("#reader-list")
+	for _, c := range []struct{ attr, input string }{
+		{"data-scope", "scope"}, {"data-sub", "sub"}, {"data-filter", "filter"}, {"data-q", "q"},
+	} {
+		got, ok := htmlassert.Attr(list, c.attr)
+		if !ok {
+			t.Errorf("#reader-list has no %s", c.attr)
+			continue
+		}
+		in := doc.Query(`.reader-mark-all input[name="` + c.input + `"]`)
+		if in == nil {
+			t.Errorf("mark-all form has no %s input", c.input)
+			continue
+		}
+		if want, _ := htmlassert.Attr(in, "value"); got != want {
+			t.Errorf("%s = %q, but the list's own %s field is %q", c.attr, got, c.input, want)
+		}
+	}
+	if got, _ := htmlassert.Attr(list, "data-filter"); got != "all" {
+		t.Errorf("data-filter = %q, want all", got)
+	}
+	if got, _ := htmlassert.Attr(list, "data-q"); got != "go" {
+		t.Errorf("data-q = %q, want go", got)
+	}
+}
+
+// getHXTarget issues an htmx GET aimed at the given swap target id, the way
+// htmx itself sends it: HX-Target names the element it will swap into.
+func getHXTarget(t *testing.T, s *apptest.Server[*reader.Store], path, target string) *htmlassert.Doc {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("HX-Request", "true")
+	if target != "" {
+		req.Header.Set("HX-Target", target)
+	}
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s (target %q) = %d: %s", path, target, rec.Code, rec.Body.String())
+	}
+	return htmlassert.Parse(t, rec.Body.String())
+}
+
+// TestListTargetSwapsOnlyTheListAndItsCompanions is the core of issue #453:
+// a list navigation must not send the tree back. Replacing the tree reflowed
+// all three panes (the dragged widths were wiped until htmx settled), reopened
+// collapsed folders, reset the tree's scroll and rebuilt every favicon. What
+// does change rides along out of band.
+func TestListTargetSwapsOnlyTheListAndItsCompanions(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "g1")
+
+	doc := getHXTarget(t, s, "/reader/feed/"+itoa(subID), "reader-list")
+
+	doc.MustNotHave("#reader-panes")
+	doc.MustNotHave("#reader-tree")
+	list := doc.MustHave("#reader-list")
+	if got, _ := htmlassert.Attr(list, "hx-swap-oob"); got != "" {
+		t.Errorf("#reader-list hx-swap-oob = %q, want none: it is the main target", got)
+	}
+	for _, id := range []string{
+		"shell-crumb-tail", "reader-toolbar", "reader-banner", "reader-article",
+		"reader-list-open", "reader-article-open", "reader-count-all",
+		"reader-count-sub-" + itoa(subID), "reader-tree-hidden-all",
+	} {
+		if got, _ := htmlassert.Attr(doc.MustHave("#"+id), "hx-swap-oob"); got != "true" {
+			t.Errorf("#%s hx-swap-oob = %q, want true", id, got)
+		}
+	}
+	if _, ok := htmlassert.Attr(doc.MustHave("#reader-list-open"), "checked"); !ok {
+		t.Error("#reader-list-open is not checked: a phone would not drill into the list")
+	}
+	if _, ok := htmlassert.Attr(doc.MustHave("#reader-article-open"), "checked"); ok {
+		t.Error("#reader-article-open is checked for a list with no article open")
+	}
+	if got := htmlassert.Text(doc.MustHave("#reader-count-sub-" + itoa(subID))); got != "1" {
+		t.Errorf("feed count = %q, want 1", got)
+	}
+}
+
+// TestOtherTargetsStillGetTheWholePanes pins that only the list target is
+// narrowed: every other htmx request (tree edits, refresh, hide-read) keeps
+// the full panes response.
+func TestOtherTargetsStillGetTheWholePanes(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "g1")
+
+	for _, target := range []string{"", "reader-panes"} {
+		doc := getHXTarget(t, s, "/reader/feed/"+itoa(subID), target)
+		doc.MustHave("#reader-panes")
+		doc.MustHave("#reader-tree")
+	}
+}
+
+// TestMarkAllReadIntoTheListTarget covers the POST side of the list target:
+// the form sits in the list, so its response is a list swap too, carrying the
+// zeroed counts.
+func TestMarkAllReadIntoTheListTarget(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "a", "b")
+
+	form := url.Values{"scope": {"feed"}, "sub": {itoa(subID)}}
+	form.Set(web.CSRFFormField, s.CSRFToken(t, s.Alice))
+	req := httptest.NewRequest(http.MethodPost, "/reader/read-all", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "reader-list")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /reader/read-all = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustNotHave("#reader-panes")
+	doc.MustHave("#reader-list")
+	if got := htmlassert.Text(doc.MustHave("#reader-count-sub-" + itoa(subID))); got != "" {
+		t.Errorf("feed count after mark-all-read = %q, want empty", got)
+	}
+}
+
+// TestListNavigationControlsTargetTheList pins which controls use the narrow
+// swap. The list navigations do; the tree-editing ones keep targeting the
+// whole panes, because they really do change the tree.
+func TestListNavigationControlsTargetTheList(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "g1")
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(subID))
+
+	var toList []*html.Node
+	toList = append(toList, doc.QueryAll(".reader-filters a")...)
+	toList = append(toList, doc.QueryAll(".reader-tree-nav a")...)
+	toList = append(toList,
+		doc.MustHave("#reader-sub-"+itoa(subID)+" a"),
+		doc.MustHave("#reader-search-input"),
+		doc.MustHave(".reader-mark-all"),
+	)
+	if len(toList) < 8 {
+		t.Fatalf("found %d list-navigation controls, want at least 8", len(toList))
+	}
+	for _, n := range toList {
+		if got, _ := htmlassert.Attr(n, "hx-target"); got != "#reader-list" {
+			t.Errorf("<%s> hx-target = %q, want #reader-list", n.Data, got)
+		}
+	}
+	for _, sel := range []string{".reader-hide-read-form", `form[action="/reader/refresh"]`} {
+		if got, _ := htmlassert.Attr(doc.MustHave(sel), "hx-target"); got != "#reader-panes" {
+			t.Errorf("%s hx-target = %q, want #reader-panes", sel, got)
+		}
+	}
+}
+
+// TestListSwapFallsBackToPanesWhenTheTreeLacksAFeed: a list-only swap cannot
+// add a feed to the tree, so reader.js says which feeds it has and the server
+// answers with the whole panes when it would show one more.
+func TestListSwapFallsBackToPanesWhenTheTreeLacksAFeed(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	a, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/a.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/b.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	get := func(header *string) (*httptest.ResponseRecorder, *htmlassert.Doc) {
+		req := httptest.NewRequest(http.MethodGet, "/reader/", nil)
+		req.Header.Set("HX-Request", "true")
+		req.Header.Set("HX-Target", "reader-list")
+		if header != nil {
+			req.Header.Set("X-Reader-Tree", *header)
+		}
+		rec := s.Do(t, s.Alice, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d", rec.Code)
+		}
+		return rec, htmlassert.Parse(t, rec.Body.String())
+	}
+
+	both := itoa(a.ID) + " " + itoa(b.ID)
+	rec, doc := get(&both)
+	if rec.Header().Get("HX-Retarget") != "" || doc.Query("#reader-panes") != nil {
+		t.Errorf("tree has every feed: want plain list-swap, got retarget %q", rec.Header().Get("HX-Retarget"))
+	}
+
+	one := itoa(a.ID)
+	rec, doc = get(&one)
+	if got := rec.Header().Get("HX-Retarget"); got != "#reader-panes" {
+		t.Errorf("HX-Retarget = %q, want #reader-panes", got)
+	}
+	if got := rec.Header().Get("HX-Reswap"); got != "outerHTML" {
+		t.Errorf("HX-Reswap = %q, want outerHTML", got)
+	}
+	doc.MustHave("#reader-panes")
+	doc.MustHave("#reader-tree")
+
+	rec, doc = get(nil)
+	if rec.Header().Get("HX-Retarget") != "" || doc.Query("#reader-panes") != nil {
+		t.Error("no header: want plain list-swap")
+	}
+}

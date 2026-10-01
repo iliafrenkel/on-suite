@@ -67,3 +67,12 @@ func IsHTMX(r *http.Request) bool {
 func IsHTMXHistoryRestore(r *http.Request) bool {
 	return r.Header.Get("HX-History-Restore-Request") == "true"
 }
+
+// HTMXTarget returns the id of the element an htmx request is going to swap
+// into: htmx sends it as HX-Target whenever that element has an id. It is
+// empty for a plain request or an id-less target. It lets one endpoint answer
+// a narrow target with a narrow fragment instead of re-rendering everything
+// around it.
+func HTMXTarget(r *http.Request) string {
+	return r.Header.Get("HX-Target")
+}
