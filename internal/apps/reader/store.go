@@ -64,19 +64,22 @@ func (s *Store) DB() *sql.DB { return s.db }
 
 // Feed is one globally shared feed row.
 type Feed struct {
-	ID            int64
-	URL           string
-	ResolvedURL   string
-	Title         string
-	SiteURL       string
-	FaviconURL    string
-	ETag          string
-	LastModified  string
-	LastStatus    int
-	LastError     string
-	ErrorCount    int
-	NextFetchAt   time.Time
-	FetchInterval time.Duration // zero means DefaultFetchInterval
+	ID          int64
+	URL         string
+	ResolvedURL string
+	Title       string
+	SiteURL     string
+	FaviconURL  string
+	// FaviconPageChecked is set once the site's homepage has been read for a
+	// favicon (#451) — see Poller.CheckSiteFavicon.
+	FaviconPageChecked bool
+	ETag               string
+	LastModified       string
+	LastStatus         int
+	LastError          string
+	ErrorCount         int
+	NextFetchAt        time.Time
+	FetchInterval      time.Duration // zero means DefaultFetchInterval
 }
 
 // Interval is the effective polling interval for this feed.
@@ -932,7 +935,7 @@ func scanListItems(rows *sql.Rows) ([]Item, error) {
 // DueFeeds returns feeds whose next_fetch_at has passed, oldest first.
 func (s *Store) DueFeeds(ctx context.Context, now time.Time, limit int) ([]Feed, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, url, resolved_url, title, site_url, favicon_url, etag, last_modified,
+		SELECT id, url, resolved_url, title, site_url, favicon_url, favicon_page_checked, etag, last_modified,
 		       last_status, last_error, error_count, next_fetch_at, fetch_interval
 		  FROM reader_feeds
 		 WHERE next_fetch_at <= ?
@@ -948,7 +951,7 @@ func (s *Store) DueFeeds(ctx context.Context, now time.Time, limit int) ([]Feed,
 		var f Feed
 		var next string
 		var interval sql.NullInt64
-		if err := rows.Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL, &f.FaviconURL,
+		if err := rows.Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL, &f.FaviconURL, &f.FaviconPageChecked,
 			&f.ETag, &f.LastModified, &f.LastStatus, &f.LastError, &f.ErrorCount,
 			&next, &interval); err != nil {
 			return nil, fmt.Errorf("reader: scan feed: %w", err)
@@ -973,10 +976,10 @@ func (s *Store) FeedByID(ctx context.Context, feedID int64) (Feed, error) {
 	var next string
 	var interval sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, url, resolved_url, title, site_url, favicon_url, etag, last_modified,
+		SELECT id, url, resolved_url, title, site_url, favicon_url, favicon_page_checked, etag, last_modified,
 		       last_status, last_error, error_count, next_fetch_at, fetch_interval
 		  FROM reader_feeds
-		 WHERE id = ?`, feedID).Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL, &f.FaviconURL,
+		 WHERE id = ?`, feedID).Scan(&f.ID, &f.URL, &f.ResolvedURL, &f.Title, &f.SiteURL, &f.FaviconURL, &f.FaviconPageChecked,
 		&f.ETag, &f.LastModified, &f.LastStatus, &f.LastError, &f.ErrorCount,
 		&next, &interval)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1083,6 +1086,70 @@ func (s *Store) SetFaviconIfEmpty(ctx context.Context, feedID int64, faviconURL 
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("reader: commit set favicon: %w", err)
+	}
+	return nil
+}
+
+// SetPageFavicon records the favicon found by reading the feed's site
+// homepage, and marks the feed as checked (#451). Unlike SetFaviconIfEmpty it
+// replaces an existing URL: a homepage's own <link rel="icon"> is better
+// evidence than the poller's /favicon.ico guess, which some sites serve empty.
+// An empty faviconURL only marks the feed checked and keeps what it had.
+//
+// The replaced URL's reader_feed_icons row is dropped once no feed points at
+// it any more, the same shared-icon rule Unsubscribe follows.
+func (s *Store) SetPageFavicon(ctx context.Context, feedID int64, faviconURL string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("reader: begin set page favicon: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var old string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT favicon_url FROM reader_feeds WHERE id = ?`, feedID).Scan(&old); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("reader: load feed favicon: %w", err)
+	}
+
+	if faviconURL == "" || faviconURL == old {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE reader_feeds SET favicon_page_checked = 1 WHERE id = ?`, feedID); err != nil {
+			return fmt.Errorf("reader: mark favicon page checked: %w", err)
+		}
+		return tx.Commit()
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE reader_feeds SET favicon_url = ?, favicon_page_checked = 1 WHERE id = ?`,
+		faviconURL, feedID); err != nil {
+		return fmt.Errorf("reader: set page favicon url: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO reader_feed_icons (url_hash, src_url) VALUES (?, ?)
+		ON CONFLICT (url_hash) DO NOTHING`,
+		FaviconHash(faviconURL), faviconURL); err != nil {
+		return fmt.Errorf("reader: insert feed icon: %w", err)
+	}
+
+	if old != "" {
+		var stillShared int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT count(*) FROM reader_feeds WHERE favicon_url = ?`, old).Scan(&stillShared); err != nil {
+			return fmt.Errorf("reader: check shared favicon: %w", err)
+		}
+		if stillShared == 0 {
+			if _, err := tx.ExecContext(ctx,
+				`DELETE FROM reader_feed_icons WHERE url_hash = ?`, FaviconHash(old)); err != nil {
+				return fmt.Errorf("reader: delete replaced favicon: %w", err)
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("reader: commit set page favicon: %w", err)
 	}
 	return nil
 }

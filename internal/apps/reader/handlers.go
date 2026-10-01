@@ -675,6 +675,19 @@ func (a *App) subscribe(w http.ResponseWriter, r *http.Request) {
 		a.deps.Log.Info("reader fetch-on-add failed", "feed_id", sub.FeedID, "error", err)
 	}
 
+	// A feed URL pasted directly has no page in hand to find a favicon in,
+	// and the poll above could only guess /favicon.ico — which some sites
+	// serve empty (#451). Now that fetch-on-add knows the site URL, read the
+	// homepage once, under its own deadline rather than what is left of the
+	// fetch's.
+	if faviconURL == "" {
+		iconCtx, cancelIcon := context.WithTimeout(r.Context(), fetchOnAddTimeout)
+		defer cancelIcon()
+		if err := a.poller.CheckSiteFavicon(iconCtx, sub.FeedID); err != nil {
+			a.deps.Log.Info("reader favicon check on add failed", "feed_id", sub.FeedID, "error", err)
+		}
+	}
+
 	// Adding a feed selects it, which is the one case where the new state wins
 	// over the list the form came from.
 	lc.Scope, lc.SubID = ScopeFeed, sub.ID

@@ -2,6 +2,7 @@ package reader
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math"
 	"math/rand/v2"
@@ -186,6 +187,7 @@ func (p *Poller) pollOne(ctx context.Context, f Feed) {
 			NextFetchAt:  NextFetchAt(now, f.Interval(), 0),
 		})
 		p.maybeGuessFavicon(ctx, f, f.SiteURL)
+		p.maybeRepairFavicon(ctx, f, f.SiteURL)
 		return
 	}
 
@@ -230,6 +232,7 @@ func (p *Poller) pollOne(ctx context.Context, f Feed) {
 		siteURL = parsed.SiteURL
 	}
 	p.maybeGuessFavicon(ctx, f, siteURL)
+	p.maybeRepairFavicon(ctx, f, siteURL)
 }
 
 // maybeGuessFavicon fills in a feed's favicon the first time its site URL is
@@ -248,6 +251,63 @@ func (p *Poller) maybeGuessFavicon(ctx context.Context, f Feed, siteURL string) 
 	}
 	if err := p.store.SetFaviconIfEmpty(ctx, f.ID, guess); err != nil {
 		p.log.Error("reader saving favicon guess failed", "feed_id", f.ID, "error", err)
+	}
+}
+
+// CheckSiteFavicon reads a feed's site homepage for its <link rel="icon">,
+// once per feed (#451). The poll-time guess is only "<origin>/favicon.ico",
+// and some sites serve that empty while their homepage declares the real
+// icon. Adding a feed by its feed URL calls this right after fetch-on-add,
+// once the site URL is known. A feed already checked, or with no site URL
+// yet, is left alone; a homepage that cannot be read returns its error and
+// leaves the feed unchecked, so maybeRepairFavicon can still try later.
+func (p *Poller) CheckSiteFavicon(ctx context.Context, feedID int64) error {
+	f, err := p.store.FeedByID(ctx, feedID)
+	if err != nil {
+		return err
+	}
+	if f.FaviconPageChecked || f.SiteURL == "" {
+		return nil
+	}
+	return p.readSiteFavicon(ctx, f.ID, f.SiteURL)
+}
+
+// readSiteFavicon fetches siteURL and saves whatever DiscoverFavicon finds in
+// it — its <link rel="icon">, or the final URL's /favicon.ico — marking the
+// feed checked.
+func (p *Poller) readSiteFavicon(ctx context.Context, feedID int64, siteURL string) error {
+	res, err := p.client.Get(ctx, siteURL, GetOptions{MaxBytes: MaxFeedBytes, Accept: "text/html"})
+	if err != nil {
+		return err
+	}
+	return p.store.SetPageFavicon(ctx, feedID, DiscoverFavicon(res.Body, res.FinalURL))
+}
+
+// maybeRepairFavicon is the one-off fix for a feed stuck on a favicon the
+// proxy has given up on (maxImageFetchAttempts failures) — typically a
+// /favicon.ico guess made before #451, which SetFaviconIfEmpty never lets
+// anything overwrite. It reads the homepage once; a failed read still marks
+// the feed checked, so a broken site is not re-fetched on every poll. f is
+// the feed's state from before this poll, as for maybeGuessFavicon.
+func (p *Poller) maybeRepairFavicon(ctx context.Context, f Feed, siteURL string) {
+	if f.FaviconPageChecked || f.FaviconURL == "" || siteURL == "" {
+		return
+	}
+	icon, err := p.store.FeedIconByHash(ctx, FaviconHash(f.FaviconURL))
+	if err != nil {
+		if !errors.Is(err, ErrNotFound) {
+			p.log.Error("reader loading favicon state failed", "feed_id", f.ID, "error", err)
+		}
+		return
+	}
+	if icon.ErrorCount < maxImageFetchAttempts {
+		return
+	}
+	if err := p.readSiteFavicon(ctx, f.ID, siteURL); err != nil {
+		p.log.Info("reader favicon repair could not read the homepage", "feed_id", f.ID, "site", siteURL, "error", err)
+		if err := p.store.SetPageFavicon(ctx, f.ID, ""); err != nil {
+			p.log.Error("reader marking favicon checked failed", "feed_id", f.ID, "error", err)
+		}
 	}
 }
 
