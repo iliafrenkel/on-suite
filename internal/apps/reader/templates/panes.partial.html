@@ -483,9 +483,12 @@
 {{/* The list is "list-swap"'s main target (issue #453). data-scope/data-sub
      say which list this is, so reader.js can move the tree's highlight to
      match without the tree itself being re-rendered. data-hidden-subs/-folders
-     list what "hide read" filtered out of the tree, for the same reason. */}}
+     list what "hide read" filtered out of the tree, for the same reason.
+     data-filter/data-q complete the list context, so reader.js can bring the
+     hidden reader-ctx fields of the tree and dialogs (not re-rendered by
+     "list-swap") up to date. */}}
 {{define "list"}}
-<section class="reader-list" id="reader-list" aria-label="Articles" data-scope="{{.Scope}}" data-sub="{{.SubID}}" data-hidden-subs="{{range $i, $id := .HiddenSubs}}{{if $i}} {{end}}{{$id}}{{end}}" data-hidden-folders="{{range $i, $id := .HiddenFolders}}{{if $i}} {{end}}{{$id}}{{end}}">
+<section class="reader-list" id="reader-list" aria-label="Articles" data-scope="{{.Scope}}" data-sub="{{.SubID}}" data-filter="{{.Filter}}" data-q="{{.Query}}" data-hidden-subs="{{range $i, $id := .HiddenSubs}}{{if $i}} {{end}}{{$id}}{{end}}" data-hidden-folders="{{range $i, $id := .HiddenFolders}}{{if $i}} {{end}}{{$id}}{{end}}">
   <div class="reader-list-toolbar">
     {{/* The live filter. Mirrors ON Notes' notes-search-box
          (internal/apps/notes/templates/toolbar.partial.html) — copied rather
@@ -512,8 +515,8 @@
          tree's row menus, see PATTERNS.md — whose buttons submit this same
          form with older_than=day|week. Same form, so they carry reader-ctx
          and work with JavaScript off; htmx sends the clicked button's
-         name/value along. The panes re-render on success, which also closes
-         the menu. */}}
+         name/value along. The list re-renders on success, and the menu, which
+         is inside it, closes with it. */}}
     <form class="reader-mark-all" method="post" action="/reader/read-all"
           hx-post="/reader/read-all" hx-target="#reader-list" hx-swap="outerHTML">
       {{template "reader-ctx" .}}

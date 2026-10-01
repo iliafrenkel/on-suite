@@ -291,9 +291,8 @@
 	// What a full render would have drawn differently in the tree arrives on
 	// the new list as data-*: which list is selected, and, with "hide read"
 	// on, which feeds and folders the server's filtered tree dropped. This
-	// copies that across and decides nothing itself. Removing is enough for
-	// hide-read: a feed only comes back through a refresh or a new
-	// subscription, and both re-render the whole tree.
+	// copies that across and decides nothing itself. It can only remove feeds;
+	// one that has to come back is handled by the X-Reader-Tree fallback below.
 	function idList(el, name) {
 		return (el.getAttribute(name) || "").split(" ").filter(Boolean);
 	}
@@ -304,6 +303,16 @@
 			if (el) el.remove();
 		};
 	}
+
+	// The tree's and the dialogs' forms each carry the list on screen in
+	// their reader-ctx hidden fields, so a rename or refresh re-renders the
+	// list the reader is looking at. A list-only swap does not re-render
+	// them, so without this they would still name the list from the last
+	// full render, and renaming a feed after clicking All would land the
+	// panes back on the previous feed. The article pane is skipped: it is
+	// empty after a list swap, and an open article's forms carry their own
+	// context (including "view").
+	var CTX_FIELDS = { scope: "data-scope", sub: "data-sub", filter: "data-filter", q: "data-q" };
 
 	function syncTree() {
 		var list = document.getElementById("reader-list");
@@ -318,7 +327,29 @@
 		});
 		idList(list, "data-hidden-subs").forEach(removeById("reader-sub-"));
 		idList(list, "data-hidden-folders").forEach(removeById("reader-folder-"));
+		var panes = document.getElementById("reader-panes");
+		if (panes) {
+			Object.keys(CTX_FIELDS).forEach(function (name) {
+				var value = list.getAttribute(CTX_FIELDS[name]) || "";
+				panes.querySelectorAll('input[type="hidden"][name="' + name + '"]').forEach(function (input) {
+					if (!input.closest("#reader-article")) input.value = value;
+				});
+			});
+		}
 	}
+
+	// A list-only swap cannot add a feed to the tree, only take one away. So
+	// every list request says which feeds the tree has, and when the server
+	// would show one it lacks (a hidden feed that has unread items again, or a
+	// subscription made elsewhere), it answers with the whole panes instead.
+	document.addEventListener("htmx:configRequest", function (e) {
+		if (!e.detail.target || e.detail.target.id !== "reader-list") return;
+		var ids = [];
+		document.querySelectorAll(".reader-tree .reader-sub").forEach(function (row) {
+			ids.push(row.id.replace("reader-sub-", ""));
+		});
+		e.detail.headers["X-Reader-Tree"] = ids.join(" ");
+	});
 
 	// Read the list back by id rather than off the event: after an outerHTML
 	// swap, the element the event names is not guaranteed to be the one now
@@ -371,8 +402,8 @@
 	});
 
 	// A new list means new ids, whether it came with the whole panes or alone:
-	// anything prefetched against the old one is
-	// stale, and keeping it would swap the wrong article into the pane.
+	// anything prefetched against the old one is stale, and keeping it would
+	// swap the wrong article into the pane.
 	document.addEventListener("htmx:afterSwap", function (e) {
 		if (e.target && (e.target.id === "reader-panes" || e.target.id === "reader-list")) {
 			prefetched = Object.create(null);

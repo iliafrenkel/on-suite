@@ -3300,9 +3300,51 @@ func TestListCarriesTheFeedsHideReadDropped(t *testing.T) {
 		t.Errorf("data-hidden-folders = %q, want %d", got, folder.ID)
 	}
 
-	plain := s.Get(t, s.Alice, "/reader/").MustHave("#reader-list")
+	if _, ok := htmlassert.Attr(htmlassert.Parse(t, rec.Body.String()).MustHave("#reader-tree-hidden-all"), "hidden"); ok {
+		t.Error("hide-read with every feed read: #reader-tree-hidden-all is hidden")
+	}
+
+	plainDoc := s.Get(t, s.Alice, "/reader/")
+	if _, ok := htmlassert.Attr(plainDoc.MustHave("#reader-tree-hidden-all"), "hidden"); !ok {
+		t.Error("hide-read off: #reader-tree-hidden-all is not hidden")
+	}
+	plain := plainDoc.MustHave("#reader-list")
 	if got, _ := htmlassert.Attr(plain, "data-hidden-subs"); got != "" {
 		t.Errorf("hide-read off: data-hidden-subs = %q, want empty", got)
+	}
+}
+
+// TestListCarriesItsFilterAndQueryForTheCtxSync pins what reader.js copies into
+// the tree's and dialogs' hidden reader-ctx fields after a list-only swap: the
+// values on #reader-list must equal the list's own fresh reader-ctx.
+func TestListCarriesItsFilterAndQueryForTheCtxSync(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "g1")
+
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(subID)+"?filter=all&q=go")
+	list := doc.MustHave("#reader-list")
+	for _, c := range []struct{ attr, input string }{
+		{"data-scope", "scope"}, {"data-sub", "sub"}, {"data-filter", "filter"}, {"data-q", "q"},
+	} {
+		got, ok := htmlassert.Attr(list, c.attr)
+		if !ok {
+			t.Errorf("#reader-list has no %s", c.attr)
+			continue
+		}
+		in := doc.Query(`.reader-mark-all input[name="` + c.input + `"]`)
+		if in == nil {
+			t.Errorf("mark-all form has no %s input", c.input)
+			continue
+		}
+		if want, _ := htmlassert.Attr(in, "value"); got != want {
+			t.Errorf("%s = %q, but the list's own %s field is %q", c.attr, got, c.input, want)
+		}
+	}
+	if got, _ := htmlassert.Attr(list, "data-filter"); got != "all" {
+		t.Errorf("data-filter = %q, want all", got)
+	}
+	if got, _ := htmlassert.Attr(list, "data-q"); got != "go" {
+		t.Errorf("data-q = %q, want go", got)
 	}
 }
 
@@ -3427,5 +3469,56 @@ func TestListNavigationControlsTargetTheList(t *testing.T) {
 		if got, _ := htmlassert.Attr(doc.MustHave(sel), "hx-target"); got != "#reader-panes" {
 			t.Errorf("%s hx-target = %q, want #reader-panes", sel, got)
 		}
+	}
+}
+
+// TestListSwapFallsBackToPanesWhenTheTreeLacksAFeed: a list-only swap cannot
+// add a feed to the tree, so reader.js says which feeds it has and the server
+// answers with the whole panes when it would show one more.
+func TestListSwapFallsBackToPanesWhenTheTreeLacksAFeed(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+	a, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/a.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/b.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	get := func(header *string) (*httptest.ResponseRecorder, *htmlassert.Doc) {
+		req := httptest.NewRequest(http.MethodGet, "/reader/", nil)
+		req.Header.Set("HX-Request", "true")
+		req.Header.Set("HX-Target", "reader-list")
+		if header != nil {
+			req.Header.Set("X-Reader-Tree", *header)
+		}
+		rec := s.Do(t, s.Alice, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d", rec.Code)
+		}
+		return rec, htmlassert.Parse(t, rec.Body.String())
+	}
+
+	both := itoa(a.ID) + " " + itoa(b.ID)
+	rec, doc := get(&both)
+	if rec.Header().Get("HX-Retarget") != "" || doc.Query("#reader-panes") != nil {
+		t.Errorf("tree has every feed: want plain list-swap, got retarget %q", rec.Header().Get("HX-Retarget"))
+	}
+
+	one := itoa(a.ID)
+	rec, doc = get(&one)
+	if got := rec.Header().Get("HX-Retarget"); got != "#reader-panes" {
+		t.Errorf("HX-Retarget = %q, want #reader-panes", got)
+	}
+	if got := rec.Header().Get("HX-Reswap"); got != "outerHTML" {
+		t.Errorf("HX-Reswap = %q, want outerHTML", got)
+	}
+	doc.MustHave("#reader-panes")
+	doc.MustHave("#reader-tree")
+
+	rec, doc = get(nil)
+	if rec.Header().Get("HX-Retarget") != "" || doc.Query("#reader-panes") != nil {
+		t.Error("no header: want plain list-swap")
 	}
 }

@@ -132,3 +132,26 @@ func TestViewTreeHideReadFiltersZeroUnreadFeedsAndEmptyFolders(t *testing.T) {
 		}
 	})
 }
+
+func TestTreeViewHasSubsBeyond(t *testing.T) {
+	tree := treeView{
+		Folders: []TreeFolder{{Folder: Folder{ID: 1}, Subs: []Subscription{{ID: 10}, {ID: 11}}}},
+		Root:    []Subscription{{ID: 20}},
+	}
+	for _, c := range []struct {
+		name string
+		tree treeView
+		have []string
+		want bool
+	}{
+		{"all present", tree, []string{"10", "11", "20"}, false},
+		{"one missing in a folder", tree, []string{"10", "20"}, true},
+		{"one missing in root", tree, []string{"10", "11"}, true},
+		{"nothing known", tree, nil, true},
+		{"empty tree", treeView{}, nil, false},
+	} {
+		if got := c.tree.hasSubsBeyond(c.have); got != c.want {
+			t.Errorf("%s: hasSubsBeyond = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

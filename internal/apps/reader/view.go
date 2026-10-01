@@ -65,7 +65,7 @@ type treeView struct {
 	// one it is rather than just going blank.
 	HiddenAll bool
 	// HiddenSubs and HiddenFolders are the subscription and folder ids
-	// hideRead filtered out of this tree, nil when hideRead is off. A full
+	// hideRead filtered out of this tree, empty when hideRead is off or nothing was dropped. A full
 	// render never needs them, since it simply leaves those rows out. A
 	// list-only swap does: it does not re-render the tree, so the browser
 	// still has rows this render would have dropped, and reader.js removes
@@ -526,4 +526,29 @@ func buildStatsView(days []DayStat, feeds []FeedStat, counts Counts, now time.Ti
 		}
 	}
 	return out
+}
+
+// hasSubsBeyond reports whether the tree shows a subscription whose id is not
+// in have, the ids the browser's tree already has. A list-only swap can take
+// feeds out of that tree but never add one, so this is the cue to send the
+// whole panes instead.
+func (t treeView) hasSubsBeyond(have []string) bool {
+	known := make(map[string]bool, len(have))
+	for _, id := range have {
+		known[id] = true
+	}
+	missing := func(subs []Subscription) bool {
+		for _, s := range subs {
+			if !known[strconv.FormatInt(s.ID, 10)] {
+				return true
+			}
+		}
+		return false
+	}
+	for _, f := range t.Folders {
+		if missing(f.Subs) {
+			return true
+		}
+	}
+	return missing(t.Root)
 }
