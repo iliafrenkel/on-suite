@@ -64,6 +64,14 @@ type treeView struct {
 	// from Empty (no subscriptions at all), and the tree needs to say which
 	// one it is rather than just going blank.
 	HiddenAll bool
+	// HiddenSubs and HiddenFolders are the subscription and folder ids
+	// hideRead filtered out of this tree, nil when hideRead is off. A full
+	// render never needs them, since it simply leaves those rows out. A
+	// list-only swap does: it does not re-render the tree, so the browser
+	// still has rows this render would have dropped, and reader.js removes
+	// them from these lists (issue #453).
+	HiddenSubs    []int64
+	HiddenFolders []int64
 }
 
 type listView struct {
@@ -91,6 +99,10 @@ type listView struct {
 	// the button's pressed state matches whatever was actually applied to
 	// this render.
 	HideRead bool
+	// HiddenSubs and HiddenFolders copy treeView's, because the list is what
+	// a list-only swap delivers: reader.js reads them off #reader-list.
+	HiddenSubs    []int64
+	HiddenFolders []int64
 	// Shell carries the CSRF token the mark-all-read form needs. It is set by
 	// renderIndex rather than viewList, which has no request to read it from.
 	Shell render.Shell
@@ -162,15 +174,22 @@ func viewTree(t Tree, activeID int64, scope Scope, counts Counts, hideRead bool)
 	}
 
 	folders, root := t.Folders, t.Root
+	var hiddenSubs, hiddenFolders []int64
 	if hideRead {
 		folders = make([]TreeFolder, 0, len(t.Folders))
 		for _, f := range t.Folders {
-			f.Subs = filterUnread(f.Subs, counts, activeID)
+			var dropped []int64
+			f.Subs, dropped = splitUnread(f.Subs, counts, activeID)
+			hiddenSubs = append(hiddenSubs, dropped...)
 			if len(f.Subs) > 0 {
 				folders = append(folders, f)
+			} else {
+				hiddenFolders = append(hiddenFolders, f.ID)
 			}
 		}
-		root = filterUnread(t.Root, counts, activeID)
+		var dropped []int64
+		root, dropped = splitUnread(t.Root, counts, activeID)
+		hiddenSubs = append(hiddenSubs, dropped...)
 	}
 
 	return treeView{
@@ -185,22 +204,27 @@ func viewTree(t Tree, activeID int64, scope Scope, counts Counts, hideRead bool)
 		// only the latter gets the "no feeds yet" hint.
 		Empty: empty,
 		// HiddenAll: see the field comment on treeView.
-		HiddenAll: hideRead && !empty && len(folders) == 0 && len(root) == 0,
+		HiddenAll:     hideRead && !empty && len(folders) == 0 && len(root) == 0,
+		HiddenSubs:    hiddenSubs,
+		HiddenFolders: hiddenFolders,
 	}
 }
 
-// filterUnread drops every subscription with nothing unread, except the
+// splitUnread drops every subscription with nothing unread, except the
 // currently open one: hiding the feed you are actively reading out from
 // under you the moment its last item is read would be more surprising than
 // useful, and the sidebar catches up as soon as you navigate away from it.
-func filterUnread(subs []Subscription, counts Counts, activeID int64) []Subscription {
-	out := make([]Subscription, 0, len(subs))
+// It returns what it kept and the ids of what it dropped.
+func splitUnread(subs []Subscription, counts Counts, activeID int64) (kept []Subscription, dropped []int64) {
+	kept = make([]Subscription, 0, len(subs))
 	for _, s := range subs {
 		if s.ID == activeID || counts.BySub[s.ID] > 0 {
-			out = append(out, s)
+			kept = append(kept, s)
+		} else {
+			dropped = append(dropped, s.ID)
 		}
 	}
-	return out
+	return kept, dropped
 }
 
 func viewList(items []Item, title string, scope Scope, subID int64, filter Filter, basePath, query string, now time.Time) listView {

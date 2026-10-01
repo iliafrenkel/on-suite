@@ -1,6 +1,7 @@
 package reader
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -104,6 +105,30 @@ func TestViewTreeHideReadFiltersZeroUnreadFeedsAndEmptyFolders(t *testing.T) {
 		out := viewTree(tree, 0, ScopeAll, counts, true)
 		if out.Empty {
 			t.Error("Empty is true even though real subscriptions exist, just all currently read")
+		}
+	})
+
+	t.Run("hideRead true reports what it dropped", func(t *testing.T) {
+		out := viewTree(tree, 0, ScopeAll, counts, true)
+		if want := []int64{10, 12, 20}; !slices.Equal(out.HiddenSubs, want) {
+			t.Errorf("HiddenSubs = %v, want %v", out.HiddenSubs, want)
+		}
+		if want := []int64{2}; !slices.Equal(out.HiddenFolders, want) {
+			t.Errorf("HiddenFolders = %v, want %v", out.HiddenFolders, want)
+		}
+	})
+
+	t.Run("the active feed is never reported hidden", func(t *testing.T) {
+		out := viewTree(tree, 10, ScopeAll, counts, true)
+		if want := []int64{12, 20}; !slices.Equal(out.HiddenSubs, want) {
+			t.Errorf("HiddenSubs = %v, want %v", out.HiddenSubs, want)
+		}
+	})
+
+	t.Run("hideRead false hides nothing", func(t *testing.T) {
+		out := viewTree(tree, 0, ScopeAll, counts, false)
+		if len(out.HiddenSubs) != 0 || len(out.HiddenFolders) != 0 {
+			t.Errorf("hideRead=false reported hidden subs %v, folders %v", out.HiddenSubs, out.HiddenFolders)
 		}
 	})
 }

@@ -3259,3 +3259,49 @@ func TestReaderPageCarriesTheTargetedSwapHooks(t *testing.T) {
 		t.Errorf("full page #reader-article hx-swap-oob = %q, want none", got)
 	}
 }
+
+// TestListCarriesTheFeedsHideReadDropped pins the data reader.js uses to keep
+// a tree it no longer re-renders in step with "hide read" (issue #453): the
+// list names every feed and folder the server's filtered tree dropped.
+func TestListCarriesTheFeedsHideReadDropped(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Blogs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", &folder.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.SaveItems(ctx, sub.FeedID, []reader.ParsedItem{{GUID: "g1", Title: "Only item"}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.Store.ItemsForSubscription(ctx, s.Alice.User.ID, sub.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetRead(ctx, s.Alice.User.ID, items[0].ID, true, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/reader/", nil)
+	req.AddCookie(&http.Cookie{Name: reader.HideReadCookie, Value: "1"})
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	list := htmlassert.Parse(t, rec.Body.String()).MustHave("#reader-list")
+	if got, _ := htmlassert.Attr(list, "data-hidden-subs"); got != itoa(sub.ID) {
+		t.Errorf("data-hidden-subs = %q, want %d", got, sub.ID)
+	}
+	if got, _ := htmlassert.Attr(list, "data-hidden-folders"); got != itoa(folder.ID) {
+		t.Errorf("data-hidden-folders = %q, want %d", got, folder.ID)
+	}
+
+	plain := s.Get(t, s.Alice, "/reader/").MustHave("#reader-list")
+	if got, _ := htmlassert.Attr(plain, "data-hidden-subs"); got != "" {
+		t.Errorf("hide-read off: data-hidden-subs = %q, want empty", got)
+	}
+}

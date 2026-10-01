@@ -317,6 +317,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	listTitleStr := listTitle(lc.Scope, sub)
 	view.List = viewList(items, listTitleStr, lc.Scope, lc.SubID, lc.Filter, basePathFor(lc.Scope, lc.SubID), search, a.store.now())
 	view.List.HideRead = opts.HideRead
+	view.List.HiddenSubs, view.List.HiddenFolders = view.Tree.HiddenSubs, view.Tree.HiddenFolders
 	// The currently-open article's row is highlighted in the list, the same
 	// way the tree highlights the selected feed — real item ids start at 1,
 	// so 0 (art's zero value when nothing is open) correctly highlights

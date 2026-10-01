@@ -469,9 +469,10 @@
 
 {{/* The list is "list-swap"'s main target (issue #453). data-scope/data-sub
      say which list this is, so reader.js can move the tree's highlight to
-     match without the tree itself being re-rendered. */}}
+     match without the tree itself being re-rendered. data-hidden-subs/-folders
+     list what "hide read" filtered out of the tree, for the same reason. */}}
 {{define "list"}}
-<section class="reader-list" id="reader-list" aria-label="Articles" data-scope="{{.Scope}}" data-sub="{{.SubID}}">
+<section class="reader-list" id="reader-list" aria-label="Articles" data-scope="{{.Scope}}" data-sub="{{.SubID}}" data-hidden-subs="{{range $i, $id := .HiddenSubs}}{{if $i}} {{end}}{{$id}}{{end}}" data-hidden-folders="{{range $i, $id := .HiddenFolders}}{{if $i}} {{end}}{{$id}}{{end}}">
   <div class="reader-list-toolbar">
     {{/* The live filter. Mirrors ON Notes' notes-search-box
          (internal/apps/notes/templates/toolbar.partial.html) — copied rather
