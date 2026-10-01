@@ -3211,3 +3211,51 @@ func TestRenameFeedIsScopedToTheOwner(t *testing.T) {
 		t.Errorf("renaming another user's subscription returned %d, want 404", rec.Code)
 	}
 }
+
+// TestReaderPageCarriesTheTargetedSwapHooks pins the ids and data attributes
+// the list-only swap (issue #453) relies on. Every piece "list-swap" updates
+// out of band needs a stable id that is present even when it is empty — an
+// element missing from the page cannot be swapped back in later — and the
+// tree needs ids and data-scope so reader.js can move the highlight without
+// the tree being re-rendered.
+func TestReaderPageCarriesTheTargetedSwapHooks(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	folder, err := s.Store.CreateFolder(ctx, s.Alice.User.ID, "Blogs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", &folder.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(sub.ID))
+
+	list := doc.MustHave("#reader-list")
+	if got, _ := htmlassert.Attr(list, "data-scope"); got != "feed" {
+		t.Errorf("#reader-list data-scope = %q, want feed", got)
+	}
+	if got, _ := htmlassert.Attr(list, "data-sub"); got != itoa(sub.ID) {
+		t.Errorf("#reader-list data-sub = %q, want %d", got, sub.ID)
+	}
+	doc.MustHave("#reader-toolbar")
+	if _, ok := htmlassert.Attr(doc.MustHave("#reader-banner"), "hidden"); !ok {
+		t.Error("#reader-banner with no message is not hidden")
+	}
+	if _, ok := htmlassert.Attr(doc.MustHave("#reader-tree-hidden-all"), "hidden"); !ok {
+		t.Error("#reader-tree-hidden-all is not hidden with hide-read off")
+	}
+	row := doc.MustHave("#reader-sub-" + itoa(sub.ID))
+	if got, _ := htmlassert.Attr(row, "class"); !strings.Contains(got, "is-active") {
+		t.Errorf("selected feed row class = %q, want is-active", got)
+	}
+	doc.MustHave("#reader-folder-" + itoa(folder.ID))
+	for _, scope := range []string{"all", "starred"} {
+		doc.MustHave(`.reader-tree-nav a[data-scope="` + scope + `"]`)
+	}
+	if got, _ := htmlassert.Attr(doc.MustHave("#reader-article"), "hx-swap-oob"); got != "" {
+		t.Errorf("full page #reader-article hx-swap-oob = %q, want none", got)
+	}
+}

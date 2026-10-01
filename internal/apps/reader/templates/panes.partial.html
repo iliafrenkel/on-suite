@@ -6,8 +6,11 @@
      notes' "outline-swap" use. Without this, an HTMX feed selection would
      swap the panes while leaving the tab title and breadcrumb showing
      whatever was there before, which is the regression fixed for issue #205
-     (commit c96a03f) elsewhere in this codebase. */}}
-{{define "panes-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{template "panes" .}}{{end}}
+     (commit c96a03f) elsewhere in this codebase. The <title>/crumb pair lives
+     in "shell-oob" because "list-swap" sends it too. */}}
+{{define "shell-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{end}}
+
+{{define "panes-oob"}}{{template "shell-oob" .}}{{template "panes" .}}{{end}}
 
 {{/* reader-ctx is the hidden state every reader POST carries: the CSRF token,
      and the list the control fired from. Without the scope/sub/filter fields a
@@ -61,13 +64,8 @@
 
 {{define "panes"}}
 <div class="reader-panes" id="reader-panes">
-  {{template "reader-toolbar" .List}}
-  {{if or .Error .Notice}}
-  <div class="reader-banner">
-    {{if .Error}}<p class="notice notice-error" role="alert">{{.Error}}</p>{{end}}
-    {{if .Notice}}<p class="notice" role="status">{{.Notice}}</p>{{end}}
-  </div>
-  {{end}}
+  {{template "reader-toolbar" (dict "List" .List "OOB" false)}}
+  {{template "reader-banner" (dict "Error" .Error "Notice" .Notice "OOB" false)}}
   <div class="reader-panes-row" id="reader-panes-row">
     {{/* Two hidden checkboxes drive the narrow-viewport drill-down, the same
          technique #paste-detail-open uses. They are siblings of the three
@@ -85,10 +83,8 @@
          the accessibility tree along with its text. app.css hides these two
          above the width where checking them has no visible effect, so a
          desktop keyboard user does not tab through inert controls. */}}
-    <input type="checkbox" id="reader-list-open" class="visually-hidden reader-pane-toggle"
-           {{if .List.Selected}}checked{{end}} aria-label="Feeds">
-    <input type="checkbox" id="reader-article-open" class="visually-hidden reader-pane-toggle"
-           {{if .Article.Selected}}checked{{end}} aria-label="Articles">
+    {{template "pane-toggle" (dict "ID" "reader-list-open" "Label" "Feeds" "Checked" .List.Selected "OOB" false)}}
+    {{template "pane-toggle" (dict "ID" "reader-article-open" "Label" "Articles" "Checked" .Article.Selected "OOB" false)}}
     {{template "tree" .}}
     <div class="pane-gutter" data-gutter-for="tree" role="separator"
          aria-orientation="vertical" aria-label="Resize the feed list" tabindex="0"></div>
@@ -101,6 +97,20 @@
 </div>
 {{end}}
 
+{{/* reader-banner always renders, hidden when there is nothing to say, so
+     "list-swap" can swap it by id: a banner that only existed while it had a
+     message could never be cleared by a later targeted swap, and an error
+     from one Mark all read would sit there through every feed click after
+     it. .reader-banner sets no display of its own, so [hidden] wins. */}}
+{{define "reader-banner"}}<div class="reader-banner" id="reader-banner"{{if not (or .Error .Notice)}} hidden{{end}}{{if .OOB}} hx-swap-oob="true"{{end}}>{{if .Error}}<p class="notice notice-error" role="alert">{{.Error}}</p>{{end}}{{if .Notice}}<p class="notice" role="status">{{.Notice}}</p>{{end}}</div>{{end}}
+
+{{/* pane-toggle is one of the two narrow-viewport drill-down checkboxes (see
+     the comment in "panes"). One template, because three responses render
+     them: the full panes, "article-oob" and "list-swap" — and an OOB copy
+     whose class or label drifted from the original would silently restyle
+     it on the next swap. */}}
+{{define "pane-toggle"}}<input type="checkbox" id="{{.ID}}" class="visually-hidden reader-pane-toggle"{{if .Checked}} checked{{end}}{{if .OOB}} hx-swap-oob="true"{{end}} aria-label="{{.Label}}">{{end}}
+
 {{/* reader-toolbar spans the full width above all three panes: the filter
      pills (moved here from the list pane's own header — same classes, same
      .Filter/.BasePath/.Query logic, just relocated) on the left, and the
@@ -108,9 +118,11 @@
      and links inside the tree pane — on the right. Receives .List
      (listView) as its root, exactly as "list" itself does, since every
      field it needs (BasePath, Filter, Query, Shell, Scope, SubID) already
-     lives there. */}}
-{{define "reader-toolbar"}}
-<div class="reader-toolbar">
+     lives there. The wrapper is separate so "list-swap" can send the same
+     toolbar out of band: the filter links point at the selected list's path. */}}
+{{define "reader-toolbar"}}<div class="reader-toolbar" id="reader-toolbar"{{if .OOB}} hx-swap-oob="true"{{end}}>{{template "reader-toolbar-body" .List}}</div>{{end}}
+
+{{define "reader-toolbar-body"}}
   <nav class="reader-filters" aria-label="Filter">
     <a href="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}"
        hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
@@ -167,7 +179,6 @@
       <button type="button" class="reader-menu-item" data-open-dialog="shortcuts-dialog">{{ticon "keyboard"}}Keyboard shortcuts</button>
     </div>
   </div>
-</div>
 {{end}}
 
 {{/* Every form here pairs method/action with hx-post rather than using hx-post
@@ -183,12 +194,12 @@
        items in the feed/folder tree below. */}}
   <div class="reader-tree-nav">
     <a href="/reader/" hx-get="/reader/" hx-target="#reader-panes"
-       hx-swap="outerHTML" hx-push-url="true"
+       hx-swap="outerHTML" hx-push-url="true" data-scope="all"
        class="toolbar-btn toolbar-btn-nav{{if eq .Tree.Scope "all"}} toolbar-btn-active{{end}}">
       {{ticon "inbox"}}All{{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total "Class" "toolbar-due-badge")}}
     </a>
     <a href="/reader/starred" hx-get="/reader/starred" hx-target="#reader-panes"
-       hx-swap="outerHTML" hx-push-url="true"
+       hx-swap="outerHTML" hx-push-url="true" data-scope="starred"
        class="toolbar-btn toolbar-btn-nav{{if eq .Tree.Scope "starred"}} toolbar-btn-active{{end}}">
       {{ticon "star-filled"}}Starred{{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred "Class" "toolbar-due-badge")}}
     </a>
@@ -200,11 +211,9 @@
   {{if .Tree.Empty}}
     <p class="empty">No feeds yet. Click &#8220;···&#8221; in the toolbar and choose &#8220;Add feed…&#8221; to start.</p>
   {{end}}
-  {{if .Tree.HiddenAll}}
-    <p class="empty">Everything is read. Turn off &#8220;hide read&#8221; in the toolbar to see all your feeds.</p>
-  {{end}}
+  {{template "tree-hidden-all" (dict "Show" .Tree.HiddenAll "OOB" false)}}
   {{range .Tree.Folders}}
-    <details open class="reader-folder">
+    <details open class="reader-folder" id="reader-folder-{{.ID}}">
       <summary>{{.Name}}</summary>
       {{/* The per-row "..." menu is a sibling of <summary>, not nested inside
            it: <summary> is what <details> uses as its native toggle, so a
@@ -243,6 +252,12 @@
 </nav>
 {{end}}
 
+{{/* tree-hidden-all is the "hide read" note for a tree with nothing left to
+     show. Always rendered (hidden when it does not apply) for the same reason
+     as reader-banner: "list-swap" toggles it out of band after Mark all read
+     empties the last feed, without re-rendering the tree. */}}
+{{define "tree-hidden-all"}}<p class="empty" id="reader-tree-hidden-all"{{if not .Show}} hidden{{end}}{{if .OOB}} hx-swap-oob="true"{{end}}>Everything is read. Turn off &#8220;hide read&#8221; in the toolbar to see all your feeds.</p>{{end}}
+
 {{/* sub-row is one feed row in the tree: its name/link, unread count, the
      per-row "..." menu (Feed URL / Refresh feed / Rename… / Move to folder… /
      Unsubscribe), and the rename and move dialogs. Shared by both loops in "tree" above — feeds nested in
@@ -251,7 +266,7 @@
      are passed through unchanged (no longer reached via $, since they arrive
      directly as fields of the dict rather than through the range's dot). */}}
 {{define "sub-row"}}
-<li class="reader-sub{{if eq .Sub.ID .Tree.ActiveID}} is-active{{end}}">
+<li class="reader-sub{{if eq .Sub.ID .Tree.ActiveID}} is-active{{end}}" id="reader-sub-{{.Sub.ID}}">
   {{if .Sub.FaviconPath}}
     <img class="reader-favicon" src="{{.Sub.FaviconPath}}" width="16" height="16" alt="">
     <span class="reader-favicon" hidden>{{ticon "rss"}}</span>
@@ -452,8 +467,11 @@
 </li>
 {{end}}
 
+{{/* The list is "list-swap"'s main target (issue #453). data-scope/data-sub
+     say which list this is, so reader.js can move the tree's highlight to
+     match without the tree itself being re-rendered. */}}
 {{define "list"}}
-<section class="reader-list" aria-label="Articles">
+<section class="reader-list" id="reader-list" aria-label="Articles" data-scope="{{.Scope}}" data-sub="{{.SubID}}">
   <div class="reader-list-toolbar">
     {{/* The live filter. Mirrors ON Notes' notes-search-box
          (internal/apps/notes/templates/toolbar.partial.html) — copied rather
@@ -523,10 +541,10 @@
      reconciled them. Only the counts, not the whole tree: see "counts-oob". */}}
 {{define "article-swap"}}{{template "article-oob" .Article}}{{template "counts-oob" .}}{{template "row" (dict "Item" (dict "ID" .Article.ID "Title" .Article.Title "FeedName" .Article.FeedName "Published" .Article.When "Read" .Article.Read "Starred" .Article.Starred) "Scope" .Article.Scope "SubID" .Article.SubID "Filter" .Article.Filter "Query" .Article.Query "ActiveID" .Article.ID "OOB" true)}}{{end}}
 
-{{define "article-oob"}}<input type="checkbox" id="reader-article-open" class="visually-hidden reader-pane-toggle" hx-swap-oob="true" checked aria-label="Articles">{{template "article" .}}{{end}}
+{{define "article-oob"}}{{template "pane-toggle" (dict "ID" "reader-article-open" "Label" "Articles" "Checked" true "OOB" true)}}{{template "article" .}}{{end}}
 
 {{define "article"}}
-<article class="reader-article" id="reader-article">
+<article class="reader-article" id="reader-article"{{if .OOB}} hx-swap-oob="true"{{end}}>
   {{if .Selected}}
     {{template "reader-back" (dict "For" "reader-article-open" "Label" "Articles")}}
     <h1>{{.Title}}</h1>

@@ -145,6 +145,12 @@ type articleView struct {
 	ShowingFull bool
 	// FullError explains a failed fetch, empty when there is nothing to say.
 	FullError string
+
+	// OOB marks the article pane as an out-of-band swap. Only "list-swap"
+	// sets it: a list navigation replaces #reader-list as its main target,
+	// and the article pane has to be emptied alongside it (see PATTERNS.md,
+	// "hx-swap-oob for state living outside the swapped fragment").
+	OOB bool
 }
 
 func viewTree(t Tree, activeID int64, scope Scope, counts Counts, hideRead bool) treeView {
