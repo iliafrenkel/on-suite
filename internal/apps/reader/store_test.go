@@ -773,6 +773,108 @@ func TestSetFaviconIfEmptyDoesNotOverwrite(t *testing.T) {
 	}
 }
 
+// Reading the site's homepage is better evidence than the /favicon.ico guess
+// (#451), so SetPageFavicon replaces it — unlike SetFaviconIfEmpty — and
+// drops the guess's cache row once nothing points at it.
+func TestSetPageFaviconReplacesTheGuessAndMarksTheFeedChecked(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const guess = "https://example.com/favicon.ico"
+	const page = "https://example.com/static/icon.png"
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, guess); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.SetPageFavicon(ctx, sub.FeedID, page); err != nil {
+		t.Fatal(err)
+	}
+
+	feed, err := f.store.FeedByID(ctx, sub.FeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if feed.FaviconURL != page {
+		t.Errorf("FaviconURL = %q, want the page's icon %q", feed.FaviconURL, page)
+	}
+	if !feed.FaviconPageChecked {
+		t.Error("FaviconPageChecked = false, want true after a page favicon is saved")
+	}
+	if _, err := f.store.FeedIconByHash(ctx, reader.FaviconHash(page)); err != nil {
+		t.Errorf("the page icon's reader_feed_icons row was not created: %v", err)
+	}
+	if _, err := f.store.FeedIconByHash(ctx, reader.FaviconHash(guess)); !errors.Is(err, reader.ErrNotFound) {
+		t.Errorf("the replaced guess's icon row is still there (err = %v)", err)
+	}
+}
+
+func TestSetPageFaviconKeepsAnOldIconAnotherFeedStillUses(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	subA, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/a.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subB, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/b.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const shared = "https://example.com/favicon.ico"
+	for _, id := range []int64{subA.FeedID, subB.FeedID} {
+		if err := f.store.SetFaviconIfEmpty(ctx, id, shared); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := f.store.SetPageFavicon(ctx, subA.FeedID, "https://example.com/static/icon.png"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.store.FeedIconByHash(ctx, reader.FaviconHash(shared)); err != nil {
+		t.Errorf("feed B's icon row was dropped while B still uses it: %v", err)
+	}
+}
+
+// An empty URL means the homepage could not be read: the feed keeps whatever
+// favicon it had and is only marked checked, so the poller's one-off repair
+// does not try again on every poll.
+func TestSetPageFaviconWithNoURLOnlyMarksTheFeedChecked(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const guess = "https://example.com/favicon.ico"
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, guess); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.SetPageFavicon(ctx, sub.FeedID, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	feed, err := f.store.FeedByID(ctx, sub.FeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if feed.FaviconURL != guess {
+		t.Errorf("FaviconURL = %q, want the existing %q kept", feed.FaviconURL, guess)
+	}
+	if !feed.FaviconPageChecked {
+		t.Error("FaviconPageChecked = false, want true")
+	}
+	if _, err := f.store.FeedIconByHash(ctx, reader.FaviconHash(guess)); err != nil {
+		t.Errorf("the kept favicon's icon row was dropped: %v", err)
+	}
+}
+
 func TestSubscriptionFaviconPath(t *testing.T) {
 	withURL := reader.Subscription{FaviconURL: "https://example.com/favicon.ico"}
 	if withURL.FaviconPath() != "/reader/favicon/"+reader.FaviconHash("https://example.com/favicon.ico") {

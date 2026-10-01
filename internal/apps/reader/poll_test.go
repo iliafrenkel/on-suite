@@ -237,29 +237,62 @@ func TestFetchNowReturnsErrNotFoundForAMissingFeed(t *testing.T) {
 	}
 }
 
-// TestFetchOnAddDerivesAFaviconGuessForADirectFeedURL guards the common case
-// this task exists for: pasting a feed URL directly never fetches the site's
-// homepage (see TestSubscribeToADirectFeedURLStillWorks), so the favicon
-// must come from a pure string derivation off the feed's own site URL, with
-// no extra request to the origin.
-func TestFetchOnAddDerivesAFaviconGuessForADirectFeedURL(t *testing.T) {
+// siteOrigin serves a feed at /feed.xml whose <link> is the origin itself, and
+// hands every other path to home — the site's homepage, as far as favicon
+// discovery is concerned. homeHits counts requests to "/".
+type siteOrigin struct {
+	*httptest.Server
+	homeHits atomic.Int32
+}
+
+func newSiteOrigin(t *testing.T, home http.HandlerFunc) *siteOrigin {
+	t.Helper()
+	o := &siteOrigin{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0"?><rss version="2.0"><channel>
+			<title>Site</title><link>` + o.URL + `</link>
+			<item><title>One</title><link>` + o.URL + `/one</link><guid>one</guid></item>
+			</channel></rss>`))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			o.homeHits.Add(1)
+		}
+		home(w, r)
+	})
+	o.Server = httptest.NewServer(mux)
+	t.Cleanup(o.Close)
+	return o
+}
+
+// homeWithIcon is a homepage that declares its icon the way Quanta's does —
+// the real one, while /favicon.ico (unrouted here) is no use.
+func homeWithIcon(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	_, _ = w.Write([]byte(`<html><head><link rel="icon" href="/static/icon.png"></head><body>hi</body></html>`))
+}
+
+func homeBroken(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "down", http.StatusInternalServerError)
+}
+
+// Adding a feed by its feed URL reads the site's homepage once for its
+// <link rel="icon"> (#451): a site's /favicon.ico can be empty while its
+// homepage declares the real icon.
+func TestFetchOnAddReadsTheSiteHomepageForItsFavicon(t *testing.T) {
 	s, a := newServerWithApp(t)
 	ctx := context.Background()
-
-	var hits int
-	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = w.Write(fixture(t, "rss2.xml")) // <link>https://example.com/</link>
-	}))
-	defer origin.Close()
+	origin := newSiteOrigin(t, homeWithIcon)
 	a.AllowPrivateFetchesForTest()
 
 	if rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/feed.xml"}}); rec.Code != http.StatusOK {
 		t.Fatalf("subscribe returned %d", rec.Code)
-	}
-	if hits != 2 {
-		t.Fatalf("origin was fetched %d times, want 2 (discovery + fetch-on-add) — a favicon fetch would make this 3", hits)
 	}
 
 	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
@@ -269,7 +302,172 @@ func TestFetchOnAddDerivesAFaviconGuessForADirectFeedURL(t *testing.T) {
 	if len(tree.Root) != 1 {
 		t.Fatalf("subscribed to %d feeds, want 1", len(tree.Root))
 	}
-	if tree.Root[0].FaviconURL != "https://example.com/favicon.ico" {
-		t.Errorf("FaviconURL = %q, want the derived /favicon.ico guess", tree.Root[0].FaviconURL)
+	if want := origin.URL + "/static/icon.png"; tree.Root[0].FaviconURL != want {
+		t.Errorf("FaviconURL = %q, want the homepage's icon %q", tree.Root[0].FaviconURL, want)
+	}
+	if n := origin.homeHits.Load(); n != 1 {
+		t.Errorf("homepage fetched %d times, want exactly 1", n)
+	}
+	feed, err := s.Store.FeedByID(ctx, tree.Root[0].FeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !feed.FaviconPageChecked {
+		t.Error("FaviconPageChecked = false after reading the homepage")
+	}
+}
+
+// A homepage that cannot be read leaves the poller's /favicon.ico guess in
+// place, and the feed unchecked so the poller's repair can still try later.
+func TestFetchOnAddKeepsTheFaviconGuessWhenTheHomepageFails(t *testing.T) {
+	s, a := newServerWithApp(t)
+	ctx := context.Background()
+	origin := newSiteOrigin(t, homeBroken)
+	a.AllowPrivateFetchesForTest()
+
+	if rec := s.PostHX(t, s.Alice, "/reader/subscribe", url.Values{"url": {origin.URL + "/feed.xml"}}); rec.Code != http.StatusOK {
+		t.Fatalf("subscribe returned %d", rec.Code)
+	}
+
+	tree, err := s.Store.Tree(ctx, s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Root) != 1 {
+		t.Fatalf("subscribed to %d feeds, want 1", len(tree.Root))
+	}
+	if want := origin.URL + "/favicon.ico"; tree.Root[0].FaviconURL != want {
+		t.Errorf("FaviconURL = %q, want the derived guess %q", tree.Root[0].FaviconURL, want)
+	}
+	feed, err := s.Store.FeedByID(ctx, tree.Root[0].FeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if feed.FaviconPageChecked {
+		t.Error("FaviconPageChecked = true, but the homepage was never read")
+	}
+}
+
+// pollAgain makes a feed due and runs one poll cycle.
+func pollAgain(t *testing.T, f *storeFixture, poller *reader.Poller, feedID int64) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := f.db.ExecContext(ctx, `UPDATE reader_feeds SET next_fetch_at = ? WHERE id = ?`,
+		db.FormatTime(time.Now().UTC().Add(-time.Minute)), feedID); err != nil {
+		t.Fatal(err)
+	}
+	if err := poller.PollDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// killFavicon records enough failed fetches that the proxy gives up on the
+// feed's current favicon for good.
+func killFavicon(t *testing.T, f *storeFixture, feedID int64) {
+	t.Helper()
+	ctx := context.Background()
+	feed, err := f.store.FeedByID(ctx, feedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if feed.FaviconURL == "" {
+		t.Fatal("feed has no favicon to kill")
+	}
+	for range reader.MaxImageFetchAttemptsForTest {
+		if err := f.store.SaveFeedIconFailure(ctx, reader.FaviconHash(feed.FaviconURL), "not an image", time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func newTestPoller(f *storeFixture) *reader.Poller {
+	client := reader.NewClient("test")
+	client.DenyAddr = func(string) error { return nil }
+	return reader.NewPoller(f.store, client, quietLogger())
+}
+
+// Feeds added before #451 can be stuck on a dead /favicon.ico guess forever,
+// since SetFaviconIfEmpty never overwrites. Once the proxy has given up on
+// it, the poller reads the homepage once to repair it.
+func TestPollRepairsADeadFaviconGuessFromTheHomepageOnce(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	origin := newSiteOrigin(t, homeWithIcon)
+	poller := newTestPoller(f)
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, origin.URL+"/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pollAgain(t, f, poller, sub.FeedID) // first poll: the /favicon.ico guess
+	if n := origin.homeHits.Load(); n != 0 {
+		t.Fatalf("homepage fetched %d times before the guess died, want 0", n)
+	}
+	killFavicon(t, f, sub.FeedID)
+
+	pollAgain(t, f, poller, sub.FeedID)
+
+	feed, err := f.store.FeedByID(ctx, sub.FeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := origin.URL + "/static/icon.png"; feed.FaviconURL != want {
+		t.Errorf("FaviconURL = %q, want the homepage's icon %q", feed.FaviconURL, want)
+	}
+
+	killFavicon(t, f, sub.FeedID)
+	pollAgain(t, f, poller, sub.FeedID)
+	if n := origin.homeHits.Load(); n != 1 {
+		t.Errorf("homepage fetched %d times, want exactly 1 — the repair runs once per feed", n)
+	}
+}
+
+func TestPollLeavesAWorkingFaviconAlone(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	origin := newSiteOrigin(t, homeWithIcon)
+	poller := newTestPoller(f)
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, origin.URL+"/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pollAgain(t, f, poller, sub.FeedID)
+	pollAgain(t, f, poller, sub.FeedID)
+
+	if n := origin.homeHits.Load(); n != 0 {
+		t.Errorf("homepage fetched %d times for a favicon that never failed, want 0", n)
+	}
+}
+
+// A repair that cannot read the homepage still counts as the one attempt, so
+// a broken site is not re-fetched on every poll.
+func TestPollRepairMarksTheFeedCheckedEvenWhenTheHomepageFails(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	origin := newSiteOrigin(t, homeBroken)
+	poller := newTestPoller(f)
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, origin.URL+"/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pollAgain(t, f, poller, sub.FeedID)
+	killFavicon(t, f, sub.FeedID)
+	pollAgain(t, f, poller, sub.FeedID)
+	pollAgain(t, f, poller, sub.FeedID)
+
+	if n := origin.homeHits.Load(); n != 1 {
+		t.Errorf("homepage fetched %d times, want exactly 1", n)
+	}
+	feed, err := f.store.FeedByID(ctx, sub.FeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !feed.FaviconPageChecked {
+		t.Error("FaviconPageChecked = false after the repair attempt")
+	}
+	if want := origin.URL + "/favicon.ico"; feed.FaviconURL != want {
+		t.Errorf("FaviconURL = %q, want the guess %q kept", feed.FaviconURL, want)
 	}
 }
