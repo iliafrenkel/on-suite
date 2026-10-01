@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
 	github.com/microcosm-cc/bluemonday v1.0.27
-	github.com/mmcdole/gofeed v1.4.2
+	github.com/mmcdole/gofeed v1.5.0
 	github.com/open-spaced-repetition/go-fsrs/v4 v4.0.0
 	github.com/yuin/goldmark v1.8.6
 	golang.org/x/crypto v0.57.0
