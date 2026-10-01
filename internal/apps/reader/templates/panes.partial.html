@@ -12,6 +12,19 @@
 
 {{define "panes-oob"}}{{template "shell-oob" .}}{{template "panes" .}}{{end}}
 
+{{/* list-swap is the response to a list navigation: picking a feed, All or
+     Starred, a filter pill, a search, or Mark all read (issue #453). Its main
+     target is #reader-list; nothing in it touches the tree, which is what
+     keeps the dragged pane widths, collapsed folders, the tree's scroll and
+     its favicons exactly as they were. What a list navigation does change
+     rides along out of band: the <title>/crumb, the toolbar (its filter links
+     point at the selected list), the banner, an emptied article pane, both
+     drill-down checkboxes, the sidebar counts and the hide-read note. The
+     tree's highlight and hide-read removals are not here: reader.js copies
+     them across from the list's data-* attributes. renderPanes picks this
+     over "panes-oob" when HX-Target is reader-list. */}}
+{{define "list-swap"}}{{template "shell-oob" .}}{{template "list" .List}}{{template "reader-toolbar" (dict "List" .List "OOB" true)}}{{template "reader-banner" (dict "Error" .Error "Notice" .Notice "OOB" true)}}{{template "article" .Article}}{{template "pane-toggle" (dict "ID" "reader-list-open" "Label" "Feeds" "Checked" .List.Selected "OOB" true)}}{{template "pane-toggle" (dict "ID" "reader-article-open" "Label" "Articles" "Checked" .Article.Selected "OOB" true)}}{{template "counts-oob" .}}{{template "tree-hidden-all" (dict "Show" .Tree.HiddenAll "OOB" true)}}{{end}}
+
 {{/* reader-ctx is the hidden state every reader POST carries: the CSRF token,
      and the list the control fired from. Without the scope/sub/filter fields a
      POST re-render has nothing to derive them from — it has no query string,
@@ -125,15 +138,15 @@
 {{define "reader-toolbar-body"}}
   <nav class="reader-filters" aria-label="Filter">
     <a href="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=unread{{if .Query}}&amp;q={{.Query}}{{end}}"
-       hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+       hx-target="#reader-list" hx-swap="outerHTML" hx-push-url="true"
        class="toolbar-btn{{if eq .Filter "unread"}} toolbar-btn-active{{end}}"
        {{if eq .Filter "unread"}}aria-current="page"{{end}}>Unread</a>
     <a href="{{.BasePath}}?filter=starred{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=starred{{if .Query}}&amp;q={{.Query}}{{end}}"
-       hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+       hx-target="#reader-list" hx-swap="outerHTML" hx-push-url="true"
        class="toolbar-btn{{if eq .Filter "starred"}} toolbar-btn-active{{end}}"
        {{if eq .Filter "starred"}}aria-current="page"{{end}}>Starred</a>
     <a href="{{.BasePath}}?filter=all{{if .Query}}&amp;q={{.Query}}{{end}}" hx-get="{{.BasePath}}?filter=all{{if .Query}}&amp;q={{.Query}}{{end}}"
-       hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true"
+       hx-target="#reader-list" hx-swap="outerHTML" hx-push-url="true"
        class="toolbar-btn{{if eq .Filter "all"}} toolbar-btn-active{{end}}"
        {{if eq .Filter "all"}}aria-current="page"{{end}}>All</a>
     <form method="post" action="/reader/prefs" class="reader-hide-read-form"
@@ -193,12 +206,12 @@
        icon and a count badge), since they are page-level scopes rather than
        items in the feed/folder tree below. */}}
   <div class="reader-tree-nav">
-    <a href="/reader/" hx-get="/reader/" hx-target="#reader-panes"
+    <a href="/reader/" hx-get="/reader/" hx-target="#reader-list"
        hx-swap="outerHTML" hx-push-url="true" data-scope="all"
        class="toolbar-btn toolbar-btn-nav{{if eq .Tree.Scope "all"}} toolbar-btn-active{{end}}">
       {{ticon "inbox"}}All{{template "count-span" (dict "ID" "reader-count-all" "N" .Tree.Counts.Total "Class" "toolbar-due-badge")}}
     </a>
-    <a href="/reader/starred" hx-get="/reader/starred" hx-target="#reader-panes"
+    <a href="/reader/starred" hx-get="/reader/starred" hx-target="#reader-list"
        hx-swap="outerHTML" hx-push-url="true" data-scope="starred"
        class="toolbar-btn toolbar-btn-nav{{if eq .Tree.Scope "starred"}} toolbar-btn-active{{end}}">
       {{ticon "star-filled"}}Starred{{template "count-span" (dict "ID" "reader-count-starred" "N" .Tree.Counts.Starred "Class" "toolbar-due-badge")}}
@@ -274,7 +287,7 @@
     <span class="reader-favicon">{{ticon "rss"}}</span>
   {{end}}
   <a href="/reader/feed/{{.Sub.ID}}" hx-get="/reader/feed/{{.Sub.ID}}"
-       hx-target="#reader-panes" hx-swap="outerHTML" hx-push-url="true">{{.Sub.DisplayName}}</a>{{if .Sub.Failing}} <span class="reader-failing" title="{{.Sub.LastError}}">&#9888;</span>{{end}}
+       hx-target="#reader-list" hx-swap="outerHTML" hx-push-url="true">{{.Sub.DisplayName}}</a>{{if .Sub.Failing}} <span class="reader-failing" title="{{.Sub.LastError}}">&#9888;</span>{{end}}
   {{template "count-span" (dict "ID" (printf "reader-count-sub-%d" .Sub.ID) "N" (index .Tree.Counts.BySub .Sub.ID))}}
   <details class="outline-menu">
     <summary class="outline-menu-toggle quiet" aria-label="Feed actions">{{ticon "more"}}</summary>
@@ -489,7 +502,7 @@
       <input type="hidden" name="filter" value="{{.Filter}}">
       <input type="search" id="reader-search-input" name="q" value="{{.Query}}"
              placeholder="Search articles…" aria-label="Search articles"
-             hx-get="{{.BasePath}}" hx-target="#reader-panes" hx-swap="outerHTML"
+             hx-get="{{.BasePath}}" hx-target="#reader-list" hx-swap="outerHTML"
              hx-include="closest form"
              hx-trigger="input changed delay:300ms, search"
              hx-replace-url="true">
@@ -502,7 +515,7 @@
          name/value along. The panes re-render on success, which also closes
          the menu. */}}
     <form class="reader-mark-all" method="post" action="/reader/read-all"
-          hx-post="/reader/read-all" hx-target="#reader-panes" hx-swap="outerHTML">
+          hx-post="/reader/read-all" hx-target="#reader-list" hx-swap="outerHTML">
       {{template "reader-ctx" .}}
       <button type="submit" class="toolbar-btn reader-mark-all-main">{{ticon "check"}}Mark all read</button>
       <details class="outline-menu reader-mark-all-menu">

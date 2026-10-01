@@ -3305,3 +3305,127 @@ func TestListCarriesTheFeedsHideReadDropped(t *testing.T) {
 		t.Errorf("hide-read off: data-hidden-subs = %q, want empty", got)
 	}
 }
+
+// getHXTarget issues an htmx GET aimed at the given swap target id, the way
+// htmx itself sends it: HX-Target names the element it will swap into.
+func getHXTarget(t *testing.T, s *apptest.Server[*reader.Store], path, target string) *htmlassert.Doc {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("HX-Request", "true")
+	if target != "" {
+		req.Header.Set("HX-Target", target)
+	}
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s (target %q) = %d: %s", path, target, rec.Code, rec.Body.String())
+	}
+	return htmlassert.Parse(t, rec.Body.String())
+}
+
+// TestListTargetSwapsOnlyTheListAndItsCompanions is the core of issue #453:
+// a list navigation must not send the tree back. Replacing the tree reflowed
+// all three panes (the dragged widths were wiped until htmx settled), reopened
+// collapsed folders, reset the tree's scroll and rebuilt every favicon. What
+// does change rides along out of band.
+func TestListTargetSwapsOnlyTheListAndItsCompanions(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "g1")
+
+	doc := getHXTarget(t, s, "/reader/feed/"+itoa(subID), "reader-list")
+
+	doc.MustNotHave("#reader-panes")
+	doc.MustNotHave("#reader-tree")
+	list := doc.MustHave("#reader-list")
+	if got, _ := htmlassert.Attr(list, "hx-swap-oob"); got != "" {
+		t.Errorf("#reader-list hx-swap-oob = %q, want none: it is the main target", got)
+	}
+	for _, id := range []string{
+		"shell-crumb-tail", "reader-toolbar", "reader-banner", "reader-article",
+		"reader-list-open", "reader-article-open", "reader-count-all",
+		"reader-count-sub-" + itoa(subID), "reader-tree-hidden-all",
+	} {
+		if got, _ := htmlassert.Attr(doc.MustHave("#"+id), "hx-swap-oob"); got != "true" {
+			t.Errorf("#%s hx-swap-oob = %q, want true", id, got)
+		}
+	}
+	if _, ok := htmlassert.Attr(doc.MustHave("#reader-list-open"), "checked"); !ok {
+		t.Error("#reader-list-open is not checked: a phone would not drill into the list")
+	}
+	if _, ok := htmlassert.Attr(doc.MustHave("#reader-article-open"), "checked"); ok {
+		t.Error("#reader-article-open is checked for a list with no article open")
+	}
+	if got := htmlassert.Text(doc.MustHave("#reader-count-sub-" + itoa(subID))); got != "1" {
+		t.Errorf("feed count = %q, want 1", got)
+	}
+}
+
+// TestOtherTargetsStillGetTheWholePanes pins that only the list target is
+// narrowed: every other htmx request (tree edits, refresh, hide-read) keeps
+// the full panes response.
+func TestOtherTargetsStillGetTheWholePanes(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "g1")
+
+	for _, target := range []string{"", "reader-panes"} {
+		doc := getHXTarget(t, s, "/reader/feed/"+itoa(subID), target)
+		doc.MustHave("#reader-panes")
+		doc.MustHave("#reader-tree")
+	}
+}
+
+// TestMarkAllReadIntoTheListTarget covers the POST side of the list target:
+// the form sits in the list, so its response is a list swap too, carrying the
+// zeroed counts.
+func TestMarkAllReadIntoTheListTarget(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "a", "b")
+
+	form := url.Values{"scope": {"feed"}, "sub": {itoa(subID)}}
+	form.Set(web.CSRFFormField, s.CSRFToken(t, s.Alice))
+	req := httptest.NewRequest(http.MethodPost, "/reader/read-all", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "reader-list")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /reader/read-all = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustNotHave("#reader-panes")
+	doc.MustHave("#reader-list")
+	if got := htmlassert.Text(doc.MustHave("#reader-count-sub-" + itoa(subID))); got != "" {
+		t.Errorf("feed count after mark-all-read = %q, want empty", got)
+	}
+}
+
+// TestListNavigationControlsTargetTheList pins which controls use the narrow
+// swap. The list navigations do; the tree-editing ones keep targeting the
+// whole panes, because they really do change the tree.
+func TestListNavigationControlsTargetTheList(t *testing.T) {
+	s := newServer(t)
+	subID, _ := seedOne(t, s, "g1")
+	doc := s.Get(t, s.Alice, "/reader/feed/"+itoa(subID))
+
+	var toList []*html.Node
+	toList = append(toList, doc.QueryAll(".reader-filters a")...)
+	toList = append(toList, doc.QueryAll(".reader-tree-nav a")...)
+	toList = append(toList,
+		doc.MustHave("#reader-sub-"+itoa(subID)+" a"),
+		doc.MustHave("#reader-search-input"),
+		doc.MustHave(".reader-mark-all"),
+	)
+	if len(toList) < 8 {
+		t.Fatalf("found %d list-navigation controls, want at least 8", len(toList))
+	}
+	for _, n := range toList {
+		if got, _ := htmlassert.Attr(n, "hx-target"); got != "#reader-list" {
+			t.Errorf("<%s> hx-target = %q, want #reader-list", n.Data, got)
+		}
+	}
+	for _, sel := range []string{".reader-hide-read-form", `form[action="/reader/refresh"]`} {
+		if got, _ := htmlassert.Attr(doc.MustHave(sel), "hx-target"); got != "#reader-panes" {
+			t.Errorf("%s hx-target = %q, want #reader-panes", sel, got)
+		}
+	}
+}

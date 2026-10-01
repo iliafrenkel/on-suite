@@ -342,7 +342,15 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		// Always 200 for a fragment: htmx's default responseHandling only
 		// swaps 2xx/3xx, so a 400 would silently discard the re-rendered form
 		// and its error message.
-		if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", "panes-oob", view); err != nil {
+		// A list navigation targets #reader-list and gets only the list and
+		// its out-of-band companions back (issue #453); every other htmx
+		// request still changes the tree and gets the whole panes.
+		block := "panes-oob"
+		if web.HTMXTarget(r) == "reader-list" {
+			block = "list-swap"
+			view.Article.OOB = true
+		}
+		if err := a.deps.Render.Fragment(w, http.StatusOK, "reader/index", block, view); err != nil {
 			a.deps.Errors.Internal(w, r, err)
 		}
 		return
