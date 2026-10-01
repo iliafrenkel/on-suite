@@ -175,7 +175,10 @@ canonical example's own comment, not here.
   properties set by JS (never inline `flex-basis` directly, so a CSS default
   via `var(--x, fallback)` still applies before JS runs), persisted to
   `localStorage`, and cleared below the layout's own mobile breakpoint via a
-  `matchMedia` listener rather than left to silently misapply. Canonical:
+  `matchMedia` listener rather than left to silently misapply. The
+  properties live on `<html>`, not on `.reader-panes-row`, because anything
+  inside an htmx swap target loses its inline styles on the swap (issue
+  #453). Canonical:
   `internal/ui/static/app.css`'s `.reader-panes-row`/`.pane-gutter` and
   `internal/apps/reader/static/reader.js`'s resizable-panes section.
 

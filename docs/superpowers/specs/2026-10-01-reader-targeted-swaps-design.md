@@ -82,8 +82,8 @@ Out of band:
 ### Tree highlight sync (`reader.js`)
 
 The list section carries the state it was rendered for:
-`data-scope="all|starred|sub"` and `data-sub="<id>"` (0 when no feed is
-selected). Feed rows get `id="reader-sub-<id>"`; folders get
+`data-scope="all|starred|feed"`, `data-sub="<id>"` (0 when no feed is
+selected), `data-filter` and `data-q`. Feed rows get `id="reader-sub-<id>"`; folders get
 `id="reader-folder-<id>"`.
 
 One function, `syncTree()`, runs on `htmx:afterSettle` when `#reader-list` was
@@ -95,6 +95,24 @@ the target. It:
 - applies the hide-read removals below
 
 The server stays the source of truth. JS only reflects what the list says.
+
+### Keeping the tree honest
+
+The tree and the dialogs are not re-rendered by `list-swap`, which causes two
+problems, both handled in `reader.js`:
+
+- **Stale list context.** Their forms carry the list on screen in hidden
+  `reader-ctx` fields (`scope`, `sub`, `filter`, `q`). After "open feed A,
+  click All, rename feed B" the POST would re-render feed A. `syncTree()`
+  therefore copies `data-scope`, `data-sub`, `data-filter` and `data-q` into
+  those hidden inputs under `#reader-panes`, except inside `#reader-article`,
+  whose forms carry their own context (including `view`).
+- **A feed the tree lacks.** A list swap can remove a feed (hide read) but
+  never add one back. An `htmx:configRequest` listener sends
+  `X-Reader-Tree: <ids the tree has>` on list requests. If the server's tree
+  has a subscription not in that list, it answers with `panes-oob` plus
+  `HX-Retarget: #reader-panes` and `HX-Reswap: outerHTML`, so the full panes
+  replace the tree. An absent header keeps the plain list swap.
 
 ### Hide read
 
