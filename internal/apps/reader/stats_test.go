@@ -283,7 +283,14 @@ func dailyFetched(t *testing.T, f *storeFixture, userID int64, day time.Time) (f
 func TestSubscriptionVisibilityCutoffAgreesAcrossQueries(t *testing.T) {
 	f := newStoreFixture(t)
 	ctx := context.Background()
-	now := time.Now().UTC()
+	// A fixed local noon, not time.Now(): RecordDailyStats keys rows by the
+	// local date and BackfillDailyStats by the UTC date, and dailyFetched
+	// looks both up under one key. At noon in Melbourne the two dates agree;
+	// in the early morning they don't (before 10:00 in AEST, 11:00 in AEDT),
+	// which made this test fail depending on when it ran (#521). Every day
+	// below falls in AEST, clear of the October DST change.
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.Local)
+	f.store.SetClock(func() time.Time { return now })
 
 	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
 	if err != nil {
