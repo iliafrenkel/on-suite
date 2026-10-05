@@ -7,10 +7,8 @@ package reader
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
 	"embed"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -19,6 +17,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 // ID is the app id: the URL prefix, the migration namespace, and the prefix on
@@ -1551,8 +1550,7 @@ func (s *Store) SaveImageFailure(ctx context.Context, hash, msg string, now time
 // over reader_feed_icons rather than reader_images. A hash from one table
 // is never looked up in the other.
 func FaviconHash(srcURL string) string {
-	sum := sha256.Sum256([]byte(srcURL))
-	return hex.EncodeToString(sum[:16])
+	return webfetch.URLHash(srcURL)
 }
 
 // FeedIcon is one cached favicon.
@@ -1575,8 +1573,7 @@ func (i FeedIcon) Cached() bool { return len(i.Bytes) > 0 }
 // now: it has failed too often, or failed recently and is in backoff. Tree
 // uses the same test so the sidebar never offers a URL the proxy would 404.
 func (i FeedIcon) GivenUp(now time.Time) bool {
-	return i.ErrorCount >= maxImageFetchAttempts ||
-		(i.ErrorCount > 0 && now.Sub(i.FetchedAt) < imageRetryBackoff)
+	return webfetch.GivenUp(i.ErrorCount, i.FetchedAt, now)
 }
 
 // FeedIconByHash loads one favicon record. An unknown hash is ErrNotFound,

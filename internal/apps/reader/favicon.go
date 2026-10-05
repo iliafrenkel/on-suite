@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
@@ -69,7 +70,7 @@ func faviconLinkInPage(page []byte, base *url.URL) (string, bool) {
 				}
 			}
 			if isIconRel(rel) && href != "" {
-				if abs, resolved := resolveAbsoluteHTTPURL(href, base); resolved {
+				if abs, resolved := webfetch.ResolveHTTPURL(href, base); resolved {
 					found, ok = abs, true
 					return
 				}

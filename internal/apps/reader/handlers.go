@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 // userID is the signed-in user. Every route is registered with Handle, so a
@@ -751,7 +752,7 @@ func (a *App) resolveFeedURL(ctx context.Context, raw string) (feedURL, faviconU
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	res, err := a.client.Get(ctx, raw, GetOptions{MaxBytes: MaxFeedBytes})
+	res, err := a.client.Get(ctx, raw, webfetch.GetOptions{MaxBytes: MaxFeedBytes})
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -808,7 +809,7 @@ func (a *App) probeForFeed(ctx context.Context, pageURL string) (string, bool) {
 			continue
 		}
 		candidate := base.ResolveReference(ref).String()
-		res, err := a.client.Get(ctx, candidate, GetOptions{MaxBytes: MaxFeedBytes})
+		res, err := a.client.Get(ctx, candidate, webfetch.GetOptions{MaxBytes: MaxFeedBytes})
 		if err != nil {
 			continue
 		}
@@ -1194,8 +1195,8 @@ func (a *App) extractInto(r *http.Request, userID int64, item Item) error {
 		return r.Context().Err()
 	}
 
-	res, err := a.client.Get(r.Context(), item.URL, GetOptions{
-		MaxBytes: MaxArticleBytes,
+	res, err := a.client.Get(r.Context(), item.URL, webfetch.GetOptions{
+		MaxBytes: webfetch.MaxPageBytes,
 		Accept:   "text/html, application/xhtml+xml;q=0.9, */*;q=0.5",
 	})
 	if err != nil {

@@ -5,22 +5,9 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
-)
 
-// validFaviconHash reports whether the path segment could be one of our
-// hashes. Checked before any database work so a probe costs nothing.
-func validFaviconHash(s string) bool {
-	if len(s) != 32 {
-		return false
-	}
-	for _, c := range s {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return false
-		}
-	}
-	return true
-}
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
+)
 
 // bareNotFound answers a failed-favicon request with a bare 404 rather than
 // the app's full HTML error page. An <img> tag hits this on a known-dead
@@ -44,7 +31,7 @@ func (a *App) favicon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash := r.PathValue("hash")
-	if !validFaviconHash(hash) {
+	if !webfetch.ValidURLHash(hash) {
 		bareNotFound(w)
 		return
 	}
@@ -92,24 +79,16 @@ func (a *App) fetchFeedIcon(r *http.Request, icon FeedIcon) (FeedIcon, error) {
 		return FeedIcon{}, r.Context().Err()
 	}
 
-	res, err := a.client.Get(r.Context(), icon.SrcURL, GetOptions{
-		MaxBytes: MaxFaviconBytes,
-		Accept:   "image/*",
-	})
+	ct, body, err := a.client.GetImage(r.Context(), icon.SrcURL, webfetch.MaxFaviconBytes)
 	if err != nil {
 		return FeedIcon{}, err
 	}
 
-	ct := http.DetectContentType(res.Body)
-	if !strings.HasPrefix(ct, "image/") {
-		return FeedIcon{}, errors.New("reader: response is not an image (" + ct + ")")
-	}
-
-	if err := a.store.SaveFeedIconBytes(r.Context(), icon.Hash, ct, res.Body, a.store.now()); err != nil {
+	if err := a.store.SaveFeedIconBytes(r.Context(), icon.Hash, ct, body, a.store.now()); err != nil {
 		return FeedIcon{}, err
 	}
 	icon.ContentType = ct
-	icon.Bytes = res.Body
+	icon.Bytes = body
 	return icon, nil
 }
 

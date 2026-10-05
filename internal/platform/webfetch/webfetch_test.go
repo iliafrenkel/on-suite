@@ -1,4 +1,4 @@
-package reader_test
+package webfetch_test
 
 import (
 	"context"
@@ -8,15 +8,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iliafrenkel/on-suite/internal/apps/reader"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
+
+func newTestClient() *webfetch.Client {
+	return webfetch.New(webfetch.Config{UserAgent: "test", DefaultMaxBytes: 5 << 20})
+}
 
 // testClient is a client that may talk to httptest, which listens on
 // 127.0.0.1 — an address the real client refuses by construction. Injecting
 // the guard is what makes both this and TestDefaultClientRefusesPrivateAddresses
 // possible; a package-level guard would allow only one of them.
-func testClient() *reader.Client {
-	c := reader.NewClient("test")
+func testClient() *webfetch.Client {
+	c := newTestClient()
 	c.DenyAddr = func(string) error { return nil }
 	return c
 }
@@ -30,7 +34,7 @@ func TestGetReturnsBodyAndValidators(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := testClient().Get(context.Background(), srv.URL, reader.GetOptions{})
+	got, err := testClient().Get(context.Background(), srv.URL, webfetch.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -57,7 +61,7 @@ func TestGetSendsConditionalHeadersAndHandles304(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := testClient().Get(context.Background(), srv.URL, reader.GetOptions{
+	got, err := testClient().Get(context.Background(), srv.URL, webfetch.GetOptions{
 		ETag:         `"abc"`,
 		LastModified: "Wed, 09 Sep 2026 00:00:00 GMT",
 	})
@@ -92,7 +96,7 @@ func TestGetRejectsAnOversizedBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := testClient().Get(context.Background(), srv.URL, reader.GetOptions{MaxBytes: 1024})
+	_, err := testClient().Get(context.Background(), srv.URL, webfetch.GetOptions{MaxBytes: 1024})
 	if err == nil {
 		t.Fatal("Get: want an error for a body over the cap, got nil")
 	}
@@ -105,13 +109,13 @@ func TestGetRefusesTooManyRedirects(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, err := testClient().Get(context.Background(), srv.URL, reader.GetOptions{}); err == nil {
+	if _, err := testClient().Get(context.Background(), srv.URL, webfetch.GetOptions{}); err == nil {
 		t.Fatal("a redirect loop returned no error")
 	}
 }
 
 func TestGetRefusesANonHTTPScheme(t *testing.T) {
-	if _, err := testClient().Get(context.Background(), "file:///etc/passwd", reader.GetOptions{}); err == nil {
+	if _, err := testClient().Get(context.Background(), "file:///etc/passwd", webfetch.GetOptions{}); err == nil {
 		t.Fatal("file:// was accepted")
 	}
 }
@@ -119,7 +123,7 @@ func TestGetRefusesANonHTTPScheme(t *testing.T) {
 // This is the test that would silently stop meaning anything if DenyAddr were
 // package-level and the tests overrode it: it uses the DEFAULT client.
 func TestDefaultClientRefusesPrivateAddresses(t *testing.T) {
-	c := reader.NewClient("test")
+	c := newTestClient()
 
 	for _, target := range []string{
 		"http://127.0.0.1:8080/admin",
@@ -129,11 +133,11 @@ func TestDefaultClientRefusesPrivateAddresses(t *testing.T) {
 		"http://[::1]:8080/",
 	} {
 		t.Run(target, func(t *testing.T) {
-			_, err := c.Get(context.Background(), target, reader.GetOptions{})
+			_, err := c.Get(context.Background(), target, webfetch.GetOptions{})
 			if err == nil {
 				t.Fatalf("%s was fetched; the SSRF guard must refuse it", target)
 			}
-			if !errors.Is(err, reader.ErrBlockedAddress) {
+			if !errors.Is(err, webfetch.ErrBlockedAddress) {
 				t.Errorf("error = %v, want ErrBlockedAddress", err)
 			}
 		})

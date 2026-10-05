@@ -4,6 +4,8 @@ import (
 	"net"
 	"net/netip"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 // AllowPrivateFetchesForTest lets this app's HTTP client reach loopback, so
@@ -26,12 +28,12 @@ func (a *App) AllowPrivateFetchesForTest() {
 	a.client.DenyAddr = func(address string) error {
 		host, _, err := net.SplitHostPort(address)
 		if err != nil {
-			return ErrBlockedAddress
+			return webfetch.ErrBlockedAddress
 		}
 		if ip, err := netip.ParseAddr(host); err == nil && ip.Unmap().IsLoopback() {
 			return nil
 		}
-		return ErrBlockedAddress
+		return webfetch.ErrBlockedAddress
 	}
 }
 

@@ -1,11 +1,10 @@
 package reader
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"net/url"
 	"strings"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
@@ -21,8 +20,7 @@ const ImagePathPrefix = "/reader/img/"
 // assigning an id is what lets rewriting happen in parse.go, which never
 // touches the database — see the plan's note on deviating from the spec here.
 func ImageHash(srcURL string) string {
-	sum := sha256.Sum256([]byte(srcURL))
-	return hex.EncodeToString(sum[:16])
+	return webfetch.URLHash(srcURL)
 }
 
 // SanitizeArticleHTML sanitizes publisher HTML and rewrites every image to the
@@ -89,7 +87,7 @@ func absolutizeOneImageSrc(n *html.Node, base *url.URL) {
 		attrs = append(attrs, a)
 	}
 
-	abs, ok := resolveAbsoluteHTTPURL(src, base)
+	abs, ok := webfetch.ResolveHTTPURL(src, base)
 	if !ok {
 		n.Attr = attrs
 		return
@@ -123,7 +121,7 @@ func rewriteOneImage(n *html.Node, base *url.URL, images map[string]string) {
 		attrs = append(attrs, a)
 	}
 
-	abs, ok := resolveAbsoluteHTTPURL(src, base)
+	abs, ok := webfetch.ResolveHTTPURL(src, base)
 	if !ok {
 		// No usable source. Keep the element (its alt text is still worth
 		// something) but with nothing to load.

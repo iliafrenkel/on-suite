@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
@@ -109,29 +110,9 @@ func candidateFrom(n *html.Node, base *url.URL) (FeedCandidate, bool) {
 		return FeedCandidate{}, false
 	}
 
-	abs, ok := resolveAbsoluteHTTPURL(href, base)
+	abs, ok := webfetch.ResolveHTTPURL(href, base)
 	if !ok {
 		return FeedCandidate{}, false
 	}
 	return FeedCandidate{URL: abs, Title: title}, true
-}
-
-// resolveAbsoluteHTTPURL resolves a URL against a base URL and accepts http and
-// https only — javascript:, data:, and file: are refused so they never reach a
-// fetcher or an img src.
-func resolveAbsoluteHTTPURL(raw string, base *url.URL) (string, bool) {
-	if raw == "" {
-		return "", false
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", false
-	}
-	if !u.IsAbs() && base != nil {
-		u = base.ResolveReference(u)
-	}
-	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return "", false
-	}
-	return u.String(), true
 }
