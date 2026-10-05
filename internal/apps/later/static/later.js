@@ -113,6 +113,24 @@
 		});
 		updatePrefButtons(reader);
 	});
+
+	// A highlight link in the Notes panel scrolls to the passage; on a
+	// narrow screen the panel would cover it, so close the panel too.
+	document.addEventListener("click", function (e) {
+		var link = e.target instanceof Element && e.target.closest(".later-notes-quote[href]");
+		if (!link || !window.matchMedia("(max-width: 640px)").matches) return;
+		var open = document.getElementById("later-notes-open");
+		if (open) open.checked = false;
+	});
+
+	// "Saved" shouldn't linger over text that has changed since.
+	document.addEventListener("input", function (e) {
+		var t = e.target;
+		if (!(t instanceof HTMLTextAreaElement)) return;
+		if (t.id !== "later-note-panel" && t.id !== "later-note-end") return;
+		var status = document.getElementById("later-note-status-" + t.id.slice("later-note-".length));
+		if (status) status.textContent = "";
+	});
 })();
 
 	// Reading progress: where you are, saved quietly, restored on return.

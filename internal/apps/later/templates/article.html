@@ -6,11 +6,13 @@
 <div class="later-reader later-font-{{$d.Prefs.Font}} later-size-{{$d.Prefs.Size}} later-width-{{$d.Prefs.Width}}"
      id="later-reader" data-article-id="{{$d.ID}}" data-minutes="{{$d.Minutes}}"
      {{if not $d.LinkOnly}}data-progress="{{$d.Progress}}"{{end}}>
+	<input type="checkbox" id="later-notes-open" class="visually-hidden later-notes-open" aria-controls="later-notes">
 	<div class="later-sticky">
 	<div class="later-topbar">
 		<a class="later-back" href="/later/?tab={{$d.Tab}}">← Later</a>
 		<span class="later-topbar-title">{{$d.Title}}</span>
 		{{if not $d.LinkOnly}}<span class="later-left" data-later-left>{{$d.Minutes}} min left</span>{{end}}
+		<label class="later-notes-toggle" for="later-notes-open">Notes · {{template "later-notes-count" $d}}</label>
 		<details class="later-menu later-aa">
 			<summary aria-label="Reading settings">Aa</summary>
 			<div class="later-menu-panel stack">
@@ -101,9 +103,55 @@
 		{{else}}
 		{{template "later-body" $d}}
 		{{end}}
+		<section class="later-note-end" aria-label="Your note">
+			{{template "later-note-form" (dict "D" $d "Copy" "end" "CSRF" $csrf)}}
+		</section>
 	</article>
+	<aside class="later-notes stack" id="later-notes" aria-label="Notes">
+		<div class="later-notes-head">
+			<h2>Notes</h2>
+			<label class="later-notes-close" for="later-notes-open" aria-label="Close notes">✕</label>
+		</div>
+		{{template "later-note-form" (dict "D" $d "Copy" "panel" "CSRF" $csrf)}}
+		<h3>Highlights</h3>
+		{{template "later-notes-list" $d}}
+	</aside>
 </div>
 {{template "later-confirm"}}
 {{end}}
 
 {{define "later-body"}}<div class="later-article-body" id="later-body">{{.Body}}</div>{{end}}
+
+{{define "later-note-form"}}
+<form class="later-note-form stack" method="post" action="/later/a/{{.D.ID}}/note"
+      hx-post="/later/a/{{.D.ID}}/note" hx-trigger="change, submit" hx-swap="none">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRF}}">
+	<input type="hidden" name="copy" value="{{.Copy}}">
+	<label for="later-note-{{.Copy}}">Your note on this article</label>
+	{{template "later-note-text" (dict "D" .D "Copy" .Copy "OOB" false)}}
+	<div class="later-note-actions">
+		<button type="submit">Save note</button>
+		<span class="later-note-status" id="later-note-status-{{.Copy}}" role="status"></span>
+	</div>
+</form>
+{{end}}
+
+{{define "later-note-text"}}<textarea id="later-note-{{.Copy}}" name="note" rows="{{if eq .Copy "panel"}}8{{else}}5{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.D.Note}}</textarea>{{end}}
+
+{{define "later-note-saved"}}{{template "later-note-text" (dict "D" .D "Copy" .Other "OOB" true)}}<span class="later-note-status" id="later-note-status-{{.Copy}}" role="status" hx-swap-oob="true">Saved</span>{{end}}
+
+{{define "later-notes-count"}}<span id="later-notes-count"{{if .OOB}} hx-swap-oob="true"{{end}}>{{len .Highlights}}</span>{{end}}
+
+{{define "later-notes-list"}}
+<ol class="later-notes-list" id="later-notes-list"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	{{range .Highlights}}
+	<li class="later-notes-item" data-highlight-id="{{.ID}}">
+		{{if .Drawn}}<a class="later-notes-quote" href="#later-h-{{.ID}}">{{.Quote}}</a>
+		{{else}}<span class="later-notes-quote">{{.Quote}}</span> <span class="later-notes-stale">Not found in the text</span>{{end}}
+		{{with .Comment}}<p class="later-notes-comment">{{.}}</p>{{end}}
+	</li>
+	{{else}}
+	<li class="later-notes-empty">Select text in the article to highlight it.</li>
+	{{end}}
+</ol>
+{{end}}

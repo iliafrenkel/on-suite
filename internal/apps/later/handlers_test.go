@@ -307,7 +307,7 @@ func TestPastingTextMakesItReadable(t *testing.T) {
 	if n := len(doc.QueryAll(".later-article-body p")); n != 2 {
 		t.Errorf("got %d paragraphs, want 2", n)
 	}
-	doc.MustNotHave("textarea")
+	doc.MustNotHave("#later-text") // the paste form is gone
 }
 
 func TestPastingBlankTextIs422(t *testing.T) {

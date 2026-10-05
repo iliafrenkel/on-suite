@@ -53,6 +53,7 @@ An article opens full screen. The top bar has:
 - **← Later** — back to the list the article is in.
 - **Aa** — choose the font (serif or sans), the text size and the width of
   the column. Changes apply at once and are remembered on every device.
+- **Notes** — opens the Notes panel (see below).
 - **Archive** — move the article to Archived (or **Move to unread** if it
   is already archived).
 - **⋯** — **Open original** opens the saved page on its own site, and
@@ -61,6 +62,13 @@ An article opens full screen. The top bar has:
 ON Later remembers where you stopped and opens there next time. The
 line under the top bar shows how far through you are, and the bar shows the
 minutes left. **Move to unread** starts the article again from the top.
+
+## Highlights and notes
+
+**Notes** in the top bar opens the Notes panel. Write your thoughts on
+the whole article in the note at the top; it saves when you click
+elsewhere. The same note is at the end of the article, so you can write
+it as soon as you finish reading.
 
 ## Deleting an article
 

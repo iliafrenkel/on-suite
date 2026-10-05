@@ -76,6 +76,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /a/{id}/delete", a.delete)
 	r.HandleFunc("POST /a/{id}/text", a.pasteText)
 	r.HandleFunc("POST /a/{id}/progress", a.progress)
+	r.HandleFunc("POST /a/{id}/note", a.setNote)
 	r.HandleFunc("POST /prefs", a.setPrefs)
 	r.HandleFunc("GET /later.js", a.script)
 	r.HandleFunc("GET /img/{hash}", a.image)
