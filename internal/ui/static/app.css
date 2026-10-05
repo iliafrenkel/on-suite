@@ -3706,6 +3706,7 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-note-form textarea { width: 100%; }
 .later-note-actions { display: flex; gap: .5rem; align-items: center; }
 .later-note-status { font-size: var(--fs-sm); color: var(--c-text-faint); }
+.later-note-status-error { color: var(--c-danger); }
 .later-note-end { margin-top: 2.5rem; padding-top: 1.5rem; border-top: var(--border); }
 @media (prefers-reduced-motion: reduce) {
   .later-notes { transition: none; }

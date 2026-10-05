@@ -187,8 +187,8 @@ func TestSavingTheNoteOverHTMXRefreshesTheOtherCopy(t *testing.T) {
 		t.Errorf("end textarea = %q, want the saved note", text)
 	}
 	status := doc.MustHave("span#later-note-status-panel")
-	if v, _ := htmlassert.Attr(status, "hx-swap-oob"); v != "true" {
-		t.Errorf("status hx-swap-oob = %q, want true", v)
+	if v, _ := htmlassert.Attr(status, "hx-swap-oob"); v != "innerHTML" {
+		t.Errorf("status hx-swap-oob = %q, want innerHTML", v)
 	}
 	if text := htmlassert.Text(status); text != "Saved" {
 		t.Errorf("status = %q, want Saved", text)

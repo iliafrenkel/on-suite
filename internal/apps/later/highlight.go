@@ -43,11 +43,6 @@ func validSpan(text []rune, start, end int, quote string) bool {
 	return string(text[start:end]) == quote
 }
 
-// Matches reports whether h still points at its quote in text. One that
-// doesn't is listed but not drawn (spec: the stored quote is a
-// belt-and-braces check).
-func (h Highlight) Matches(text string) bool { return ValidSpan(text, h.Start, h.End, h.Quote) }
-
 // cleanText is how comments (and Later's article note) are stored: trimmed,
 // with browser CRLFs as LFs. A textarea drops one leading newline, so
 // trimming also keeps an edit round trip exact.

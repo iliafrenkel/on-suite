@@ -32,9 +32,14 @@
 	function selection() {
 		var sel = window.getSelection();
 		if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
-		var range = sel.getRangeAt(0);
+		var range = sel.getRangeAt(0).cloneRange();
 		var root = body();
-		if (!root || !root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+		if (!root || !root.contains(range.startContainer)) return null;
+		// A triple-click on the last paragraph ends just past the body; clamp.
+		if (!root.contains(range.endContainer)) {
+			if (!(root.compareDocumentPosition(range.endContainer) & Node.DOCUMENT_POSITION_FOLLOWING)) return null;
+			range.setEnd(root, root.childNodes.length);
+		}
 		var chars = Array.from(range.toString());
 		var lead = 0, trail = 0;
 		while (lead < chars.length && /\s/.test(chars[lead])) lead++;

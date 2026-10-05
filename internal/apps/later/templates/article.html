@@ -183,7 +183,7 @@
 
 {{define "later-note-text"}}<textarea id="later-note-{{.Copy}}" name="note" rows="{{if eq .Copy "panel"}}8{{else}}5{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.D.Note}}</textarea>{{end}}
 
-{{define "later-note-saved"}}{{template "later-note-text" (dict "D" .D "Copy" .Other "OOB" true)}}<span class="later-note-status" id="later-note-status-{{.Copy}}" role="status" hx-swap-oob="true">Saved</span>{{end}}
+{{define "later-note-saved"}}{{template "later-note-text" (dict "D" .D "Copy" .Other "OOB" true)}}<span class="later-note-status" id="later-note-status-{{.Copy}}" role="status" hx-swap-oob="innerHTML">Saved</span>{{end}}
 
 {{define "later-notes-count"}}<span id="later-notes-count"{{if .OOB}} hx-swap-oob="true"{{end}}>{{len .Highlights}}</span>{{end}}
 

@@ -147,7 +147,26 @@
 		if (!(t instanceof HTMLTextAreaElement)) return;
 		if (t.id !== "later-note-panel" && t.id !== "later-note-end") return;
 		var status = document.getElementById("later-note-status-" + t.id.slice("later-note-".length));
-		if (status) status.textContent = "";
+		if (status) {
+			status.textContent = "";
+			status.classList.remove("later-note-status-error");
+		}
+	});
+
+	// A note save that failed (403, 500, offline) says so; the server's OOB
+	// swap writes "Saved" on success.
+	document.body.addEventListener("htmx:afterRequest", function (e) {
+		var form = e.detail && e.detail.elt;
+		if (!(form instanceof Element) || !form.matches("form.later-note-form")) return;
+		var copy = form.querySelector("input[name=copy]");
+		var status = copy && document.getElementById("later-note-status-" + copy.value);
+		if (!status) return;
+		if (e.detail.successful) {
+			status.classList.remove("later-note-status-error");
+		} else {
+			status.textContent = "Couldn't save. Try again.";
+			status.classList.add("later-note-status-error");
+		}
 	});
 })();
 
