@@ -39,7 +39,9 @@ An article opens full screen. The top bar has:
 - **⋯** — **Open original** opens the saved page on its own site, and
   **Delete** removes the article.
 
-A thin line under the bar shows how far through the article you are.
+ON Later remembers where you stopped and opens there next time. The
+line under the top bar shows how far through you are, and the bar shows the
+minutes left. **Move to unread** starts the article again from the top.
 
 ## Deleting an article
 

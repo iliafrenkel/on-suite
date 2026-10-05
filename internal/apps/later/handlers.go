@@ -428,3 +428,26 @@ func (a *App) pasteText(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, fmt.Sprintf("/later/a/%d", id), http.StatusSeeOther)
 }
+
+// progress quietly saves how far through an article the reader has scrolled.
+// The reader's script posts it; there is nothing to show, so it answers 204.
+func (a *App) progress(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	p, err := strconv.ParseFloat(r.PostFormValue("progress"), 64)
+	if err != nil {
+		a.fail(w, r, ErrInvalid)
+		return
+	}
+	if err := a.store.SetProgress(r.Context(), userID, id, p); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

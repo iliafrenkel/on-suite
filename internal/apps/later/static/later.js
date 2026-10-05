@@ -88,3 +88,71 @@
 		updatePrefButtons(reader);
 	});
 })();
+
+	// Reading progress: where you are, saved quietly, restored on return.
+	(function () {
+		var reader = document.getElementById("later-reader");
+		if (!reader || !reader.hasAttribute("data-progress")) return;
+		var id = reader.dataset.articleId;
+		var minutes = parseInt(reader.dataset.minutes, 10) || 1;
+		var bar = document.querySelector("[data-later-progress]");
+		var left = document.querySelector("[data-later-left]");
+		var saved = parseFloat(reader.dataset.progress) || 0;
+		var timer = null;
+		var touched = false; // the reader has scrolled by hand
+
+		// The CSRF token HTMX sends is also the one a form field accepts.
+		function csrfToken() {
+			try {
+				return JSON.parse(document.body.getAttribute("hx-headers"))["X-CSRF-Token"] || "";
+			} catch (e) {
+				return "";
+			}
+		}
+		function maxScroll() {
+			return document.documentElement.scrollHeight - window.innerHeight;
+		}
+		function current() {
+			var max = maxScroll();
+			return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 1;
+		}
+		function show(p) {
+			if (bar) bar.value = p;
+			if (left) left.textContent = p >= 0.98 ? "Finished" : Math.max(1, Math.ceil(minutes * (1 - p))) + " min left";
+		}
+		function body(p) {
+			var b = new URLSearchParams();
+			b.set("csrf_token", csrfToken());
+			b.set("progress", p.toFixed(4));
+			return b;
+		}
+		function save() {
+			var p = current();
+			if (Math.abs(p - saved) < 0.01) return;
+			saved = p;
+			fetch("/later/a/" + id + "/progress", { method: "POST", body: body(p), credentials: "same-origin" });
+		}
+		function restore() {
+			if (saved > 0.02 && saved < 0.98) window.scrollTo(0, saved * maxScroll());
+			show(current());
+		}
+
+		// Restore now, and again once images have loaded and moved things,
+		// unless the reader has already taken over the scrolling.
+		restore();
+		window.addEventListener("load", function () { if (!touched) restore(); });
+		["wheel", "touchstart", "keydown", "mousedown"].forEach(function (name) {
+			window.addEventListener(name, function () { touched = true; }, { passive: true });
+		});
+
+		window.addEventListener("scroll", function () {
+			show(current());
+			clearTimeout(timer);
+			timer = setTimeout(save, 2000);
+		}, { passive: true });
+		window.addEventListener("pagehide", function () {
+			var p = current();
+			if (Math.abs(p - saved) >= 0.01) navigator.sendBeacon("/later/a/" + id + "/progress", body(p));
+		});
+	})();
+

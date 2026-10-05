@@ -590,3 +590,81 @@ func TestArticleMetaDoesNotRepeatTheAuthorAsSite(t *testing.T) {
 		t.Errorf("meta %q mentions the author %d times, want 1", meta, got)
 	}
 }
+
+// --- reading progress ---------------------------------------------------
+
+func TestProgressIsSaved(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	ctx, uid := context.Background(), s.Alice.User.ID
+	if err := s.Store.MarkOpened(ctx, uid, a.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := s.Post(t, s.Alice, articlePath(a, "/progress"), url.Values{"progress": {"0.42"}})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("POST progress = %d, want 204; body: %s", rec.Code, rec.Body.String())
+	}
+	got, _ := s.Store.Article(ctx, uid, a.ID)
+	if got.Progress != 0.42 {
+		t.Errorf("Progress = %v, want 0.42", got.Progress)
+	}
+	if got.State != later.StateReading {
+		t.Errorf("State = %q, saving progress must not change it", got.State)
+	}
+}
+
+func TestProgressRejectsGarbage(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	for _, v := range []string{"abc", "NaN", "", "Inf"} {
+		rec := s.Post(t, s.Alice, articlePath(a, "/progress"), url.Values{"progress": {v}})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("progress=%q = %d, want 400", v, rec.Code)
+		}
+	}
+}
+
+func TestProgressOfAnotherUserIs404(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	rec := s.Post(t, s.Bob, articlePath(a, "/progress"), url.Values{"progress": {"0.5"}})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("progress as bob = %d, want 404", rec.Code)
+	}
+	got, _ := s.Store.Article(context.Background(), s.Alice.User.ID, a.ID)
+	if got.Progress != 0 {
+		t.Errorf("alice's progress = %v, want 0", got.Progress)
+	}
+}
+
+func TestArticleCarriesSavedProgress(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	s.Post(t, s.Alice, articlePath(a, "/progress"), url.Values{"progress": {"0.42"}})
+
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	root := doc.MustHave("#later-reader")
+	if v, ok := htmlassert.Attr(root, "data-progress"); !ok || v != "0.42" {
+		t.Errorf("data-progress = %q (present %v), want 0.42", v, ok)
+	}
+	bar := doc.MustHave("progress[data-later-progress]")
+	if v, _ := htmlassert.Attr(bar, "value"); v != "0.42" {
+		t.Errorf("progress value = %q, want 0.42", v)
+	}
+	list := s.Get(t, s.Alice, "/later/?tab=reading")
+	row := list.MustHave("progress.later-row-progress")
+	if v, _ := htmlassert.Attr(row, "value"); v != "42" {
+		t.Errorf("list row progress = %q, want 42", v)
+	}
+}
+
+func TestLinkOnlyArticleHasNoProgress(t *testing.T) {
+	s := newServer(t)
+	a := seedLinkOnly(t, s)
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	if _, ok := htmlassert.Attr(doc.MustHave("#later-reader"), "data-progress"); ok {
+		t.Error("link-only reader has data-progress")
+	}
+	doc.MustNotHave("progress[data-later-progress]")
+}
