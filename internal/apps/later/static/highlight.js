@@ -53,7 +53,12 @@
 	// inside the window.
 	function place(el, rect) {
 		var width = document.documentElement.clientWidth;
-		el.style.top = (rect.bottom + window.scrollY + 8) + "px";
+		var top = rect.bottom + window.scrollY + 8;
+		// Flip above the anchor when it would run off the bottom of the window.
+		if (rect.bottom + 8 + el.offsetHeight > window.innerHeight && rect.top - 8 - el.offsetHeight >= 0) {
+			top = rect.top + window.scrollY - el.offsetHeight - 8;
+		}
+		el.style.top = top + "px";
 		el.style.left = (window.scrollX + Math.max(8, Math.min(rect.left, width - el.offsetWidth - 8))) + "px";
 	}
 
@@ -91,7 +96,7 @@
 		comment.focus();
 	});
 	document.addEventListener("keydown", function (e) {
-		if (e.key === "Escape" && !form.hidden) close();
+		if (e.key === "Escape" && !form.hidden && !document.querySelector("dialog[open]")) close();
 	});
 
 	// After the post: close on success (the body has been redrawn), else say
@@ -136,6 +141,7 @@
 
 		document.addEventListener("click", function (e) {
 			if (!(e.target instanceof Element)) return;
+			if (e.target.closest("dialog")) return; // the confirm dialog is not "outside"
 			var opener = e.target.closest("[data-later-hl-open], mark.later-hl");
 			if (opener) {
 				var sel = window.getSelection();
@@ -146,7 +152,8 @@
 			if (!edit.hidden && !edit.contains(e.target)) edit.hidden = true;
 		});
 		document.addEventListener("keydown", function (e) {
-			if (e.key === "Escape") edit.hidden = true;
+			if (e.key !== "Escape" || document.querySelector("dialog[open]")) return;
+			edit.hidden = true;
 		});
 		document.body.addEventListener("htmx:afterRequest", function (e) {
 			if (e.detail.elt !== editForm && e.detail.elt !== deleteForm) return;
