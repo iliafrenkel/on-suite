@@ -3607,6 +3607,7 @@ input.flash-tag-entry:focus { outline: none; }
 .later-article-body { font-family: 'Source Serif 4', Georgia, serif; font-size: 1.125rem; line-height: 1.65; overflow-wrap: anywhere; }
 .later-article-body img { max-width: 100%; height: auto; }
 .later-article-body pre { overflow-x: auto; }
+.later-article-body table { display: block; max-width: 100%; overflow-x: auto; }
 .later-linkonly { border: var(--border); border-radius: var(--radius); padding: 1rem; background: var(--c-bg-subtle); }
 .later-linkonly textarea { width: 100%; }
 .later-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1rem; border: var(--border); border-radius: var(--radius); color: var(--c-text); background: var(--c-bg); }

@@ -6,7 +6,7 @@
 	<form class="later-save" method="post" action="/later/save">
 		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
 		<label class="visually-hidden" for="later-url">Web address</label>
-		<input id="later-url" class="later-save-input" name="url" type="text" inputmode="url" placeholder="Paste a link to save" value="{{.Data.FormValue}}">
+		<input id="later-url" class="later-save-input" name="url" type="text" inputmode="url" placeholder="Paste a URL to save…" value="{{.Data.FormValue}}">
 		<button class="primary" type="submit">Save</button>
 	</form>
 	{{with .Data.FormError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}

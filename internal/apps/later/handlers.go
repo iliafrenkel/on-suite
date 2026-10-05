@@ -293,7 +293,7 @@ func (a *App) view(w http.ResponseWriter, r *http.Request) {
 
 // setState archives or un-archives an article, then goes to where the user
 // will want to be next.
-func (a *App) setState(state State, redirect func(id int64) string) http.HandlerFunc {
+func (a *App) setState(state State, redirect string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := a.userID(w, r)
 		if !ok {
@@ -307,7 +307,7 @@ func (a *App) setState(state State, redirect func(id int64) string) http.Handler
 			a.fail(w, r, err)
 			return
 		}
-		http.Redirect(w, r, redirect(id), http.StatusSeeOther)
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
 	}
 }
 

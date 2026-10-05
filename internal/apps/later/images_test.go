@@ -96,6 +96,9 @@ func TestImageRouteFetchesStoresAndServes(t *testing.T) {
 	if rec.Header().Get("ETag") == "" {
 		t.Error("missing ETag")
 	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "private, max-age=31536000, immutable" {
+		t.Errorf("Cache-Control = %q", cc)
+	}
 	if !bytes.Equal(rec.Body.Bytes(), tinyPNG(t)) {
 		t.Error("body is not the origin's image")
 	}

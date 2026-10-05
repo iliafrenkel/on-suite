@@ -218,10 +218,10 @@ func (st *Store) Article(ctx context.Context, userID, id int64) (Article, error)
 		`SELECT `+articleColumns+` FROM later_articles WHERE id = ? AND user_id = ?`, id, userID))
 }
 
-// ArticleByURL loads the article userID saved under the (normalised) url.
-func (st *Store) ArticleByURL(ctx context.Context, userID int64, url string) (Article, error) {
+// ArticleByURL loads the article userID saved under the (normalised) pageURL.
+func (st *Store) ArticleByURL(ctx context.Context, userID int64, pageURL string) (Article, error) {
 	return scanArticle(st.db.QueryRowContext(ctx,
-		`SELECT `+articleColumns+` FROM later_articles WHERE user_id = ? AND url = ?`, userID, url))
+		`SELECT `+articleColumns+` FROM later_articles WHERE user_id = ? AND url = ?`, userID, pageURL))
 }
 
 // listOrder is each tab's sort; the keys are the only states List accepts.
@@ -371,6 +371,10 @@ func (st *Store) Delete(ctx context.Context, userID, id int64) error {
 			return fmt.Errorf("later: scan article image: %w", err)
 		}
 		hashes = append(hashes, h)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("later: list article images: %w", err)
 	}
 	if err := rows.Close(); err != nil {
 		return fmt.Errorf("later: list article images: %w", err)

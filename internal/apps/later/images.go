@@ -2,6 +2,7 @@ package later
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -70,7 +71,7 @@ func (a *App) fetchImage(ctx context.Context, img Image) (Image, error) {
 	ct, body, err := a.client.GetImage(ctx, img.SrcURL, webfetch.MaxImageBytes)
 	if err != nil {
 		if ctx.Err() == nil {
-			if serr := a.store.SaveImageFailure(ctx, img.Hash, err.Error()); serr != nil {
+			if serr := a.store.SaveImageFailure(ctx, img.Hash, err.Error()); serr != nil && !errors.Is(serr, ErrNotFound) {
 				a.deps.Log.Error("later recording an image failure failed", "error", serr)
 			}
 			a.deps.Log.Info("later image fetch failed", "src", img.SrcURL, "error", err)
@@ -78,6 +79,10 @@ func (a *App) fetchImage(ctx context.Context, img Image) (Image, error) {
 		return Image{}, err
 	}
 	if err := a.store.SaveImageBytes(ctx, img.Hash, ct, body); err != nil {
+		// ErrNotFound: the article was deleted mid-fetch, which is benign.
+		if !errors.Is(err, ErrNotFound) {
+			a.deps.Log.Error("later storing an image failed", "hash", img.Hash, "error", err)
+		}
 		return Image{}, err
 	}
 	img.ContentType, img.Bytes = ct, body

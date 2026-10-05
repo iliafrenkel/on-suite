@@ -8,7 +8,7 @@ import (
 )
 
 func TestIconForKnownApps(t *testing.T) {
-	for _, id := range []string{"paste", "notes", "reader", "flash", "admin"} {
+	for _, id := range []string{"paste", "notes", "reader", "flash", "admin", "later"} {
 		got := string(ui.IconFor(id))
 		if !strings.Contains(got, "<svg") {
 			t.Errorf("IconFor(%q) = %q, want it to contain <svg", id, got)
@@ -42,7 +42,7 @@ func TestIconForIsDistinctPerApp(t *testing.T) {
 }
 
 func TestIconStrokeWidthIsConsistent(t *testing.T) {
-	for _, id := range []string{"paste", "notes", "reader", "admin", "flash"} {
+	for _, id := range []string{"paste", "notes", "reader", "admin", "flash", "later"} {
 		got := string(ui.IconFor(id))
 		if strings.Contains(got, `stroke-width="1.8"`) {
 			t.Errorf("IconFor(%q) still uses stroke-width 1.8, want the shared 1.5 line-icon weight", id)

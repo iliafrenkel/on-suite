@@ -10,50 +10,50 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// isBlockElement returns true if the element is a block-level element.
-func isBlockElement(a atom.Atom) bool {
-	blockElements := map[atom.Atom]bool{
-		atom.P:          true,
-		atom.Div:        true,
-		atom.H1:         true,
-		atom.H2:         true,
-		atom.H3:         true,
-		atom.H4:         true,
-		atom.H5:         true,
-		atom.H6:         true,
-		atom.Li:         true,
-		atom.Ul:         true,
-		atom.Ol:         true,
-		atom.Dl:         true,
-		atom.Dt:         true,
-		atom.Dd:         true,
-		atom.Blockquote: true,
-		atom.Pre:        true,
-		atom.Figure:     true,
-		atom.Figcaption: true,
-		atom.Table:      true,
-		atom.Thead:      true,
-		atom.Tbody:      true,
-		atom.Tfoot:      true,
-		atom.Tr:         true,
-		atom.Td:         true,
-		atom.Th:         true,
-		atom.Caption:    true,
-		atom.Section:    true,
-		atom.Article:    true,
-		atom.Header:     true,
-		atom.Footer:     true,
-		atom.Aside:      true,
-		atom.Nav:        true,
-		atom.Hr:         true,
-		atom.Br:         true,
-	}
-	return blockElements[a]
+// blockElements are the block-level elements plainText separates.
+var blockElements = map[atom.Atom]bool{
+	atom.P:          true,
+	atom.Div:        true,
+	atom.H1:         true,
+	atom.H2:         true,
+	atom.H3:         true,
+	atom.H4:         true,
+	atom.H5:         true,
+	atom.H6:         true,
+	atom.Li:         true,
+	atom.Ul:         true,
+	atom.Ol:         true,
+	atom.Dl:         true,
+	atom.Dt:         true,
+	atom.Dd:         true,
+	atom.Blockquote: true,
+	atom.Pre:        true,
+	atom.Figure:     true,
+	atom.Figcaption: true,
+	atom.Table:      true,
+	atom.Thead:      true,
+	atom.Tbody:      true,
+	atom.Tfoot:      true,
+	atom.Tr:         true,
+	atom.Td:         true,
+	atom.Th:         true,
+	atom.Caption:    true,
+	atom.Section:    true,
+	atom.Article:    true,
+	atom.Header:     true,
+	atom.Footer:     true,
+	atom.Aside:      true,
+	atom.Nav:        true,
+	atom.Hr:         true,
+	atom.Br:         true,
 }
 
+// isBlockElement returns true if the element is a block-level element.
+func isBlockElement(a atom.Atom) bool { return blockElements[a] }
+
 // plainText concatenates the text nodes of an HTML fragment, writing sep
-// after every block-level element. With sep "" it is exactly the browser's textContent
-// of the rendered fragment.
+// after every block-level element. With sep "" it is exactly the browser's
+// textContent of the rendered fragment.
 func plainText(fragment, sep string) string {
 	ctx := &xhtml.Node{Type: xhtml.ElementNode, Data: "body", DataAtom: atom.Body}
 	nodes, err := xhtml.ParseFragment(strings.NewReader(fragment), ctx)
