@@ -31,6 +31,7 @@
 	{{else}}
 	<p class="later-empty">{{.Data.EmptyText}}</p>
 	{{end}}
+{{template "later-confirm"}}
 </div>
 {{end}}
 
@@ -52,6 +53,29 @@
 			</span>
 		</span>
 	</a>
+	<details class="later-menu later-row-menu">
+		<summary aria-label="Actions for {{.Title}}">⋯</summary>
+		<div class="later-menu-panel stack">
+			{{if eq $.Data.Tab "archived"}}
+			<form method="post" action="/later/a/{{.ID}}/unarchive">
+				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<button type="submit">Move to unread</button>
+			</form>
+			{{else}}
+			<form method="post" action="/later/a/{{.ID}}/archive">
+				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<button type="submit">Archive</button>
+			</form>
+			{{end}}
+			<form method="post" action="/later/a/{{.ID}}/delete" data-later-confirm="Delete this article permanently? This can't be undone.">
+				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<button class="danger" type="submit">Delete</button>
+			</form>
+		</div>
+	</details>
 	{{if .Progress}}<progress class="later-row-progress" max="100" value="{{.Progress}}">{{.Progress}}%</progress>{{end}}
 </li>
 {{end}}

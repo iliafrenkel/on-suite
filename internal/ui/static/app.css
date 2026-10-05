@@ -3626,6 +3626,11 @@ main:has(.later-reader) { max-width: none; padding: 0; }
   .later-menu { position: static; }
   .later-menu-panel { left: 1rem; right: 1rem; top: 100%; min-width: 0; }
 }
+.later-row-menu > summary { border: 0; }
+.later-row-menu .later-menu-panel { z-index: 2; }
+@media (max-width: 40rem) {
+  .later-row { position: relative; }
+}
 .later-pref-row { display: flex; align-items: center; gap: .5rem; justify-content: space-between; }
 .later-pref-row form { margin: 0; }
 .later-pref-row button[aria-pressed="true"] { background: var(--c-accent-bg); color: var(--c-accent); }

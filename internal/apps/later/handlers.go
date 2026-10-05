@@ -375,7 +375,7 @@ func (a *App) setState(state State, redirect string) http.HandlerFunc {
 			a.fail(w, r, err)
 			return
 		}
-		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		http.Redirect(w, r, safeBack(r, redirect), http.StatusSeeOther)
 	}
 }
 
@@ -399,7 +399,7 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/later/?tab="+string(art.State), http.StatusSeeOther)
+	http.Redirect(w, r, safeBack(r, "/later/?tab="+string(art.State)), http.StatusSeeOther)
 }
 
 // pasteText gives a link-only article the text the user pasted.

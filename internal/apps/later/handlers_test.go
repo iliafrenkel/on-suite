@@ -668,3 +668,69 @@ func TestLinkOnlyArticleHasNoProgress(t *testing.T) {
 	}
 	doc.MustNotHave("progress[data-later-progress]")
 }
+
+// --- row ⋯ menu ----------------------------------------------------------
+
+func TestRowMenuOffersTheRightActions(t *testing.T) {
+	s := newServer(t)
+	seedStates(t, s)
+
+	doc := s.Get(t, s.Alice, "/later/?tab=unread")
+	doc.MustHave(".later-row details.later-row-menu")
+	doc.MustHave(`form[action="/later/a/1/archive"]`)
+	del := doc.MustHave(`form[action="/later/a/1/delete"]`)
+	if _, ok := htmlassert.Attr(del, "data-later-confirm"); !ok {
+		t.Error("row Delete form lacks data-later-confirm")
+	}
+	doc.MustHave(`input[value="/later/?tab=unread"]`)
+	doc.MustNotHave(`form[action="/later/a/1/unarchive"]`)
+	doc.MustNotHave(".later-row-menu .later-row-link") // menu stays out of the link
+
+	arch := s.Get(t, s.Alice, "/later/?tab=archived")
+	arch.MustHave(`form[action="/later/a/4/unarchive"]`)
+	arch.MustNotHave(`form[action="/later/a/4/archive"]`)
+	arch.MustHave(`input[value="/later/?tab=archived"]`)
+	if !strings.Contains(arch.Text(), "Move to unread") {
+		t.Error("archived row lacks Move to unread")
+	}
+}
+
+func TestRowMenuWorksInTheLoadMoreFragment(t *testing.T) {
+	s := newServer(t)
+	for i := 0; i < 30; i++ {
+		seed(t, s, s.Alice.User.ID, later.NewArticle{URL: fmt.Sprintf("https://m.example/%d", i), Title: "T", ContentHTML: words(5)})
+	}
+	req := httptest.NewRequest("GET", "/later/?tab=unread&offset=25", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave(`input[value="/later/?tab=unread"]`)
+	doc.MustHave(".later-row-menu")
+}
+
+func TestArchiveFromTheListStaysOnTheList(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	s.Submit(t, s.Alice, articlePath(a, "/archive"), url.Values{"back": {"/later/?tab=unread"}}, "/later/?tab=unread")
+	s.Submit(t, s.Alice, articlePath(a, "/unarchive"), url.Values{"back": {"/later/?tab=archived"}}, "/later/?tab=archived")
+}
+
+func TestDeleteFromTheListStaysOnTheList(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	s.Submit(t, s.Alice, articlePath(a, "/delete"), url.Values{"back": {"/later/?tab=unread"}}, "/later/?tab=unread")
+}
+
+func TestActionsIgnoreForeignBackTargets(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	evil := url.Values{"back": {"https://evil.example"}}
+	s.Submit(t, s.Alice, articlePath(a, "/archive"), evil, "/later/?tab=archived")
+	s.Submit(t, s.Alice, articlePath(a, "/unarchive"), evil, "/later/?tab=unread")
+	s.Submit(t, s.Alice, articlePath(a, "/delete"), evil, "/later/?tab=unread")
+}
+
+func TestIndexIncludesTheConfirmDialog(t *testing.T) {
+	s := newServer(t)
+	s.Get(t, s.Alice, "/later/").MustHave("#later-confirm-dialog")
+}

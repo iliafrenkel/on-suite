@@ -45,4 +45,6 @@ minutes left. **Move to unread** starts the article again from the top.
 
 ## Deleting an article
 
-Open the article, choose **⋯**, then **Delete**. This can't be undone.
+Each article in the list has a **⋯** menu to archive, move back to
+unread, or delete it without opening it. You can also open the article,
+choose **⋯**, then **Delete**. Deleting can't be undone.
