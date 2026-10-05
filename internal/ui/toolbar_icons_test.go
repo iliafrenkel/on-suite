@@ -14,7 +14,7 @@ func TestToolbarIconForKnownNames(t *testing.T) {
 	names := []string{
 		"more", "plus", "refresh", "import", "export", "folder",
 		"keyboard", "stats", "close", "check", "check-circle", "star-filled",
-		"star-outline", "external", "doc", "expand", "inbox",
+		"star-outline", "bookmark", "external", "doc", "expand", "inbox",
 		"edit", "trash", "cards", "play", "arrow-left", "share",
 		"user", "log-out", "settings", "help",
 	}

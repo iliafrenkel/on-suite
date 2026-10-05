@@ -69,6 +69,10 @@ var toolbarIcons = map[string]template.HTML{
 	"star-outline": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<path d="M12 4l2.4 5.8L20.6 10l-4.6 4 1.4 6.2L12 17l-5.4 3.2L8 14l-4.6-4 6.2-.2z"/>
 	</svg>`,
+	// "Read later" (ON Reader's hand-off to ON Later): a bookmark ribbon.
+	"bookmark": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M7 4h10v16l-5-4-5 4z"/>
+	</svg>`,
 	"external": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<path d="M9 6h9v9M18 6L7 17"/>
 	</svg>`,
