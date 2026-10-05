@@ -580,6 +580,7 @@ func TestAppsReadTheirStoreClock(t *testing.T) {
 
 	want := []string{
 		"internal/apps/flash/store.go",
+		"internal/apps/later/store.go",
 		"internal/apps/notes/store.go",
 		"internal/apps/paste/store.go",
 		"internal/apps/reader/store.go",

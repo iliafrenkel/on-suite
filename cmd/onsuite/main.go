@@ -13,6 +13,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
+	"github.com/iliafrenkel/on-suite/internal/apps/later"
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/apps/paste"
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
@@ -81,6 +82,7 @@ Run "onsuite serve -h" for serve flags.
 func registeredApps() []app.App {
 	return []app.App{
 		flash.New(),
+		later.New(),
 		notes.New(),
 		paste.New(),
 		reader.New(),

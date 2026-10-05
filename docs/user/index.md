@@ -7,11 +7,12 @@ can't see it in ON Suite unless you choose to share it.
 ## What ON Suite is
 
 ON Suite is one place for your notes, snippets, news feeds and study cards.
-You sign in once and move freely between four apps:
+You sign in once and move freely between five apps:
 
 - **[ON Notes](notes.md)** — organise notes and to-do lists in one outline.
 - **[ON Paste](paste.md)** — keep and share snippets of text or code.
 - **[ON Reader](reader.md)** — follow your favourite websites and read what's new.
+- **[ON Later](later.md)** — save articles and read them properly.
 - **[ON Flash](flash.md)** — make flash card decks and study them.
 
 ## Signing in
@@ -115,6 +116,7 @@ These guides explain everything each app can do:
 - [ON Notes](notes.md) — outlines, tasks, due dates and sharing.
 - [ON Paste](paste.md) — saving and sharing snippets.
 - [ON Reader](reader.md) — following feeds and reading articles.
+- [ON Later](later.md) — saving and reading articles.
 - [ON Flash](flash.md) — making decks and studying cards.
 - [Admin](admin.md) — managing accounts and the server (for admins only).
 
