@@ -79,6 +79,12 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /a/{id}/note", a.setNote)
 	r.HandleFunc("POST /prefs", a.setPrefs)
 	r.HandleFunc("POST /a/{id}/highlights", a.addHighlight)
+	r.HandleFunc("POST /a/{id}/highlights/comment", a.changeHighlight(func(r *http.Request, art Article, hid int64) error {
+		return a.store.SetHighlightComment(r.Context(), art.ID, hid, r.PostFormValue("comment"))
+	}))
+	r.HandleFunc("POST /a/{id}/highlights/delete", a.changeHighlight(func(r *http.Request, art Article, hid int64) error {
+		return a.store.DeleteHighlight(r.Context(), art.ID, hid)
+	}))
 	r.HandleFunc("GET /later.js", a.script("later.js"))
 	r.HandleFunc("GET /highlight.js", a.script("highlight.js"))
 	r.HandleFunc("GET /img/{hash}", a.image)

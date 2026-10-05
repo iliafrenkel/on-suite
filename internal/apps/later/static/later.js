@@ -39,6 +39,25 @@
 		setTimeout(function () { window.close(); }, 1500);
 	}
 
+	// confirmThen asks message in the app's dialog and calls onOK on OK.
+	function confirmThen(message, onOK) {
+		var dialog = document.getElementById("later-confirm-dialog");
+		document.getElementById("later-confirm-message").textContent = message;
+
+		// Listeners are tied to this one opening of the dialog, so a cancelled
+		// confirmation can never fire later (the bug reader.js documents).
+		var controller = new AbortController();
+		dialog.addEventListener("close", function () { controller.abort(); }, { once: true });
+		document.getElementById("later-confirm-ok").addEventListener("click", function () {
+			dialog.close();
+			onOK();
+		}, { signal: controller.signal });
+		document.getElementById("later-confirm-cancel").addEventListener("click", function () {
+			dialog.close();
+		}, { signal: controller.signal });
+		dialog.showModal();
+	}
+
 	document.addEventListener("submit", function (e) {
 		var form = e.target;
 		if (!(form instanceof HTMLFormElement) || !form.dataset.laterConfirm) return;
@@ -48,21 +67,20 @@
 		if (!dialog || typeof dialog.showModal !== "function") return;
 
 		e.preventDefault();
-		document.getElementById("later-confirm-message").textContent = form.dataset.laterConfirm;
-
-		// Listeners are tied to this one opening of the dialog, so a cancelled
-		// confirmation can never fire later (the bug reader.js documents).
-		var controller = new AbortController();
-		dialog.addEventListener("close", function () { controller.abort(); }, { once: true });
-		document.getElementById("later-confirm-ok").addEventListener("click", function () {
+		confirmThen(form.dataset.laterConfirm, function () {
 			form.dataset.laterConfirmed = "1";
-			dialog.close();
 			form.requestSubmit();
-		}, { signal: controller.signal });
-		document.getElementById("later-confirm-cancel").addEventListener("click", function () {
-			dialog.close();
-		}, { signal: controller.signal });
-		dialog.showModal();
+		});
+	});
+
+	// hx-confirm questions use the same dialog as data-later-confirm forms
+	// (the pattern reader.js uses for its own dialog).
+	document.addEventListener("htmx:confirm", function (e) {
+		if (!e.detail.question) return;
+		var dialog = document.getElementById("later-confirm-dialog");
+		if (!dialog || typeof dialog.showModal !== "function") return; // htmx falls back to window.confirm
+		e.preventDefault();
+		confirmThen(e.detail.question, function () { e.detail.issueRequest(true); });
 	});
 
 	// Aa settings: apply at once, save in the background. Without JS the

@@ -120,3 +120,43 @@ func (a *App) renderHighlightSwap(w http.ResponseWriter, r *http.Request, userID
 		a.deps.Errors.Internal(w, r, err)
 	}
 }
+
+// highlightID parses the "highlight" form field; anything but a positive
+// integer is a 404, like a highlight that isn't there.
+func (a *App) highlightID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PostFormValue("highlight"), 10, 64)
+	if err != nil || id <= 0 {
+		a.deps.Errors.Status(w, r, http.StatusNotFound)
+		return 0, false
+	}
+	return id, true
+}
+
+// changeHighlight loads the user's article and the highlight id, runs op on
+// them, and answers with the redrawn article.
+func (a *App) changeHighlight(op func(r *http.Request, art Article, hid int64) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := a.userID(w, r)
+		if !ok {
+			return
+		}
+		id, ok := a.pathID(w, r)
+		if !ok {
+			return
+		}
+		art, err := a.store.Article(r.Context(), userID, id)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		hid, ok := a.highlightID(w, r)
+		if !ok {
+			return
+		}
+		if err := op(r, art, hid); err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		a.renderHighlightSwap(w, r, userID, art)
+	}
+}

@@ -133,6 +133,24 @@
 		</div>
 		<p class="later-hl-error" data-later-hl-error role="alert" hidden></p>
 	</form>
+	<div id="later-hl-edit" class="later-popover stack" hidden role="dialog" aria-label="Edit highlight">
+		<p class="later-hl-quote" data-later-hl-quote></p>
+		<form class="stack" method="post" action="/later/a/{{$d.ID}}/highlights/comment" data-later-hl-edit-form
+		      hx-post="/later/a/{{$d.ID}}/highlights/comment" hx-target="#later-body" hx-swap="outerHTML">
+			<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+			<input type="hidden" name="highlight">
+			<label for="later-hl-edit-comment">Comment</label>
+			<textarea id="later-hl-edit-comment" name="comment" rows="3"></textarea>
+			<div class="later-popover-actions"><button class="primary" type="submit">Save</button></div>
+		</form>
+		<form method="post" action="/later/a/{{$d.ID}}/highlights/delete" data-later-hl-delete-form
+		      hx-post="/later/a/{{$d.ID}}/highlights/delete" hx-target="#later-body" hx-swap="outerHTML">
+			<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+			<input type="hidden" name="highlight">
+			<button class="danger" type="submit">Delete highlight</button>
+		</form>
+		<p class="later-hl-error" data-later-hl-error role="alert" hidden></p>
+	</div>
 	{{end}}
 </div>
 {{template "later-confirm"}}
@@ -169,6 +187,7 @@
 		{{if .Drawn}}<a class="later-notes-quote" href="#later-h-{{.ID}}">{{.Quote}}</a>
 		{{else}}<span class="later-notes-quote">{{.Quote}}</span> <span class="later-notes-stale">Not found in the text</span>{{end}}
 		{{with .Comment}}<p class="later-notes-comment">{{.}}</p>{{end}}
+		<button type="button" class="later-notes-edit" data-later-hl-open="{{.ID}}">Edit</button>
 	</li>
 	{{else}}
 	<li class="later-notes-empty">Select text in the article to highlight it.</li>

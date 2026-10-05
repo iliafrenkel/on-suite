@@ -75,6 +75,10 @@ Click **Highlight** to mark it, or **Highlight + comment** to add a
 comment too. Highlights can't overlap. Every highlight is listed in the
 Notes panel; click one to jump to it.
 
+Click a highlight (or **Edit** next to it in the Notes panel) to change
+its comment or delete it. Deleting a highlight that has a comment asks
+first.
+
 ## Deleting an article
 
 Each article in the list has a **⋯** menu to archive, move back to

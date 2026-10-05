@@ -108,4 +108,51 @@
 		error.textContent = (xhr && xhr.status === 422 && xhr.responseText) || "Couldn't save the highlight. Try again.";
 		error.hidden = false;
 	});
+
+	var edit = document.getElementById("later-hl-edit");
+	if (edit) {
+		var editForm = edit.querySelector("[data-later-hl-edit-form]");
+		var deleteForm = edit.querySelector("[data-later-hl-delete-form]");
+		var editError = edit.querySelector("[data-later-hl-error]");
+
+		var openEdit = function (id, anchor) {
+			var item = document.querySelector('.later-notes-item[data-highlight-id="' + id + '"]');
+			if (!item) return;
+			var quote = item.querySelector(".later-notes-quote");
+			var note = item.querySelector(".later-notes-comment");
+			edit.querySelector("[data-later-hl-quote]").textContent = quote ? quote.textContent : "";
+			editForm.elements.highlight.value = id;
+			deleteForm.elements.highlight.value = id;
+			editForm.elements.comment.value = note ? note.textContent : "";
+			// Only a highlight with a comment asks before it goes (Ilia's call).
+			if (note) deleteForm.setAttribute("hx-confirm", "Delete this highlight and its comment?");
+			else deleteForm.removeAttribute("hx-confirm");
+			editError.hidden = true;
+			close(); // the new-highlight popover
+			edit.hidden = false;
+			place(edit, anchor.getBoundingClientRect());
+			editForm.elements.comment.focus();
+		};
+
+		document.addEventListener("click", function (e) {
+			if (!(e.target instanceof Element)) return;
+			var opener = e.target.closest("[data-later-hl-open], mark.later-hl");
+			if (opener) {
+				var sel = window.getSelection();
+				if (opener.matches("mark") && sel && !sel.isCollapsed) return; // a drag-select starting in a mark
+				openEdit(opener.dataset.laterHlOpen || opener.dataset.highlightId, opener);
+				return;
+			}
+			if (!edit.hidden && !edit.contains(e.target)) edit.hidden = true;
+		});
+		document.addEventListener("keydown", function (e) {
+			if (e.key === "Escape") edit.hidden = true;
+		});
+		document.body.addEventListener("htmx:afterRequest", function (e) {
+			if (e.detail.elt !== editForm && e.detail.elt !== deleteForm) return;
+			if (e.detail.successful) { edit.hidden = true; return; }
+			editError.textContent = "Couldn't save that. Try again.";
+			editError.hidden = false;
+		});
+	}
 })();
