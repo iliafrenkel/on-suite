@@ -3579,6 +3579,7 @@ input.flash-tag-entry:focus { outline: none; }
 
 /* ---- ON Later ---------------------------------------------------------- */
 
+.later-hl { background: var(--c-accent-attention-bg); color: inherit; border-radius: 2px; scroll-margin-top: 5rem; }
 .later-page { max-width: var(--measure); margin-inline: auto; }
 .later-save { display: flex; gap: .5rem; }
 .later-save-input { flex: 1; min-width: 0; }

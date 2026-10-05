@@ -99,9 +99,11 @@
 			</form>
 		</section>
 		{{else}}
-		<div class="later-article-body">{{$d.Body}}</div>
+		{{template "later-body" $d}}
 		{{end}}
 	</article>
 </div>
 {{template "later-confirm"}}
 {{end}}
+
+{{define "later-body"}}<div class="later-article-body" id="later-body">{{.Body}}</div>{{end}}

@@ -286,10 +286,13 @@ type articleView struct {
 	Byline  string
 	Minutes int
 	SavedAt time.Time
-	// Body is the stored snapshot. This is the only template.HTML conversion
-	// in the app, and it is safe because ContentHTML is only ever
-	// article.SanitizeWithImages output (the save path) or PastedHTML output
-	// (every character escaped); nothing else can write the column.
+	// Body is ContentHTML or RenderHighlights over it. This is the only
+	// template.HTML conversion in the app, and it is safe because ContentHTML
+	// is only ever article.SanitizeWithImages output (the save path) or
+	// PastedHTML output (every character escaped); nothing else can write the
+	// column. RenderHighlights re-serialises that parsed tree and adds only
+	// <mark> elements whose attributes this package builds from integers and
+	// fixed class names.
 	Body      template.HTML
 	LinkOnly  bool
 	Reason    string // ExtractError, for link-only
@@ -305,6 +308,17 @@ type articleView struct {
 	Tab              State   // the list ← Later returns to
 	Progress         float64 // 0-1, as stored
 	Back             string  // this page, for the Aa forms
+
+	Highlights []highlightView // text order
+	Note       string
+	OOB        bool // set on HTMX fragment responses
+}
+
+type highlightView struct {
+	ID      int64
+	Quote   string
+	Comment string
+	Drawn   bool // still matches the text, so it has a <mark id="later-h-{ID}">
 }
 
 // prefOption is one button in the Aa menu.
@@ -324,15 +338,11 @@ func options(current string, pairs ...string) []prefOption {
 // blankTextMessage is shown when the paste-text form is submitted empty.
 const blankTextMessage = "Paste some text first."
 
-func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, art Article, status int, textError string) {
-	userID, ok := a.userID(w, r)
-	if !ok {
-		return
-	}
+// buildArticleView assembles everything the reading view shows for art.
+func (a *App) buildArticleView(r *http.Request, userID int64, art Article, textError string) (articleView, error) {
 	prefs, err := a.store.Prefs(r.Context(), userID)
 	if err != nil {
-		a.fail(w, r, err)
-		return
+		return articleView{}, err
 	}
 	view := articleView{
 		Prefs:        prefs,
@@ -348,7 +358,6 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, art Article,
 		Byline:       art.Byline,
 		Minutes:      ReadingMinutes(art.WordCount),
 		SavedAt:      art.SavedAt,
-		Body:         template.HTML(art.ContentHTML),
 		LinkOnly:     art.Content == ContentLinkOnly,
 		Reason:       art.ExtractError,
 		Archived:     art.State == StateArchived,
@@ -365,6 +374,32 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, art Article,
 	}
 	if prefs.Size < 5 {
 		view.SizeUp = prefs.Size + 1
+	}
+	hs, err := a.store.Highlights(r.Context(), art.ID)
+	if err != nil {
+		return articleView{}, err
+	}
+	runes := []rune(art.ContentText)
+	for _, h := range hs {
+		view.Highlights = append(view.Highlights, highlightView{
+			ID: h.ID, Quote: h.Quote, Comment: h.Comment,
+			Drawn: validSpan(runes, h.Start, h.End, h.Quote),
+		})
+	}
+	view.Note = art.Note
+	view.Body = template.HTML(RenderHighlights(art.ContentHTML, art.ContentText, hs))
+	return view, nil
+}
+
+func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, art Article, status int, textError string) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	view, err := a.buildArticleView(r, userID, art, textError)
+	if err != nil {
+		a.fail(w, r, err)
+		return
 	}
 	page := a.deps.Page(r, art.Title)
 	page.Data = view

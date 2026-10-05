@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -733,4 +734,41 @@ func TestActionsIgnoreForeignBackTargets(t *testing.T) {
 func TestIndexIncludesTheConfirmDialog(t *testing.T) {
 	s := newServer(t)
 	s.Get(t, s.Alice, "/later/").MustHave("#later-confirm-dialog")
+}
+
+// --- highlights drawn in the snapshot -----------------------------------
+
+func TestArticleDrawsItsHighlights(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	h, err := s.Store.AddHighlight(context.Background(), a.ID, a.ContentText, 6, 12, "reader", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	body := doc.MustHave("div#later-body")
+	if got, _ := htmlassert.Attr(body, "class"); got != "later-article-body" {
+		t.Errorf("body class = %q, want later-article-body", got)
+	}
+	id := strconv.FormatInt(h.ID, 10)
+	mark := doc.MustHave("mark#later-h-" + id)
+	if got, _ := htmlassert.Attr(mark, "data-highlight-id"); got != id {
+		t.Errorf("data-highlight-id = %q, want %q", got, id)
+	}
+	if got := htmlassert.Text(mark); got != "reader" {
+		t.Errorf("mark text = %q, want reader", got)
+	}
+}
+
+func TestArticleWithAStaleHighlightStillRenders(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	if _, err := s.Store.InsertHighlightForTest(context.Background(), a.ID, 6, 12, "nope"); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	doc.MustNotHave("mark")
+	if got := htmlassert.Text(doc.MustHave("#later-body")); got != "Hello reader" {
+		t.Errorf("body text = %q, want Hello reader", got)
+	}
 }
