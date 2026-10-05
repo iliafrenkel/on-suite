@@ -502,12 +502,14 @@ func TestDueQueueIsOwnerScoped(t *testing.T) {
 	}
 }
 
+// ratingCount keys by the local date, as flash stores it (#424), not the UTC
+// one; the two differ for part of every day east of UTC (#521).
 func ratingCount(t *testing.T, f *fixture, userID, deckID int64, day time.Time, column string) int {
 	t.Helper()
 	var n int
 	err := f.db.QueryRowContext(context.Background(),
 		`SELECT `+column+` FROM flash_review_counts WHERE user_id = ? AND deck_id = ? AND day = ?`,
-		userID, deckID, day.UTC().Format("2006-01-02")).Scan(&n)
+		userID, deckID, day.Local().Format("2006-01-02")).Scan(&n)
 	if err != nil {
 		t.Fatalf("read %s: %v", column, err)
 	}
@@ -596,7 +598,7 @@ func TestBumpDailyCountsFloorsRatingColumnAtZero(t *testing.T) {
 	// grade log, while leaving the grade itself in place.
 	if _, err := f.db.ExecContext(ctx,
 		`UPDATE flash_review_counts SET again_count = 0 WHERE user_id = ? AND deck_id = ? AND day = ?`,
-		f.alice.ID, deck.ID, now.UTC().Format("2006-01-02"),
+		f.alice.ID, deck.ID, now.Local().Format("2006-01-02"),
 	); err != nil {
 		t.Fatal(err)
 	}
