@@ -105,6 +105,11 @@ canonical example's own comment, not here.
   (see `SyncSearch`): it would throw away whatever the user typed while
   the request was in flight.
 
+- **Fetching publisher-controlled URLs** — reach for
+  `internal/platform/webfetch` (and `article` / `favicon` on top of it)
+  rather than `net/http` or a mirrored copy: one SSRF guard, one set of
+  caps. Canonical: `internal/apps/reader/client.go`'s `NewClient`.
+
 - **Cross-app mirroring instead of a shared package** — reach for this when
   two apps need identical behavior (slug generation, revoke-then-remint
   sharing) but apps must never import each other (see AGENTS.md's
@@ -112,7 +117,9 @@ canonical example's own comment, not here.
   ("mirrors X's own Y... apps never import each other, so this is an
   independent implementation") rather than extracting a shared package.
   Canonical: `internal/apps/notes/share.go`'s `newShareSlug`, which mirrors
-  `internal/apps/paste/store.go`'s.
+  `internal/apps/paste/store.go`'s. Exception: outbound fetching and HTML
+  sanitising, which live in `internal/platform/webfetch` and
+  `internal/platform/article` because they are security-critical.
 
 - **Owner-matching re-checked at every tree-descent step** — reach for this
   whenever code walks a parent/child structure keyed by a plain foreign key

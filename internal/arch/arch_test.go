@@ -170,6 +170,23 @@ func TestLayering(t *testing.T) {
 			"internal/platform/web", "internal/platform/app", "internal/platform/render",
 			"internal/platform/auth", "internal/platform/db", "internal/platform/config",
 		},
+		// The shared web-content packages are leaves: they know HTTP and
+		// HTML, nothing about users, pages, storage or apps.
+		"internal/platform/webfetch": {
+			"internal/platform/web", "internal/platform/app", "internal/platform/render",
+			"internal/platform/auth", "internal/platform/db", "internal/platform/config",
+			"internal/platform/jobs", "internal/platform/article", "internal/platform/favicon",
+		},
+		"internal/platform/article": {
+			"internal/platform/web", "internal/platform/app", "internal/platform/render",
+			"internal/platform/auth", "internal/platform/db", "internal/platform/config",
+			"internal/platform/jobs", "internal/platform/favicon",
+		},
+		"internal/platform/favicon": {
+			"internal/platform/web", "internal/platform/app", "internal/platform/render",
+			"internal/platform/auth", "internal/platform/db", "internal/platform/config",
+			"internal/platform/jobs", "internal/platform/article",
+		},
 	}
 
 	imports := scan(t)
@@ -292,6 +309,9 @@ func TestScanSeesTheRealTree(t *testing.T) {
 		"internal/platform/usermgmt",
 		"internal/platform/jobsadmin",
 		"internal/platform/help",
+		"internal/platform/webfetch",
+		"internal/platform/article",
+		"internal/platform/favicon",
 		"docs",
 		"docs/screenshots/seed",
 		"docs/screenshots/capture",

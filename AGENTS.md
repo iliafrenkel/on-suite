@@ -179,6 +179,18 @@ job with a **Run now** button, runs it in the background, and polls the table
 with HTMX until it finishes. Its design is in
 [docs/superpowers/specs/2026-09-27-trigger-jobs-design.md](docs/superpowers/specs/2026-09-27-trigger-jobs-design.md).
 
+**Three platform packages are shared web-content plumbing.**
+[internal/platform/webfetch](internal/platform/webfetch/webfetch.go) is
+the only way an app should fetch publisher-controlled URLs (SSRF guard at
+dial time, redirect and size caps, image sniffing, the retry rule);
+[internal/platform/article](internal/platform/article/extract.go) is
+readability extraction plus the sanitiser and image rewriting;
+[internal/platform/favicon](internal/platform/favicon/favicon.go) finds a
+site's icon URL. They are leaves (pinned by `TestLayering`) and a
+deliberate exception to cross-app mirroring: this code is large and
+security-critical, so two drifting copies would be worse than one shared
+package. ON Flash still has its own mirrored fetch client.
+
 ## Commit messages
 
 Subjects follow [Conventional Commits](https://www.conventionalcommits.org/):
@@ -213,7 +225,8 @@ labels — the title prefix covers that.
   `modernc.org/sqlite`, `golang.org/x/crypto`, `golang.org/x/term`,
   `golang.org/x/net`, `github.com/alecthomas/chroma/v2`,
   `github.com/mmcdole/gofeed`, `github.com/microcosm-cc/bluemonday`,
-  `github.com/go-shiori/go-readability`,
+  `github.com/go-shiori/go-readability` (contained to
+  `internal/platform/article`),
   `github.com/open-spaced-repetition/go-fsrs/v4`, `github.com/yuin/goldmark`
   — the last one contained to `internal/platform/help`, enforced by
   `TestGoldmarkIsContained`); adding a new one is a spec change, not just an
