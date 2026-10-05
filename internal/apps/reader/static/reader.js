@@ -550,4 +550,34 @@
 		ok.addEventListener("click", onOk, { signal: controller.signal });
 		dialog.showModal();
 	});
+
+	// ---- Read later failures --------------------------------------------------
+	//
+	// A rejected or failed save to ON Later would otherwise leave the button
+	// looking as if nothing happened (htmx does not swap 4xx/5xx). Show the
+	// suite's shared dismissable notice instead and leave the form in place so
+	// the user can try again. Same shape as notes.js's initPasteErrors.
+	function laterRequest(evt) {
+		var detail = evt.detail || {};
+		var path = (detail.pathInfo && detail.pathInfo.requestPath) ||
+			(detail.requestConfig && detail.requestConfig.path) || "";
+		return path.indexOf("/later/save") !== -1;
+	}
+
+	function laterNotices() {
+		return (window.OnSuite && window.OnSuite.notices) || null;
+	}
+
+	function showLaterError(evt) {
+		var n = laterNotices();
+		if (!n || !laterRequest(evt)) return;
+		n.show(evt.detail.elt, "reader-later-error", "Couldn't save to ON Later. Try again.");
+	}
+
+	document.body.addEventListener("htmx:responseError", showLaterError);
+	document.body.addEventListener("htmx:sendError", showLaterError);
+	document.body.addEventListener("htmx:beforeRequest", function (evt) {
+		var n = laterNotices();
+		if (n && laterRequest(evt)) n.clear("reader-later-error");
+	});
 })();

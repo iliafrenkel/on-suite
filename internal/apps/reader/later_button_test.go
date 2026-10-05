@@ -53,6 +53,17 @@ func TestArticleOffersReadLaterWhenLaterIsEnabled(t *testing.T) {
 	}
 }
 
+func TestReadLaterDisablesItsButtonWhileSaving(t *testing.T) {
+	doc := renderArticle(t, articleView{
+		ID: 7, Selected: true, Title: "T", URL: "https://example.com/a",
+		LaterEnabled: true, Shell: render.Shell{CSRFToken: "tok"},
+	})
+	form := doc.MustHave("form[hx-post=/later/save]")
+	if got, _ := htmlassert.Attr(form, "hx-disabled-elt"); got != "find button" {
+		t.Errorf("hx-disabled-elt = %q, want \"find button\"", got)
+	}
+}
+
 func TestArticleHidesReadLaterWhenLaterIsOff(t *testing.T) {
 	doc := renderArticle(t, articleView{ID: 7, Selected: true, Title: "T", URL: "https://example.com/a"})
 	doc.MustNotHave("form[hx-post=/later/save]")

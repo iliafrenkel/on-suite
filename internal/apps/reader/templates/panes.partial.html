@@ -569,7 +569,8 @@
     <div class="reader-actions">
       {{if .URL}}<a class="toolbar-btn" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{ticon "external"}}Open original</a>{{end}}
       {{if and .URL .LaterEnabled}}
-      <form method="post" action="/later/save" hx-post="/later/save" hx-target="this" hx-swap="outerHTML">
+      <form method="post" action="/later/save" hx-post="/later/save" hx-target="this" hx-swap="outerHTML"
+            hx-disabled-elt="find button">
         <input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
         <input type="hidden" name="url" value="{{.URL}}">
         <button type="submit" class="toolbar-btn">{{ticon "bookmark"}}Read later</button>
