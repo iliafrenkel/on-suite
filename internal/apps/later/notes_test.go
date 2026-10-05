@@ -3,6 +3,7 @@ package later_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
@@ -238,5 +239,201 @@ func TestLinkOnlyArticleCanHaveANote(t *testing.T) {
 	}
 	if got.Note != "why I saved it" {
 		t.Errorf("note = %q", got.Note)
+	}
+}
+
+// postHighlight posts a highlight over the given code points of a's text.
+func postHighlight(t *testing.T, s *server, a later.Article, start, end int, comment string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := []rune(a.ContentText)
+	return s.PostHX(t, s.Alice, articlePath(a, "/highlights"), url.Values{
+		"start": {strconv.Itoa(start)}, "end": {strconv.Itoa(end)},
+		"quote": {string(r[start:end])}, "comment": {comment},
+	})
+}
+
+func storedHighlights(t *testing.T, s *server, a later.Article) []later.Highlight {
+	t.Helper()
+	hs, err := s.Store.Highlights(context.Background(), a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hs
+}
+
+func TestAddHighlightSwapsTheBodyAndRefreshesThePanel(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	rec := postHighlight(t, s, a, 6, 11, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "<html") {
+		t.Error("response is a whole page, want a fragment")
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("div#later-body")
+	doc.MustHave("div#later-body mark[data-highlight-id]")
+	if got := htmlassert.Text(doc.MustHave("div#later-body mark")); got != "brave" {
+		t.Errorf("mark = %q, want brave", got)
+	}
+	if got := attr(t, doc, "span#later-notes-count", "hx-swap-oob"); got != "true" {
+		t.Errorf("count hx-swap-oob = %q, want true", got)
+	}
+	if got := htmlassert.Text(doc.MustHave("span#later-notes-count")); got != "1" {
+		t.Errorf("count = %q, want 1", got)
+	}
+	if got := attr(t, doc, "ol#later-notes-list", "hx-swap-oob"); got != "true" {
+		t.Errorf("list hx-swap-oob = %q, want true", got)
+	}
+	if got := htmlassert.Text(doc.MustHave("ol#later-notes-list li.later-notes-item")); !strings.Contains(got, "brave") {
+		t.Errorf("list item = %q, want the quote", got)
+	}
+}
+
+func TestAddHighlightWithAComment(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	rec := postHighlight(t, s, a, 6, 11, "Why?")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	hs := storedHighlights(t, s, a)
+	if len(hs) != 1 || hs[0].Comment != "Why?" {
+		t.Fatalf("stored = %+v, want one highlight with comment Why?", hs)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("mark.later-hl-commented")
+	if got := htmlassert.Text(doc.MustHave("p.later-notes-comment")); got != "Why?" {
+		t.Errorf("comment = %q, want Why?", got)
+	}
+}
+
+func assertHighlightRejected(t *testing.T, rec *httptest.ResponseRecorder, want string) {
+	t.Helper()
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Errorf("Content-Type = %q, want text/plain", ct)
+	}
+	if got := rec.Body.String(); got != want {
+		t.Errorf("body = %q, want %q", got, want)
+	}
+}
+
+func TestAddHighlightRefusesAnOverlap(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	if rec := postHighlight(t, s, a, 6, 15, ""); rec.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want 200", rec.Code)
+	}
+	assertHighlightRejected(t, postHighlight(t, s, a, 12, 21, ""), "That overlaps one of your highlights. Select a different passage.")
+	if n := len(storedHighlights(t, s, a)); n != 1 {
+		t.Errorf("got %d highlights, want 1", n)
+	}
+}
+
+func TestAddHighlightRefusesAMismatchedQuote(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	rec := s.PostHX(t, s.Alice, articlePath(a, "/highlights"), url.Values{
+		"start": {"6"}, "end": {"11"}, "quote": {"brane"},
+	})
+	assertHighlightRejected(t, rec, "Couldn't highlight that selection. Try selecting it again.")
+	if n := len(storedHighlights(t, s, a)); n != 0 {
+		t.Errorf("got %d highlights, want 0", n)
+	}
+}
+
+func TestAddHighlightRefusesGarbageOffsets(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	rec := s.PostHX(t, s.Alice, articlePath(a, "/highlights"), url.Values{
+		"start": {"abc"}, "end": {"11"}, "quote": {"brave"},
+	})
+	assertHighlightRejected(t, rec, "Couldn't highlight that selection. Try selecting it again.")
+}
+
+func TestAddHighlightOnALinkOnlyArticleIs422(t *testing.T) {
+	s := newServer(t)
+	a := seedLinkOnly(t, s)
+	rec := s.PostHX(t, s.Alice, articlePath(a, "/highlights"), url.Values{
+		"start": {"0"}, "end": {"3"}, "quote": {"abc"},
+	})
+	assertHighlightRejected(t, rec, "Couldn't highlight that selection. Try selecting it again.")
+}
+
+func TestAddHighlightOnAnotherUsersArticleIs404(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	rec := s.PostHX(t, s.Bob, articlePath(a, "/highlights"), url.Values{
+		"start": {"6"}, "end": {"11"}, "quote": {"brave"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+	if n := len(storedHighlights(t, s, a)); n != 0 {
+		t.Errorf("got %d highlights, want 0", n)
+	}
+}
+
+func TestAddHighlightWithoutHTMXRedirects(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	rec := s.Post(t, s.Alice, articlePath(a, "/highlights"), url.Values{
+		"start": {"6"}, "end": {"11"}, "quote": {"brave"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != articlePath(a, "") {
+		t.Errorf("Location = %q, want %q", loc, articlePath(a, ""))
+	}
+	if n := len(storedHighlights(t, s, a)); n != 1 {
+		t.Errorf("got %d highlights, want 1", n)
+	}
+}
+
+func TestArticleHasTheHighlightPopover(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	doc.MustHave("script[src=/later/highlight.js]")
+	form := "form#later-hl-new"
+	doc.MustHave(form)
+	for name, want := range map[string]string{
+		"hx-post":   articlePath(a, "/highlights"),
+		"hx-target": "#later-body",
+		"hx-swap":   "outerHTML",
+	} {
+		if got := attr(t, doc, form, name); got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+	if _, ok := htmlassert.Attr(doc.MustHave(form), "hidden"); !ok {
+		t.Error("popover is not hidden")
+	}
+	doc.MustHave(form + " input[name=start]")
+	doc.MustHave(form + " input[name=end]")
+	doc.MustHave(form + " input[name=quote]")
+	doc.MustHave(form + " textarea[name=comment]")
+
+	lo := seedLinkOnly(t, s)
+	doc = s.Get(t, s.Alice, articlePath(lo, ""))
+	doc.MustNotHave(form)
+}
+
+func TestHighlightScriptIsServed(t *testing.T) {
+	s := newServer(t)
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", "/later/highlight.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/javascript; charset=utf-8" {
+		t.Errorf("Content-Type = %q", ct)
+	}
+	if !strings.Contains(rec.Body.String(), "later-hl-new") {
+		t.Error("script does not mention later-hl-new")
 	}
 }

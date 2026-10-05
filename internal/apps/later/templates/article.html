@@ -1,4 +1,4 @@
-{{define "head"}}<script src="/later/later.js" defer></script>{{end}}
+{{define "head"}}<script src="/later/later.js" defer></script><script src="/later/highlight.js" defer></script>{{end}}
 
 {{define "content"}}
 {{$d := .Data}}
@@ -116,11 +116,31 @@
 		<h3>Highlights</h3>
 		{{template "later-notes-list" $d}}
 	</aside>
+	{{if not $d.LinkOnly}}
+	<form id="later-hl-new" class="later-popover stack" hidden method="post" action="/later/a/{{$d.ID}}/highlights"
+	      hx-post="/later/a/{{$d.ID}}/highlights" hx-target="#later-body" hx-swap="outerHTML">
+		<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+		<input type="hidden" name="start">
+		<input type="hidden" name="end">
+		<input type="hidden" name="quote">
+		<div class="stack" data-later-hl-comment hidden>
+			<label for="later-hl-comment">Comment</label>
+			<textarea id="later-hl-comment" name="comment" rows="3"></textarea>
+		</div>
+		<div class="later-popover-actions">
+			<button class="primary" type="submit" data-later-hl-submit>Highlight</button>
+			<button type="button" data-later-hl-with-comment>Highlight + comment</button>
+		</div>
+		<p class="later-hl-error" data-later-hl-error role="alert" hidden></p>
+	</form>
+	{{end}}
 </div>
 {{template "later-confirm"}}
 {{end}}
 
 {{define "later-body"}}<div class="later-article-body" id="later-body">{{.Body}}</div>{{end}}
+
+{{define "later-highlight-swap"}}{{template "later-body" .}}{{template "later-notes-count" .}}{{template "later-notes-list" .}}{{end}}
 
 {{define "later-note-form"}}
 <form class="later-note-form stack" method="post" action="/later/a/{{.D.ID}}/note"

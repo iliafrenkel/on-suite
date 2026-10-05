@@ -3680,6 +3680,12 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-notes h3 { margin: 0; font-size: var(--fs-base); }
 .later-notes-close { cursor: pointer; padding: .2rem .5rem; }
 .later-notes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .75rem; }
+.later-popover { position: absolute; z-index: 4; width: min(20rem, calc(100vw - 1rem)); padding: .75rem;
+  background: var(--c-bg); border: var(--border); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0,0,0,.15); }
+.later-popover[hidden], .later-popover [hidden] { display: none; }
+.later-popover textarea { width: 100%; }
+.later-popover-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.later-hl-error { margin: 0; color: var(--c-danger); font-size: var(--fs-sm); }
 .later-notes-quote { display: block; padding-left: .5rem; border-left: 3px solid var(--c-accent-attention); color: inherit; text-decoration: none; }
 .later-notes-comment { margin: .25rem 0 0 .75rem; font-size: var(--fs-sm); color: var(--c-text-dim); white-space: pre-wrap; }
 .later-notes-stale, .later-notes-empty { font-size: var(--fs-sm); color: var(--c-text-faint); }

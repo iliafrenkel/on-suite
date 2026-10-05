@@ -70,6 +70,11 @@ the whole article in the note at the top; it saves when you click
 elsewhere. The same note is at the end of the article, so you can write
 it as soon as you finish reading.
 
+Select a passage in the article and a small box appears under it.
+Click **Highlight** to mark it, or **Highlight + comment** to add a
+comment too. Highlights can't overlap. Every highlight is listed in the
+Notes panel; click one to jump to it.
+
 ## Deleting an article
 
 Each article in the list has a **⋯** menu to archive, move back to
