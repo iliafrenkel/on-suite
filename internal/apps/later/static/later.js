@@ -127,10 +127,13 @@
 			return b;
 		}
 		function save() {
+			// A restore scroll is not the reader moving; never save before they have.
+			if (!touched) return;
 			var p = current();
 			if (Math.abs(p - saved) < 0.01) return;
 			saved = p;
-			fetch("/later/a/" + id + "/progress", { method: "POST", body: body(p), credentials: "same-origin" });
+			fetch("/later/a/" + id + "/progress", { method: "POST", body: body(p), credentials: "same-origin", keepalive: true })
+				.catch(function () {}); // the next scroll or pagehide retries
 		}
 		function restore() {
 			if (saved > 0.02 && saved < 0.98) window.scrollTo(0, saved * maxScroll());
@@ -152,7 +155,7 @@
 		}, { passive: true });
 		window.addEventListener("pagehide", function () {
 			var p = current();
-			if (Math.abs(p - saved) >= 0.01) navigator.sendBeacon("/later/a/" + id + "/progress", body(p));
+			if (touched && Math.abs(p - saved) >= 0.01) navigator.sendBeacon("/later/a/" + id + "/progress", body(p));
 		});
 	})();
 
