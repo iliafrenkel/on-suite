@@ -156,7 +156,7 @@ design's rules into failing tests:
 | `TestUIIsALeaf` | `internal/ui` imports nothing from the module |
 | `TestDocsIsALeaf` | `docs` imports nothing from the module — documentation never depends on code |
 | `TestHTMLAssertIsTestOnly`, `TestAppTestIsTestOnly` | only `_test.go` files import the test helpers |
-| `TestReadabilityIsContained` | go-readability is imported only by `internal/apps/reader/extract.go` |
+| `TestReadabilityIsContained` | go-readability is imported only by `internal/platform/article/extract.go` |
 | `TestFSRSIsContained` | go-fsrs is imported only by `internal/apps/flash/fsrs.go` |
 | `TestGoldmarkIsContained` | goldmark is imported only by `internal/platform/help/pages.go` |
 | `TestRFC3339IsContained` | no stored time formatted as RFC 3339 outside a short allow-list |

@@ -219,7 +219,7 @@ cmd/onsuite                     wires everything; the only production importer o
                          db must not import web, app, render or auth
 
    config, jobs          leaves: import nothing else in the module
-   webfetch              leaf; article and favicon import only it
+   webfetch              leaf; article and favicon may import it, nothing else
 ```
 
 `TestLayering` holds those rules, `TestAppsDoNotImportEachOther` and
