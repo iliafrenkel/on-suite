@@ -578,3 +578,15 @@ func TestPrefsBackMustBeLocal(t *testing.T) {
 	s := newServer(t)
 	s.Submit(t, s.Alice, "/later/prefs", url.Values{"size": {"2"}, "back": {"https://evil.example/"}}, "/later/")
 }
+
+func TestArticleMetaDoesNotRepeatTheAuthorAsSite(t *testing.T) {
+	s := newServer(t)
+	a := seed(t, s, s.Alice.User.ID, later.NewArticle{
+		URL: "https://jvns.example/p", Title: "P", SiteName: "Julia Evans", Byline: " julia evans ",
+		ContentHTML: "<p>x</p>",
+	})
+	meta := htmlassert.Text(s.Get(t, s.Alice, articlePath(a, "")).MustHave(".later-article-meta"))
+	if got := strings.Count(strings.ToLower(meta), "julia evans"); got != 1 {
+		t.Errorf("meta %q mentions the author %d times, want 1", meta, got)
+	}
+}

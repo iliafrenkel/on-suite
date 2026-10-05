@@ -3608,12 +3608,13 @@ body:has(.later-reader) .shell-bar,
 body:has(.later-reader) .app-sidebar,
 body:has(.later-reader) .app-footer { display: none; }
 main:has(.later-reader) { max-width: none; padding: 0; }
-.later-topbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: .75rem;
+.later-sticky { position: sticky; top: 0; z-index: 2; background: var(--c-bg); }
+.later-topbar { display: flex; align-items: center; gap: .75rem;
   padding: .5rem 1rem; background: var(--c-bg); border-bottom: var(--border); font-size: var(--fs-sm); color: var(--c-text-dim); }
 .later-topbar form { margin: 0; }
 .later-topbar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text); font-weight: 500; }
 .later-left { white-space: nowrap; }
-.later-progress { position: sticky; top: 2.6rem; z-index: 1; display: block; width: 100%; height: 3px; appearance: none; border: 0; background: var(--c-bg-subtle); }
+.later-progress { display: block; width: 100%; height: 3px; appearance: none; border: 0; background: var(--c-bg-subtle); }
 .later-progress::-webkit-progress-bar { background: var(--c-bg-subtle); }
 .later-progress::-webkit-progress-value { background: var(--c-accent); }
 .later-progress::-moz-progress-bar { background: var(--c-accent); }
@@ -3621,6 +3622,10 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-menu > summary { list-style: none; cursor: pointer; padding: .2rem .5rem; border: var(--border); border-radius: var(--radius); }
 .later-menu > summary::-webkit-details-marker { display: none; }
 .later-menu-panel { position: absolute; right: 0; top: calc(100% + .25rem); min-width: 13rem; padding: .75rem; background: var(--c-bg); border: var(--border); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+@media (max-width: 40rem) {
+  .later-menu { position: static; }
+  .later-menu-panel { left: 1rem; right: 1rem; top: 100%; min-width: 0; }
+}
 .later-pref-row { display: flex; align-items: center; gap: .5rem; justify-content: space-between; }
 .later-pref-row form { margin: 0; }
 .later-pref-row button[aria-pressed="true"] { background: var(--c-accent-bg); color: var(--c-accent); }

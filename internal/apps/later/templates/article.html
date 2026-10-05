@@ -6,6 +6,7 @@
 <div class="later-reader later-font-{{$d.Prefs.Font}} later-size-{{$d.Prefs.Size}} later-width-{{$d.Prefs.Width}}"
      id="later-reader" data-article-id="{{$d.ID}}" data-minutes="{{$d.Minutes}}"
      {{if not $d.LinkOnly}}data-progress="{{$d.Progress}}"{{end}}>
+	<div class="later-sticky">
 	<div class="later-topbar">
 		<a class="later-back" href="/later/?tab={{$d.Tab}}">← Later</a>
 		<span class="later-topbar-title">{{$d.Title}}</span>
@@ -28,13 +29,13 @@
 						<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
 						<input type="hidden" name="back" value="{{$d.Back}}">
 						<input type="hidden" name="size" value="{{$d.SizeDown}}">
-						<button type="submit" {{if not $d.SizeDown}}disabled{{end}} aria-label="Smaller text">A−</button>
+						<button type="submit" data-later-size="down" {{if not $d.SizeDown}}disabled{{end}} aria-label="Smaller text">A−</button>
 					</form>
 					<form method="post" action="/later/prefs" data-later-pref>
 						<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
 						<input type="hidden" name="back" value="{{$d.Back}}">
 						<input type="hidden" name="size" value="{{$d.SizeUp}}">
-						<button type="submit" {{if not $d.SizeUp}}disabled{{end}} aria-label="Larger text">A+</button>
+						<button type="submit" data-later-size="up" {{if not $d.SizeUp}}disabled{{end}} aria-label="Larger text">A+</button>
 					</form>
 				</div>
 				<div class="later-pref-row"><span>Width</span>
@@ -74,6 +75,7 @@
 		</details>
 	</div>
 	{{if not $d.LinkOnly}}<progress class="later-progress" max="1" value="{{$d.Progress}}" data-later-progress aria-label="Reading progress"></progress>{{end}}
+	</div>
 	<article class="later-article stack">
 		<header class="later-article-header stack">
 			<h1 class="later-article-title">{{$d.Title}}</h1>

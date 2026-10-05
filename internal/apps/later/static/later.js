@@ -57,7 +57,7 @@
 			var size = f.querySelector('input[name="size"]');
 			if (size && button) {
 				var n = parseInt(current("size"), 10);
-				var up = button.getAttribute("aria-label") === "Larger text";
+				var up = button.dataset.laterSize === "up";
 				var target = up ? n + 1 : n - 1;
 				var ok = target >= 1 && target <= 5;
 				size.value = ok ? String(target) : "";

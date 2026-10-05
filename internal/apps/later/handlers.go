@@ -320,6 +320,9 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, art Article,
 	if view.Site == "" {
 		view.Site = art.SiteHost
 	}
+	if strings.EqualFold(strings.TrimSpace(view.Byline), strings.TrimSpace(view.Site)) {
+		view.Byline = ""
+	}
 	if prefs.Size > 1 {
 		view.SizeDown = prefs.Size - 1
 	}
