@@ -28,11 +28,11 @@ These are non-negotiable. Most are enforced by a test, not just a convention.
   | `modernc.org/sqlite` | `internal/platform/db` — the pure-Go SQLite driver |
   | `golang.org/x/crypto` | Argon2id in `internal/platform/auth`; Let's Encrypt (`acme/autocert`) in `cmd/onsuite` |
   | `golang.org/x/term` | reading passwords without echo in `cmd/onsuite` |
-  | `golang.org/x/net` | HTML parsing in ON Notes, ON Reader and `internal/htmlassert` |
+  | `golang.org/x/net` | HTML parsing in ON Notes, ON Reader, `internal/platform/article`, `internal/platform/favicon` and `internal/htmlassert` |
   | `github.com/alecthomas/chroma/v2` | ON Paste's syntax highlighting |
   | `github.com/mmcdole/gofeed` | ON Reader's feed parsing |
-  | `github.com/microcosm-cc/bluemonday` | ON Reader's HTML sanitising |
-  | `github.com/go-shiori/go-readability` | ON Reader's full-article extraction — allowed in one file only |
+  | `github.com/microcosm-cc/bluemonday` | `internal/platform/article` — HTML sanitising for ON Reader, and ON Later |
+  | `github.com/go-shiori/go-readability` | ON Reader's full-article extraction — allowed only in `internal/platform/article/extract.go` |
   | `github.com/open-spaced-repetition/go-fsrs/v4` | ON Flash's review scheduling — allowed in one file only |
   | `github.com/yuin/goldmark` | Markdown rendering for the in-app help at `/help` — allowed only in `internal/platform/help`, enforced by `TestGoldmarkIsContained` |
 

@@ -1,4 +1,8 @@
-package reader
+// Package article turns a publisher's web page into HTML that is safe to
+// show inside the suite: readability extraction, an allowlist sanitiser that
+// fails closed, and image rewriting so no remote image ever reaches a
+// browser directly. It never fetches — callers do that through webfetch.
+package article
 
 import (
 	"sync"
@@ -18,7 +22,7 @@ var policy = sync.OnceValue(buildPolicy)
 //   - img. Excluded from this default policy so that passing remote images
 //     through would never hand a publisher a tracking pixel pointed at this
 //     household's IP. img is admitted only by policyWithImages, whose output
-//     is always rewritten to the proxy before it reaches a template.
+//     is always rewritten to a same-origin path before it reaches a template.
 //   - style attributes and <style>. The suite's CSP forbids inline styles, so
 //     they would be dead weight even if they were harmless, which they are not.
 //   - iframe, object, embed, form, input. Nothing in an article needs them.
@@ -40,7 +44,7 @@ func buildPolicy() *bluemonday.Policy {
 
 	// Links: http(s) and mailto only, which is what rejects javascript: and
 	// data: hrefs. RequireNoFollowOnLinks and friends add the rel; the target
-	// is set here because a feed article always opens away from the reader.
+	// is set here because an article link always opens away from the app.
 	p.AllowAttrs("href").OnElements("a")
 	p.AllowURLSchemes("http", "https", "mailto")
 	p.RequireNoFollowOnLinks(true)
@@ -63,8 +67,8 @@ func SanitizeHTML(raw string) string {
 }
 
 // policyWithImages is buildPolicy plus img. It is unexported and used only by
-// SanitizeArticleHTML, which rewrites every src to the proxy immediately
-// afterwards.
+// SanitizeWithImages, which rewrites every src to the caller's image path
+// immediately afterwards.
 //
 // Keeping it separate from SanitizeHTML is the safety property: a caller who
 // reaches for the obvious function still cannot emit a remote image, so

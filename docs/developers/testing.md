@@ -153,10 +153,11 @@ design's rules into failing tests:
 | `TestAppsDoNotImportEachOther` | an app never imports another app |
 | `TestPlatformDoesNotImportApps` | `internal/platform/*` and `internal/ui` never import an app |
 | `TestLayering` | the platform's internal order — see [Package layering](architecture.md#package-layering) |
+| `TestWebContentPackagesAreLeaves` | `webfetch` imports nothing from the module; `article` and `favicon` import only `webfetch` |
 | `TestUIIsALeaf` | `internal/ui` imports nothing from the module |
 | `TestDocsIsALeaf` | `docs` imports nothing from the module — documentation never depends on code |
 | `TestHTMLAssertIsTestOnly`, `TestAppTestIsTestOnly` | only `_test.go` files import the test helpers |
-| `TestReadabilityIsContained` | go-readability is imported only by `internal/apps/reader/extract.go` |
+| `TestReadabilityIsContained` | go-readability is imported only by `internal/platform/article/extract.go` |
 | `TestFSRSIsContained` | go-fsrs is imported only by `internal/apps/flash/fsrs.go` |
 | `TestGoldmarkIsContained` | goldmark is imported only by `internal/platform/help/pages.go` |
 | `TestRFC3339IsContained` | no stored time formatted as RFC 3339 outside a short allow-list |

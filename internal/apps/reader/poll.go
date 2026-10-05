@@ -9,6 +9,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/favicon"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 const (
@@ -29,10 +32,11 @@ const (
 )
 
 // Poller turns a due feed into stored items. It is the only glue between
-// fetch.go, parse.go and store.go, none of which know about each other.
+// the webfetch client (see client.go), parse.go and store.go, none of which
+// know about each other.
 type Poller struct {
 	store  *Store
-	client *Client
+	client *webfetch.Client
 	log    *slog.Logger
 	// polling guards PollDue against overlapping runs: the scheduled tick and
 	// a manual "refresh all feeds" click can land at the same time, and
@@ -40,7 +44,7 @@ type Poller struct {
 	polling atomic.Bool
 }
 
-func NewPoller(store *Store, client *Client, log *slog.Logger) *Poller {
+func NewPoller(store *Store, client *webfetch.Client, log *slog.Logger) *Poller {
 	return &Poller{store: store, client: client, log: log}
 }
 
@@ -151,7 +155,7 @@ func (p *Poller) pollOne(ctx context.Context, f Feed) {
 		target = f.URL
 	}
 
-	res, err := p.client.Get(ctx, target, GetOptions{
+	res, err := p.client.Get(ctx, target, webfetch.GetOptions{
 		ETag:         f.ETag,
 		LastModified: f.LastModified,
 		MaxBytes:     MaxFeedBytes,
@@ -236,7 +240,7 @@ func (p *Poller) pollOne(ctx context.Context, f Feed) {
 }
 
 // maybeGuessFavicon fills in a feed's favicon the first time its site URL is
-// known, using only data already in hand: DiscoverFavicon with no page HTML
+// known, using only data already in hand: favicon.Discover with no page HTML
 // is a pure string derivation to "<origin>/favicon.ico", not a fetch. f is
 // the feed's state from before this poll, so f.FaviconURL is accurate to
 // check against; siteURL is this poll's most current value (the freshly
@@ -245,7 +249,7 @@ func (p *Poller) maybeGuessFavicon(ctx context.Context, f Feed, siteURL string) 
 	if f.FaviconURL != "" || siteURL == "" {
 		return
 	}
-	guess := DiscoverFavicon(nil, siteURL)
+	guess := favicon.Discover(nil, siteURL)
 	if guess == "" {
 		return
 	}
@@ -272,15 +276,15 @@ func (p *Poller) CheckSiteFavicon(ctx context.Context, feedID int64) error {
 	return p.readSiteFavicon(ctx, f.ID, f.SiteURL)
 }
 
-// readSiteFavicon fetches siteURL and saves whatever DiscoverFavicon finds in
+// readSiteFavicon fetches siteURL and saves whatever favicon.Discover finds in
 // it — its <link rel="icon">, or the final URL's /favicon.ico — marking the
 // feed checked.
 func (p *Poller) readSiteFavicon(ctx context.Context, feedID int64, siteURL string) error {
-	res, err := p.client.Get(ctx, siteURL, GetOptions{MaxBytes: MaxFeedBytes, Accept: "text/html"})
+	res, err := p.client.Get(ctx, siteURL, webfetch.GetOptions{MaxBytes: MaxFeedBytes, Accept: "text/html"})
 	if err != nil {
 		return err
 	}
-	return p.store.SetPageFavicon(ctx, feedID, DiscoverFavicon(res.Body, res.FinalURL))
+	return p.store.SetPageFavicon(ctx, feedID, favicon.Discover(res.Body, res.FinalURL))
 }
 
 // maybeRepairFavicon is the one-off fix for a feed stuck on a favicon the
@@ -317,7 +321,7 @@ func (p *Poller) record(ctx context.Context, r FetchResult) {
 	}
 }
 
-func statusOf(res *Response) int {
+func statusOf(res *webfetch.Response) int {
 	if res == nil {
 		return 0
 	}

@@ -1,28 +1,32 @@
-package reader
+// Package favicon finds a site's favicon URL. It never fetches: callers pass
+// page HTML they already have (or none) and fetch the result through
+// webfetch, storing the bytes and failures themselves.
+package favicon
 
 import (
 	"bytes"
 	"net/url"
 	"strings"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
 
-// DiscoverFavicon returns the best favicon URL for a site, given page HTML
-// that may already be in hand.
+// Discover returns the best favicon URL for a site, given page HTML that may
+// already be in hand.
 //
 // It never fetches anything itself — the caller decides whether fetching
-// pageHTML was worth doing, which is the whole point: this function exists
-// so that a poll cycle or an add-feed request that already has a page's
-// bytes in memory (or has none at all) can still get a favicon URL for free.
+// pageHTML was worth doing, which is the whole point: this function exists so
+// that a caller that already has a page's bytes in memory (or has none at
+// all) can still get a favicon URL for free.
 //
 // It returns the first <link rel="icon"> or <link rel="shortcut icon"> found
 // in pageHTML, resolved against siteURL. If pageHTML is empty, unparsable,
 // or has no such link, it falls back to "<origin>/favicon.ico" — the
 // decades-old convention every browser itself falls back to. It returns ""
 // only if siteURL itself does not parse into an absolute http(s) URL.
-func DiscoverFavicon(pageHTML []byte, siteURL string) string {
+func Discover(pageHTML []byte, siteURL string) string {
 	base, err := url.Parse(siteURL)
 	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
 		return ""
@@ -42,9 +46,8 @@ func DiscoverFavicon(pageHTML []byte, siteURL string) string {
 	return fallback.String()
 }
 
-// faviconLinkInPage walks the parsed page the same way FeedsInPage
-// (discover.go) does, looking for the first <link> whose rel identifies it
-// as a favicon.
+// faviconLinkInPage walks the parsed page, looking for the first <link> whose
+// rel identifies it as a favicon.
 func faviconLinkInPage(page []byte, base *url.URL) (string, bool) {
 	doc, err := html.Parse(bytes.NewReader(page))
 	if err != nil {
@@ -69,7 +72,7 @@ func faviconLinkInPage(page []byte, base *url.URL) (string, bool) {
 				}
 			}
 			if isIconRel(rel) && href != "" {
-				if abs, resolved := resolveAbsoluteHTTPURL(href, base); resolved {
+				if abs, resolved := webfetch.ResolveHTTPURL(href, base); resolved {
 					found, ok = abs, true
 					return
 				}

@@ -1,10 +1,10 @@
-package reader_test
+package article_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/iliafrenkel/on-suite/internal/apps/reader"
+	"github.com/iliafrenkel/on-suite/internal/platform/article"
 )
 
 // The corpus is the point of this file. Each case names the attack it stands
@@ -58,7 +58,7 @@ func TestSanitizeHTMLStripsHostileMarkup(t *testing.T) {
 			mustNot: []string{"<form", "<input"},
 		},
 		{
-			name:     "SanitizeHTML strips images; only SanitizeArticleHTML admits them",
+			name:     "SanitizeHTML strips images; only SanitizeWithImages admits them",
 			in:       `<p>a</p><img src="https://tracker.example/px.gif">`,
 			mustNot:  []string{"<img", "tracker.example"},
 			mustHave: []string{"<p>a</p>"},
@@ -67,7 +67,7 @@ func TestSanitizeHTMLStripsHostileMarkup(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := reader.SanitizeHTML(tc.in)
+			got := article.SanitizeHTML(tc.in)
 			for _, bad := range tc.mustNot {
 				if strings.Contains(strings.ToLower(got), strings.ToLower(bad)) {
 					t.Errorf("output still contains %q\ngot: %s", bad, got)
@@ -87,7 +87,7 @@ func TestSanitizeHTMLKeepsReadableProse(t *testing.T) {
 		` a <a href="https://example.com/x">link</a> and <code>code</code>.</p>` +
 		`<blockquote><p>quoted</p></blockquote><ul><li>one</li></ul><pre>fenced</pre>`
 
-	got := reader.SanitizeHTML(in)
+	got := article.SanitizeHTML(in)
 	for _, want := range []string{"<h2>", "<em>", "<strong>", "<code>", "<blockquote>", "<ul>", "<li>", "<pre>", `href="https://example.com/x"`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("sanitizer dropped %q from ordinary prose\ngot: %s", want, got)
@@ -96,7 +96,7 @@ func TestSanitizeHTMLKeepsReadableProse(t *testing.T) {
 }
 
 func TestSanitizeHTMLHardensOutboundLinks(t *testing.T) {
-	got := reader.SanitizeHTML(`<a href="https://example.com/x">link</a>`)
+	got := article.SanitizeHTML(`<a href="https://example.com/x">link</a>`)
 
 	// Check that all three rel tokens are present (order may vary)
 	for _, token := range []string{"nofollow", "noopener", "noreferrer"} {
@@ -106,5 +106,14 @@ func TestSanitizeHTMLHardensOutboundLinks(t *testing.T) {
 	}
 	if !strings.Contains(got, `target="_blank"`) {
 		t.Errorf("outbound link does not open in a new tab\ngot: %s", got)
+	}
+}
+
+// SanitizeHTML keeps the guarantee that, on its own, it strips images
+// entirely, so a caller that forgets to rewrite cannot leak a remote image.
+func TestSanitizeHTMLStillStripsImages(t *testing.T) {
+	got := article.SanitizeHTML(`<p>a</p><img src="https://tracker.example/px.gif">`)
+	if strings.Contains(got, "<img") || strings.Contains(got, "tracker.example") {
+		t.Errorf("SanitizeHTML no longer strips images:\n%s", got)
 	}
 }

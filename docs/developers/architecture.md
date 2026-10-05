@@ -44,6 +44,12 @@ together before changing it.*
   `usermgmt` (`/admin/users` and `/account`) and `jobsadmin`
   (`/admin/jobs`, with a **Run now** button). The admin routes answer a
   non-admin with the same 404 as a URL that doesn't exist.
+- **Fetching web content is shared platform plumbing.**
+  `internal/platform/webfetch` is the guarded HTTP client for
+  publisher-controlled URLs (SSRF guard, redirect and size caps, image
+  sniffing); `article` does readability extraction and sanitising on top of
+  it, and `favicon` finds a site's icon. They are leaves, pinned by
+  `TestWebContentPackagesAreLeaves`.
 - **In-app help is also a platform package, not an app**:
   `internal/platform/help` renders `docs/user`'s Markdown guides to HTML
   once at startup (`help.Load`) and serves the cached result at `/help` and
@@ -213,12 +219,14 @@ cmd/onsuite                     wires everything; the only production importer o
                          db must not import web, app, render or auth
 
    config, jobs          leaves: import nothing else in the module
+   webfetch, article, favicon
+                         leaves; article and favicon import only webfetch
 ```
 
 `TestLayering` holds those rules, `TestAppsDoNotImportEachOther` and
 `TestPlatformDoesNotImportApps` hold the boundary, and `TestUIIsALeaf`,
-`TestHTMLAssertIsTestOnly` and `TestAppTestIsTestOnly` keep the leaf and
-test-only packages honest. [Testing](testing.md#the-architecture-test) lists
+`TestWebContentPackagesAreLeaves`, `TestHTMLAssertIsTestOnly` and
+`TestAppTestIsTestOnly` keep the leaf and test-only packages honest. [Testing](testing.md#the-architecture-test) lists
 the rest.
 
 The one other importer of the apps is the screenshot seed,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
+	"github.com/iliafrenkel/on-suite/internal/platform/article"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
@@ -18,7 +19,7 @@ func TestSaveFullArticleRoundTrips(t *testing.T) {
 	now := time.Now().UTC()
 
 	hash := reader.ImageHash("https://cdn.example/full.png")
-	ex := reader.Extracted{
+	ex := article.Extracted{
 		HTML:       `<p>The full body.</p><img src="` + reader.ImagePathPrefix + hash + `">`,
 		Title:      "A Title",
 		Images:     map[string]string{hash: "https://cdn.example/full.png"},
@@ -69,7 +70,7 @@ func TestSaveFullArticleClearsAnEarlierFailure(t *testing.T) {
 		t.Error("a failed fetch left the item claiming it has a full article")
 	}
 
-	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, reader.Extracted{
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, article.Extracted{
 		HTML: "<p>Worked this time.</p>", TextLength: 500,
 	}, now); err != nil {
 		t.Fatal(err)
@@ -91,7 +92,7 @@ func TestSaveFullArticleRefusesAnItemTheUserCannotSee(t *testing.T) {
 	// Bob does not subscribe to this feed. Full articles are shared across the
 	// household, so writing one is a write to everybody's copy: it needs the
 	// same visibility check every other state change has.
-	err := f.store.SaveFullArticle(ctx, f.bob.ID, item.ID, reader.Extracted{
+	err := f.store.SaveFullArticle(ctx, f.bob.ID, item.ID, article.Extracted{
 		HTML: "<p>x</p>", TextLength: 500,
 	}, time.Now().UTC())
 	if !errors.Is(err, reader.ErrNotFound) {
@@ -127,7 +128,7 @@ func TestSaveItemsDoesNotDestroyFullArticleImageLinks(t *testing.T) {
 	item := items[0]
 
 	fullHash := reader.ImageHash("https://cdn.example/full-only.png")
-	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, reader.Extracted{
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, article.Extracted{
 		HTML:   `<img src="` + reader.ImagePathPrefix + fullHash + `">`,
 		Images: map[string]string{fullHash: "https://cdn.example/full-only.png"},
 	}, now); err != nil {
@@ -186,7 +187,7 @@ func TestPurgeFreesAFullArticlesImages(t *testing.T) {
 	}
 
 	hash := reader.ImageHash("https://cdn.example/only-in-full.png")
-	if err := f.store.SaveFullArticle(ctx, f.alice.ID, items[0].ID, reader.Extracted{
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, items[0].ID, article.Extracted{
 		HTML:   `<img src="` + reader.ImagePathPrefix + hash + `">`,
 		Images: map[string]string{hash: "https://cdn.example/only-in-full.png"},
 	}, now); err != nil {

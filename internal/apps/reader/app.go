@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 // ON Reader implements the scheduling capability. Compile-time assertions,
@@ -30,7 +31,7 @@ var scriptFiles embed.FS
 // App is ON Reader.
 type App struct {
 	store   *Store
-	client  *Client
+	client  *webfetch.Client
 	poller  *Poller
 	deps    app.Deps
 	imgSem  chan struct{}

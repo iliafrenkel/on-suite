@@ -192,6 +192,31 @@ func TestUIIsALeaf(t *testing.T) {
 	}
 }
 
+// TestWebContentPackagesAreLeaves: webfetch, article and favicon know HTTP and
+// HTML, nothing about users, pages, storage, other apps or UI. article and
+// favicon build on webfetch, so that is the one internal import they may have.
+// This is an allowlist rather than a denylist, so a package added later cannot
+// slip in unnoticed.
+func TestWebContentPackagesAreLeaves(t *testing.T) {
+	allowed := map[string][]string{
+		"internal/platform/webfetch": nil,
+		"internal/platform/article":  {"internal/platform/webfetch"},
+		"internal/platform/favicon":  {"internal/platform/webfetch"},
+	}
+	imports := scan(t)
+	for pkg, ok := range allowed {
+	next:
+		for _, dep := range imports.prod[pkg] {
+			for _, a := range ok {
+				if dep == a {
+					continue next
+				}
+			}
+			t.Errorf("%q imports %q; allowed internal imports: %v", pkg, dep, ok)
+		}
+	}
+}
+
 // TestDocsIsALeaf: docs (the embed package itself — docs/embed.go and any
 // other non-test .go file directly in docs/, not the docs/screenshots/...
 // tree, which is its own main package) only embeds the user guides. scan
@@ -292,6 +317,9 @@ func TestScanSeesTheRealTree(t *testing.T) {
 		"internal/platform/usermgmt",
 		"internal/platform/jobsadmin",
 		"internal/platform/help",
+		"internal/platform/webfetch",
+		"internal/platform/article",
+		"internal/platform/favicon",
 		"docs",
 		"docs/screenshots/seed",
 		"docs/screenshots/capture",
@@ -376,12 +404,13 @@ func importersOf(t *testing.T, libPrefix string) []string {
 }
 
 // TestReadabilityIsContained: go-readability brings two unmaintained
-// transitive modules, and R4's plan accepted it only on the condition that it
-// stays behind one file. A second importer makes it load-bearing, which is a
-// different decision and should be made deliberately.
+// transitive modules, and accepting it depended on it staying behind one file
+// — now the shared article package, so ON Reader and ON Later use one copy. A
+// second importer makes it load-bearing, which is a different decision and
+// should be made deliberately.
 func TestReadabilityIsContained(t *testing.T) {
 	importers := importersOf(t, "github.com/go-shiori/go-readability")
-	want := []string{"internal/apps/reader/extract.go"}
+	want := []string{"internal/platform/article/extract.go"}
 	if !slices.Equal(importers, want) {
 		t.Errorf("go-readability is imported by %v, want only %v", importers, want)
 	}

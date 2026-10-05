@@ -39,6 +39,9 @@ on-suite/
 │   │   ├── admin/                read-only admin dashboard at /admin/
 │   │   ├── usermgmt/             /admin/users and /account
 │   │   ├── jobsadmin/            /admin/jobs with Run now
+│   │   ├── webfetch/             guarded HTTP client for publisher-controlled URLs: SSRF guard, caps, image sniffing
+│   │   ├── article/              readability extraction, HTML sanitiser, image rewriting
+│   │   ├── favicon/              finds a site's icon URL
 │   │   └── help/                 renders docs/user's guides at /help, /help/{slug}; only importer of goldmark
 │   ├── ui/                       embedded shell: base.html and platform pages, app.css, fonts, HTMX, icons
 │   │   ├── static/               app.css, htmx.min.js, platform scripts, favicons
