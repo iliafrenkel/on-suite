@@ -271,3 +271,36 @@ func TestSearchMigrationIndexesExistingArticles(t *testing.T) {
 		}
 	}
 }
+
+func TestSearchPagesKeepOrderAndSnippets(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.saveBody(t, f.alice.ID, "https://a.example/1", "One", "a lychee in the first body")
+	f.saveBody(t, f.alice.ID, "https://a.example/2", "Two", "lychee lychee lychee in the second")
+	f.saveBody(t, f.alice.ID, "https://a.example/3", "Three", "the third body mentions a lychee too")
+	all, err := f.store.Search(ctx, f.alice.ID, "lychee", "", 0, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("got %d hits, want 3", len(all))
+	}
+	var paged []later.SearchHit
+	for off := 0; off < 3; off++ {
+		page, err := f.store.Search(ctx, f.alice.ID, "lychee", "", off, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page) != 1 {
+			t.Fatalf("offset %d: got %d hits, want 1", off, len(page))
+		}
+		h := page[0]
+		if h.In != later.MatchText || !strings.Contains(h.Snippet, later.SnippetOpen+"lychee"+later.SnippetClose) {
+			t.Errorf("offset %d: In=%q Snippet=%q", off, h.In, h.Snippet)
+		}
+		paged = append(paged, h)
+	}
+	if got, want := hitIDs(paged), hitIDs(all); len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Errorf("paged IDs %v, single query %v", got, want)
+	}
+}

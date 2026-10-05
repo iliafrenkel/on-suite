@@ -63,20 +63,36 @@ func (st *Store) Search(ctx context.Context, userID int64, query, tag string, of
 	if match == "" {
 		return nil, nil
 	}
+	// Two steps. The inner "page" query ranks every match and cuts the
+	// requested page, touching no snippet. The outer query then builds the
+	// three snippets for just that page's rows. snippet() on a long body is
+	// costly, and one query computes it for every match before sorting and
+	// LIMIT; with the platform's single DB connection and a search box that
+	// fires on every keystroke, that stalled the whole suite. The outer
+	// MATCH is required for snippet() to work.
+	//
 	// later_search is named, never aliased: the driver resolves MATCH,
 	// snippet() and bm25() against the real name. Column numbers: 0 title,
 	// 1 body, 2 highlights, 3 note. bm25 weights favour the title, then
 	// what the reader wrote, then the text.
 	rows, err := st.db.QueryContext(ctx, `
+		WITH page AS (
+		  SELECT later_search.rowid AS id,
+		         bm25(later_search, 10.0, 1.0, 4.0, 4.0) AS score
+		    FROM later_search
+		    JOIN later_articles a ON a.id = later_search.rowid
+		   WHERE later_search MATCH ? AND a.user_id = ? AND `+tagFilter+`
+		   ORDER BY score, a.id DESC
+		   LIMIT ? OFFSET ?)
 		SELECT `+listSelect+`,
 		       snippet(later_search, 2, char(2), char(3), '…', 16),
 		       snippet(later_search, 3, char(2), char(3), '…', 16),
 		       snippet(later_search, 1, char(2), char(3), '…', 16)
-		  FROM later_search
-		  JOIN later_articles a ON a.id = later_search.rowid`+listJoins+`
-		 WHERE later_search MATCH ? AND a.user_id = ? AND `+tagFilter+`
-		 ORDER BY bm25(later_search, 10.0, 1.0, 4.0, 4.0), a.id DESC
-		 LIMIT ? OFFSET ?`, match, userID, tag, tag, limit, offset)
+		  FROM page
+		  JOIN later_search ON later_search.rowid = page.id
+		  JOIN later_articles a ON a.id = page.id`+listJoins+`
+		 WHERE later_search MATCH ?
+		 ORDER BY page.score, a.id DESC`, match, userID, tag, tag, limit, offset, match)
 	if err != nil {
 		return nil, fmt.Errorf("later: search: %w", err)
 	}
