@@ -333,6 +333,12 @@ func TestSearchBoxKeepsTheQueryTabAndTag(t *testing.T) {
 	if got := attr(t, doc, "input#later-q", "hx-target"); got != "#later-list" {
 		t.Errorf("hx-target = %q", got)
 	}
+	if got := attr(t, doc, "input#later-q", "hx-trigger"); got != "input changed delay:300ms, search" {
+		t.Errorf("hx-trigger = %q", got)
+	}
+	if got := attr(t, doc, "input#later-q", "hx-replace-url"); got != "true" {
+		t.Errorf("hx-replace-url = %q", got)
+	}
 	doc.MustHave(`.later-search input[value="archived"]`)
 	doc.MustHave(`.later-search input[value="essays"]`)
 }
