@@ -117,6 +117,9 @@ type Subscription struct {
 	// persistently-failing feed without a second query.
 	ErrorCount int
 	LastError  string
+	// faviconGivenUp is set by Tree when the favicon proxy would refuse this
+	// favicon right now (FeedIcon.GivenUp), so FaviconPath can skip it.
+	faviconGivenUp bool
 }
 
 // Failing is true once the poller has recorded at least one consecutive
@@ -125,9 +128,11 @@ type Subscription struct {
 func (s Subscription) Failing() bool { return s.ErrorCount > 0 }
 
 // FaviconPath is the proxy URL for this feed's favicon, or "" if none is
-// known yet — the template's cue to render the generic icon instead.
+// known yet or the proxy has given up on it — the template's cue to render
+// the generic icon instead. Offering a URL the proxy will only 404 drew a
+// broken image on every tree render until reader.js swapped it out (#455).
 func (s Subscription) FaviconPath() string {
-	if s.FaviconURL == "" {
+	if s.FaviconURL == "" || s.faviconGivenUp {
 		return ""
 	}
 	return "/reader/favicon/" + FaviconHash(s.FaviconURL)
@@ -513,8 +518,10 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 
 	subRows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.feed_id, s.folder_id, s.title, s.added_at, f.url, f.title,
-		       f.site_url, f.favicon_url, f.error_count, f.last_error
+		       f.site_url, f.favicon_url, f.error_count, f.last_error,
+		       coalesce(length(i.bytes), 0), coalesce(i.error_count, 0), i.fetched_at
 		  FROM reader_subs s JOIN reader_feeds f ON f.id = s.feed_id
+		  LEFT JOIN reader_feed_icons i ON i.src_url = f.favicon_url
 		 WHERE s.user_id = ?
 		 ORDER BY s.position, coalesce(nullif(s.title, ''), nullif(f.title, ''), f.url)`,
 		userID)
@@ -523,15 +530,24 @@ func (s *Store) Tree(ctx context.Context, userID int64) (Tree, error) {
 	}
 	defer func() { _ = subRows.Close() }()
 
+	now := s.now()
 	for subRows.Next() {
 		var sub Subscription
 		var added string
+		var iconLen int
+		var icon FeedIcon
+		var iconFetched sql.NullString
 		if err := subRows.Scan(&sub.ID, &sub.FeedID, &sub.FolderID, &sub.Title,
 			&added, &sub.FeedURL, &sub.FeedName, &sub.SiteURL, &sub.FaviconURL,
-			&sub.ErrorCount, &sub.LastError); err != nil {
+			&sub.ErrorCount, &sub.LastError,
+			&iconLen, &icon.ErrorCount, &iconFetched); err != nil {
 			return Tree{}, fmt.Errorf("reader: scan subscription: %w", err)
 		}
 		sub.AddedAt = parseTime(added)
+		if iconFetched.Valid {
+			icon.FetchedAt = parseTime(iconFetched.String)
+		}
+		sub.faviconGivenUp = iconLen == 0 && icon.GivenUp(now)
 		if sub.FolderID != nil {
 			if i, ok := byID[*sub.FolderID]; ok {
 				out.Folders[i].Subs = append(out.Folders[i].Subs, sub)
@@ -1554,6 +1570,14 @@ type FeedIcon struct {
 // a feed's favicon URL is first known; the bytes arrive on first view, same
 // as Image.
 func (i FeedIcon) Cached() bool { return len(i.Bytes) > 0 }
+
+// GivenUp reports whether the proxy will refuse to fetch this favicon at
+// now: it has failed too often, or failed recently and is in backoff. Tree
+// uses the same test so the sidebar never offers a URL the proxy would 404.
+func (i FeedIcon) GivenUp(now time.Time) bool {
+	return i.ErrorCount >= maxImageFetchAttempts ||
+		(i.ErrorCount > 0 && now.Sub(i.FetchedAt) < imageRetryBackoff)
+}
 
 // FeedIconByHash loads one favicon record. An unknown hash is ErrNotFound,
 // which is what stops the proxy being asked to fetch a URL no feed's
