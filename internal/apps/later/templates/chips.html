@@ -1,0 +1,9 @@
+{{/* Small answers to ON Reader's "Read later" button, which swaps them in
+     place of the button. Each is a block; there is no page here. */}}
+{{define "content"}}{{end}}
+
+{{define "chip-saved"}}<span class="later-chip" role="status">Saved to Later ✓ <a href="/later/?saved={{.}}">Open</a></span>{{end}}
+
+{{define "chip-existing"}}<span class="later-chip" role="status">Already in Later · <a href="/later/a/{{.}}">Open</a></span>{{end}}
+
+{{define "chip-error"}}<span class="later-chip later-chip-error" role="alert">Couldn't save this link.</span>{{end}}

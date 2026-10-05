@@ -30,6 +30,13 @@ Save without leaving the page you're reading:
 You need to be signed in to ON Suite in that browser. If the page is
 already in ON Later, the window says so and offers to open it.
 
+## Saving from ON Reader
+
+When you're reading an article in [ON Reader](reader.md), click **Read
+later** in its toolbar. The button turns into **Saved to Later ✓**, with a
+link to open it. If you'd already saved that page, it says **Already in
+Later** instead. The button is there only when ON Later is turned on.
+
 ## Finding your articles
 
 Articles are in three lists:

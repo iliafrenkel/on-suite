@@ -219,7 +219,12 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 	}
 	pageURL, err := NormalizeURL(r.PostFormValue("url"))
 	popup := r.PostFormValue("popup") == "1"
+	htmx := web.IsHTMX(r)
 	if err != nil {
+		if htmx {
+			a.renderChip(w, r, http.StatusUnprocessableEntity, "chip-error", nil)
+			return
+		}
 		if popup {
 			a.renderPopup(w, r, http.StatusUnprocessableEntity, popupView{Error: badURLMessage})
 			return
@@ -228,6 +233,10 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing, err := a.store.ArticleByURL(r.Context(), userID, pageURL); err == nil {
+		if htmx {
+			a.renderChip(w, r, http.StatusOK, "chip-existing", existing.ID)
+			return
+		}
 		if popup {
 			http.Redirect(w, r, popupDoneURL(existing.ID, true), http.StatusSeeOther)
 			return
@@ -244,6 +253,14 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	if htmx {
+		block := "chip-saved"
+		if !created {
+			block = "chip-existing"
+		}
+		a.renderChip(w, r, http.StatusOK, block, saved.ID)
+		return
+	}
 	target := fmt.Sprintf("/later/?saved=%d", saved.ID)
 	if popup {
 		target = popupDoneURL(saved.ID, !created)
@@ -251,6 +268,14 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		target = fmt.Sprintf("/later/?tab=%s&saved=%d&existing=1", saved.State, saved.ID)
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+// renderChip answers an HTMX save (ON Reader's button) with a small fragment
+// that replaces the button.
+func (a *App) renderChip(w http.ResponseWriter, r *http.Request, status int, block string, data any) {
+	if err := a.deps.Render.Fragment(w, status, "later/chips", block, data); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
 }
 
 type articleView struct {
