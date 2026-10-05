@@ -74,7 +74,7 @@ func TestListCarriesTheFavicon(t *testing.T) {
 	hash := webfetch.URLHash("https://example.com/icon.png")
 
 	list := func() map[int64]later.ListItem {
-		items, err := f.store.List(ctx, f.alice.ID, later.StateUnread, 0, 10)
+		items, err := f.store.List(ctx, f.alice.ID, later.StateUnread, "", 0, 10)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -262,7 +262,7 @@ func TestLinkOnlyItemsGuessFaviconIco(t *testing.T) {
 	t.Cleanup(origin.Close)
 	idFrom(t, save(t, s, s.Alice, origin.URL+"/gone"))
 
-	items, err := s.Store.List(context.Background(), s.Alice.User.ID, later.StateUnread, 0, 10)
+	items, err := s.Store.List(context.Background(), s.Alice.User.ID, later.StateUnread, "", 0, 10)
 	if err != nil || len(items) != 1 {
 		t.Fatalf("List = %v, %v", items, err)
 	}
@@ -301,7 +301,7 @@ func TestCrossHostRedirectDoesNotChooseTheSiteIcon(t *testing.T) {
 
 	idFrom(t, save(t, s, s.Alice, aURL+"/story"))
 
-	items, err := s.Store.List(context.Background(), s.Alice.User.ID, later.StateUnread, 0, 10)
+	items, err := s.Store.List(context.Background(), s.Alice.User.ID, later.StateUnread, "", 0, 10)
 	if err != nil || len(items) != 1 {
 		t.Fatalf("List = %v, %v", items, err)
 	}

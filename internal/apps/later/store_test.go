@@ -182,20 +182,20 @@ func TestListOrdersEachTabAndPages(t *testing.T) {
 	c := f.save(t, "https://example.com/3", "Three")
 	f.tick()
 
-	got, err := f.store.List(ctx, f.alice.ID, later.StateUnread, 0, 10)
+	got, err := f.store.List(ctx, f.alice.ID, later.StateUnread, "", 0, 10)
 	if err != nil || !sameIDs(got, c.ID, b.ID, a.ID) {
 		t.Fatalf("unread = %v, %v; want newest first %v", ids(got), err, []int64{c.ID, b.ID, a.ID})
 	}
 	if got[0].Title != "Three" || got[0].SiteHost != "example.com" || got[0].Content != later.ContentExtracted || got[0].WordCount != 1 {
 		t.Errorf("item = %+v", got[0])
 	}
-	if got, _ := f.store.List(ctx, f.alice.ID, later.StateUnread, 1, 1); !sameIDs(got, b.ID) {
+	if got, _ := f.store.List(ctx, f.alice.ID, later.StateUnread, "", 1, 1); !sameIDs(got, b.ID) {
 		t.Errorf("offset 1 limit 1 = %v, want [%d]", ids(got), b.ID)
 	}
-	if got, _ := f.store.List(ctx, f.alice.ID, later.StateUnread, 2, 5); !sameIDs(got, a.ID) {
+	if got, _ := f.store.List(ctx, f.alice.ID, later.StateUnread, "", 2, 5); !sameIDs(got, a.ID) {
 		t.Errorf("offset 2 = %v, want [%d]", ids(got), a.ID)
 	}
-	if _, err := f.store.List(ctx, f.alice.ID, "bogus", 0, 10); !errors.Is(err, later.ErrInvalid) {
+	if _, err := f.store.List(ctx, f.alice.ID, "bogus", "", 0, 10); !errors.Is(err, later.ErrInvalid) {
 		t.Errorf("bogus tab err = %v, want ErrInvalid", err)
 	}
 
@@ -206,10 +206,10 @@ func TestListOrdersEachTabAndPages(t *testing.T) {
 		}
 		f.tick()
 	}
-	if got, _ := f.store.List(ctx, f.alice.ID, later.StateReading, 0, 10); !sameIDs(got, a.ID, b.ID) {
+	if got, _ := f.store.List(ctx, f.alice.ID, later.StateReading, "", 0, 10); !sameIDs(got, a.ID, b.ID) {
 		t.Errorf("reading = %v, want [%d %d]", ids(got), a.ID, b.ID)
 	}
-	if got, _ := f.store.List(ctx, f.alice.ID, later.StateUnread, 0, 10); !sameIDs(got, c.ID) {
+	if got, _ := f.store.List(ctx, f.alice.ID, later.StateUnread, "", 0, 10); !sameIDs(got, c.ID) {
 		t.Errorf("unread = %v, want [%d]", ids(got), c.ID)
 	}
 
@@ -220,18 +220,18 @@ func TestListOrdersEachTabAndPages(t *testing.T) {
 		}
 		f.tick()
 	}
-	if got, _ := f.store.List(ctx, f.alice.ID, later.StateArchived, 0, 10); !sameIDs(got, c.ID, a.ID) {
+	if got, _ := f.store.List(ctx, f.alice.ID, later.StateArchived, "", 0, 10); !sameIDs(got, c.ID, a.ID) {
 		t.Errorf("archived = %v, want [%d %d]", ids(got), c.ID, a.ID)
 	}
 
 	// Ties on the sort column fall back to id DESC.
 	d := f.save(t, "https://example.com/4", "Four")
 	e := f.save(t, "https://example.com/5", "Five")
-	if got, _ := f.store.List(ctx, f.alice.ID, later.StateUnread, 0, 10); !sameIDs(got, e.ID, d.ID) {
+	if got, _ := f.store.List(ctx, f.alice.ID, later.StateUnread, "", 0, 10); !sameIDs(got, e.ID, d.ID) {
 		t.Errorf("tied unread = %v, want [%d %d]", ids(got), e.ID, d.ID)
 	}
 	// Another user's list is empty.
-	if got, _ := f.store.List(ctx, f.bob.ID, later.StateUnread, 0, 10); len(got) != 0 {
+	if got, _ := f.store.List(ctx, f.bob.ID, later.StateUnread, "", 0, 10); len(got) != 0 {
 		t.Errorf("bob's list = %v", ids(got))
 	}
 }
@@ -251,14 +251,14 @@ func TestCountsByState(t *testing.T) {
 	if _, _, err := f.store.Save(ctx, f.bob.ID, later.NewArticle{URL: "https://example.com/1"}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := f.store.Counts(ctx, f.alice.ID)
+	got, err := f.store.Counts(ctx, f.alice.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got[later.StateUnread] != 1 || got[later.StateReading] != 1 || got[later.StateArchived] != 1 {
 		t.Errorf("counts = %v, want 1/1/1", got)
 	}
-	empty, err := newFixture(t).store.Counts(ctx, 999)
+	empty, err := newFixture(t).store.Counts(ctx, 999, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -605,7 +605,7 @@ func TestListCountsHighlights(t *testing.T) {
 	if _, err := f.store.AddHighlight(ctx, two.ID, two.ContentText, 16, 21, "world", "c"); err != nil {
 		t.Fatal(err)
 	}
-	got, err := f.store.List(ctx, f.alice.ID, later.StateUnread, 0, 10)
+	got, err := f.store.List(ctx, f.alice.ID, later.StateUnread, "", 0, 10)
 	if err != nil {
 		t.Fatal(err)
 	}

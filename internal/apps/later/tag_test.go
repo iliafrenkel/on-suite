@@ -150,3 +150,74 @@ func TestDeleteRemovesUnusedTags(t *testing.T) {
 		t.Errorf("TagNames = %q, want [shared]", got)
 	}
 }
+
+func TestListFiltersByTag(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.saveTagged(t, f.alice.ID, "https://a.example/1", "x")
+	b := f.saveTagged(t, f.alice.ID, "https://a.example/2", "x", "y")
+	c := f.saveTagged(t, f.alice.ID, "https://a.example/3")
+	f.saveTagged(t, f.bob.ID, "https://a.example/4", "x")
+
+	for _, tc := range []struct {
+		tag  string
+		want []int64
+	}{
+		{"x", []int64{b.ID, a.ID}},
+		{"y", []int64{b.ID}},
+		{"", []int64{c.ID, b.ID, a.ID}},
+		{"nope", nil},
+	} {
+		got, err := f.store.List(ctx, f.alice.ID, later.StateUnread, tc.tag, 0, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !sameIDs(got, tc.want...) {
+			t.Errorf("List(tag %q) = %v, want %v", tc.tag, ids(got), tc.want)
+		}
+	}
+}
+
+func TestListItemCarriesTagsAndState(t *testing.T) {
+	f := newFixture(t)
+	f.saveTagged(t, f.alice.ID, "https://a.example/1", "zeta", "Alpha")
+	got, err := f.store.List(context.Background(), f.alice.ID, later.StateUnread, "", 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d items", len(got))
+	}
+	if !slices.Equal(got[0].Tags, []string{"alpha", "zeta"}) {
+		t.Errorf("Tags = %q, want [alpha zeta]", got[0].Tags)
+	}
+	if got[0].State != later.StateUnread {
+		t.Errorf("State = %q, want unread", got[0].State)
+	}
+}
+
+func TestCountsByTag(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.saveTagged(t, f.alice.ID, "https://a.example/1", "x")
+	b := f.saveTagged(t, f.alice.ID, "https://a.example/2", "x")
+	f.saveTagged(t, f.alice.ID, "https://a.example/3")
+	f.saveTagged(t, f.bob.ID, "https://a.example/4", "x")
+	if err := f.store.SetState(ctx, f.alice.ID, b.ID, later.StateArchived); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.store.Counts(ctx, f.alice.ID, "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[later.StateUnread] != 1 || got[later.StateReading] != 0 || got[later.StateArchived] != 1 {
+		t.Errorf("Counts(x) = %v, want unread 1, reading 0, archived 1", got)
+	}
+	all, err := f.store.Counts(ctx, f.alice.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all[later.StateUnread] != 2 || all[later.StateArchived] != 1 {
+		t.Errorf("Counts() = %v, want unread 2, archived 1", all)
+	}
+}

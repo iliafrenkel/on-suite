@@ -114,6 +114,8 @@ type ListItem struct {
 	FaviconHash  string
 	FaviconShown bool
 	Highlights   int
+	State        State
+	Tags         []string // alphabetical
 }
 
 // articleColumns is every column scanArticle reads, in order.
@@ -261,23 +263,69 @@ var listOrder = map[State]string{
 	StateArchived: "a.archived_at DESC, a.id DESC",
 }
 
-// List returns one page of a tab, newest activity first.
-func (st *Store) List(ctx context.Context, userID int64, state State, offset, limit int) ([]ListItem, error) {
+// listSelect is every column scanListItem reads: an article a, the favicon
+// joins in listJoins, its highlight count and its tags joined by tagSep.
+const listSelect = `a.id, a.title, a.site_host, a.content, a.word_count, a.progress, a.state,
+	COALESCE(sf.hash, ''), f.bytes IS NOT NULL, COALESCE(f.error_count, 0), f.fetched_at,
+	(SELECT count(*) FROM later_highlights h WHERE h.article_id = a.id),
+	(SELECT COALESCE(group_concat(t.name, char(31) ORDER BY t.name), '')
+	   FROM later_article_tags x JOIN later_tags t ON t.id = x.tag_id
+	  WHERE x.article_id = a.id)`
+
+// tagSep is char(31) in listSelect. ParseTags turns control characters into
+// spaces, so no name contains it.
+const tagSep = "\x1f"
+
+const listJoins = `
+	  LEFT JOIN later_site_favicons sf ON sf.site_host = a.site_host
+	  LEFT JOIN later_favicons f ON f.hash = sf.hash`
+
+// tagFilter keeps the articles a carrying one tag. It takes the tag name
+// twice; "" keeps everything.
+const tagFilter = `(? = '' OR EXISTS (
+	SELECT 1 FROM later_article_tags x JOIN later_tags t ON t.id = x.tag_id
+	 WHERE x.article_id = a.id AND t.name = ?))`
+
+// scanListItem reads one listSelect row, then any extra columns into extra.
+func scanListItem(row rowScanner, now time.Time, extra ...any) (ListItem, error) {
+	var it ListItem
+	var cached bool
+	var errorCount int
+	var fetched sql.NullString
+	var tags string
+	dest := append([]any{&it.ID, &it.Title, &it.SiteHost, &it.Content, &it.WordCount, &it.Progress, &it.State,
+		&it.FaviconHash, &cached, &errorCount, &fetched, &it.Highlights, &tags}, extra...)
+	if err := row.Scan(dest...); err != nil {
+		return ListItem{}, fmt.Errorf("later: scan list: %w", err)
+	}
+	var attempt time.Time
+	if fetched.Valid {
+		var err error
+		if attempt, err = db.ParseTime(fetched.String); err != nil {
+			return ListItem{}, err
+		}
+	}
+	it.FaviconShown = it.FaviconHash != "" && (cached || !webfetch.GivenUp(errorCount, attempt, now))
+	if tags != "" {
+		it.Tags = strings.Split(tags, tagSep)
+	}
+	return it, nil
+}
+
+// List returns one page of a tab, newest activity first, narrowed to the
+// articles carrying tag unless tag is "".
+func (st *Store) List(ctx context.Context, userID int64, state State, tag string, offset, limit int) ([]ListItem, error) {
 	order, ok := listOrder[state]
 	if !ok {
 		return nil, ErrInvalid
 	}
 	// order comes only from the listOrder map above, never from input.
 	rows, err := st.db.QueryContext(ctx, `
-		SELECT a.id, a.title, a.site_host, a.content, a.word_count, a.progress,
-		       COALESCE(sf.hash, ''), f.bytes IS NOT NULL, COALESCE(f.error_count, 0), f.fetched_at,
-		       (SELECT count(*) FROM later_highlights h WHERE h.article_id = a.id)
-		  FROM later_articles a
-		  LEFT JOIN later_site_favicons sf ON sf.site_host = a.site_host
-		  LEFT JOIN later_favicons f ON f.hash = sf.hash
-		 WHERE a.user_id = ? AND a.state = ?
+		SELECT `+listSelect+`
+		  FROM later_articles a`+listJoins+`
+		 WHERE a.user_id = ? AND a.state = ? AND `+tagFilter+`
 		 ORDER BY `+order+`
-		 LIMIT ? OFFSET ?`, userID, state, limit, offset)
+		 LIMIT ? OFFSET ?`, userID, state, tag, tag, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("later: list: %w", err)
 	}
@@ -285,21 +333,10 @@ func (st *Store) List(ctx context.Context, userID int64, state State, offset, li
 	now := st.now()
 	var items []ListItem
 	for rows.Next() {
-		var it ListItem
-		var cached bool
-		var errorCount int
-		var fetched sql.NullString
-		if err := rows.Scan(&it.ID, &it.Title, &it.SiteHost, &it.Content, &it.WordCount, &it.Progress,
-			&it.FaviconHash, &cached, &errorCount, &fetched, &it.Highlights); err != nil {
-			return nil, fmt.Errorf("later: scan list: %w", err)
+		it, err := scanListItem(rows, now)
+		if err != nil {
+			return nil, err
 		}
-		var attempt time.Time
-		if fetched.Valid {
-			if attempt, err = db.ParseTime(fetched.String); err != nil {
-				return nil, err
-			}
-		}
-		it.FaviconShown = it.FaviconHash != "" && (cached || !webfetch.GivenUp(errorCount, attempt, now))
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {
@@ -308,12 +345,14 @@ func (st *Store) List(ctx context.Context, userID int64, state State, offset, li
 	return items, nil
 }
 
-// Counts is how many articles userID has in each state; every state is
-// present, 0 when empty.
-func (st *Store) Counts(ctx context.Context, userID int64) (map[State]int, error) {
+// Counts is how many articles userID has in each state, narrowed to tag
+// unless it is ""; every state is present, 0 when empty.
+func (st *Store) Counts(ctx context.Context, userID int64, tag string) (map[State]int, error) {
 	counts := map[State]int{StateUnread: 0, StateReading: 0, StateArchived: 0}
-	rows, err := st.db.QueryContext(ctx,
-		`SELECT state, count(*) FROM later_articles WHERE user_id = ? GROUP BY state`, userID)
+	rows, err := st.db.QueryContext(ctx, `
+		SELECT a.state, count(*) FROM later_articles a
+		 WHERE a.user_id = ? AND `+tagFilter+`
+		 GROUP BY a.state`, userID, tag, tag)
 	if err != nil {
 		return nil, fmt.Errorf("later: counts: %w", err)
 	}

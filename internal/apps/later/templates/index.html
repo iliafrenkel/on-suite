@@ -17,9 +17,15 @@
 
 	<nav class="later-tabs" aria-label="Lists">
 		{{range .Data.Tabs}}
-		<a class="later-tab" href="/later/?tab={{.State}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}} <span class="later-tab-count">{{.Count}}</span></a>
+		<a class="later-tab" href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}} <span class="later-tab-count">{{.Count}}</span></a>
 		{{end}}
 	</nav>
+	{{if .Data.Chips}}
+	<nav class="later-tags" aria-label="Tags">
+		{{range .Data.Chips}}<a class="later-tag-chip" href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>{{.Name}}</a>
+		{{end}}
+	</nav>
+	{{end}}
 
 	{{if .Data.Rows}}
 	<ul class="later-rows">{{template "rows" .}}</ul>
@@ -46,28 +52,29 @@
 				{{if .LinkOnly}}<span class="later-pill later-pill-linkonly">link only — add text</span>
 				{{else}}<span>{{.Minutes}} min</span>{{end}}
 				{{if .Highlights}}<span class="later-pill later-pill-hl">{{.Highlights}} {{if eq .Highlights 1}}highlight{{else}}highlights{{end}}</span>{{end}}
+				{{range .Tags}}<span class="later-pill later-pill-tag">{{.}}</span>{{end}}
 			</span>
 		</span>
 	</a>
 	<details class="later-menu later-row-menu">
 		<summary aria-label="Actions for {{.Title}}">⋯</summary>
 		<div class="later-menu-panel stack">
-			{{if eq $.Data.Tab "archived"}}
+			{{if .Archived}}
 			<form method="post" action="/later/a/{{.ID}}/unarchive">
 				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
-				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<input type="hidden" name="back" value="{{$.Data.Back}}">
 				<button type="submit">Move to unread</button>
 			</form>
 			{{else}}
 			<form method="post" action="/later/a/{{.ID}}/archive">
 				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
-				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<input type="hidden" name="back" value="{{$.Data.Back}}">
 				<button type="submit">Archive</button>
 			</form>
 			{{end}}
 			<form method="post" action="/later/a/{{.ID}}/delete" data-later-confirm="Delete permanently? Highlights and notes go too.">
 				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
-				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<input type="hidden" name="back" value="{{$.Data.Back}}">
 				<button class="danger" type="submit">Delete</button>
 			</form>
 		</div>
@@ -75,10 +82,10 @@
 	{{if .Progress}}<progress class="later-row-progress" max="100" value="{{.Progress}}">{{.Progress}}%</progress>{{end}}
 </li>
 {{end}}
-{{if .Data.NextOffset}}
+{{if .Data.NextURL}}
 <li class="later-more">
 	<button type="button"
-	        hx-get="/later/?tab={{.Data.Tab}}&amp;offset={{.Data.NextOffset}}"
+	        hx-get="{{.Data.NextURL}}"
 	        hx-target="closest li" hx-swap="outerHTML">Load more</button>
 </li>
 {{end}}

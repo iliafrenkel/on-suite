@@ -4,13 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -51,38 +48,6 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 
 const pageSize = 50
 
-type tabView struct {
-	State   State
-	Label   string
-	Count   int
-	Current bool
-}
-
-type rowView struct {
-	ID       int64
-	Title    string
-	Site     string
-	Minutes  int
-	LinkOnly bool
-	Progress int // percent, 0-100
-
-	Highlights int
-
-	FaviconSrc string // "" when no <img> should be emitted
-	Initial    string // the site's first letter, for the badge
-}
-
-type indexView struct {
-	Tabs       []tabView
-	Tab        State
-	Rows       []rowView
-	NextOffset int // 0 when there are no more rows
-	FormError  string
-	FormValue  string
-	EmptyText  string
-	Saved      *savedView // the note after a save, or nil
-}
-
 // savedView is the status note shown above the tabs after saving a URL.
 type savedView struct {
 	ID       int64
@@ -90,127 +55,6 @@ type savedView struct {
 	LinkOnly bool
 	Existing bool
 	NewTab   bool // the Open link opens a new tab (the popup is about to close)
-}
-
-var tabs = []struct {
-	state State
-	label string
-	empty string
-}{
-	{StateUnread, "Unread", "Nothing to read. Paste a URL above to save an article."},
-	{StateReading, "Reading", "Nothing in progress."},
-	{StateArchived, "Archived", "Nothing archived yet."},
-}
-
-// parseTab maps the tab query value to a state; anything else is Unread.
-func parseTab(v string) State {
-	for _, t := range tabs {
-		if string(t.state) == v {
-			return t.state
-		}
-	}
-	return StateUnread
-}
-
-func (a *App) index(w http.ResponseWriter, r *http.Request) {
-	userID, ok := a.userID(w, r)
-	if !ok {
-		return
-	}
-	tab := parseTab(r.URL.Query().Get("tab"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	if offset < 0 {
-		offset = 0
-	}
-	a.renderListPage(w, r, userID, tab, offset, http.StatusOK, "", "", a.savedNote(r, userID))
-}
-
-// savedNote loads the article named by ?saved= for the note after a save.
-// A missing, malformed or someone else's id shows no note.
-func (a *App) savedNote(r *http.Request, userID int64) *savedView {
-	id, err := strconv.ParseInt(r.URL.Query().Get("saved"), 10, 64)
-	if err != nil || id <= 0 {
-		return nil
-	}
-	art, err := a.store.Article(r.Context(), userID, id)
-	if err != nil {
-		return nil
-	}
-	return &savedView{
-		ID:       art.ID,
-		Title:    art.Title,
-		LinkOnly: art.Content == ContentLinkOnly,
-		Existing: r.URL.Query().Get("existing") == "1",
-	}
-}
-
-func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, tab State, status int, formError, formValue string) {
-	a.renderListPage(w, r, userID, tab, 0, status, formError, formValue, nil)
-}
-
-// renderListPage draws the list page, or just its rows when HTMX asks for the
-// next page.
-func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int64, tab State, offset, status int, formError, formValue string, saved *savedView) {
-	ctx := r.Context()
-	items, err := a.store.List(ctx, userID, tab, offset, pageSize+1)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	counts, err := a.store.Counts(ctx, userID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	view := indexView{Tab: tab, FormError: formError, FormValue: formValue, Saved: saved}
-	if len(items) > pageSize {
-		items = items[:pageSize]
-		view.NextOffset = offset + pageSize
-	}
-	for _, it := range items {
-		row := rowView{
-			ID:       it.ID,
-			Title:    it.Title,
-			Site:     it.SiteHost,
-			Minutes:  ReadingMinutes(it.WordCount),
-			LinkOnly: it.Content == ContentLinkOnly,
-			Progress: int(math.Round(it.Progress * 100)),
-			Initial:  siteInitial(it.SiteHost),
-
-			Highlights: it.Highlights,
-		}
-		if it.FaviconShown {
-			row.FaviconSrc = "/later/favicon/" + it.FaviconHash
-		}
-		view.Rows = append(view.Rows, row)
-	}
-	for _, t := range tabs {
-		view.Tabs = append(view.Tabs, tabView{State: t.state, Label: t.label, Count: counts[t.state], Current: t.state == tab})
-		if t.state == tab {
-			view.EmptyText = t.empty
-		}
-	}
-	page := a.deps.Page(r, "ON Later")
-	page.Data = view
-	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) && offset > 0 {
-		if err := a.deps.Render.Fragment(w, status, "later/index", "rows", page); err != nil {
-			a.deps.Errors.Internal(w, r, err)
-		}
-		return
-	}
-	if err := a.deps.Render.Page(w, status, "later/index", page); err != nil {
-		a.deps.Errors.Internal(w, r, err)
-	}
-}
-
-// siteInitial is the upper-cased first letter of a site, for the badge shown
-// when it has no icon.
-func siteInitial(site string) string {
-	r, _ := utf8.DecodeRuneInString(site)
-	if r == utf8.RuneError {
-		return ""
-	}
-	return string(unicode.ToUpper(r))
 }
 
 // badURLMessage is shown in the save form for a URL Later can't use.

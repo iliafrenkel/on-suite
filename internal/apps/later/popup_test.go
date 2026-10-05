@@ -15,7 +15,7 @@ import (
 
 func totalCount(t *testing.T, s *server) int {
 	t.Helper()
-	counts, err := s.Store.Counts(context.Background(), s.Alice.User.ID)
+	counts, err := s.Store.Counts(context.Background(), s.Alice.User.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}

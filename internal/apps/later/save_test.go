@@ -119,7 +119,7 @@ func TestSavingTheSameURLAgainGoesToTheExistingArticle(t *testing.T) {
 	if loc := rec.Header().Get("Location"); loc != want {
 		t.Errorf("Location = %q, want %q", loc, want)
 	}
-	counts, err := s.Store.Counts(context.Background(), s.Alice.User.ID)
+	counts, err := s.Store.Counts(context.Background(), s.Alice.User.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestSaveRejectsAnInvalidURL(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), want) {
 		t.Errorf("page does not show the message:\n%s", rec.Body.String())
 	}
-	counts, err := s.Store.Counts(context.Background(), s.Alice.User.ID)
+	counts, err := s.Store.Counts(context.Background(), s.Alice.User.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestSaveOverHTMXReturnsAChip(t *testing.T) {
 	if got := htmlassert.Text(chip); !strings.Contains(got, "Saved to Later") {
 		t.Errorf("chip = %q, want Saved to Later", got)
 	}
-	items, err := s.Store.List(context.Background(), s.Alice.User.ID, later.StateUnread, 0, 10)
+	items, err := s.Store.List(context.Background(), s.Alice.User.ID, later.StateUnread, "", 0, 10)
 	if err != nil || len(items) != 1 {
 		t.Fatalf("unread list = %v, %v; want one row", items, err)
 	}
