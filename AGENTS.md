@@ -186,7 +186,7 @@ dial time, redirect and size caps, image sniffing, the retry rule);
 [internal/platform/article](internal/platform/article/extract.go) is
 readability extraction plus the sanitiser and image rewriting;
 [internal/platform/favicon](internal/platform/favicon/favicon.go) finds a
-site's icon URL. They are leaves (pinned by `TestLayering`) and a
+site's icon URL. They are leaves (pinned by `TestWebContentPackagesAreLeaves`) and a
 deliberate exception to cross-app mirroring: this code is large and
 security-critical, so two drifting copies would be worse than one shared
 package. ON Flash still has its own mirrored fetch client.

@@ -170,23 +170,6 @@ func TestLayering(t *testing.T) {
 			"internal/platform/web", "internal/platform/app", "internal/platform/render",
 			"internal/platform/auth", "internal/platform/db", "internal/platform/config",
 		},
-		// The shared web-content packages are leaves: they know HTTP and
-		// HTML, nothing about users, pages, storage or apps.
-		"internal/platform/webfetch": {
-			"internal/platform/web", "internal/platform/app", "internal/platform/render",
-			"internal/platform/auth", "internal/platform/db", "internal/platform/config",
-			"internal/platform/jobs", "internal/platform/article", "internal/platform/favicon",
-		},
-		"internal/platform/article": {
-			"internal/platform/web", "internal/platform/app", "internal/platform/render",
-			"internal/platform/auth", "internal/platform/db", "internal/platform/config",
-			"internal/platform/jobs", "internal/platform/favicon",
-		},
-		"internal/platform/favicon": {
-			"internal/platform/web", "internal/platform/app", "internal/platform/render",
-			"internal/platform/auth", "internal/platform/db", "internal/platform/config",
-			"internal/platform/jobs", "internal/platform/article",
-		},
 	}
 
 	imports := scan(t)
@@ -206,6 +189,31 @@ func TestUIIsALeaf(t *testing.T) {
 	imports := scan(t)
 	if deps := imports.prod["internal/ui"]; len(deps) != 0 {
 		t.Errorf("internal/ui imports %v; it must be a leaf", deps)
+	}
+}
+
+// TestWebContentPackagesAreLeaves: webfetch, article and favicon know HTTP and
+// HTML, nothing about users, pages, storage, other apps or UI. article and
+// favicon build on webfetch, so that is the one internal import they may have.
+// This is an allowlist rather than a denylist, so a package added later cannot
+// slip in unnoticed.
+func TestWebContentPackagesAreLeaves(t *testing.T) {
+	allowed := map[string][]string{
+		"internal/platform/webfetch": nil,
+		"internal/platform/article":  {"internal/platform/webfetch"},
+		"internal/platform/favicon":  {"internal/platform/webfetch"},
+	}
+	imports := scan(t)
+	for pkg, ok := range allowed {
+	next:
+		for _, dep := range imports.prod[pkg] {
+			for _, a := range ok {
+				if dep == a {
+					continue next
+				}
+			}
+			t.Errorf("%q imports %q; allowed internal imports: %v", pkg, dep, ok)
+		}
 	}
 }
 

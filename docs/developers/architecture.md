@@ -49,7 +49,7 @@ together before changing it.*
   publisher-controlled URLs (SSRF guard, redirect and size caps, image
   sniffing); `article` does readability extraction and sanitising on top of
   it, and `favicon` finds a site's icon. They are leaves, pinned by
-  `TestLayering`.
+  `TestWebContentPackagesAreLeaves`.
 - **In-app help is also a platform package, not an app**:
   `internal/platform/help` renders `docs/user`'s Markdown guides to HTML
   once at startup (`help.Load`) and serves the cached result at `/help` and
@@ -224,8 +224,8 @@ cmd/onsuite                     wires everything; the only production importer o
 
 `TestLayering` holds those rules, `TestAppsDoNotImportEachOther` and
 `TestPlatformDoesNotImportApps` hold the boundary, and `TestUIIsALeaf`,
-`TestHTMLAssertIsTestOnly` and `TestAppTestIsTestOnly` keep the leaf and
-test-only packages honest. [Testing](testing.md#the-architecture-test) lists
+`TestWebContentPackagesAreLeaves`, `TestHTMLAssertIsTestOnly` and
+`TestAppTestIsTestOnly` keep the leaf and test-only packages honest. [Testing](testing.md#the-architecture-test) lists
 the rest.
 
 The one other importer of the apps is the screenshot seed,

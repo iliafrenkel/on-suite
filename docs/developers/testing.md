@@ -153,6 +153,7 @@ design's rules into failing tests:
 | `TestAppsDoNotImportEachOther` | an app never imports another app |
 | `TestPlatformDoesNotImportApps` | `internal/platform/*` and `internal/ui` never import an app |
 | `TestLayering` | the platform's internal order — see [Package layering](architecture.md#package-layering) |
+| `TestWebContentPackagesAreLeaves` | `webfetch` imports nothing from the module; `article` and `favicon` import only `webfetch` |
 | `TestUIIsALeaf` | `internal/ui` imports nothing from the module |
 | `TestDocsIsALeaf` | `docs` imports nothing from the module — documentation never depends on code |
 | `TestHTMLAssertIsTestOnly`, `TestAppTestIsTestOnly` | only `_test.go` files import the test helpers |
