@@ -32,7 +32,8 @@ const (
 )
 
 // Poller turns a due feed into stored items. It is the only glue between
-// fetch.go, parse.go and store.go, none of which know about each other.
+// the webfetch client (see client.go), parse.go and store.go, none of which
+// know about each other.
 type Poller struct {
 	store  *Store
 	client *webfetch.Client

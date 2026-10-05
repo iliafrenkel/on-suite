@@ -19,6 +19,7 @@ func ImageHash(srcURL string) string {
 	return webfetch.URLHash(srcURL)
 }
 
+// readerImageSrc points rewritten images at Reader's proxy.
 func readerImageSrc(hash string) string { return ImagePathPrefix + hash }
 
 // SanitizeArticleHTML is article.SanitizeWithImages bound to Reader's proxy.

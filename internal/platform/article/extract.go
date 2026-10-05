@@ -12,7 +12,8 @@ import (
 
 // ErrNotExtractable means the page had no article in it worth showing: a
 // listing page, a login wall, a fetch that returned something that is not
-// HTML, or a body so short that any summary the caller already has is certainly better.
+// HTML, or a body so short that any summary the caller already has is
+// certainly better.
 var ErrNotExtractable = errors.New("article: no article found in page")
 
 // minExtractedText is the shortest extraction worth storing.
@@ -43,11 +44,11 @@ type Extracted struct {
 //
 // It is the only place in this module that imports go-readability. That
 // containment is deliberate: the library brings two effectively unmaintained
-// transitive modules, and keeping it behind one function means extraction can be removed or
-// replaced without touching its callers.
+// transitive modules, and keeping it behind one function means extraction can
+// be removed or replaced without touching its callers.
 //
-// It never fetches. The caller does that through webfetch, so every guard in the
-// threat model still applies to the page this reads.
+// It never fetches. The caller does that through webfetch, so every guard in
+// the threat model still applies to the page this reads.
 func Extract(body []byte, pageURL string, src ImageSrc) (Extracted, error) {
 	if len(bytes.TrimSpace(body)) == 0 {
 		return Extracted{}, fmt.Errorf("%w: empty body", ErrNotExtractable)

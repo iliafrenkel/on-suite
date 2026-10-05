@@ -86,8 +86,8 @@ func TestSanitizeWithImagesFailsClosed(t *testing.T) {
 // rendering it relative to the reader app's own origin instead of the
 // publisher's site. Pre-absolutizing img sources ahead of sanitizing lets
 // policyWithImages leave AllowRelativeURLs off, so this must show the same
-// "href stripped" behavior TestSanitizeHTMLStillStripsImages-adjacent code
-// already relies on for the default policy.
+// "href stripped" behavior the default policy already has (see
+// TestSanitizeHTMLStillStripsImages).
 func TestSanitizeWithImagesDoesNotWidenRelativeLinks(t *testing.T) {
 	in := `<p><a href="/about">About</a></p><img src="/img/a.png">`
 

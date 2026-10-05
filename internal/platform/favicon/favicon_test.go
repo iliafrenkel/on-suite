@@ -31,7 +31,7 @@ func TestDiscoverFindsAShortcutIconLink(t *testing.T) {
 }
 
 // apple-touch-icon is a single rel token, not "icon" plus something else, so
-// it must not match — this app wants a small favicon-shaped image, not the
+// it must not match — callers want a small favicon-shaped image, not the
 // large icon iOS home-screen bookmarks use.
 func TestDiscoverIgnoresAppleTouchIcon(t *testing.T) {
 	page := []byte(`<html><head>
@@ -70,7 +70,7 @@ func TestDiscoverFallsBackWhenNoLinkMatches(t *testing.T) {
 // The /favicon.ico fallback is built by copying the site URL and swapping
 // its path, so it must not carry over userinfo (a "user:pass@" prefix) that
 // happened to be present on the site URL — that would land credentials in
-// reader_feed_icons.src_url and potentially in logs on a later fetch
+// the caller's stored source URL and potentially in logs on a later fetch
 // failure.
 func TestDiscoverFallbackStripsUserinfo(t *testing.T) {
 	got := favicon.Discover(nil, "https://u:p@blog.example/")

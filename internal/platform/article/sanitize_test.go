@@ -58,7 +58,7 @@ func TestSanitizeHTMLStripsHostileMarkup(t *testing.T) {
 			mustNot: []string{"<form", "<input"},
 		},
 		{
-			name:     "SanitizeHTML strips images; only SanitizeArticleHTML admits them",
+			name:     "SanitizeHTML strips images; only SanitizeWithImages admits them",
 			in:       `<p>a</p><img src="https://tracker.example/px.gif">`,
 			mustNot:  []string{"<img", "tracker.example"},
 			mustHave: []string{"<p>a</p>"},
@@ -109,8 +109,8 @@ func TestSanitizeHTMLHardensOutboundLinks(t *testing.T) {
 	}
 }
 
-// SanitizeHTML keeps the guarantee that: on its own it strips images entirely, so
-// any caller that forgets to rewrite cannot leak.
+// SanitizeHTML keeps the guarantee that, on its own, it strips images
+// entirely, so a caller that forgets to rewrite cannot leak a remote image.
 func TestSanitizeHTMLStillStripsImages(t *testing.T) {
 	got := article.SanitizeHTML(`<p>a</p><img src="https://tracker.example/px.gif">`)
 	if strings.Contains(got, "<img") || strings.Contains(got, "tracker.example") {

@@ -24,10 +24,10 @@ the extractor interested in this particular subtree of the page.</p>
 <footer>Copyright, privacy policy, cookie notice</footer>
 </body></html>`
 
-func TestExtractArticleKeepsTheBodyAndDropsTheChrome(t *testing.T) {
+func TestExtractKeepsTheBodyAndDropsTheChrome(t *testing.T) {
 	got, err := article.Extract([]byte(articlePage), "https://example.com/post", testSrc)
 	if err != nil {
-		t.Fatalf("ExtractArticle: %v", err)
+		t.Fatalf("Extract: %v", err)
 	}
 	if !strings.Contains(got.HTML, "First real paragraph") {
 		t.Errorf("article body missing:\n%s", got.HTML)
@@ -43,9 +43,9 @@ func TestExtractArticleKeepsTheBodyAndDropsTheChrome(t *testing.T) {
 	}
 }
 
-// The whole reason R4 waits for R3: an extracted page is raw publisher HTML,
-// usually more image-heavy than the feed body.
-func TestExtractArticleProxiesImages(t *testing.T) {
+// Images must be rewritten before extracted HTML is stored: an extracted page
+// is raw publisher HTML, usually more image-heavy than a feed body.
+func TestExtractProxiesImages(t *testing.T) {
 	got, err := article.Extract([]byte(articlePage), "https://example.com/post", testSrc)
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestExtractArticleProxiesImages(t *testing.T) {
 	}
 }
 
-func TestExtractArticleSanitizesHostileMarkup(t *testing.T) {
+func TestExtractSanitizesHostileMarkup(t *testing.T) {
 	got, err := article.Extract([]byte(`<html><body><article>
 <p>Body text long enough that readability will keep this node when it scores the
 candidates in this document and picks a winner among them.</p>
@@ -83,7 +83,7 @@ candidates in this document and picks a winner among them.</p>
 	}
 }
 
-func TestExtractArticleRefusesAPageWithNoArticle(t *testing.T) {
+func TestExtractRefusesAPageWithNoArticle(t *testing.T) {
 	cases := map[string]string{
 		"empty":        ``,
 		"nav only":     `<html><body><nav>a b c</nav></body></html>`,
