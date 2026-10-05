@@ -19,15 +19,22 @@ import (
 type listQuery struct {
 	Tab State
 	Tag string // "" means every tag
+	Q   string // the search box as typed
 }
 
+// searching is whether the page shows search results instead of a tab.
+func (q listQuery) searching() bool { return strings.TrimSpace(q.Q) != "" }
+
 // url is the list page for q. Parameters come in a fixed order (tab, tag,
-// offset) so links are stable and tests can pin them.
+// q, offset) so links are stable and tests can pin them.
 func (q listQuery) url(offset int) string {
 	var b strings.Builder
 	b.WriteString("/later/?tab=" + string(q.Tab))
 	if q.Tag != "" {
 		b.WriteString("&tag=" + url.QueryEscape(q.Tag))
+	}
+	if q.searching() {
+		b.WriteString("&q=" + url.QueryEscape(strings.TrimSpace(q.Q)))
 	}
 	if offset > 0 {
 		fmt.Fprintf(&b, "&offset=%d", offset)
@@ -36,7 +43,7 @@ func (q listQuery) url(offset int) string {
 }
 
 func parseListQuery(v url.Values) listQuery {
-	return listQuery{Tab: parseTab(v.Get("tab")), Tag: tagParam(v.Get("tag"))}
+	return listQuery{Tab: parseTab(v.Get("tab")), Tag: tagParam(v.Get("tag")), Q: v.Get("q")}
 }
 
 // tagParam is the one tag a ?tag= names, cleaned like a stored name.
@@ -91,6 +98,9 @@ type rowView struct {
 	Tags      []string
 	TagsValue string // the ⋯ menu's tags field
 
+	StateLabel string       // shown on search results, which mix states
+	Snippet    *snippetView // search results only; nil for a title match
+
 	Highlights int
 
 	FaviconSrc string // "" when no <img> should be emitted
@@ -113,6 +123,10 @@ type indexView struct {
 	Form      saveForm
 	EmptyText string
 	Saved     *savedView // the note after a save, or nil
+
+	Q         string // the search box's value
+	Searching bool
+	ClearURL  string // the tab the search was started from
 }
 
 // newRow is the list row for it.
@@ -136,6 +150,16 @@ func newRow(it ListItem) rowView {
 		row.FaviconSrc = "/later/favicon/" + it.FaviconHash
 	}
 	return row
+}
+
+// stateLabel is the tab name of s, for a search result's state pill.
+func stateLabel(s State) string {
+	for _, t := range tabs {
+		if t.state == s {
+			return t.label
+		}
+	}
+	return string(s)
 }
 
 var tabs = []struct {
@@ -193,50 +217,79 @@ func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, 
 	a.renderListPage(w, r, userID, listQuery{Tab: tab}, 0, status, form, nil)
 }
 
-// renderListPage draws the list page, or just its rows when HTMX asks for the
-// next page.
+// renderListPage draws the list page: a tab, or search results when the
+// search box has a word in it. HTMX gets just the rows for Load more, or
+// just #later-list for the search box.
 func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int64, q listQuery, offset, status int, form saveForm, saved *savedView) {
 	ctx := r.Context()
-	items, err := a.store.List(ctx, userID, q.Tab, q.Tag, offset, pageSize+1)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	counts, err := a.store.Counts(ctx, userID, q.Tag)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
 	names, err := a.store.TagNames(ctx, userID)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	view := indexView{
-		Tab: q.Tab, Tag: q.Tag, Chips: tagChips(q, names), Back: q.url(0),
-		Form: form, Saved: saved,
+		Tab: q.Tab, Tag: q.Tag, Q: q.Q, Searching: q.searching(),
+		Chips: tagChips(q, names), Back: q.url(0), Form: form, Saved: saved,
 	}
-	if len(items) > pageSize {
-		items = items[:pageSize]
-		view.NextURL = q.url(offset + pageSize)
-	}
-	for _, it := range items {
-		view.Rows = append(view.Rows, newRow(it))
-	}
-	for _, t := range tabs {
-		tq := listQuery{Tab: t.state, Tag: q.Tag}
-		view.Tabs = append(view.Tabs, tabView{State: t.state, Label: t.label, Count: counts[t.state], Current: t.state == q.Tab, URL: tq.url(0)})
-		if t.state == q.Tab {
-			view.EmptyText = t.empty
+	var rows []rowView
+	if view.Searching {
+		hits, err := a.store.Search(ctx, userID, q.Q, q.Tag, offset, pageSize+1)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		for _, h := range hits {
+			row := newRow(h.ListItem)
+			row.StateLabel = stateLabel(h.State)
+			row.Snippet = newSnippet(h)
+			rows = append(rows, row)
+		}
+		view.ClearURL = listQuery{Tab: q.Tab, Tag: q.Tag}.url(0)
+		view.EmptyText = fmt.Sprintf("Nothing matches “%s”.", strings.TrimSpace(q.Q))
+	} else {
+		items, err := a.store.List(ctx, userID, q.Tab, q.Tag, offset, pageSize+1)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		counts, err := a.store.Counts(ctx, userID, q.Tag)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		for _, it := range items {
+			rows = append(rows, newRow(it))
+		}
+		for _, t := range tabs {
+			tq := listQuery{Tab: t.state, Tag: q.Tag}
+			view.Tabs = append(view.Tabs, tabView{State: t.state, Label: t.label, Count: counts[t.state], Current: t.state == q.Tab, URL: tq.url(0)})
+			if t.state == q.Tab {
+				view.EmptyText = t.empty
+			}
+		}
+		if q.Tag != "" {
+			view.EmptyText = fmt.Sprintf("Nothing tagged “%s” here.", q.Tag)
 		}
 	}
-	if q.Tag != "" {
-		view.EmptyText = fmt.Sprintf("Nothing tagged “%s” here.", q.Tag)
+	if len(rows) > pageSize {
+		rows = rows[:pageSize]
+		view.NextURL = q.url(offset + pageSize)
 	}
+	view.Rows = rows
+
 	page := a.deps.Page(r, "ON Later")
 	page.Data = view
-	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) && offset > 0 {
-		if err := a.deps.Render.Fragment(w, status, "later/index", "rows", page); err != nil {
+	block := ""
+	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
+		switch {
+		case offset > 0:
+			block = "rows"
+		case web.HTMXTarget(r) == "later-list":
+			block = "later-list"
+		}
+	}
+	if block != "" {
+		if err := a.deps.Render.Fragment(w, status, "later/index", block, page); err != nil {
 			a.deps.Errors.Internal(w, r, err)
 		}
 		return

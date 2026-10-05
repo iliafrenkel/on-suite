@@ -62,6 +62,18 @@ tag above the list to see only the articles with it; the counts on
 see everything. While reading, an article's tags show under its title;
 click one to go to its list.
 
+## Searching
+
+Type in **Search all articles…** above the list. Results appear as you
+type, from **Unread**, **Reading** and **Archived** together, best match
+first. ON Later searches titles, article text, your highlights and their
+comments, and your notes. Under each result a line shows where it matched —
+*In a highlight*, *In your note* or *In the text* — with the words you
+searched for marked.
+
+A selected tag narrows the search too. Click **Clear search**, or empty the
+box, to go back to the list you were on.
+
 ## Reading an article
 
 An article opens full screen. The top bar has:

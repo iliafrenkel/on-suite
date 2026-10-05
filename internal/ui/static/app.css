@@ -3613,6 +3613,11 @@ input.flash-tag-entry:focus { outline: none; }
 .later-row-progress { width: 3rem; height: .25rem; }
 .later-more { list-style: none; padding: .75rem 0; text-align: center; }
 .later-empty { color: var(--c-text-dim); }
+.later-search input[type="search"] { width: 100%; }
+.later-search-head { display: flex; flex-wrap: wrap; gap: .75rem; align-items: baseline; margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
+.later-row-snippet { display: block; margin-top: .15rem; font-size: var(--fs-sm); color: var(--c-text-dim); overflow-wrap: anywhere; }
+.later-row-snippet mark { background: var(--c-accent-attention-bg); color: inherit; border-radius: 2px; }
+.later-snippet-in { color: var(--c-text-faint); }
 /* The bookmarklet popup is a small window: hide the suite chrome too. */
 body:has(.later-popup) .shell-bar,
 body:has(.later-popup) .app-sidebar,

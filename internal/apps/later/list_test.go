@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strings"
@@ -236,5 +237,140 @@ func TestPopupHasATagsField(t *testing.T) {
 	doc.MustHave(".later-popup input#later-popup-tags")
 	if got := attr(t, doc, "input#later-popup-tags", "name"); got != "tags" {
 		t.Errorf("name = %q", got)
+	}
+}
+
+func TestSearchShowsMatchesFromEveryState(t *testing.T) {
+	s := newServer(t)
+	seedStates(t, s) // Unread One, Unread Two, Reading One, Archived One
+	doc := s.Get(t, s.Alice, "/later/?tab=unread&q=one")
+
+	doc.MustNotHave(".later-tabs")
+	doc.MustHave(".later-search-head")
+	rows := doc.QueryAll(".later-row")
+	if len(rows) != 3 {
+		t.Fatalf("rows = %q, want the three titled One", texts(rows))
+	}
+	got := texts(doc.QueryAll(".later-pill-state"))
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"Archived", "Reading", "Unread"}) {
+		t.Errorf("state pills = %q", got)
+	}
+	if href, _ := htmlassert.Attr(doc.MustHave(".later-search-head a"), "href"); href != "/later/?tab=unread" {
+		t.Errorf("clear link = %q, want back to the tab", href)
+	}
+}
+
+func TestSearchRowsActOnTheirOwnState(t *testing.T) {
+	s := newServer(t)
+	seedStates(t, s)
+	// Searching from Unread finds the archived article; its menu must offer
+	// Move to unread, not Archive.
+	doc := s.Get(t, s.Alice, "/later/?tab=unread&q=archived")
+	var unarchive, archive int
+	for _, f := range doc.QueryAll(".later-row-menu form") {
+		action, _ := htmlassert.Attr(f, "action")
+		switch {
+		case strings.HasSuffix(action, "/unarchive"):
+			unarchive++
+		case strings.HasSuffix(action, "/archive"):
+			archive++
+		}
+	}
+	if unarchive != 1 || archive != 0 {
+		t.Errorf("menu forms: %d unarchive, %d archive; want 1 and 0", unarchive, archive)
+	}
+	doc.MustHave(`input[value="/later/?tab=unread&q=archived"]`)
+}
+
+func TestSearchShowsWhereItMatched(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	quote := string([]rune(a.ContentText)[0:5])
+	if _, err := s.Store.AddHighlight(context.Background(), a.ID, a.ContentText, 0, 5, quote, "giraffe thoughts"); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, "/later/?q=giraffe")
+	if got := htmlassert.Text(doc.MustHave(".later-snippet-in")); got != "In a highlight:" {
+		t.Errorf("label = %q", got)
+	}
+	if got := htmlassert.Text(doc.MustHave(".later-row-snippet mark")); got != "giraffe" {
+		t.Errorf("marked = %q, want giraffe", got)
+	}
+}
+
+func TestSearchHTMXAnswersTheListOnly(t *testing.T) {
+	s := newServer(t)
+	seedStates(t, s)
+	req := httptest.NewRequest("GET", "/later/?tab=unread&q=one", nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "later-list")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "<html") {
+		t.Error("fragment is a whole page")
+	}
+	frag := htmlassert.Parse(t, rec.Body.String())
+	frag.MustHave("div#later-list")
+	frag.MustNotHave(".later-save")
+	if n := len(frag.QueryAll(".later-row")); n != 3 {
+		t.Errorf("fragment has %d rows, want 3", n)
+	}
+}
+
+func TestSearchBoxKeepsTheQueryTabAndTag(t *testing.T) {
+	s := newServer(t)
+	seedTagged(t, s, "https://a.example/1", "Essay", "essays")
+	doc := s.Get(t, s.Alice, "/later/?tab=archived&tag=essays&q=ess")
+	if got := attr(t, doc, "input#later-q", "value"); got != "ess" {
+		t.Errorf("search box = %q", got)
+	}
+	if got := attr(t, doc, "input#later-q", "hx-get"); got != "/later/" {
+		t.Errorf("hx-get = %q", got)
+	}
+	if got := attr(t, doc, "input#later-q", "hx-target"); got != "#later-list" {
+		t.Errorf("hx-target = %q", got)
+	}
+	doc.MustHave(`.later-search input[value="archived"]`)
+	doc.MustHave(`.later-search input[value="essays"]`)
+}
+
+func TestSearchPageNarrowsByTag(t *testing.T) {
+	s := newServer(t)
+	seedTagged(t, s, "https://a.example/1", "Pomelo One", "fruit")
+	seedTagged(t, s, "https://a.example/2", "Pomelo Two")
+	doc := s.Get(t, s.Alice, "/later/?tab=unread&tag=fruit&q=pomelo")
+	if rows := doc.QueryAll(".later-row"); len(rows) != 1 {
+		t.Errorf("rows = %q, want just the tagged one", texts(rows))
+	}
+}
+
+func TestBlankSearchShowsTheTab(t *testing.T) {
+	s := newServer(t)
+	seedStates(t, s)
+	doc := s.Get(t, s.Alice, "/later/?tab=unread&q=++")
+	doc.MustHave(".later-tabs")
+	doc.MustNotHave(".later-search-head")
+}
+
+func TestSearchWithNoMatches(t *testing.T) {
+	s := newServer(t)
+	seedStates(t, s)
+	doc := s.Get(t, s.Alice, "/later/?q=zzz")
+	if got := htmlassert.Text(doc.MustHave(".later-empty")); got != "Nothing matches “zzz”." {
+		t.Errorf("empty text = %q", got)
+	}
+}
+
+func TestSearchLoadMoreKeepsTheQuery(t *testing.T) {
+	s := newServer(t)
+	for i := 0; i < 51; i++ {
+		seedTagged(t, s, fmt.Sprintf("https://p.example/%d", i), fmt.Sprintf("Mango %d", i))
+	}
+	doc := s.Get(t, s.Alice, "/later/?q=mango")
+	if got, _ := htmlassert.Attr(doc.MustHave(".later-more button"), "hx-get"); got != "/later/?tab=unread&q=mango&offset=50" {
+		t.Errorf("hx-get = %q", got)
 	}
 }
