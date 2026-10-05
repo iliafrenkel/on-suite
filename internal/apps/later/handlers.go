@@ -77,7 +77,9 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 			a.renderPopup(w, r, http.StatusUnprocessableEntity, popupView{Error: badURLMessage})
 			return
 		}
-		a.renderIndex(w, r, userID, StateUnread, http.StatusUnprocessableEntity, badURLMessage, r.PostFormValue("url"))
+		a.renderIndex(w, r, userID, StateUnread, http.StatusUnprocessableEntity, saveForm{
+			Error: badURLMessage, URL: r.PostFormValue("url"), Tags: r.PostFormValue("tags"),
+		})
 		return
 	}
 	if existing, err := a.store.ArticleByURL(r.Context(), userID, pageURL); err == nil {
@@ -96,6 +98,7 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n := a.fetchArticle(r.Context(), pageURL)
+	n.Tags = ParseTags(r.PostFormValue("tags"))
 	saved, created, err := a.store.Save(r.Context(), userID, n)
 	if err != nil {
 		a.fail(w, r, err)
@@ -125,6 +128,9 @@ func (a *App) renderChip(w http.ResponseWriter, r *http.Request, status int, blo
 		a.deps.Errors.Internal(w, r, err)
 	}
 }
+
+// tagLink is one of an article's tags, linking to its list filtered by it.
+type tagLink struct{ Name, URL string }
 
 type articleView struct {
 	ID      int64
@@ -159,7 +165,9 @@ type articleView struct {
 
 	Highlights []highlightView // text order
 	Note       string
-	OOB        bool // set on HTMX fragment responses
+	Tags       []tagLink
+	TagsValue  string // the ⋯ menu's tags field
+	OOB        bool   // set on HTMX fragment responses
 }
 
 type highlightView struct {
@@ -234,6 +242,14 @@ func (a *App) buildArticleView(r *http.Request, userID int64, art Article, textE
 			Drawn: validSpan(runes, h.Start, h.End, h.Quote),
 		})
 	}
+	names, err := a.store.ArticleTags(r.Context(), userID, art.ID)
+	if err != nil {
+		return articleView{}, err
+	}
+	for _, n := range names {
+		view.Tags = append(view.Tags, tagLink{Name: n, URL: listQuery{Tab: art.State, Tag: n}.url(0)})
+	}
+	view.TagsValue = strings.Join(names, ", ")
 	view.Note = art.Note
 	view.Body = template.HTML(RenderHighlights(art.ContentHTML, art.ContentText, hs))
 	return view, nil
@@ -370,4 +386,22 @@ func (a *App) progress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// setTags replaces an article's tags from the comma-separated field in a
+// row's or the reading view's ⋯ menu, then goes back where it came from.
+func (a *App) setTags(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	if err := a.store.SetTags(r.Context(), userID, id, ParseTags(r.PostFormValue("tags"))); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, safeBack(r, fmt.Sprintf("/later/a/%d", id)), http.StatusSeeOther)
 }

@@ -6,10 +6,12 @@
 	<form class="later-save" method="post" action="/later/save">
 		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
 		<label class="visually-hidden" for="later-url">Web address</label>
-		<input id="later-url" class="later-save-input" name="url" type="text" inputmode="url" placeholder="Paste a URL to save…" value="{{.Data.FormValue}}">
+		<input id="later-url" class="later-save-input" name="url" type="text" inputmode="url" placeholder="Paste a URL to save…" value="{{.Data.Form.URL}}">
+		<label class="visually-hidden" for="later-save-tags">Tags</label>
+		<input id="later-save-tags" class="later-save-tags" name="tags" type="text" placeholder="Tags, comma-separated" autocomplete="off" value="{{.Data.Form.Tags}}">
 		<button class="primary" type="submit">Save</button>
 	</form>
-	{{with .Data.FormError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
+	{{with .Data.Form.Error}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
 
 	{{with .Data.Saved}}{{template "later-saved-note" .}}{{end}}
 
@@ -59,6 +61,13 @@
 	<details class="later-menu later-row-menu">
 		<summary aria-label="Actions for {{.Title}}">⋯</summary>
 		<div class="later-menu-panel stack">
+			<form class="later-tags-form stack" method="post" action="/later/a/{{.ID}}/tags">
+				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+				<input type="hidden" name="back" value="{{$.Data.Back}}">
+				<label for="later-tags-{{.ID}}">Tags</label>
+				<input id="later-tags-{{.ID}}" name="tags" type="text" value="{{.TagsValue}}" placeholder="essays, ai" autocomplete="off">
+				<button type="submit">Save tags</button>
+			</form>
 			{{if .Archived}}
 			<form method="post" action="/later/a/{{.ID}}/unarchive">
 				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">

@@ -46,6 +46,22 @@ Articles are in three lists:
 - **Archived** — finished. Click **Archive** when you're done with an
   article; **Move to unread** brings it back.
 
+## Tags
+
+Tags group articles however suits you — `essays`, `work`, `to cook`.
+
+- **When saving:** type tags, separated by commas, in the **Tags** box
+  next to the address, or in the bookmarklet's window.
+- **Afterwards:** open an article's **⋯** menu — in the list, or while
+  reading — change the **Tags** box and click **Save tags**. Empty the box
+  to remove all its tags.
+
+Tags are lowercase, and a tag disappears once no article has it. Click a
+tag above the list to see only the articles with it; the counts on
+**Unread**, **Reading** and **Archived** follow it. Click the tag again to
+see everything. While reading, an article's tags show under its title;
+click one to go to its list.
+
 ## Reading an article
 
 An article opens full screen. The top bar has:

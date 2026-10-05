@@ -1,7 +1,10 @@
 package later_test
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -124,5 +127,114 @@ func TestLoadMoreKeepsTheTag(t *testing.T) {
 	doc := s.Get(t, s.Alice, "/later/?tab=unread&tag=bulk")
 	if got, _ := htmlassert.Attr(doc.MustHave(".later-more button"), "hx-get"); got != "/later/?tab=unread&tag=bulk&offset=50" {
 		t.Errorf("hx-get = %q", got)
+	}
+}
+
+func storedTags(t *testing.T, s *server, a later.Article) []string {
+	t.Helper()
+	got, err := s.Store.ArticleTags(context.Background(), s.Alice.User.ID, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func TestSetTagsFromTheRowMenu(t *testing.T) {
+	s := newServer(t)
+	a := seedTagged(t, s, "https://a.example/1", "Essay", "old")
+	doc := s.Get(t, s.Alice, "/later/")
+	path := articlePath(a, "/tags")
+	doc.MustHave(".later-row-menu form[action=" + path + "]")
+	if got := attr(t, doc, "input#later-tags-"+fmt.Sprint(a.ID), "value"); got != "old" {
+		t.Errorf("row tags input = %q, want old", got)
+	}
+
+	s.Submit(t, s.Alice, path, url.Values{"tags": {"Essays, AI"}, "back": {"/later/?tab=unread"}}, "/later/?tab=unread")
+	if got := storedTags(t, s, a); !slices.Equal(got, []string{"ai", "essays"}) {
+		t.Errorf("tags = %q, want [ai essays]", got)
+	}
+	if got := attr(t, s.Get(t, s.Alice, "/later/"), "input#later-tags-"+fmt.Sprint(a.ID), "value"); got != "ai, essays" {
+		t.Errorf("row tags input after saving = %q", got)
+	}
+}
+
+func TestSetTagsGoesBackToTheArticleByDefault(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	s.Submit(t, s.Alice, articlePath(a, "/tags"), url.Values{"tags": {"x"}}, articlePath(a, ""))
+	s.Submit(t, s.Alice, articlePath(a, "/tags"), url.Values{"tags": {"x"}, "back": {"https://evil.example/"}}, articlePath(a, ""))
+}
+
+func TestSetTagsOnSomeoneElsesArticleIs404(t *testing.T) {
+	s := newServer(t)
+	a := seedTagged(t, s, "https://a.example/1", "Essay", "mine")
+	rec := s.Post(t, s.Bob, articlePath(a, "/tags"), url.Values{"tags": {"theirs"}})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+	if got := storedTags(t, s, a); !slices.Equal(got, []string{"mine"}) {
+		t.Errorf("tags = %q, want them untouched", got)
+	}
+}
+
+func TestReadingViewShowsAndEditsTags(t *testing.T) {
+	s := newServer(t)
+	a := seedTagged(t, s, "https://a.example/1", "Essay", "work", "essays")
+	doc := s.Get(t, s.Alice, articlePath(a, "")) // opening moves it to reading
+
+	links := doc.QueryAll(".later-article-tags a")
+	if got := texts(links); !slices.Equal(got, []string{"essays", "work"}) {
+		t.Fatalf("tag links = %q", got)
+	}
+	if href, _ := htmlassert.Attr(links[0], "href"); href != "/later/?tab=reading&tag=essays" {
+		t.Errorf("tag link href = %q", href)
+	}
+	path := articlePath(a, "/tags")
+	doc.MustHave(".later-topbar form[action=" + path + "]")
+	if got := attr(t, doc, "input#later-tags-input", "value"); got != "essays, work" {
+		t.Errorf("tags input = %q", got)
+	}
+	doc.MustHave(`.later-tags-form input[value="` + articlePath(a, "") + `"]`) // back to the article
+}
+
+func TestReadingViewWithoutTagsHasNoTagLine(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	s.Get(t, s.Alice, articlePath(a, "")).MustNotHave(".later-article-tags")
+}
+
+func TestSaveBoxTagsTheNewArticle(t *testing.T) {
+	s, app := newSaveServer(t)
+	app.AllowPrivateFetchesForTest()
+	origin := pageOrigin(t, "text/html", articlePage)
+	rec := s.Post(t, s.Alice, "/later/save", url.Values{"url": {origin.URL + "/essay"}, "tags": {"Long reads, #ai"}})
+	id := idFrom(t, rec)
+	got, err := s.Store.ArticleTags(context.Background(), s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"ai", "long reads"}) {
+		t.Errorf("tags = %q, want [ai long reads]", got)
+	}
+}
+
+func TestSaveBoxKeepsTagsOnABadURL(t *testing.T) {
+	s := newServer(t)
+	rec := s.Post(t, s.Alice, "/later/save", url.Values{"url": {"not a url"}, "tags": {"keep me"}})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := attr(t, doc, "input#later-save-tags", "value"); got != "keep me" {
+		t.Errorf("tags input = %q, want it kept", got)
+	}
+}
+
+func TestPopupHasATagsField(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/later/save?url=https://example.com/a")
+	doc.MustHave(".later-popup input#later-popup-tags")
+	if got := attr(t, doc, "input#later-popup-tags", "name"); got != "tags" {
+		t.Errorf("name = %q", got)
 	}
 }

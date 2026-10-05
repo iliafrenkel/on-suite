@@ -80,20 +80,26 @@ type tabView struct {
 }
 
 type rowView struct {
-	ID       int64
-	Title    string
-	Site     string
-	Minutes  int
-	LinkOnly bool
-	Progress int // percent, 0-100
-	State    State
-	Archived bool
-	Tags     []string
+	ID        int64
+	Title     string
+	Site      string
+	Minutes   int
+	LinkOnly  bool
+	Progress  int // percent, 0-100
+	State     State
+	Archived  bool
+	Tags      []string
+	TagsValue string // the ⋯ menu's tags field
 
 	Highlights int
 
 	FaviconSrc string // "" when no <img> should be emitted
 	Initial    string // the site's first letter, for the badge
+}
+
+// saveForm is what the save box shows again after a refused save.
+type saveForm struct {
+	Error, URL, Tags string
 }
 
 type indexView struct {
@@ -104,8 +110,7 @@ type indexView struct {
 	Back      string // this list, for the row forms' back field
 	Rows      []rowView
 	NextURL   string // Load more; "" when there are no more rows
-	FormError string
-	FormValue string
+	Form      saveForm
 	EmptyText string
 	Saved     *savedView // the note after a save, or nil
 }
@@ -113,16 +118,17 @@ type indexView struct {
 // newRow is the list row for it.
 func newRow(it ListItem) rowView {
 	row := rowView{
-		ID:       it.ID,
-		Title:    it.Title,
-		Site:     it.SiteHost,
-		Minutes:  ReadingMinutes(it.WordCount),
-		LinkOnly: it.Content == ContentLinkOnly,
-		Progress: int(math.Round(it.Progress * 100)),
-		State:    it.State,
-		Archived: it.State == StateArchived,
-		Tags:     it.Tags,
-		Initial:  siteInitial(it.SiteHost),
+		ID:        it.ID,
+		Title:     it.Title,
+		Site:      it.SiteHost,
+		Minutes:   ReadingMinutes(it.WordCount),
+		LinkOnly:  it.Content == ContentLinkOnly,
+		Progress:  int(math.Round(it.Progress * 100)),
+		State:     it.State,
+		Archived:  it.State == StateArchived,
+		Tags:      it.Tags,
+		TagsValue: strings.Join(it.Tags, ", "),
+		Initial:   siteInitial(it.SiteHost),
 
 		Highlights: it.Highlights,
 	}
@@ -161,7 +167,7 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 	if offset < 0 {
 		offset = 0
 	}
-	a.renderListPage(w, r, userID, parseListQuery(r.URL.Query()), offset, http.StatusOK, "", "", a.savedNote(r, userID))
+	a.renderListPage(w, r, userID, parseListQuery(r.URL.Query()), offset, http.StatusOK, saveForm{}, a.savedNote(r, userID))
 }
 
 // savedNote loads the article named by ?saved= for the note after a save.
@@ -183,13 +189,13 @@ func (a *App) savedNote(r *http.Request, userID int64) *savedView {
 	}
 }
 
-func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, tab State, status int, formError, formValue string) {
-	a.renderListPage(w, r, userID, listQuery{Tab: tab}, 0, status, formError, formValue, nil)
+func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, tab State, status int, form saveForm) {
+	a.renderListPage(w, r, userID, listQuery{Tab: tab}, 0, status, form, nil)
 }
 
 // renderListPage draws the list page, or just its rows when HTMX asks for the
 // next page.
-func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int64, q listQuery, offset, status int, formError, formValue string, saved *savedView) {
+func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int64, q listQuery, offset, status int, form saveForm, saved *savedView) {
 	ctx := r.Context()
 	items, err := a.store.List(ctx, userID, q.Tab, q.Tag, offset, pageSize+1)
 	if err != nil {
@@ -208,7 +214,7 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 	}
 	view := indexView{
 		Tab: q.Tab, Tag: q.Tag, Chips: tagChips(q, names), Back: q.url(0),
-		FormError: formError, FormValue: formValue, Saved: saved,
+		Form: form, Saved: saved,
 	}
 	if len(items) > pageSize {
 		items = items[:pageSize]

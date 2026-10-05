@@ -3583,6 +3583,9 @@ input.flash-tag-entry:focus { outline: none; }
 .later-page { max-width: var(--measure); margin-inline: auto; }
 .later-save { display: flex; gap: .5rem; }
 .later-save-input { flex: 1; min-width: 0; }
+.later-save-tags { flex: 0 1 12rem; min-width: 0; }
+.later-tags-form input { width: 100%; }
+.later-article-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0; }
 .later-form-error { color: var(--c-danger); margin: 0; }
 .later-saved { color: var(--c-accent); margin: 0; }
 .later-chip { display: inline-flex; align-items: center; gap: .4rem; font-size: var(--fs-sm); color: var(--c-accent); }
@@ -3639,6 +3642,8 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-menu-panel { position: absolute; right: 0; top: calc(100% + .25rem); min-width: 13rem; padding: .75rem; background: var(--c-bg); border: var(--border); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0,0,0,.12); }
 @media (max-width: 40rem) {
   .later-menu { position: static; }
+  .later-save { flex-wrap: wrap; }
+  .later-save-input { flex-basis: 100%; }
   .later-topbar { gap: .5rem; }
   .later-left { display: none; }
   .later-back, .later-notes-toggle { white-space: nowrap; }
