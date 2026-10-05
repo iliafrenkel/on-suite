@@ -282,6 +282,10 @@
 	document.addEventListener("htmx:afterSettle", function (e) {
 		if (e.target && e.target.id === "reader-panes") initResizablePanes();
 	});
+	// Back/forward restores <body> from htmx's history snapshot: new gutters
+	// with no listeners, and no afterSettle on #reader-panes to rebind them
+	// (issue #456).
+	document.addEventListener("htmx:historyRestore", initResizablePanes);
 
 	// --- Tree sync after a list-only swap --------------------------------
 	//
