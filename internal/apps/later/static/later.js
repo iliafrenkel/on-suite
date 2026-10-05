@@ -39,6 +39,25 @@
 		setTimeout(function () { window.close(); }, 1500);
 	}
 
+	// confirmThen asks message in the app's dialog and calls onOK on OK.
+	function confirmThen(message, onOK) {
+		var dialog = document.getElementById("later-confirm-dialog");
+		document.getElementById("later-confirm-message").textContent = message;
+
+		// Listeners are tied to this one opening of the dialog, so a cancelled
+		// confirmation can never fire later (the bug reader.js documents).
+		var controller = new AbortController();
+		dialog.addEventListener("close", function () { controller.abort(); }, { once: true });
+		document.getElementById("later-confirm-ok").addEventListener("click", function () {
+			dialog.close();
+			onOK();
+		}, { signal: controller.signal });
+		document.getElementById("later-confirm-cancel").addEventListener("click", function () {
+			dialog.close();
+		}, { signal: controller.signal });
+		dialog.showModal();
+	}
+
 	document.addEventListener("submit", function (e) {
 		var form = e.target;
 		if (!(form instanceof HTMLFormElement) || !form.dataset.laterConfirm) return;
@@ -48,21 +67,20 @@
 		if (!dialog || typeof dialog.showModal !== "function") return;
 
 		e.preventDefault();
-		document.getElementById("later-confirm-message").textContent = form.dataset.laterConfirm;
-
-		// Listeners are tied to this one opening of the dialog, so a cancelled
-		// confirmation can never fire later (the bug reader.js documents).
-		var controller = new AbortController();
-		dialog.addEventListener("close", function () { controller.abort(); }, { once: true });
-		document.getElementById("later-confirm-ok").addEventListener("click", function () {
+		confirmThen(form.dataset.laterConfirm, function () {
 			form.dataset.laterConfirmed = "1";
-			dialog.close();
 			form.requestSubmit();
-		}, { signal: controller.signal });
-		document.getElementById("later-confirm-cancel").addEventListener("click", function () {
-			dialog.close();
-		}, { signal: controller.signal });
-		dialog.showModal();
+		});
+	});
+
+	// hx-confirm questions use the same dialog as data-later-confirm forms
+	// (the pattern reader.js uses for its own dialog).
+	document.addEventListener("htmx:confirm", function (e) {
+		if (!e.detail.question) return;
+		var dialog = document.getElementById("later-confirm-dialog");
+		if (!dialog || typeof dialog.showModal !== "function") return; // htmx falls back to window.confirm
+		e.preventDefault();
+		confirmThen(e.detail.question, function () { e.detail.issueRequest(true); });
 	});
 
 	// Aa settings: apply at once, save in the background. Without JS the
@@ -112,6 +130,43 @@
 			reader.classList.add("later-" + field + "-" + v);
 		});
 		updatePrefButtons(reader);
+	});
+
+	// A highlight link in the Notes panel scrolls to the passage; on a
+	// narrow screen the panel would cover it, so close the panel too.
+	document.addEventListener("click", function (e) {
+		var link = e.target instanceof Element && e.target.closest(".later-notes-quote[href]");
+		if (!link || !window.matchMedia("(max-width: 640px)").matches) return;
+		var open = document.getElementById("later-notes-open");
+		if (open) open.checked = false;
+	});
+
+	// "Saved" shouldn't linger over text that has changed since.
+	document.addEventListener("input", function (e) {
+		var t = e.target;
+		if (!(t instanceof HTMLTextAreaElement)) return;
+		if (t.id !== "later-note-panel" && t.id !== "later-note-end") return;
+		var status = document.getElementById("later-note-status-" + t.id.slice("later-note-".length));
+		if (status) {
+			status.textContent = "";
+			status.classList.remove("later-note-status-error");
+		}
+	});
+
+	// A note save that failed (403, 500, offline) says so; the server's OOB
+	// swap writes "Saved" on success.
+	document.body.addEventListener("htmx:afterRequest", function (e) {
+		var form = e.detail && e.detail.elt;
+		if (!(form instanceof Element) || !form.matches("form.later-note-form")) return;
+		var copy = form.querySelector("input[name=copy]");
+		var status = copy && document.getElementById("later-note-status-" + copy.value);
+		if (!status) return;
+		if (e.detail.successful) {
+			status.classList.remove("later-note-status-error");
+		} else {
+			status.textContent = "Couldn't save. Try again.";
+			status.classList.add("later-note-status-error");
+		}
 	});
 })();
 
@@ -189,3 +244,37 @@
 		});
 	})();
 
+	// Margin comments (spec: "comments in the right margin on wide
+	// screens"): when the window has room beside the column, each comment
+	// sits level with its highlight, pushed down if the one above runs long.
+	// Otherwise CSS hides the margin and the 💬 marker shows instead.
+	(function () {
+		var reader = document.getElementById("later-reader");
+		var article = reader && reader.querySelector(".later-article");
+		if (!article) return;
+		function layout() {
+			var margin = document.getElementById("later-margin");
+			if (!margin) return;
+			var rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+			var room = document.documentElement.clientWidth - article.getBoundingClientRect().right;
+			var fits = room >= 17 * rem; // 14rem notes + 2rem gap + 1rem edge
+			reader.classList.toggle("later-has-margin", fits);
+			if (!fits) return;
+			var top0 = article.getBoundingClientRect().top;
+			var next = 0;
+			margin.querySelectorAll(".later-margin-note").forEach(function (n) {
+				var mark = document.getElementById("later-h-" + n.dataset.laterHlOpen);
+				n.hidden = !mark;
+				if (!mark) return;
+				var top = Math.max(mark.getBoundingClientRect().top - top0, next);
+				n.style.top = top + "px";
+				next = top + n.offsetHeight + 8;
+			});
+		}
+		layout();
+		window.addEventListener("load", layout);
+		window.addEventListener("resize", layout);
+		document.body.addEventListener("htmx:afterSettle", layout);
+		// Aa changes and late images reflow the column.
+		if (typeof ResizeObserver === "function") new ResizeObserver(layout).observe(article);
+	})();

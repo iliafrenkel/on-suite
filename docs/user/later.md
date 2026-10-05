@@ -53,6 +53,7 @@ An article opens full screen. The top bar has:
 - **← Later** — back to the list the article is in.
 - **Aa** — choose the font (serif or sans), the text size and the width of
   the column. Changes apply at once and are remembered on every device.
+- **Notes** — opens the Notes panel (see below).
 - **Archive** — move the article to Archived (or **Move to unread** if it
   is already archived).
 - **⋯** — **Open original** opens the saved page on its own site, and
@@ -62,8 +63,30 @@ ON Later remembers where you stopped and opens there next time. The
 line under the top bar shows how far through you are, and the bar shows the
 minutes left. **Move to unread** starts the article again from the top.
 
+## Highlights and notes
+
+**Notes** in the top bar opens the Notes panel. Write your thoughts on
+the whole article in the note at the top; it saves when you click
+elsewhere. The same note is at the end of the article, so you can write
+it as soon as you finish reading.
+
+Select a passage in the article and a small box appears under it.
+Click **Highlight** to mark it, or **Highlight + comment** to add a
+comment too. Highlights can't overlap. Every highlight is listed in the
+Notes panel; click one to jump to it.
+
+On a wide screen, comments sit in the margin beside their highlights;
+click one to edit it. On a narrow screen a 💬 after a highlight means it
+has a comment — tap the highlight to read it. The list shows how many
+highlights each article has.
+
+Click a highlight (or **Edit** next to it in the Notes panel) to change
+its comment or delete it. Deleting a highlight that has a comment asks
+first.
+
 ## Deleting an article
 
 Each article in the list has a **⋯** menu to archive, move back to
 unread, or delete it without opening it. You can also open the article,
-choose **⋯**, then **Delete**. Deleting can't be undone.
+choose **⋯**, then **Delete**. Deleting removes its highlights and note too,
+and can't be undone.

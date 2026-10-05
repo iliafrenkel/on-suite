@@ -45,6 +45,7 @@
 				<span>{{.Site}}</span>
 				{{if .LinkOnly}}<span class="later-pill later-pill-linkonly">link only — add text</span>
 				{{else}}<span>{{.Minutes}} min</span>{{end}}
+				{{if .Highlights}}<span class="later-pill later-pill-hl">{{.Highlights}} {{if eq .Highlights 1}}highlight{{else}}highlights{{end}}</span>{{end}}
 			</span>
 		</span>
 	</a>
@@ -64,7 +65,7 @@
 				<button type="submit">Archive</button>
 			</form>
 			{{end}}
-			<form method="post" action="/later/a/{{.ID}}/delete" data-later-confirm="Delete this article permanently? This can't be undone.">
+			<form method="post" action="/later/a/{{.ID}}/delete" data-later-confirm="Delete permanently? Highlights and notes go too.">
 				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
 				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
 				<button class="danger" type="submit">Delete</button>

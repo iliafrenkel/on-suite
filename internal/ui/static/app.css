@@ -3579,6 +3579,7 @@ input.flash-tag-entry:focus { outline: none; }
 
 /* ---- ON Later ---------------------------------------------------------- */
 
+.later-hl { background: var(--c-accent-attention-bg); color: inherit; border-radius: 2px; scroll-margin-top: 5rem; }
 .later-page { max-width: var(--measure); margin-inline: auto; }
 .later-save { display: flex; gap: .5rem; }
 .later-save-input { flex: 1; min-width: 0; }
@@ -3634,6 +3635,9 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-menu-panel { position: absolute; right: 0; top: calc(100% + .25rem); min-width: 13rem; padding: .75rem; background: var(--c-bg); border: var(--border); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0,0,0,.12); }
 @media (max-width: 40rem) {
   .later-menu { position: static; }
+  .later-topbar { gap: .5rem; }
+  .later-left { display: none; }
+  .later-back, .later-notes-toggle { white-space: nowrap; }
   .later-menu-panel { left: 1rem; right: 1rem; top: 100%; min-width: 0; }
 }
 .later-row-menu > summary { border: 0; }
@@ -3644,10 +3648,19 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-pref-row { display: flex; align-items: center; gap: .5rem; justify-content: space-between; }
 .later-pref-row form { margin: 0; }
 .later-pref-row button[aria-pressed="true"] { background: var(--c-accent-bg); color: var(--c-accent); }
-.later-reader .later-article { margin: 2rem auto; padding-inline: 1rem; }
+.later-reader .later-article { margin: 2rem auto; padding-inline: 1rem; position: relative; }
 .later-width-narrow .later-article { max-width: 56ch; }
 .later-width-medium .later-article { max-width: 68ch; }
 .later-width-wide .later-article { max-width: 84ch; }
+.later-margin { display: none; }
+.later-has-margin .later-margin { display: block; position: absolute; top: 0; margin: 0; left: calc(100% + 2rem); width: 14rem; }
+.later-margin-note { position: absolute; left: 0; right: 0; margin: 0; padding-left: .5rem; border-left: 2px solid var(--c-accent-attention);
+  font-size: var(--fs-sm); color: var(--c-text-dim); white-space: pre-wrap; cursor: pointer; }
+.later-margin-note[hidden] { display: none; }
+/* The 💬 marker for a commented highlight when there is no margin. CSS
+   content is not part of textContent, so offsets don't move. */
+.later-hl-commented.later-hl-end::after { content: "💬"; font-size: .75em; margin-left: .15em; }
+.later-has-margin .later-hl-commented.later-hl-end::after { content: none; }
 .later-font-serif .later-article-body { font-family: 'Source Serif 4', Georgia, serif; }
 .later-font-sans .later-article-body { font-family: var(--font-ui); }
 .later-size-1 .later-article-body { font-size: .95rem; }
@@ -3665,6 +3678,39 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-linkonly textarea { width: 100%; }
 .later-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1rem; border: var(--border); border-radius: var(--radius); color: var(--c-text); background: var(--c-bg); }
 .later-dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+.later-notes-toggle { cursor: pointer; padding: .2rem .5rem; border: var(--border); border-radius: var(--radius); white-space: nowrap; }
+.later-notes-open:focus-visible ~ .later-sticky .later-notes-toggle { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.later-notes { position: fixed; inset: 0 0 0 auto; z-index: 3; width: min(24rem, 100vw); overflow-y: auto; padding: 1rem;
+  background: var(--c-bg); border-left: var(--border); box-shadow: -6px 0 20px rgba(0,0,0,.12);
+  transform: translateX(100%); visibility: hidden; transition: transform .2s ease, visibility .2s; }
+.later-notes-open:checked ~ .later-notes { transform: none; visibility: visible; }
+.later-notes-head { display: flex; align-items: center; justify-content: space-between; }
+.later-notes-head h2 { margin: 0; font-size: var(--fs-lg); }
+.later-notes h3 { margin: 0; font-size: var(--fs-base); }
+.later-notes-close { cursor: pointer; padding: .2rem .5rem; }
+.later-notes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .75rem; }
+.later-popover { position: absolute; z-index: 4; width: min(20rem, calc(100vw - 1rem)); padding: .75rem;
+  background: var(--c-bg); border: var(--border); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0,0,0,.15); }
+.later-popover[hidden], .later-popover [hidden] { display: none; }
+.later-popover textarea { width: 100%; }
+.later-popover-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.later-hl-error { margin: 0; color: var(--c-danger); font-size: var(--fs-sm); }
+.later-notes-quote { display: block; padding-left: .5rem; border-left: 3px solid var(--c-accent-attention); color: inherit; text-decoration: none; }
+.later-notes-comment { margin: .25rem 0 0 .75rem; font-size: var(--fs-sm); color: var(--c-text-dim); white-space: pre-wrap; }
+.later-hl { cursor: pointer; }
+.later-hl-quote { margin: 0; padding-left: .5rem; border-left: 3px solid var(--c-accent-attention); font-size: var(--fs-sm);
+  color: var(--c-text-dim); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.later-notes-item { position: relative; }
+.later-notes-edit { margin-top: .25rem; font-size: var(--fs-sm); }
+.later-notes-stale, .later-notes-empty { font-size: var(--fs-sm); color: var(--c-text-faint); }
+.later-note-form textarea { width: 100%; }
+.later-note-actions { display: flex; gap: .5rem; align-items: center; }
+.later-note-status { font-size: var(--fs-sm); color: var(--c-text-faint); }
+.later-note-status-error { color: var(--c-danger); }
+.later-note-end { margin-top: 2.5rem; padding-top: 1.5rem; border-top: var(--border); }
+@media (prefers-reduced-motion: reduce) {
+  .later-notes { transition: none; }
+}
 
 /* ---- In-app help (#309) ------------------------------------------------ */
 

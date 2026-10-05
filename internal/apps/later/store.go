@@ -112,6 +112,7 @@ type ListItem struct {
 	// an <img> is worth emitting (cached, or not yet given up on).
 	FaviconHash  string
 	FaviconShown bool
+	Highlights   int
 }
 
 // articleColumns is every column scanArticle reads, in order.
@@ -265,7 +266,8 @@ func (st *Store) List(ctx context.Context, userID int64, state State, offset, li
 	// order comes only from the listOrder map above, never from input.
 	rows, err := st.db.QueryContext(ctx, `
 		SELECT a.id, a.title, a.site_host, a.content, a.word_count, a.progress,
-		       COALESCE(sf.hash, ''), f.bytes IS NOT NULL, COALESCE(f.error_count, 0), f.fetched_at
+		       COALESCE(sf.hash, ''), f.bytes IS NOT NULL, COALESCE(f.error_count, 0), f.fetched_at,
+		       (SELECT count(*) FROM later_highlights h WHERE h.article_id = a.id)
 		  FROM later_articles a
 		  LEFT JOIN later_site_favicons sf ON sf.site_host = a.site_host
 		  LEFT JOIN later_favicons f ON f.hash = sf.hash
@@ -284,7 +286,7 @@ func (st *Store) List(ctx context.Context, userID int64, state State, offset, li
 		var errorCount int
 		var fetched sql.NullString
 		if err := rows.Scan(&it.ID, &it.Title, &it.SiteHost, &it.Content, &it.WordCount, &it.Progress,
-			&it.FaviconHash, &cached, &errorCount, &fetched); err != nil {
+			&it.FaviconHash, &cached, &errorCount, &fetched, &it.Highlights); err != nil {
 			return nil, fmt.Errorf("later: scan list: %w", err)
 		}
 		var attempt time.Time
@@ -380,6 +382,14 @@ func (st *Store) SetProgress(ctx context.Context, userID, id int64, p float64) e
 		p, db.FormatTime(st.now()), id, userID)
 }
 
+// SetNote replaces the article's note (spec: one plain-text note per
+// article); blank removes it.
+func (st *Store) SetNote(ctx context.Context, userID, id int64, note string) error {
+	return st.exec(ctx, "note", `
+		UPDATE later_articles SET note = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+		cleanText(note), db.FormatTime(st.now()), id, userID)
+}
+
 // SetPastedText gives a link-only article the text the user pasted.
 func (st *Store) SetPastedText(ctx context.Context, userID, id int64, text string) error {
 	a, err := st.Article(ctx, userID, id)
@@ -401,7 +411,8 @@ func (st *Store) SetPastedText(ctx context.Context, userID, id int64, text strin
 		html, ContentText(html), WordCount(html), db.FormatTime(st.now()), id, userID)
 }
 
-// Delete removes an article and every image no other article still uses.
+// Delete removes an article, its highlights and every image no other
+// article still uses.
 func (st *Store) Delete(ctx context.Context, userID, id int64) error {
 	tx, err := st.db.BeginTx(ctx, nil)
 	if err != nil {

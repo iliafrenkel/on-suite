@@ -19,7 +19,7 @@ var (
 //go:embed templates/*.html
 var templateFiles embed.FS
 
-//go:embed static/later.js
+//go:embed static/*.js
 var scriptFiles embed.FS
 
 // App is ON Later.
@@ -76,8 +76,17 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /a/{id}/delete", a.delete)
 	r.HandleFunc("POST /a/{id}/text", a.pasteText)
 	r.HandleFunc("POST /a/{id}/progress", a.progress)
+	r.HandleFunc("POST /a/{id}/note", a.setNote)
 	r.HandleFunc("POST /prefs", a.setPrefs)
-	r.HandleFunc("GET /later.js", a.script)
+	r.HandleFunc("POST /a/{id}/highlights", a.addHighlight)
+	r.HandleFunc("POST /a/{id}/highlights/comment", a.changeHighlight(func(r *http.Request, art Article, hid int64) error {
+		return a.store.SetHighlightComment(r.Context(), art.ID, hid, r.PostFormValue("comment"))
+	}))
+	r.HandleFunc("POST /a/{id}/highlights/delete", a.changeHighlight(func(r *http.Request, art Article, hid int64) error {
+		return a.store.DeleteHighlight(r.Context(), art.ID, hid)
+	}))
+	r.HandleFunc("GET /later.js", a.script("later.js"))
+	r.HandleFunc("GET /highlight.js", a.script("highlight.js"))
 	r.HandleFunc("GET /img/{hash}", a.image)
 	r.HandleFunc("GET /favicon/{hash}", a.favicon)
 }
@@ -104,10 +113,12 @@ func (a *App) Jobs(deps app.Deps) []app.Job {
 	}}
 }
 
-// script serves later.js behind the same sign-in requirement as every
-// other route, as Reader's reader.js is.
-func (a *App) script(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	http.ServeFileFS(w, r, scriptFiles, "static/later.js")
+// script serves an embedded script (later.js, highlight.js) behind the same
+// sign-in requirement as every other route, as Reader's reader.js is.
+func (a *App) script(name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		http.ServeFileFS(w, r, scriptFiles, "static/"+name)
+	}
 }

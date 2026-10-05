@@ -1,4 +1,4 @@
-{{define "head"}}<script src="/later/later.js" defer></script>{{end}}
+{{define "head"}}<script src="/later/later.js" defer></script><script src="/later/highlight.js" defer></script>{{end}}
 
 {{define "content"}}
 {{$d := .Data}}
@@ -6,11 +6,13 @@
 <div class="later-reader later-font-{{$d.Prefs.Font}} later-size-{{$d.Prefs.Size}} later-width-{{$d.Prefs.Width}}"
      id="later-reader" data-article-id="{{$d.ID}}" data-minutes="{{$d.Minutes}}"
      {{if not $d.LinkOnly}}data-progress="{{$d.Progress}}"{{end}}>
+	<input type="checkbox" id="later-notes-open" class="visually-hidden later-notes-open" aria-controls="later-notes">
 	<div class="later-sticky">
 	<div class="later-topbar">
 		<a class="later-back" href="/later/?tab={{$d.Tab}}">← Later</a>
 		<span class="later-topbar-title">{{$d.Title}}</span>
 		{{if not $d.LinkOnly}}<span class="later-left" data-later-left>{{$d.Minutes}} min left</span>{{end}}
+		<label class="later-notes-toggle" for="later-notes-open">Notes · {{template "later-notes-count" $d}}</label>
 		<details class="later-menu later-aa">
 			<summary aria-label="Reading settings">Aa</summary>
 			<div class="later-menu-panel stack">
@@ -67,7 +69,7 @@
 				{{/* The href is safe: NormalizeURL only stores http(s) URLs. */}}
 				<a href="{{$d.URL}}" target="_blank" rel="noopener noreferrer">Open original</a>
 				<form method="post" action="/later/a/{{$d.ID}}/delete"
-				      data-later-confirm="Delete this article permanently? This can't be undone.">
+				      data-later-confirm="Delete permanently? Highlights and notes go too.">
 					<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
 					<button class="danger" type="submit">Delete</button>
 				</form>
@@ -99,9 +101,103 @@
 			</form>
 		</section>
 		{{else}}
-		<div class="later-article-body">{{$d.Body}}</div>
+		{{template "later-body" $d}}
+		{{template "later-margin" $d}}
 		{{end}}
+		<section class="later-note-end" aria-label="Your note">
+			{{template "later-note-form" (dict "D" $d "Copy" "end" "CSRF" $csrf)}}
+		</section>
 	</article>
+	<aside class="later-notes stack" id="later-notes" aria-label="Notes">
+		<div class="later-notes-head">
+			<h2>Notes</h2>
+			<label class="later-notes-close" for="later-notes-open" aria-label="Close notes">✕</label>
+		</div>
+		{{template "later-note-form" (dict "D" $d "Copy" "panel" "CSRF" $csrf)}}
+		<h3>Highlights</h3>
+		{{template "later-notes-list" $d}}
+	</aside>
+	{{if not $d.LinkOnly}}
+	<form id="later-hl-new" class="later-popover stack" hidden method="post" action="/later/a/{{$d.ID}}/highlights"
+	      hx-post="/later/a/{{$d.ID}}/highlights" hx-target="#later-body" hx-swap="outerHTML">
+		<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+		<input type="hidden" name="start">
+		<input type="hidden" name="end">
+		<input type="hidden" name="quote">
+		<div class="stack" data-later-hl-comment hidden>
+			<label for="later-hl-comment">Comment</label>
+			<textarea id="later-hl-comment" name="comment" rows="3"></textarea>
+		</div>
+		<div class="later-popover-actions">
+			<button class="primary" type="submit" data-later-hl-submit>Highlight</button>
+			<button type="button" data-later-hl-with-comment>Highlight + comment</button>
+		</div>
+		<p class="later-hl-error" data-later-hl-error role="alert" hidden></p>
+	</form>
+	<div id="later-hl-edit" class="later-popover stack" hidden role="dialog" aria-label="Edit highlight">
+		<p class="later-hl-quote" data-later-hl-quote></p>
+		<form class="stack" method="post" action="/later/a/{{$d.ID}}/highlights/comment" data-later-hl-edit-form
+		      hx-post="/later/a/{{$d.ID}}/highlights/comment" hx-target="#later-body" hx-swap="outerHTML">
+			<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+			<input type="hidden" name="highlight">
+			<label for="later-hl-edit-comment">Comment</label>
+			<textarea id="later-hl-edit-comment" name="comment" rows="3"></textarea>
+			<div class="later-popover-actions"><button class="primary" type="submit">Save</button></div>
+		</form>
+		<form method="post" action="/later/a/{{$d.ID}}/highlights/delete" data-later-hl-delete-form
+		      hx-post="/later/a/{{$d.ID}}/highlights/delete" hx-target="#later-body" hx-swap="outerHTML">
+			<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+			<input type="hidden" name="highlight">
+			<button class="danger" type="submit">Delete highlight</button>
+		</form>
+		<p class="later-hl-error" data-later-hl-error role="alert" hidden></p>
+	</div>
+	{{end}}
 </div>
 {{template "later-confirm"}}
+{{end}}
+
+{{define "later-body"}}<div class="later-article-body" id="later-body">{{.Body}}</div>{{end}}
+
+{{define "later-margin"}}
+<div class="later-margin" id="later-margin" aria-hidden="true"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	{{range .Highlights}}{{if and .Drawn .Comment}}<p class="later-margin-note" data-later-hl-open="{{.ID}}">{{.Comment}}</p>{{end}}{{end}}
+</div>
+{{end}}
+
+{{define "later-highlight-swap"}}{{template "later-body" .}}{{template "later-margin" .}}{{template "later-notes-count" .}}{{template "later-notes-list" .}}{{end}}
+
+{{define "later-note-form"}}
+<form class="later-note-form stack" method="post" action="/later/a/{{.D.ID}}/note"
+      hx-post="/later/a/{{.D.ID}}/note" hx-trigger="change, submit" hx-swap="none">
+	<input type="hidden" name="{{csrfField}}" value="{{.CSRF}}">
+	<input type="hidden" name="copy" value="{{.Copy}}">
+	<label for="later-note-{{.Copy}}">Your note on this article</label>
+	{{template "later-note-text" (dict "D" .D "Copy" .Copy "OOB" false)}}
+	<div class="later-note-actions">
+		<button type="submit">Save note</button>
+		<span class="later-note-status" id="later-note-status-{{.Copy}}" role="status"></span>
+	</div>
+</form>
+{{end}}
+
+{{define "later-note-text"}}<textarea id="later-note-{{.Copy}}" name="note" rows="{{if eq .Copy "panel"}}8{{else}}5{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.D.Note}}</textarea>{{end}}
+
+{{define "later-note-saved"}}{{template "later-note-text" (dict "D" .D "Copy" .Other "OOB" true)}}<span class="later-note-status" id="later-note-status-{{.Copy}}" role="status" hx-swap-oob="innerHTML">Saved</span>{{end}}
+
+{{define "later-notes-count"}}<span id="later-notes-count"{{if .OOB}} hx-swap-oob="true"{{end}}>{{len .Highlights}}</span>{{end}}
+
+{{define "later-notes-list"}}
+<ol class="later-notes-list" id="later-notes-list"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	{{range .Highlights}}
+	<li class="later-notes-item" data-highlight-id="{{.ID}}">
+		{{if .Drawn}}<a class="later-notes-quote" href="#later-h-{{.ID}}">{{.Quote}}</a>
+		{{else}}<span class="later-notes-quote">{{.Quote}}</span> <span class="later-notes-stale">Not found in the text</span>{{end}}
+		{{with .Comment}}<p class="later-notes-comment">{{.}}</p>{{end}}
+		<button type="button" class="later-notes-edit" data-later-hl-open="{{.ID}}">Edit</button>
+	</li>
+	{{else}}
+	<li class="later-notes-empty">Select text in the article to highlight it.</li>
+	{{end}}
+</ol>
 {{end}}
