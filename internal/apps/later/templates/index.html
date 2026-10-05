@@ -4,10 +4,44 @@
 	<form class="later-save" method="post" action="/later/save">
 		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
 		<label class="visually-hidden" for="later-url">Web address</label>
-		<input id="later-url" name="url" type="text" inputmode="url" placeholder="Paste a link to save" value="{{with .Data}}{{.FormValue}}{{end}}">
-		<button type="submit">Save</button>
-		{{with .Data}}{{with .FormError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}{{end}}
+		<input id="later-url" class="later-save-input" name="url" type="text" inputmode="url" placeholder="Paste a link to save" value="{{.Data.FormValue}}">
+		<button class="primary" type="submit">Save</button>
 	</form>
-	<p class="later-empty">Nothing saved yet.</p>
+	{{with .Data.FormError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
+
+	<nav class="later-tabs" aria-label="Lists">
+		{{range .Data.Tabs}}
+		<a class="later-tab" href="/later/?tab={{.State}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}} <span class="later-tab-count">{{.Count}}</span></a>
+		{{end}}
+	</nav>
+
+	{{if .Data.Rows}}
+	<ul class="later-rows">{{template "rows" .}}</ul>
+	{{else}}
+	<p class="later-empty">{{.Data.EmptyText}}</p>
+	{{end}}
 </div>
+{{end}}
+
+{{define "rows"}}
+{{range .Data.Rows}}
+<li class="later-row">
+	<a class="later-row-link" href="/later/a/{{.ID}}">
+		<span class="later-row-title">{{.Title}}</span>
+		<span class="later-row-meta">
+			<span>{{.Site}}</span>
+			{{if .LinkOnly}}<span class="later-pill later-pill-linkonly">link only — add text</span>
+			{{else}}<span>{{.Minutes}} min</span>{{end}}
+		</span>
+	</a>
+	{{if .Progress}}<progress class="later-row-progress" max="100" value="{{.Progress}}">{{.Progress}}%</progress>{{end}}
+</li>
+{{end}}
+{{if .Data.NextOffset}}
+<li class="later-more">
+	<button type="button"
+	        hx-get="/later/?tab={{.Data.Tab}}&amp;offset={{.Data.NextOffset}}"
+	        hx-target="closest li" hx-swap="outerHTML">Load more</button>
+</li>
+{{end}}
 {{end}}
