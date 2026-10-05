@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 var _ app.App = (*App)(nil)
@@ -20,6 +21,8 @@ var scriptFiles embed.FS
 type App struct {
 	store *Store
 	deps  app.Deps
+	// client is the only way this app reaches the network.
+	client *webfetch.Client
 }
 
 // New returns the app for registration in cmd/onsuite.
@@ -50,7 +53,13 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	if deps.Now != nil {
 		a.store.SetClock(deps.Now)
 	}
+	a.client = webfetch.New(webfetch.Config{
+		UserAgent:       "onsuite/" + deps.Version + " (ON Later; +https://github.com/iliafrenkel/on-suite)",
+		DefaultAccept:   "text/html, application/xhtml+xml;q=0.9, */*;q=0.5",
+		DefaultMaxBytes: webfetch.MaxPageBytes,
+	})
 	r.HandleFunc("GET /{$}", a.index)
+	r.HandleFunc("POST /save", a.save)
 	r.HandleFunc("GET /later.js", a.script)
 }
 

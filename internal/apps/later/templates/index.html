@@ -1,6 +1,13 @@
 {{define "content"}}
 <div class="later-page stack">
 	<h1 class="visually-hidden">ON Later</h1>
+	<form class="later-save" method="post" action="/later/save">
+		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+		<label class="visually-hidden" for="later-url">Web address</label>
+		<input id="later-url" name="url" type="text" inputmode="url" placeholder="Paste a link to save" value="{{with .Data}}{{.FormValue}}{{end}}">
+		<button type="submit">Save</button>
+		{{with .Data}}{{with .FormError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}{{end}}
+	</form>
 	<p class="later-empty">Nothing saved yet.</p>
 </div>
 {{end}}
