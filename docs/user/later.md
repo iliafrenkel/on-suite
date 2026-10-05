@@ -10,7 +10,8 @@ disappears.
 1. Copy the address of the page you want to keep.
 2. In ON Later, paste it into **Paste a URL to save…** and click **Save**.
 
-The article appears at the top of **Unread**. Click **Open** in the message, or the article itself, to read it.
+The article appears at the top of **Unread**. Click **Open** in the
+message, or the article itself, to read it.
 
 Some pages can't be read this way — pages behind a paywall or a sign-in,
 for example. ON Later still saves the link and tells you why it couldn't

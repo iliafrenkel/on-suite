@@ -3603,7 +3603,6 @@ input.flash-tag-entry:focus { outline: none; }
 .later-article-meta { color: var(--c-text-faint); font-size: var(--fs-sm); margin: 0; }
 .later-article-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .later-article-actions form { margin: 0; }
-.later-note { color: var(--c-accent); margin: 0; }
 .later-article-body { font-family: 'Source Serif 4', Georgia, serif; font-size: 1.125rem; line-height: 1.65; overflow-wrap: anywhere; }
 .later-article-body img { max-width: 100%; height: auto; }
 .later-article-body pre { overflow-x: auto; }

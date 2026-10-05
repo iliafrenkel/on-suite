@@ -32,7 +32,7 @@ func TestIconForUnknownAppFallsBackToTile(t *testing.T) {
 
 func TestIconForIsDistinctPerApp(t *testing.T) {
 	seen := map[string]bool{}
-	for _, id := range []string{"paste", "notes", "reader", "flash", "admin"} {
+	for _, id := range []string{"paste", "notes", "reader", "flash", "admin", "later"} {
 		svg := string(ui.IconFor(id))
 		if seen[svg] {
 			t.Errorf("icon for %q duplicates an earlier icon", id)
