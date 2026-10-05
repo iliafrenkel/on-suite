@@ -35,6 +35,10 @@ type Extracted struct {
 	// Images maps image hash to absolute publisher URL, for the caller
 	// to persist.
 	Images map[string]string
+	// Byline and SiteName are what readability found, for callers that show
+	// them (ON Later does; ON Reader doesn't).
+	Byline   string
+	SiteName string
 	// TextLength is the extracted plain-text length, kept for the log line
 	// that explains why a given page did or did not extract well.
 	TextLength int
@@ -81,6 +85,8 @@ func Extract(body []byte, pageURL string, src ImageSrc) (Extracted, error) {
 		HTML:       clean,
 		Title:      strings.TrimSpace(page.Title),
 		Images:     images,
+		Byline:     strings.TrimSpace(page.Byline),
+		SiteName:   strings.TrimSpace(page.SiteName),
 		TextLength: page.Length,
 	}, nil
 }

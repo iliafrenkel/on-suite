@@ -98,3 +98,27 @@ func TestExtractRefusesAPageWithNoArticle(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractReportsBylineAndSiteName(t *testing.T) {
+	page := `<html><head><title>An Essay</title>
+<meta property="og:site_name" content="Example Essays"></head><body>
+<article>
+<h1>An Essay</h1>
+<p class="byline"><a rel="author" href="/jane">Jane Writer</a></p>
+<p>First real paragraph with enough words to look like an article body and pass
+the density heuristics that readability applies when it scores candidate nodes
+in a document like this one.</p>
+<p>Second paragraph, also long enough to matter for scoring purposes and to keep
+the extractor interested in this particular subtree of the page.</p>
+</article></body></html>`
+	got, err := article.Extract([]byte(page), "https://example.com/post", testSrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SiteName != "Example Essays" {
+		t.Errorf("SiteName = %q", got.SiteName)
+	}
+	if got.Byline != "Jane Writer" {
+		t.Errorf("Byline = %q", got.Byline)
+	}
+}
