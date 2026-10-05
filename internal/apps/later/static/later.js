@@ -38,4 +38,53 @@
 		}, { signal: controller.signal });
 		dialog.showModal();
 	});
+
+	// Aa settings: apply at once, save in the background. Without JS the
+	// forms post and redirect back.
+	function updatePrefButtons(reader) {
+		var cls = Array.from(reader.classList);
+		function current(field) {
+			var prefix = "later-" + field + "-";
+			var c = cls.find(function (x) { return x.indexOf(prefix) === 0; });
+			return c ? c.slice(prefix.length) : "";
+		}
+		reader.querySelectorAll("form[data-later-pref]").forEach(function (f) {
+			var button = f.querySelector("button");
+			["font", "width"].forEach(function (field) {
+				var input = f.querySelector('input[name="' + field + '"]');
+				if (input && button) button.setAttribute("aria-pressed", String(input.value === current(field)));
+			});
+			var size = f.querySelector('input[name="size"]');
+			if (size && button) {
+				var n = parseInt(current("size"), 10);
+				var up = button.getAttribute("aria-label") === "Larger text";
+				var target = up ? n + 1 : n - 1;
+				var ok = target >= 1 && target <= 5;
+				size.value = ok ? String(target) : "";
+				button.disabled = !ok;
+			}
+		});
+	}
+
+	document.addEventListener("submit", function (e) {
+		var form = e.target;
+		if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-later-pref")) return;
+		var reader = document.getElementById("later-reader");
+		if (!reader) return;
+		e.preventDefault();
+		var data = new FormData(form);
+		var body = new URLSearchParams(data);
+		fetch(form.action, { method: "POST", body: body, headers: { "X-Later-Async": "1" }, credentials: "same-origin" })
+			.then(function (res) { if (!res.ok) throw new Error(String(res.status)); })
+			.catch(function () { form.submit(); }); // fall back to the plain post
+		["font", "size", "width"].forEach(function (field) {
+			var v = data.get(field);
+			if (v === null) return;
+			Array.from(reader.classList).forEach(function (c) {
+				if (c.indexOf("later-" + field + "-") === 0) reader.classList.remove(c);
+			});
+			reader.classList.add("later-" + field + "-" + v);
+		});
+		updatePrefButtons(reader);
+	});
 })();

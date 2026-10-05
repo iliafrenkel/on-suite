@@ -12,6 +12,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/apps/later"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
+	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
 type server = apptest.Server[*later.Store]
@@ -463,4 +464,117 @@ func TestPastingTextOntoAReadableArticleIs400(t *testing.T) {
 	if got.ContentHTML != a.ContentHTML || got.Content != a.Content {
 		t.Errorf("article changed: %q / %q", got.Content, got.ContentHTML)
 	}
+}
+
+func TestArticleRendersTheReaderChrome(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+
+	root := doc.MustHave(".later-reader")
+	class, _ := htmlassert.Attr(root, "class")
+	for _, want := range []string{"later-font-serif", "later-size-3", "later-width-medium"} {
+		if !strings.Contains(class, want) {
+			t.Errorf("reader class %q lacks %q", class, want)
+		}
+	}
+	top := htmlassert.Text(doc.MustHave(".later-topbar"))
+	for _, want := range []string{"← Later", "An Essay", "min left"} {
+		if !strings.Contains(top, want) {
+			t.Errorf("top bar %q lacks %q", top, want)
+		}
+	}
+	// Opening moved the article to Reading, so ← Later goes to that tab.
+	doc.MustHave(`.later-topbar a[href="/later/?tab=reading"]`)
+	doc.MustHave("progress.later-progress")
+
+	doc.MustHave("details.later-aa")
+	forms := doc.QueryAll(`details.later-aa form[action="/later/prefs"]`)
+	if len(forms) != 7 { // 2 fonts, A-, A+, 3 widths
+		t.Fatalf("Aa menu has %d forms, want 7", len(forms))
+	}
+	for _, f := range forms {
+		if got := htmlassert.Text(f); got == "" {
+			t.Error("an Aa form has no button text")
+		}
+	}
+	for _, in := range doc.QueryAll(`details.later-aa input[name=back]`) {
+		if v, _ := htmlassert.Attr(in, "value"); v != articlePath(a, "") {
+			t.Errorf("Aa form back = %q, want %q", v, articlePath(a, ""))
+		}
+	}
+
+	doc.MustHave(`.later-topbar a[href="https://blog.example/essay"]`)
+	doc.MustHave(`.later-topbar form[data-later-confirm]`)
+}
+
+func TestArticleUsesTheReadersPrefs(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	if err := s.Store.SetPrefs(context.Background(), s.Alice.User.ID, later.Prefs{Font: "sans", Size: 5, Width: "wide"}); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	class, _ := htmlassert.Attr(doc.MustHave(".later-reader"), "class")
+	for _, want := range []string{"later-font-sans", "later-size-5", "later-width-wide"} {
+		if !strings.Contains(class, want) {
+			t.Errorf("reader class %q lacks %q", class, want)
+		}
+	}
+	btn := doc.MustHave(`details.later-aa button[disabled]`)
+	if got := htmlassert.Text(btn); got != "A+" {
+		t.Errorf("disabled Aa button = %q, want A+ (the largest size is reached)", got)
+	}
+	if n := len(doc.QueryAll(`details.later-aa button[disabled]`)); n != 1 {
+		t.Errorf("%d disabled Aa buttons, want 1", n)
+	}
+}
+
+func TestPrefsFormSavesAndRedirectsBack(t *testing.T) {
+	s := newServer(t)
+	ctx, uid := context.Background(), s.Alice.User.ID
+	s.Submit(t, s.Alice, "/later/prefs", url.Values{"size": {"4"}, "back": {"/later/a/1"}}, "/later/a/1")
+	got, err := s.Store.Prefs(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := later.DefaultPrefs
+	want.Size = 4
+	if got != want {
+		t.Errorf("prefs = %+v, want %+v", got, want)
+	}
+}
+
+func TestPrefsAsyncAnswers204(t *testing.T) {
+	s := newServer(t)
+	form := url.Values{"width": {"wide"}, web.CSRFFormField: {s.CSRFToken(t, s.Alice)}}
+	req := httptest.NewRequest("POST", "/later/prefs", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Later-Async", "1")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("async POST = %d, want 204", rec.Code)
+	}
+	got, _ := s.Store.Prefs(context.Background(), s.Alice.User.ID)
+	if got.Width != "wide" {
+		t.Errorf("width = %q, want wide", got.Width)
+	}
+}
+
+func TestPrefsRejectsInvalidValues(t *testing.T) {
+	s := newServer(t)
+	for _, form := range []url.Values{{"size": {"9"}}, {"size": {"x"}}, {"font": {"mono"}}, {"width": {"huge"}}} {
+		if rec := s.Post(t, s.Alice, "/later/prefs", form); rec.Code != http.StatusBadRequest {
+			t.Errorf("POST %v = %d, want 400", form, rec.Code)
+		}
+	}
+	got, _ := s.Store.Prefs(context.Background(), s.Alice.User.ID)
+	if got != later.DefaultPrefs {
+		t.Errorf("prefs changed to %+v", got)
+	}
+}
+
+func TestPrefsBackMustBeLocal(t *testing.T) {
+	s := newServer(t)
+	s.Submit(t, s.Alice, "/later/prefs", url.Values{"size": {"2"}, "back": {"https://evil.example/"}}, "/later/")
 }

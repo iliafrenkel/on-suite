@@ -1,51 +1,105 @@
 {{define "head"}}<script src="/later/later.js" defer></script>{{end}}
 
 {{define "content"}}
-<article class="later-article stack">
-	<header class="later-article-header stack">
-		<h1 class="later-article-title">{{.Data.Title}}</h1>
-		<p class="later-article-meta">
-			{{.Data.Site}}{{with .Data.Byline}} · {{.}}{{end}}
-			{{if not .Data.LinkOnly}} · {{.Data.Minutes}} min read{{end}}
-		</p>
-		<div class="later-article-actions">
-			{{/* The href is safe: NormalizeURL only stores http(s) URLs. */}}
-			<a class="button" href="{{.Data.URL}}" target="_blank" rel="noopener noreferrer">Open original</a>
-			{{if .Data.Archived}}
-			<form method="post" action="/later/a/{{.Data.ID}}/unarchive">
-				<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
-				<button type="submit">Move to unread</button>
-			</form>
-			{{else}}
-			<form method="post" action="/later/a/{{.Data.ID}}/archive">
-				<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
-				<button class="primary" type="submit">Archive</button>
-			</form>
-			{{end}}
-			<form method="post" action="/later/a/{{.Data.ID}}/delete"
-			      data-later-confirm="Delete this article permanently? This can't be undone.">
-				<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
-				<button class="danger" type="submit">Delete</button>
-			</form>
-		</div>
-	</header>
-
-	{{if .Data.LinkOnly}}
-	<section class="later-linkonly stack" aria-labelledby="later-linkonly-title">
-		<h2 id="later-linkonly-title">Couldn't read this page</h2>
-		<p>{{.Data.Reason}}</p>
-		<p>Open the original, copy the article's text, and paste it here to read it in ON Later.</p>
-		<form class="stack" method="post" action="/later/a/{{.Data.ID}}/text">
-			<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
-			<label for="later-text">Article text</label>
-			<textarea id="later-text" name="text" rows="12" required></textarea>
-			{{with .Data.TextError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
-			<button class="primary" type="submit">Paste text</button>
+{{$d := .Data}}
+{{$csrf := .Shell.CSRFToken}}
+<div class="later-reader later-font-{{$d.Prefs.Font}} later-size-{{$d.Prefs.Size}} later-width-{{$d.Prefs.Width}}"
+     id="later-reader" data-article-id="{{$d.ID}}" data-minutes="{{$d.Minutes}}"
+     {{if not $d.LinkOnly}}data-progress="{{$d.Progress}}"{{end}}>
+	<div class="later-topbar">
+		<a class="later-back" href="/later/?tab={{$d.Tab}}">← Later</a>
+		<span class="later-topbar-title">{{$d.Title}}</span>
+		{{if not $d.LinkOnly}}<span class="later-left" data-later-left>{{$d.Minutes}} min left</span>{{end}}
+		<details class="later-menu later-aa">
+			<summary aria-label="Reading settings">Aa</summary>
+			<div class="later-menu-panel stack">
+				<div class="later-pref-row"><span>Font</span>
+					{{range $d.FontOptions}}
+					<form method="post" action="/later/prefs" data-later-pref>
+						<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+						<input type="hidden" name="back" value="{{$d.Back}}">
+						<input type="hidden" name="font" value="{{.Value}}">
+						<button type="submit" aria-pressed="{{.Current}}">{{.Label}}</button>
+					</form>
+					{{end}}
+				</div>
+				<div class="later-pref-row"><span>Size</span>
+					<form method="post" action="/later/prefs" data-later-pref>
+						<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+						<input type="hidden" name="back" value="{{$d.Back}}">
+						<input type="hidden" name="size" value="{{$d.SizeDown}}">
+						<button type="submit" {{if not $d.SizeDown}}disabled{{end}} aria-label="Smaller text">A−</button>
+					</form>
+					<form method="post" action="/later/prefs" data-later-pref>
+						<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+						<input type="hidden" name="back" value="{{$d.Back}}">
+						<input type="hidden" name="size" value="{{$d.SizeUp}}">
+						<button type="submit" {{if not $d.SizeUp}}disabled{{end}} aria-label="Larger text">A+</button>
+					</form>
+				</div>
+				<div class="later-pref-row"><span>Width</span>
+					{{range $d.WidthOptions}}
+					<form method="post" action="/later/prefs" data-later-pref>
+						<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+						<input type="hidden" name="back" value="{{$d.Back}}">
+						<input type="hidden" name="width" value="{{.Value}}">
+						<button type="submit" aria-pressed="{{.Current}}">{{.Label}}</button>
+					</form>
+					{{end}}
+				</div>
+			</div>
+		</details>
+		{{if $d.Archived}}
+		<form method="post" action="/later/a/{{$d.ID}}/unarchive">
+			<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+			<button type="submit">Move to unread</button>
 		</form>
-	</section>
-	{{else}}
-	<div class="later-article-body">{{.Data.Body}}</div>
-	{{end}}
-</article>
+		{{else}}
+		<form method="post" action="/later/a/{{$d.ID}}/archive">
+			<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+			<button class="primary" type="submit">Archive</button>
+		</form>
+		{{end}}
+		<details class="later-menu">
+			<summary aria-label="More actions">⋯</summary>
+			<div class="later-menu-panel stack">
+				{{/* The href is safe: NormalizeURL only stores http(s) URLs. */}}
+				<a href="{{$d.URL}}" target="_blank" rel="noopener noreferrer">Open original</a>
+				<form method="post" action="/later/a/{{$d.ID}}/delete"
+				      data-later-confirm="Delete this article permanently? This can't be undone.">
+					<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+					<button class="danger" type="submit">Delete</button>
+				</form>
+			</div>
+		</details>
+	</div>
+	{{if not $d.LinkOnly}}<progress class="later-progress" max="1" value="{{$d.Progress}}" data-later-progress aria-label="Reading progress"></progress>{{end}}
+	<article class="later-article stack">
+		<header class="later-article-header stack">
+			<h1 class="later-article-title">{{$d.Title}}</h1>
+			<p class="later-article-meta">
+				{{$d.Site}}{{with $d.Byline}} · {{.}}{{end}}
+				{{if not $d.LinkOnly}} · {{$d.Minutes}} min read{{end}}
+			</p>
+		</header>
+
+		{{if $d.LinkOnly}}
+		<section class="later-linkonly stack" aria-labelledby="later-linkonly-title">
+			<h2 id="later-linkonly-title">Couldn't read this page</h2>
+			<p>{{$d.Reason}}</p>
+			<p>Open the original, copy the article's text, and paste it here to read it in ON Later.</p>
+			<form class="stack" method="post" action="/later/a/{{$d.ID}}/text">
+				<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+				<label for="later-text">Article text</label>
+				<textarea id="later-text" name="text" rows="12" required></textarea>
+				{{with $d.TextError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
+				<button class="primary" type="submit">Paste text</button>
+			</form>
+		</section>
+		{{else}}
+		<div class="later-article-body">{{$d.Body}}</div>
+		{{end}}
+	</article>
+</div>
 {{template "later-confirm"}}
 {{end}}

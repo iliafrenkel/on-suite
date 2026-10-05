@@ -258,28 +258,73 @@ type articleView struct {
 	Reason    string // ExtractError, for link-only
 	Archived  bool
 	TextError string
+
+	Prefs Prefs
+	// SizeDown and SizeUp are the sizes the A- and A+ buttons switch to; 0
+	// when already at the bound.
+	SizeDown, SizeUp int
+	FontOptions      []prefOption
+	WidthOptions     []prefOption
+	Tab              State   // the list ← Later returns to
+	Progress         float64 // 0-1, as stored
+	Back             string  // this page, for the Aa forms
+}
+
+// prefOption is one button in the Aa menu.
+type prefOption struct {
+	Value, Label string
+	Current      bool
+}
+
+func options(current string, pairs ...string) []prefOption {
+	var out []prefOption
+	for i := 0; i < len(pairs); i += 2 {
+		out = append(out, prefOption{Value: pairs[i], Label: pairs[i+1], Current: pairs[i] == current})
+	}
+	return out
 }
 
 // blankTextMessage is shown when the paste-text form is submitted empty.
 const blankTextMessage = "Paste some text first."
 
 func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, art Article, status int, textError string) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	prefs, err := a.store.Prefs(r.Context(), userID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
 	view := articleView{
-		ID:        art.ID,
-		Title:     art.Title,
-		URL:       art.URL,
-		Site:      art.SiteName,
-		Byline:    art.Byline,
-		Minutes:   ReadingMinutes(art.WordCount),
-		SavedAt:   art.SavedAt,
-		Body:      template.HTML(art.ContentHTML),
-		LinkOnly:  art.Content == ContentLinkOnly,
-		Reason:    art.ExtractError,
-		Archived:  art.State == StateArchived,
-		TextError: textError,
+		Prefs:        prefs,
+		FontOptions:  options(prefs.Font, "serif", "Serif", "sans", "Sans"),
+		WidthOptions: options(prefs.Width, "narrow", "Narrow", "medium", "Medium", "wide", "Wide"),
+		Tab:          art.State,
+		Progress:     art.Progress,
+		Back:         fmt.Sprintf("/later/a/%d", art.ID),
+		ID:           art.ID,
+		Title:        art.Title,
+		URL:          art.URL,
+		Site:         art.SiteName,
+		Byline:       art.Byline,
+		Minutes:      ReadingMinutes(art.WordCount),
+		SavedAt:      art.SavedAt,
+		Body:         template.HTML(art.ContentHTML),
+		LinkOnly:     art.Content == ContentLinkOnly,
+		Reason:       art.ExtractError,
+		Archived:     art.State == StateArchived,
+		TextError:    textError,
 	}
 	if view.Site == "" {
 		view.Site = art.SiteHost
+	}
+	if prefs.Size > 1 {
+		view.SizeDown = prefs.Size - 1
+	}
+	if prefs.Size < 5 {
+		view.SizeUp = prefs.Size + 1
 	}
 	page := a.deps.Page(r, art.Title)
 	page.Data = view

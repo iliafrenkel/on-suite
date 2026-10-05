@@ -27,6 +27,20 @@ Articles are in three lists:
 - **Archived** — finished. Click **Archive** when you're done with an
   article; **Move to unread** brings it back.
 
+## Reading an article
+
+An article opens full screen. The top bar has:
+
+- **← Later** — back to the list the article is in.
+- **Aa** — choose the font (serif or sans), the text size and the width of
+  the column. Changes apply at once and are remembered on every device.
+- **Archive** — move the article to Archived (or **Move to unread** if it
+  is already archived).
+- **⋯** — **Open original** opens the saved page on its own site, and
+  **Delete** removes the article.
+
+A thin line under the bar shows how far through the article you are.
+
 ## Deleting an article
 
-Open the article and click **Delete**. This can't be undone.
+Open the article, choose **⋯**, then **Delete**. This can't be undone.

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
@@ -53,4 +55,40 @@ func (st *Store) SetPrefs(ctx context.Context, userID int64, p Prefs) error {
 		return fmt.Errorf("later: save prefs: %w", err)
 	}
 	return nil
+}
+
+// setPrefs saves whichever of font, size and width the form carries.
+func (a *App) setPrefs(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	p, err := a.store.Prefs(r.Context(), userID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if v := r.PostFormValue("font"); v != "" {
+		p.Font = v
+	}
+	if v := r.PostFormValue("width"); v != "" {
+		p.Width = v
+	}
+	if v := r.PostFormValue("size"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			a.fail(w, r, ErrInvalid)
+			return
+		}
+		p.Size = n
+	}
+	if err := a.store.SetPrefs(r.Context(), userID, p); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if r.Header.Get("X-Later-Async") == "1" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, safeBack(r, "/later/"), http.StatusSeeOther)
 }
