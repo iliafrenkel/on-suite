@@ -81,7 +81,8 @@ type NewArticle struct {
 	ContentHTML                  string            // sanitised; "" means link-only
 	Images                       map[string]string // hash -> source URL
 	ExtractError                 string
-	FaviconURL                   string // absolute; "" when unknown
+	FaviconURL                   string   // absolute; "" when unknown
+	Tags                         []string // raw names; Save cleans them
 }
 
 // Article is one saved article.
@@ -230,6 +231,9 @@ func (st *Store) Save(ctx context.Context, userID int64, n NewArticle) (Article,
 			host, h, webfetch.MaxImageAttempts); err != nil {
 			return Article{}, false, fmt.Errorf("later: link favicon: %w", err)
 		}
+	}
+	if err := linkTags(ctx, tx, userID, id, cleanTags(n.Tags)); err != nil {
+		return Article{}, false, err
 	}
 	if err := tx.Commit(); err != nil {
 		return Article{}, false, fmt.Errorf("later: commit save: %w", err)
@@ -411,8 +415,8 @@ func (st *Store) SetPastedText(ctx context.Context, userID, id int64, text strin
 		html, ContentText(html), WordCount(html), db.FormatTime(st.now()), id, userID)
 }
 
-// Delete removes an article, its highlights and every image no other
-// article still uses.
+// Delete removes an article, its highlights, its tags that nothing else
+// uses, and every image no other article still uses.
 func (st *Store) Delete(ctx context.Context, userID, id int64) error {
 	tx, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -457,6 +461,11 @@ func (st *Store) Delete(ctx context.Context, userID, id int64) error {
 			   AND NOT EXISTS (SELECT 1 FROM later_article_images WHERE hash = ?)`, h, h); err != nil {
 			return fmt.Errorf("later: delete orphan image: %w", err)
 		}
+	}
+	// The article's tag links went with it (ON DELETE CASCADE); its tags go
+	// too if nothing else uses them (spec: "Delete").
+	if err := gcTags(ctx, tx, userID); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
