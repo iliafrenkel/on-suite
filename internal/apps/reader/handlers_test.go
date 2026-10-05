@@ -140,6 +140,30 @@ func TestTreeShowsTheGenericIconWithNoFavicon(t *testing.T) {
 	doc.MustHave("span.reader-favicon")
 }
 
+func TestTreeShowsTheGenericIconForADeadFavicon(t *testing.T) {
+	s := newServer(t)
+	ctx := context.Background()
+
+	sub, err := s.Store.Subscribe(ctx, s.Alice.User.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const icon = "https://example.com/favicon.ico"
+	if err := s.Store.SetFaviconIfEmpty(ctx, sub.FeedID, icon); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SaveFeedIconFailure(ctx, reader.FaviconHash(icon), "boom", time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := s.Get(t, s.Alice, "/reader/")
+	doc.MustNotHave("img.reader-favicon")
+	glyph := doc.MustHave("span.reader-favicon")
+	if _, hidden := htmlassert.Attr(glyph, "hidden"); hidden {
+		t.Error("the RSS glyph fallback is still hidden")
+	}
+}
+
 func TestSubscribeAddsAFeedToTheTree(t *testing.T) {
 	s, a := newServerWithApp(t)
 
