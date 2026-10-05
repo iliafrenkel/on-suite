@@ -353,7 +353,7 @@ func TestArchiveAndUnarchive(t *testing.T) {
 		t.Errorf("opening an archived article changed it to %q", got.State)
 	}
 
-	s.Submit(t, s.Alice, articlePath(a, "/unarchive"), url.Values{}, articlePath(a, ""))
+	s.Submit(t, s.Alice, articlePath(a, "/unarchive"), url.Values{}, "/later/?tab=unread")
 	if got, _ := s.Store.Article(ctx, uid, a.ID); got.State != later.StateUnread {
 		t.Errorf("State = %q, want unread", got.State)
 	}
