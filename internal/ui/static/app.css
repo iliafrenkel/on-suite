@@ -3653,7 +3653,7 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-width-medium .later-article { max-width: 68ch; }
 .later-width-wide .later-article { max-width: 84ch; }
 .later-margin { display: none; }
-.later-has-margin .later-margin { display: block; position: absolute; top: 0; left: calc(100% + 2rem); width: 14rem; }
+.later-has-margin .later-margin { display: block; position: absolute; top: 0; margin: 0; left: calc(100% + 2rem); width: 14rem; }
 .later-margin-note { position: absolute; left: 0; right: 0; margin: 0; padding-left: .5rem; border-left: 2px solid var(--c-accent-attention);
   font-size: var(--fs-sm); color: var(--c-text-dim); white-space: pre-wrap; cursor: pointer; }
 .later-margin-note[hidden] { display: none; }

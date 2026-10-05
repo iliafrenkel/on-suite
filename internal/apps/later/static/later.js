@@ -225,7 +225,6 @@
 		});
 	})();
 
-
 	// Margin comments (spec: "comments in the right margin on wide
 	// screens"): when the window has room beside the column, each comment
 	// sits level with its highlight, pushed down if the one above runs long.
