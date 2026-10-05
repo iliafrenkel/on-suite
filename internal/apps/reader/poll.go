@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/favicon"
 	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
@@ -238,7 +239,7 @@ func (p *Poller) pollOne(ctx context.Context, f Feed) {
 }
 
 // maybeGuessFavicon fills in a feed's favicon the first time its site URL is
-// known, using only data already in hand: DiscoverFavicon with no page HTML
+// known, using only data already in hand: favicon.Discover with no page HTML
 // is a pure string derivation to "<origin>/favicon.ico", not a fetch. f is
 // the feed's state from before this poll, so f.FaviconURL is accurate to
 // check against; siteURL is this poll's most current value (the freshly
@@ -247,7 +248,7 @@ func (p *Poller) maybeGuessFavicon(ctx context.Context, f Feed, siteURL string) 
 	if f.FaviconURL != "" || siteURL == "" {
 		return
 	}
-	guess := DiscoverFavicon(nil, siteURL)
+	guess := favicon.Discover(nil, siteURL)
 	if guess == "" {
 		return
 	}
@@ -274,7 +275,7 @@ func (p *Poller) CheckSiteFavicon(ctx context.Context, feedID int64) error {
 	return p.readSiteFavicon(ctx, f.ID, f.SiteURL)
 }
 
-// readSiteFavicon fetches siteURL and saves whatever DiscoverFavicon finds in
+// readSiteFavicon fetches siteURL and saves whatever favicon.Discover finds in
 // it — its <link rel="icon">, or the final URL's /favicon.ico — marking the
 // feed checked.
 func (p *Poller) readSiteFavicon(ctx context.Context, feedID int64, siteURL string) error {
@@ -282,7 +283,7 @@ func (p *Poller) readSiteFavicon(ctx context.Context, feedID int64, siteURL stri
 	if err != nil {
 		return err
 	}
-	return p.store.SetPageFavicon(ctx, feedID, DiscoverFavicon(res.Body, res.FinalURL))
+	return p.store.SetPageFavicon(ctx, feedID, favicon.Discover(res.Body, res.FinalURL))
 }
 
 // maybeRepairFavicon is the one-off fix for a feed stuck on a favicon the

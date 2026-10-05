@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/article"
+	"github.com/iliafrenkel/on-suite/internal/platform/favicon"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
@@ -772,7 +773,7 @@ func (a *App) resolveFeedURL(ctx context.Context, raw string) (feedURL, faviconU
 	// only run in the branches that actually use it.
 	candidates = FeedsInPage(res.Body, res.FinalURL)
 	if len(candidates) == 1 {
-		return candidates[0].URL, DiscoverFavicon(res.Body, res.FinalURL), nil, nil
+		return candidates[0].URL, favicon.Discover(res.Body, res.FinalURL), nil, nil
 	}
 	if len(candidates) > 1 {
 		// Ranked best-first, but let the person choose: a site with several
@@ -782,7 +783,7 @@ func (a *App) resolveFeedURL(ctx context.Context, raw string) (feedURL, faviconU
 	}
 
 	if probed, ok := a.probeForFeed(ctx, res.FinalURL); ok {
-		return probed, DiscoverFavicon(res.Body, res.FinalURL), nil, nil
+		return probed, favicon.Discover(res.Body, res.FinalURL), nil, nil
 	}
 	return "", "", nil, ErrNoFeedFound
 }
