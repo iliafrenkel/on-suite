@@ -283,18 +283,6 @@ func TestArticleOfAnotherUserIs404(t *testing.T) {
 	}
 }
 
-func TestArticleSaysWhenItWasSavedBefore(t *testing.T) {
-	s := newServer(t)
-	a := seedReadable(t, s)
-	if strings.Contains(s.Get(t, s.Alice, articlePath(a, "")).Text(), "You saved this before.") {
-		t.Error("note shown without ?existing=1")
-	}
-	doc := s.Get(t, s.Alice, articlePath(a, "?existing=1"))
-	if !strings.Contains(doc.Text(), "You saved this before.") {
-		t.Error("note missing with ?existing=1")
-	}
-}
-
 func TestLinkOnlyArticleOffersPasteText(t *testing.T) {
 	s := newServer(t)
 	a := seedLinkOnly(t, s)
@@ -384,5 +372,95 @@ func TestArticleBodyKeepsOnlyStoredHTML(t *testing.T) {
 	body := doc.MustHave(".later-article-body")
 	if len(doc.QueryAll(".later-article-body p")) != 1 || htmlassert.Text(body) != "x" {
 		t.Errorf("body = %q, want exactly one <p>x</p>", htmlassert.Text(body))
+	}
+}
+
+// --- saved note on the list ---------------------------------------------
+
+func TestListShowsANoteForAJustSavedArticle(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	doc := s.Get(t, s.Alice, fmt.Sprintf("/later/?saved=%d", a.ID))
+	note := doc.MustHave(`p.later-saved`)
+	if role, _ := htmlassert.Attr(note, "role"); role != "status" {
+		t.Errorf("role = %q, want status", role)
+	}
+	if got := htmlassert.Text(note); !strings.Contains(got, "Saved “An Essay”.") {
+		t.Errorf("note = %q", got)
+	}
+	doc.MustHave(fmt.Sprintf(`.later-saved a[href="/later/a/%d"]`, a.ID))
+}
+
+func TestListNoteForALinkOnlyArticle(t *testing.T) {
+	s := newServer(t)
+	a := seedLinkOnly(t, s)
+	doc := s.Get(t, s.Alice, fmt.Sprintf("/later/?saved=%d", a.ID))
+	got := htmlassert.Text(doc.MustHave(".later-saved"))
+	if !strings.Contains(got, "Saved “Walled” as a link only — open it to add the text.") {
+		t.Errorf("note = %q", got)
+	}
+	doc.MustHave(fmt.Sprintf(`.later-saved a[href="/later/a/%d"]`, a.ID))
+}
+
+func TestListNoteForAnAlreadySavedArticle(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	if err := s.Store.SetState(context.Background(), s.Alice.User.ID, a.ID, later.StateArchived); err != nil {
+		t.Fatal(err)
+	}
+	doc := s.Get(t, s.Alice, fmt.Sprintf("/later/?tab=archived&saved=%d&existing=1", a.ID))
+	if got := htmlassert.Text(doc.MustHave(".later-saved")); !strings.Contains(got, "You saved “An Essay” before.") {
+		t.Errorf("note = %q", got)
+	}
+	current := ""
+	for _, tab := range doc.QueryAll("a.later-tab") {
+		if _, ok := htmlassert.Attr(tab, "aria-current"); ok {
+			current, _ = htmlassert.Attr(tab, "href")
+		}
+	}
+	if current != "/later/?tab=archived" {
+		t.Errorf("current tab href = %q, want archived", current)
+	}
+	doc.MustHave(".later-row")
+}
+
+func TestListIgnoresASavedIdThatIsNotTheViewers(t *testing.T) {
+	s := newServer(t)
+	b := seed(t, s, s.Bob.User.ID, later.NewArticle{URL: "https://b.example/x", Title: "Bobs", ContentHTML: words(5)})
+	doc := s.Get(t, s.Alice, fmt.Sprintf("/later/?saved=%d", b.ID))
+	doc.MustNotHave(".later-saved")
+	if strings.Contains(doc.Text(), "Bobs") {
+		t.Error("alice saw bob's title")
+	}
+}
+
+func TestListIgnoresAMalformedSavedId(t *testing.T) {
+	s := newServer(t)
+	for _, v := range []string{"abc", "0", "-3", "99999"} {
+		s.Get(t, s.Alice, "/later/?saved="+v).MustNotHave(".later-saved")
+	}
+}
+
+func TestListHasATitle(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/later/")
+	if got := htmlassert.Text(doc.MustHave("title")); !strings.Contains(got, "ON Later") {
+		t.Errorf("title = %q", got)
+	}
+}
+
+func TestPastingTextOntoAReadableArticleIs400(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	rec := s.Post(t, s.Alice, articlePath(a, "/text"), url.Values{"text": {"replacement"}})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	got, err := s.Store.Article(context.Background(), s.Alice.User.ID, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ContentHTML != a.ContentHTML || got.Content != a.Content {
+		t.Errorf("article changed: %q / %q", got.Content, got.ContentHTML)
 	}
 }

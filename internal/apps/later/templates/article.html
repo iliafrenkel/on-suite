@@ -8,7 +8,6 @@
 			{{.Data.Site}}{{with .Data.Byline}} · {{.}}{{end}}
 			{{if not .Data.LinkOnly}} · {{.Data.Minutes}} min read{{end}}
 		</p>
-		{{if .Data.Existing}}<p class="later-note" role="status">You saved this before.</p>{{end}}
 		<div class="later-article-actions">
 			{{/* The href is safe: NormalizeURL only stores http(s) URLs. */}}
 			<a class="button" href="{{.Data.URL}}" target="_blank" rel="noopener noreferrer">Open original</a>

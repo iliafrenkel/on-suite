@@ -11,6 +11,15 @@
 	</form>
 	{{with .Data.FormError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
 
+	{{with .Data.Saved}}
+	<p class="later-saved" role="status">
+		{{if .Existing}}You saved “{{.Title}}” before.
+		{{else if .LinkOnly}}Saved “{{.Title}}” as a link only — open it to add the text.
+		{{else}}Saved “{{.Title}}”.{{end}}
+		<a href="/later/a/{{.ID}}">Open</a>
+	</p>
+	{{end}}
+
 	<nav class="later-tabs" aria-label="Lists">
 		{{range .Data.Tabs}}
 		<a class="later-tab" href="/later/?tab={{.State}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}} <span class="later-tab-count">{{.Count}}</span></a>

@@ -2,6 +2,7 @@ package later_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -50,32 +51,34 @@ func save(t *testing.T, s *server, sess *apptest.Session, target string) *httpte
 	return s.Post(t, sess, "/later/save", url.Values{"url": {target}})
 }
 
-// idFrom parses /later/a/{id}[?existing=1] out of a redirect.
+// idFrom parses the saved id out of a save redirect to /later/?...saved={id}.
 func idFrom(t *testing.T, rec *httptest.ResponseRecorder) int64 {
 	t.Helper()
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303: %s", rec.Code, rec.Body.String())
 	}
 	loc := rec.Header().Get("Location")
-	rest, ok := strings.CutPrefix(loc, "/later/a/")
-	if !ok {
-		t.Fatalf("Location = %q, want /later/a/{id}", loc)
+	u, err := url.Parse(loc)
+	if err != nil || u.Path != "/later/" {
+		t.Fatalf("Location = %q, want /later/?saved={id}", loc)
 	}
-	rest, _, _ = strings.Cut(rest, "?")
-	id, err := strconv.ParseInt(rest, 10, 64)
+	id, err := strconv.ParseInt(u.Query().Get("saved"), 10, 64)
 	if err != nil {
 		t.Fatalf("Location = %q: %v", loc, err)
 	}
 	return id
 }
 
-func TestSaveExtractsAndRedirectsToTheArticle(t *testing.T) {
+func TestSaveExtractsAndRedirectsToTheList(t *testing.T) {
 	s, a := newSaveServer(t)
 	a.AllowPrivateFetchesForTest()
 	origin := pageOrigin(t, "text/html; charset=utf-8", articlePage)
 
 	rec := save(t, s, s.Alice, origin.URL+"/essay?utm_source=x")
 	id := idFrom(t, rec)
+	if want := fmt.Sprintf("/later/?saved=%d", id); rec.Header().Get("Location") != want {
+		t.Errorf("Location = %q, want %q", rec.Header().Get("Location"), want)
+	}
 
 	got, err := s.Store.Article(context.Background(), s.Alice.User.ID, id)
 	if err != nil {
@@ -83,6 +86,9 @@ func TestSaveExtractsAndRedirectsToTheArticle(t *testing.T) {
 	}
 	if got.Content != later.ContentExtracted {
 		t.Fatalf("Content = %q (%s), want extracted", got.Content, got.ExtractError)
+	}
+	if got.State != later.StateUnread {
+		t.Errorf("State = %q, want unread (saving must not open it)", got.State)
 	}
 	if strings.Contains(got.URL, "utm_source") {
 		t.Errorf("URL kept its tracking parameter: %s", got.URL)
@@ -108,8 +114,9 @@ func TestSavingTheSameURLAgainGoesToTheExistingArticle(t *testing.T) {
 	if second := idFrom(t, rec); second != first {
 		t.Errorf("second save id = %d, want %d", second, first)
 	}
-	if loc := rec.Header().Get("Location"); !strings.HasSuffix(loc, "?existing=1") {
-		t.Errorf("Location = %q, want ?existing=1", loc)
+	want := fmt.Sprintf("/later/?tab=unread&saved=%d&existing=1", first)
+	if loc := rec.Header().Get("Location"); loc != want {
+		t.Errorf("Location = %q, want %q", loc, want)
 	}
 	counts, err := s.Store.Counts(context.Background(), s.Alice.User.ID)
 	if err != nil {

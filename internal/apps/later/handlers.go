@@ -73,6 +73,15 @@ type indexView struct {
 	FormError  string
 	FormValue  string
 	EmptyText  string
+	Saved      *savedView // the note after a save, or nil
+}
+
+// savedView is the status note shown above the tabs after saving a URL.
+type savedView struct {
+	ID       int64
+	Title    string
+	LinkOnly bool
+	Existing bool
 }
 
 var tabs = []struct {
@@ -105,16 +114,35 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 	if offset < 0 {
 		offset = 0
 	}
-	a.renderListPage(w, r, userID, tab, offset, http.StatusOK, "", "")
+	a.renderListPage(w, r, userID, tab, offset, http.StatusOK, "", "", a.savedNote(r, userID))
+}
+
+// savedNote loads the article named by ?saved= for the note after a save.
+// A missing, malformed or someone else's id shows no note.
+func (a *App) savedNote(r *http.Request, userID int64) *savedView {
+	id, err := strconv.ParseInt(r.URL.Query().Get("saved"), 10, 64)
+	if err != nil || id <= 0 {
+		return nil
+	}
+	art, err := a.store.Article(r.Context(), userID, id)
+	if err != nil {
+		return nil
+	}
+	return &savedView{
+		ID:       art.ID,
+		Title:    art.Title,
+		LinkOnly: art.Content == ContentLinkOnly,
+		Existing: r.URL.Query().Get("existing") == "1",
+	}
 }
 
 func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, tab State, status int, formError, formValue string) {
-	a.renderListPage(w, r, userID, tab, 0, status, formError, formValue)
+	a.renderListPage(w, r, userID, tab, 0, status, formError, formValue, nil)
 }
 
 // renderListPage draws the list page, or just its rows when HTMX asks for the
 // next page.
-func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int64, tab State, offset, status int, formError, formValue string) {
+func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int64, tab State, offset, status int, formError, formValue string, saved *savedView) {
 	ctx := r.Context()
 	items, err := a.store.List(ctx, userID, tab, offset, pageSize+1)
 	if err != nil {
@@ -126,7 +154,7 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 		a.fail(w, r, err)
 		return
 	}
-	view := indexView{Tab: tab, FormError: formError, FormValue: formValue}
+	view := indexView{Tab: tab, FormError: formError, FormValue: formValue, Saved: saved}
 	if len(items) > pageSize {
 		items = items[:pageSize]
 		view.NextOffset = offset + pageSize
@@ -147,7 +175,7 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 			view.EmptyText = t.empty
 		}
 	}
-	page := a.deps.Page(r, "")
+	page := a.deps.Page(r, "ON Later")
 	page.Data = view
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) && offset > 0 {
 		if err := a.deps.Render.Fragment(w, status, "later/index", "rows", page); err != nil {
@@ -174,7 +202,7 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing, err := a.store.ArticleByURL(r.Context(), userID, pageURL); err == nil {
-		http.Redirect(w, r, fmt.Sprintf("/later/a/%d?existing=1", existing.ID), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("/later/?tab=%s&saved=%d&existing=1", existing.State, existing.ID), http.StatusSeeOther)
 		return
 	} else if !errors.Is(err, ErrNotFound) {
 		a.fail(w, r, err)
@@ -186,9 +214,9 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	target := fmt.Sprintf("/later/a/%d", saved.ID)
+	target := fmt.Sprintf("/later/?saved=%d", saved.ID)
 	if !created {
-		target += "?existing=1"
+		target = fmt.Sprintf("/later/?tab=%s&saved=%d&existing=1", saved.State, saved.ID)
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }
@@ -209,7 +237,6 @@ type articleView struct {
 	LinkOnly  bool
 	Reason    string // ExtractError, for link-only
 	Archived  bool
-	Existing  bool // ?existing=1: "You saved this before."
 	TextError string
 }
 
@@ -229,7 +256,6 @@ func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, art Article,
 		LinkOnly:  art.Content == ContentLinkOnly,
 		Reason:    art.ExtractError,
 		Archived:  art.State == StateArchived,
-		Existing:  r.URL.Query().Get("existing") == "1",
 		TextError: textError,
 	}
 	if view.Site == "" {
