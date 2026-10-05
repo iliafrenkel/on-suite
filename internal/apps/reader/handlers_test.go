@@ -17,6 +17,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
+	"github.com/iliafrenkel/on-suite/internal/platform/article"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -380,7 +381,7 @@ func TestArticlePaneRendersSanitizedContent(t *testing.T) {
 		GUID:        "g1",
 		Title:       "An article",
 		URL:         "https://example.com/1",
-		ContentHTML: reader.SanitizeHTML(`<p>Body.</p><script>alert(1)</script>`),
+		ContentHTML: article.SanitizeHTML(`<p>Body.</p><script>alert(1)</script>`),
 	}}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
@@ -1816,7 +1817,7 @@ func TestFullArticleTogglesBackToTheFeedBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Store.SaveFullArticle(ctx, s.Alice.User.ID, items[0].ID, reader.Extracted{
+	if err := s.Store.SaveFullArticle(ctx, s.Alice.User.ID, items[0].ID, article.Extracted{
 		HTML: "<p>THE FULL VERSION.</p>", TextLength: 500,
 	}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
@@ -1863,7 +1864,7 @@ func TestStarringAnArticleKeepsTheFeedViewShowing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Store.SaveFullArticle(ctx, s.Alice.User.ID, items[0].ID, reader.Extracted{
+	if err := s.Store.SaveFullArticle(ctx, s.Alice.User.ID, items[0].ID, article.Extracted{
 		HTML: "<p>THE FULL VERSION.</p>", TextLength: 500,
 	}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
@@ -2085,7 +2086,7 @@ func TestClearFullArticleFallsBackToTheFeedBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Store.SaveFullArticle(ctx, s.Alice.User.ID, items[0].ID, reader.Extracted{
+	if err := s.Store.SaveFullArticle(ctx, s.Alice.User.ID, items[0].ID, article.Extracted{
 		HTML: "<p>A TEASER, NOT A REAL ARTICLE.</p>", TextLength: 120,
 		Images: map[string]string{hash: "https://cdn.example/full-lead.png"},
 	}, time.Now().UTC()); err != nil {

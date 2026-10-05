@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
+	"github.com/iliafrenkel/on-suite/internal/platform/article"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
@@ -254,7 +255,7 @@ func TestSharedImageBetweenFeedAndFullArticleSurvivesEitherSourcesResave(t *test
 	item := items[0]
 
 	// The extraction references the same image the feed body already does.
-	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, reader.Extracted{
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, article.Extracted{
 		HTML: "<p>Full body.</p>", TextLength: 500,
 		Images: map[string]string{hash: "https://cdn.example/shared-lead.png"},
 	}, now); err != nil {
@@ -287,7 +288,7 @@ func TestSharedImageBetweenFeedAndFullArticleSurvivesEitherSourcesResave(t *test
 
 	// A re-extraction that no longer includes the image drops the full-source
 	// link too. Now nothing references it, so it must finally go.
-	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, reader.Extracted{
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, item.ID, article.Extracted{
 		HTML: "<p>Re-extracted, no image this time.</p>", TextLength: 500,
 	}, now); err != nil {
 		t.Fatal(err)

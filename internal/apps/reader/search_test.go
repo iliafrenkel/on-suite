@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
+	"github.com/iliafrenkel/on-suite/internal/platform/article"
 )
 
 func TestSearchTextStripsMarkup(t *testing.T) {
@@ -104,7 +105,7 @@ func TestSaveItemsDoesNotRevertAFullArticlesIndexedText(t *testing.T) {
 	}
 	itemID := items[0].ID
 
-	if err := f.store.SaveFullArticle(ctx, f.alice.ID, itemID, reader.Extracted{
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, itemID, article.Extracted{
 		HTML: "<p>A deep dive into aerodynamics and downforce.</p>",
 	}, now); err != nil {
 		t.Fatalf("SaveFullArticle: %v", err)

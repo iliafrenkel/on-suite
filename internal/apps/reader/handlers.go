@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/article"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
@@ -1179,7 +1180,7 @@ func (a *App) recordFullFailure(r *http.Request, userID, itemID int64, msg strin
 
 // fullFailureMessage turns an error into something worth showing a person.
 func fullFailureMessage(err error) string {
-	if errors.Is(err, ErrNotExtractable) {
+	if errors.Is(err, article.ErrNotExtractable) {
 		return "could not find an article in that page — it may be a paywall, or built by JavaScript"
 	}
 	return "could not fetch the page"
@@ -1205,7 +1206,7 @@ func (a *App) extractInto(r *http.Request, userID int64, item Item) error {
 	// Only HTML extracts. A PDF or an image behind an article link is a
 	// perfectly ordinary thing to find and not something to hand to a parser.
 	if ct := res.ContentType; ct != "" && !strings.Contains(ct, "html") {
-		return fmt.Errorf("%w: content type %s", ErrNotExtractable, ct)
+		return fmt.Errorf("%w: content type %s", article.ErrNotExtractable, ct)
 	}
 
 	ex, err := ExtractArticle(res.Body, res.FinalURL)

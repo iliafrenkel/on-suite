@@ -376,12 +376,13 @@ func importersOf(t *testing.T, libPrefix string) []string {
 }
 
 // TestReadabilityIsContained: go-readability brings two unmaintained
-// transitive modules, and R4's plan accepted it only on the condition that it
-// stays behind one file. A second importer makes it load-bearing, which is a
-// different decision and should be made deliberately.
+// transitive modules, and accepting it depended on it staying behind one file
+// — now the shared article package, so ON Reader and ON Later use one copy. A
+// second importer makes it load-bearing, which is a different decision and
+// should be made deliberately.
 func TestReadabilityIsContained(t *testing.T) {
 	importers := importersOf(t, "github.com/go-shiori/go-readability")
-	want := []string{"internal/apps/reader/extract.go"}
+	want := []string{"internal/platform/article/extract.go"}
 	if !slices.Equal(importers, want) {
 		t.Errorf("go-readability is imported by %v, want only %v", importers, want)
 	}

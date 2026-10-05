@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/platform/article"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
@@ -1639,7 +1640,7 @@ func (s *Store) SaveFeedIconFailure(ctx context.Context, hash, msg string, now t
 // The visibility check runs inside this transaction, first thing after
 // BeginTx, not before it: a check-then-write split by BeginTx would let an
 // unsubscribe land in the gap and write to an item the user no longer sees.
-func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex Extracted, now time.Time) error {
+func (s *Store) SaveFullArticle(ctx context.Context, userID, itemID int64, ex article.Extracted, now time.Time) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("reader: begin save full article: %w", err)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
+	"github.com/iliafrenkel/on-suite/internal/platform/article"
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
@@ -406,7 +407,7 @@ func TestItemsForScopeOmitsBodyColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SaveFullArticle(ctx, f.alice.ID, items[0].ID, reader.Extracted{
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, items[0].ID, article.Extracted{
 		HTML: "<p>full body</p>", TextLength: 500,
 	}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
@@ -476,7 +477,7 @@ func TestSaveFullArticleRejectsAnItemTheUserCannotSee(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = f.store.SaveFullArticle(ctx, f.bob.ID, items[0].ID, reader.Extracted{
+	err = f.store.SaveFullArticle(ctx, f.bob.ID, items[0].ID, article.Extracted{
 		HTML: "<p>full body</p>", TextLength: 500,
 	}, time.Now().UTC())
 	if !errors.Is(err, reader.ErrNotFound) {
@@ -513,7 +514,7 @@ func TestClearFullArticleRejectsAnItemTheUserCannotSee(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SaveFullArticle(ctx, f.alice.ID, items[0].ID, reader.Extracted{
+	if err := f.store.SaveFullArticle(ctx, f.alice.ID, items[0].ID, article.Extracted{
 		HTML: "<p>full body</p>", TextLength: 500,
 	}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
