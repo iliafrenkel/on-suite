@@ -3577,6 +3577,10 @@ input.flash-tag-entry:focus { outline: none; }
 .flash-load-due { font-size: var(--fs-xs); color: var(--c-text-dim); white-space: nowrap; }
 .flash-load-due.flash-due-badge { color: var(--c-accent-attention); }
 
+/* ---- ON Later ---------------------------------------------------------- */
+
+.later-empty { color: var(--c-text-dim); }
+
 /* ---- In-app help (#309) ------------------------------------------------ */
 
 /* A page list beside the guide. It stands on its own when signed out, where

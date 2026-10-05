@@ -35,6 +35,7 @@ var order = []struct{ Slug, Label string }{
 	{"paste", "ON Paste"},
 	{"notes", "ON Notes"},
 	{"reader", "ON Reader"},
+	{"later", "ON Later"},
 	{"flash", "ON Flash"},
 	{"admin", "Administration"},
 }
