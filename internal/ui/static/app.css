@@ -3635,6 +3635,9 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-menu-panel { position: absolute; right: 0; top: calc(100% + .25rem); min-width: 13rem; padding: .75rem; background: var(--c-bg); border: var(--border); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0,0,0,.12); }
 @media (max-width: 40rem) {
   .later-menu { position: static; }
+  .later-topbar { gap: .5rem; }
+  .later-left { display: none; }
+  .later-back, .later-notes-toggle { white-space: nowrap; }
   .later-menu-panel { left: 1rem; right: 1rem; top: 100%; min-width: 0; }
 }
 .later-row-menu > summary { border: 0; }
