@@ -11,14 +11,9 @@
 	</form>
 	{{with .Data.FormError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
 
-	{{with .Data.Saved}}
-	<p class="later-saved" role="status">
-		{{if .Existing}}You saved “{{.Title}}” before.
-		{{else if .LinkOnly}}Saved “{{.Title}}” as a link only — open it to add the text.
-		{{else}}Saved “{{.Title}}”.{{end}}
-		<a href="/later/a/{{.ID}}">Open</a>
-	</p>
-	{{end}}
+	{{with .Data.Saved}}{{template "later-saved-note" .}}{{end}}
+
+	<p class="later-hint">Save from any page: drag <a class="later-bookmarklet" data-later-bookmarklet href="/later/">Save to Later</a> to your bookmarks bar.</p>
 
 	<nav class="later-tabs" aria-label="Lists">
 		{{range .Data.Tabs}}
@@ -31,6 +26,7 @@
 	{{else}}
 	<p class="later-empty">{{.Data.EmptyText}}</p>
 	{{end}}
+{{template "later-confirm"}}
 </div>
 {{end}}
 
@@ -38,13 +34,43 @@
 {{range .Data.Rows}}
 <li class="later-row">
 	<a class="later-row-link" href="/later/a/{{.ID}}">
-		<span class="later-row-title">{{.Title}}</span>
-		<span class="later-row-meta">
-			<span>{{.Site}}</span>
-			{{if .LinkOnly}}<span class="later-pill later-pill-linkonly">link only — add text</span>
-			{{else}}<span>{{.Minutes}} min</span>{{end}}
+		<span class="later-favicon-wrap" aria-hidden="true">
+			{{if .FaviconSrc}}<img class="later-favicon" src="{{.FaviconSrc}}" alt="" width="16" height="16" loading="lazy">
+			<span class="later-favicon-badge" hidden>{{.Initial}}</span>
+			{{else}}<span class="later-favicon-badge">{{.Initial}}</span>{{end}}
+		</span>
+		<span class="later-row-text">
+			<span class="later-row-title">{{.Title}}</span>
+			<span class="later-row-meta">
+				<span>{{.Site}}</span>
+				{{if .LinkOnly}}<span class="later-pill later-pill-linkonly">link only — add text</span>
+				{{else}}<span>{{.Minutes}} min</span>{{end}}
+			</span>
 		</span>
 	</a>
+	<details class="later-menu later-row-menu">
+		<summary aria-label="Actions for {{.Title}}">⋯</summary>
+		<div class="later-menu-panel stack">
+			{{if eq $.Data.Tab "archived"}}
+			<form method="post" action="/later/a/{{.ID}}/unarchive">
+				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<button type="submit">Move to unread</button>
+			</form>
+			{{else}}
+			<form method="post" action="/later/a/{{.ID}}/archive">
+				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<button type="submit">Archive</button>
+			</form>
+			{{end}}
+			<form method="post" action="/later/a/{{.ID}}/delete" data-later-confirm="Delete this article permanently? This can't be undone.">
+				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<button class="danger" type="submit">Delete</button>
+			</form>
+		</div>
+	</details>
 	{{if .Progress}}<progress class="later-row-progress" max="100" value="{{.Progress}}">{{.Progress}}%</progress>{{end}}
 </li>
 {{end}}

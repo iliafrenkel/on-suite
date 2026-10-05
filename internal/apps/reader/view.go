@@ -155,6 +155,10 @@ type articleView struct {
 	HasFull bool
 	// ShowingFull is which body Body currently holds.
 	ShowingFull bool
+	// LaterEnabled is whether ON Later is turned on, which decides if the
+	// Read later button shows. Reader only reads the shell's app list; the
+	// button's only link to ON Later is an HTTP POST to /later/save.
+	LaterEnabled bool
 	// FullError explains a failed fetch, empty when there is nothing to say.
 	FullError string
 
@@ -286,12 +290,23 @@ func viewArticle(it Item, shell render.Shell, lc listContext, showFull bool, now
 		Starred:  it.Starred,
 		// Safe: both bodies have been through SanitizeArticleHTML — the feed
 		// one in ParseFeed, the full one in ExtractArticle.
-		Body:        template.HTML(body),
-		Shell:       shell,
-		HasFull:     it.HasFull(),
-		ShowingFull: showFull && it.HasFull(),
-		FullError:   it.FullError,
+		Body:         template.HTML(body),
+		Shell:        shell,
+		LaterEnabled: laterEnabled(shell),
+		HasFull:      it.HasFull(),
+		ShowingFull:  showFull && it.HasFull(),
+		FullError:    it.FullError,
 	}
+}
+
+// laterEnabled reports whether ON Later is among the apps the shell offers.
+func laterEnabled(shell render.Shell) bool {
+	for _, item := range shell.Apps {
+		if item.ID == "later" {
+			return true
+		}
+	}
+	return false
 }
 
 func firstNonEmpty(vals ...string) string {

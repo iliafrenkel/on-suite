@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -63,6 +65,9 @@ type rowView struct {
 	Minutes  int
 	LinkOnly bool
 	Progress int // percent, 0-100
+
+	FaviconSrc string // "" when no <img> should be emitted
+	Initial    string // the site's first letter, for the badge
 }
 
 type indexView struct {
@@ -82,6 +87,7 @@ type savedView struct {
 	Title    string
 	LinkOnly bool
 	Existing bool
+	NewTab   bool // the Open link opens a new tab (the popup is about to close)
 }
 
 var tabs = []struct {
@@ -160,14 +166,19 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 		view.NextOffset = offset + pageSize
 	}
 	for _, it := range items {
-		view.Rows = append(view.Rows, rowView{
+		row := rowView{
 			ID:       it.ID,
 			Title:    it.Title,
 			Site:     it.SiteHost,
 			Minutes:  ReadingMinutes(it.WordCount),
 			LinkOnly: it.Content == ContentLinkOnly,
 			Progress: int(math.Round(it.Progress * 100)),
-		})
+			Initial:  siteInitial(it.SiteHost),
+		}
+		if it.FaviconShown {
+			row.FaviconSrc = "/later/favicon/" + it.FaviconHash
+		}
+		view.Rows = append(view.Rows, row)
 	}
 	for _, t := range tabs {
 		view.Tabs = append(view.Tabs, tabView{State: t.state, Label: t.label, Count: counts[t.state], Current: t.state == tab})
@@ -188,6 +199,16 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 	}
 }
 
+// siteInitial is the upper-cased first letter of a site, for the badge shown
+// when it has no icon.
+func siteInitial(site string) string {
+	r, _ := utf8.DecodeRuneInString(site)
+	if r == utf8.RuneError {
+		return ""
+	}
+	return string(unicode.ToUpper(r))
+}
+
 // badURLMessage is shown in the save form for a URL Later can't use.
 const badURLMessage = "That doesn't look like a web address. It needs to start with http:// or https://."
 
@@ -197,11 +218,29 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageURL, err := NormalizeURL(r.PostFormValue("url"))
+	popup := r.PostFormValue("popup") == "1"
+	htmx := web.IsHTMX(r)
 	if err != nil {
+		if htmx {
+			a.renderChip(w, r, http.StatusUnprocessableEntity, "chip-error", nil)
+			return
+		}
+		if popup {
+			a.renderPopup(w, r, http.StatusUnprocessableEntity, popupView{Error: badURLMessage})
+			return
+		}
 		a.renderIndex(w, r, userID, StateUnread, http.StatusUnprocessableEntity, badURLMessage, r.PostFormValue("url"))
 		return
 	}
 	if existing, err := a.store.ArticleByURL(r.Context(), userID, pageURL); err == nil {
+		if htmx {
+			a.renderChip(w, r, http.StatusOK, "chip-existing", existing.ID)
+			return
+		}
+		if popup {
+			http.Redirect(w, r, popupDoneURL(existing.ID, true), http.StatusSeeOther)
+			return
+		}
 		http.Redirect(w, r, fmt.Sprintf("/later/?tab=%s&saved=%d&existing=1", existing.State, existing.ID), http.StatusSeeOther)
 		return
 	} else if !errors.Is(err, ErrNotFound) {
@@ -214,11 +253,29 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	if htmx {
+		block := "chip-saved"
+		if !created {
+			block = "chip-existing"
+		}
+		a.renderChip(w, r, http.StatusOK, block, saved.ID)
+		return
+	}
 	target := fmt.Sprintf("/later/?saved=%d", saved.ID)
-	if !created {
+	if popup {
+		target = popupDoneURL(saved.ID, !created)
+	} else if !created {
 		target = fmt.Sprintf("/later/?tab=%s&saved=%d&existing=1", saved.State, saved.ID)
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+// renderChip answers an HTMX save (ON Reader's button) with a small fragment
+// that replaces the button.
+func (a *App) renderChip(w http.ResponseWriter, r *http.Request, status int, block string, data any) {
+	if err := a.deps.Render.Fragment(w, status, "later/chips", block, data); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
 }
 
 type articleView struct {
@@ -238,28 +295,76 @@ type articleView struct {
 	Reason    string // ExtractError, for link-only
 	Archived  bool
 	TextError string
+
+	Prefs Prefs
+	// SizeDown and SizeUp are the sizes the A- and A+ buttons switch to; 0
+	// when already at the bound.
+	SizeDown, SizeUp int
+	FontOptions      []prefOption
+	WidthOptions     []prefOption
+	Tab              State   // the list ← Later returns to
+	Progress         float64 // 0-1, as stored
+	Back             string  // this page, for the Aa forms
+}
+
+// prefOption is one button in the Aa menu.
+type prefOption struct {
+	Value, Label string
+	Current      bool
+}
+
+func options(current string, pairs ...string) []prefOption {
+	var out []prefOption
+	for i := 0; i < len(pairs); i += 2 {
+		out = append(out, prefOption{Value: pairs[i], Label: pairs[i+1], Current: pairs[i] == current})
+	}
+	return out
 }
 
 // blankTextMessage is shown when the paste-text form is submitted empty.
 const blankTextMessage = "Paste some text first."
 
 func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, art Article, status int, textError string) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	prefs, err := a.store.Prefs(r.Context(), userID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
 	view := articleView{
-		ID:        art.ID,
-		Title:     art.Title,
-		URL:       art.URL,
-		Site:      art.SiteName,
-		Byline:    art.Byline,
-		Minutes:   ReadingMinutes(art.WordCount),
-		SavedAt:   art.SavedAt,
-		Body:      template.HTML(art.ContentHTML),
-		LinkOnly:  art.Content == ContentLinkOnly,
-		Reason:    art.ExtractError,
-		Archived:  art.State == StateArchived,
-		TextError: textError,
+		Prefs:        prefs,
+		FontOptions:  options(prefs.Font, "serif", "Serif", "sans", "Sans"),
+		WidthOptions: options(prefs.Width, "narrow", "Narrow", "medium", "Medium", "wide", "Wide"),
+		Tab:          art.State,
+		Progress:     art.Progress,
+		Back:         fmt.Sprintf("/later/a/%d", art.ID),
+		ID:           art.ID,
+		Title:        art.Title,
+		URL:          art.URL,
+		Site:         art.SiteName,
+		Byline:       art.Byline,
+		Minutes:      ReadingMinutes(art.WordCount),
+		SavedAt:      art.SavedAt,
+		Body:         template.HTML(art.ContentHTML),
+		LinkOnly:     art.Content == ContentLinkOnly,
+		Reason:       art.ExtractError,
+		Archived:     art.State == StateArchived,
+		TextError:    textError,
 	}
 	if view.Site == "" {
 		view.Site = art.SiteHost
+	}
+	if strings.EqualFold(strings.TrimSpace(view.Byline), strings.TrimSpace(view.Site)) {
+		view.Byline = ""
+	}
+	if prefs.Size > 1 {
+		view.SizeDown = prefs.Size - 1
+	}
+	if prefs.Size < 5 {
+		view.SizeUp = prefs.Size + 1
 	}
 	page := a.deps.Page(r, art.Title)
 	page.Data = view
@@ -307,7 +412,7 @@ func (a *App) setState(state State, redirect string) http.HandlerFunc {
 			a.fail(w, r, err)
 			return
 		}
-		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		http.Redirect(w, r, safeBack(r, redirect), http.StatusSeeOther)
 	}
 }
 
@@ -331,7 +436,7 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/later/?tab="+string(art.State), http.StatusSeeOther)
+	http.Redirect(w, r, safeBack(r, "/later/?tab="+string(art.State)), http.StatusSeeOther)
 }
 
 // pasteText gives a link-only article the text the user pasted.
@@ -359,4 +464,27 @@ func (a *App) pasteText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/later/a/%d", id), http.StatusSeeOther)
+}
+
+// progress quietly saves how far through an article the reader has scrolled.
+// The reader's script posts it; there is nothing to show, so it answers 204.
+func (a *App) progress(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	p, err := strconv.ParseFloat(r.PostFormValue("progress"), 64)
+	if err != nil {
+		a.fail(w, r, ErrInvalid)
+		return
+	}
+	if err := a.store.SetProgress(r.Context(), userID, id, p); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

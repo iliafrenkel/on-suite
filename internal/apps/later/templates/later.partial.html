@@ -7,3 +7,12 @@
 	</div>
 </dialog>
 {{end}}
+
+{{define "later-saved-note"}}
+<p class="later-saved" role="status">
+	{{if .Existing}}You saved “{{.Title}}” before.
+	{{else if .LinkOnly}}Saved “{{.Title}}” as a link only — open it to add the text.
+	{{else}}Saved “{{.Title}}”.{{end}}
+	<a href="/later/a/{{.ID}}"{{if .NewTab}} target="_blank" rel="noopener"{{end}}>Open</a>
+</p>
+{{end}}

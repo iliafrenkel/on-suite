@@ -18,6 +18,25 @@ for example. ON Later still saves the link and tells you why it couldn't
 read the page. Open the original, copy its text, and use **Paste text** to
 make it a normal article you can read here.
 
+## Saving from any page
+
+Save without leaving the page you're reading:
+
+1. At the top of ON Later, drag **Save to Later** onto your browser's
+   bookmarks bar.
+2. On any page, click that bookmark. A small window opens.
+3. Click **Save** (or press Enter). The window closes by itself.
+
+You need to be signed in to ON Suite in that browser. If the page is
+already in ON Later, the window says so and offers to open it.
+
+## Saving from ON Reader
+
+When you're reading an article in [ON Reader](reader.md), click **Read
+later** in its toolbar. The button turns into **Saved to Later ✓**, with a
+link to open it. If you'd already saved that page, it says **Already in
+Later** instead. The button is there only when ON Later is turned on.
+
 ## Finding your articles
 
 Articles are in three lists:
@@ -27,6 +46,24 @@ Articles are in three lists:
 - **Archived** — finished. Click **Archive** when you're done with an
   article; **Move to unread** brings it back.
 
+## Reading an article
+
+An article opens full screen. The top bar has:
+
+- **← Later** — back to the list the article is in.
+- **Aa** — choose the font (serif or sans), the text size and the width of
+  the column. Changes apply at once and are remembered on every device.
+- **Archive** — move the article to Archived (or **Move to unread** if it
+  is already archived).
+- **⋯** — **Open original** opens the saved page on its own site, and
+  **Delete** removes the article.
+
+ON Later remembers where you stopped and opens there next time. The
+line under the top bar shows how far through you are, and the bar shows the
+minutes left. **Move to unread** starts the article again from the top.
+
 ## Deleting an article
 
-Open the article and click **Delete**. This can't be undone.
+Each article in the list has a **⋯** menu to archive, move back to
+unread, or delete it without opening it. You can also open the article,
+choose **⋯**, then **Delete**. Deleting can't be undone.

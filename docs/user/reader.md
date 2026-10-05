@@ -132,6 +132,8 @@ The open article shows its title, the feed's name, the author (if the feed
 says) and when it was published. The buttons under the title:
 
 - **Open original** — open the article on its own website, in a new tab.
+- **Read later** — save the article to [ON Later](later.md), to read
+  properly when you have time. It's there only when ON Later is turned on.
 - **Star** — keep the article to come back to later. The button then says
   **Starred**; click it again to remove the star.
 - **Mark unread** — put the article back into your unread list, for

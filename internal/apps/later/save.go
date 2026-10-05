@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/article"
+	"github.com/iliafrenkel/on-suite/internal/platform/favicon"
 	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
@@ -36,9 +37,18 @@ func (a *App) fetchArticle(ctx context.Context, pageURL string) NewArticle {
 	res, err := a.client.Get(ctx, pageURL, webfetch.GetOptions{})
 	if err != nil {
 		n.ExtractError = "Couldn't fetch the page: " + err.Error()
+		n.FaviconURL = favicon.Discover(nil, pageURL)
 		return n
 	}
 	n.Title = pageTitle(res.Body)
+	// Trust the page's own <link rel=icon> only when we ended up on the site
+	// that was saved: a redirect to another host must not choose that site's
+	// icon. Otherwise guess /favicon.ico on the saved site.
+	if siteHost(res.FinalURL) == siteHost(pageURL) {
+		n.FaviconURL = favicon.Discover(res.Body, res.FinalURL)
+	} else {
+		n.FaviconURL = favicon.Discover(nil, pageURL)
+	}
 	if !isHTML(res.ContentType) {
 		n.ExtractError = fmt.Sprintf("The page isn't HTML (%s).", res.ContentType)
 		return n

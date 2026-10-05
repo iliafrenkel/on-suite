@@ -9,11 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 // ID is the app id: URL prefix, migration namespace, table prefix.
@@ -79,6 +81,7 @@ type NewArticle struct {
 	ContentHTML                  string            // sanitised; "" means link-only
 	Images                       map[string]string // hash -> source URL
 	ExtractError                 string
+	FaviconURL                   string // absolute; "" when unknown
 }
 
 // Article is one saved article.
@@ -105,6 +108,10 @@ type ListItem struct {
 	Content   Content
 	WordCount int
 	Progress  float64
+	// FaviconHash is "" when the site has no favicon row; FaviconShown says
+	// an <img> is worth emitting (cached, or not yet given up on).
+	FaviconHash  string
+	FaviconShown bool
 }
 
 // articleColumns is every column scanArticle reads, in order.
@@ -205,6 +212,24 @@ func (st *Store) Save(ctx context.Context, userID int64, n NewArticle) (Article,
 			return Article{}, false, fmt.Errorf("later: link image: %w", err)
 		}
 	}
+	if n.FaviconURL != "" {
+		h := webfetch.URLHash(n.FaviconURL)
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO later_favicons (hash, src_url) VALUES (?, ?) ON CONFLICT (hash) DO NOTHING`,
+			h, n.FaviconURL); err != nil {
+			return Article{}, false, fmt.Errorf("later: save favicon: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			// First icon wins, unless the mapped one has been given up on:
+			// then a newly discovered icon repairs the site.
+			`INSERT INTO later_site_favicons (site_host, hash) VALUES (?, ?)
+			 ON CONFLICT (site_host) DO UPDATE SET hash = excluded.hash
+			  WHERE excluded.hash <> later_site_favicons.hash
+			    AND (SELECT error_count FROM later_favicons WHERE hash = later_site_favicons.hash) >= ?`,
+			host, h, webfetch.MaxImageAttempts); err != nil {
+			return Article{}, false, fmt.Errorf("later: link favicon: %w", err)
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return Article{}, false, fmt.Errorf("later: commit save: %w", err)
 	}
@@ -226,9 +251,9 @@ func (st *Store) ArticleByURL(ctx context.Context, userID int64, pageURL string)
 
 // listOrder is each tab's sort; the keys are the only states List accepts.
 var listOrder = map[State]string{
-	StateUnread:   "saved_at DESC, id DESC",
-	StateReading:  "opened_at DESC, id DESC",
-	StateArchived: "archived_at DESC, id DESC",
+	StateUnread:   "a.saved_at DESC, a.id DESC",
+	StateReading:  "a.opened_at DESC, a.id DESC",
+	StateArchived: "a.archived_at DESC, a.id DESC",
 }
 
 // List returns one page of a tab, newest activity first.
@@ -239,21 +264,36 @@ func (st *Store) List(ctx context.Context, userID int64, state State, offset, li
 	}
 	// order comes only from the listOrder map above, never from input.
 	rows, err := st.db.QueryContext(ctx, `
-		SELECT id, title, site_host, content, word_count, progress
-		  FROM later_articles
-		 WHERE user_id = ? AND state = ?
+		SELECT a.id, a.title, a.site_host, a.content, a.word_count, a.progress,
+		       COALESCE(sf.hash, ''), f.bytes IS NOT NULL, COALESCE(f.error_count, 0), f.fetched_at
+		  FROM later_articles a
+		  LEFT JOIN later_site_favicons sf ON sf.site_host = a.site_host
+		  LEFT JOIN later_favicons f ON f.hash = sf.hash
+		 WHERE a.user_id = ? AND a.state = ?
 		 ORDER BY `+order+`
 		 LIMIT ? OFFSET ?`, userID, state, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("later: list: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	now := st.now()
 	var items []ListItem
 	for rows.Next() {
 		var it ListItem
-		if err := rows.Scan(&it.ID, &it.Title, &it.SiteHost, &it.Content, &it.WordCount, &it.Progress); err != nil {
+		var cached bool
+		var errorCount int
+		var fetched sql.NullString
+		if err := rows.Scan(&it.ID, &it.Title, &it.SiteHost, &it.Content, &it.WordCount, &it.Progress,
+			&it.FaviconHash, &cached, &errorCount, &fetched); err != nil {
 			return nil, fmt.Errorf("later: scan list: %w", err)
 		}
+		var attempt time.Time
+		if fetched.Valid {
+			if attempt, err = db.ParseTime(fetched.String); err != nil {
+				return nil, err
+			}
+		}
+		it.FaviconShown = it.FaviconHash != "" && (cached || !webfetch.GivenUp(errorCount, attempt, now))
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {
@@ -311,6 +351,7 @@ func (st *Store) MarkOpened(ctx context.Context, userID, id int64) error {
 
 // SetState archives or un-archives an article. Reading is reached only by
 // opening, so asking for it (or an unknown state) is ErrInvalid.
+// Moving to unread also resets progress to 0.
 func (st *Store) SetState(ctx context.Context, userID, id int64, s State) error {
 	now := db.FormatTime(st.now())
 	switch s {
@@ -320,11 +361,23 @@ func (st *Store) SetState(ctx context.Context, userID, id int64, s State) error 
 			 WHERE id = ? AND user_id = ?`, now, now, id, userID)
 	case StateUnread:
 		return st.exec(ctx, "unarchive", `
-			UPDATE later_articles SET state = 'unread', archived_at = NULL, opened_at = NULL, updated_at = ?
+			UPDATE later_articles SET state = 'unread', progress = 0, archived_at = NULL, opened_at = NULL, updated_at = ?
 			 WHERE id = ? AND user_id = ?`, now, id, userID)
 	default:
 		return ErrInvalid
 	}
+}
+
+// SetProgress records how far through an article the reader has scrolled,
+// 0..1. It never changes the article's state.
+func (st *Store) SetProgress(ctx context.Context, userID, id int64, p float64) error {
+	if math.IsNaN(p) || math.IsInf(p, 0) {
+		return ErrInvalid
+	}
+	p = min(1, max(0, p))
+	return st.exec(ctx, "progress", `
+		UPDATE later_articles SET progress = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+		p, db.FormatTime(st.now()), id, userID)
 }
 
 // SetPastedText gives a link-only article the text the user pasted.

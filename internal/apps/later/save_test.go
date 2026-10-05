@@ -13,6 +13,7 @@ import (
 
 	"github.com/iliafrenkel/on-suite/internal/apps/later"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
+	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 )
 
 // articlePage is about 300 words of prose in an <article>, with an image and
@@ -234,5 +235,60 @@ func TestSaveIsPerUser(t *testing.T) {
 	}
 	if strings.Contains(bobRec.Header().Get("Location"), "existing") {
 		t.Error("Bob was told his save already existed")
+	}
+}
+
+func TestSaveOverHTMXReturnsAChip(t *testing.T) {
+	s, a := newSaveServer(t)
+	a.AllowPrivateFetchesForTest()
+	origin := pageOrigin(t, "text/html", articlePage)
+
+	rec := s.PostHX(t, s.Alice, "/later/save", url.Values{"url": {origin.URL + "/essay"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "<html") {
+		t.Errorf("an HTMX save returned a whole page:\n%s", body)
+	}
+	doc := htmlassert.Parse(t, body)
+	chip := doc.MustHave("span.later-chip")
+	if got := htmlassert.Text(chip); !strings.Contains(got, "Saved to Later") {
+		t.Errorf("chip = %q, want Saved to Later", got)
+	}
+	items, err := s.Store.List(context.Background(), s.Alice.User.ID, later.StateUnread, 0, 10)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("unread list = %v, %v; want one row", items, err)
+	}
+	doc.MustHave(fmt.Sprintf(`a[href=/later/?saved=%d]`, items[0].ID))
+}
+
+func TestSaveOverHTMXForAnExistingArticle(t *testing.T) {
+	s, a := newSaveServer(t)
+	a.AllowPrivateFetchesForTest()
+	origin := pageOrigin(t, "text/html", articlePage)
+	id := idFrom(t, save(t, s, s.Alice, origin.URL+"/essay"))
+
+	rec := s.PostHX(t, s.Alice, "/later/save", url.Values{"url": {origin.URL + "/essay"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(doc.MustHave("span.later-chip")); !strings.Contains(got, "Already in Later") {
+		t.Errorf("chip = %q, want Already in Later", got)
+	}
+	doc.MustHave(fmt.Sprintf(`a[href=/later/a/%d]`, id))
+}
+
+func TestSaveOverHTMXRejectsABadURL(t *testing.T) {
+	s, _ := newSaveServer(t)
+	rec := s.PostHX(t, s.Alice, "/later/save", url.Values{"url": {"ftp://x"}})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	chip := doc.MustHave("span.later-chip-error")
+	if got := htmlassert.Text(chip); !strings.Contains(got, "Couldn't save this link") {
+		t.Errorf("chip = %q", got)
 	}
 }
