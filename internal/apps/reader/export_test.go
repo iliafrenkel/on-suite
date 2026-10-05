@@ -10,7 +10,8 @@ import (
 
 // AllowPrivateFetchesForTest lets this app's HTTP client reach loopback, so
 // handler tests can point it at an httptest origin. Production never calls it;
-// the real guard is what TestDefaultClientRefusesPrivateAddresses exercises.
+// the real guard is what TestDefaultClientRefusesPrivateAddresses in
+// client_test.go exercises.
 //
 // Only loopback: every other address is still refused, so a test can never
 // reach the real internet by accident — fixtures' site URLs (example.com and

@@ -143,3 +143,90 @@ func TestDefaultClientRefusesPrivateAddresses(t *testing.T) {
 		})
 	}
 }
+
+// configClient is a permissive client built from an explicit Config, so the
+// Config-sourced defaults can be pinned one at a time.
+func configClient(cfg webfetch.Config) *webfetch.Client {
+	c := webfetch.New(cfg)
+	c.DenyAddr = func(string) error { return nil }
+	return c
+}
+
+func TestGetSendsTheConfiguredUserAgent(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("User-Agent")
+	}))
+	defer srv.Close()
+
+	c := configClient(webfetch.Config{UserAgent: "onsuite/test-agent", DefaultMaxBytes: 1024})
+	if _, err := c.Get(context.Background(), srv.URL, webfetch.GetOptions{}); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got != "onsuite/test-agent" {
+		t.Errorf("User-Agent = %q, want onsuite/test-agent", got)
+	}
+}
+
+func TestGetAcceptHeader(t *testing.T) {
+	tests := []struct {
+		name          string
+		defaultAccept string
+		optAccept     string
+		want          string
+	}{
+		{"default applies when option is empty", "text/default", "", "text/default"},
+		{"explicit option overrides the default", "text/default", "text/explicit", "text/explicit"},
+		{"no default and no option sends none", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = r.Header.Get("Accept")
+			}))
+			defer srv.Close()
+
+			c := configClient(webfetch.Config{UserAgent: "test", DefaultAccept: tt.defaultAccept, DefaultMaxBytes: 1024})
+			if _, err := c.Get(context.Background(), srv.URL, webfetch.GetOptions{Accept: tt.optAccept}); err != nil {
+				t.Fatalf("Get: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("Accept = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func bodyServer(n int) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", n)))
+	}))
+}
+
+func TestGetDefaultMaxBytesCapsWhenOptionIsZero(t *testing.T) {
+	const limit = 1024
+	c := configClient(webfetch.Config{UserAgent: "test", DefaultMaxBytes: limit})
+
+	ok := bodyServer(limit)
+	defer ok.Close()
+	if _, err := c.Get(context.Background(), ok.URL, webfetch.GetOptions{}); err != nil {
+		t.Errorf("a body of exactly DefaultMaxBytes failed: %v", err)
+	}
+
+	over := bodyServer(limit + 1)
+	defer over.Close()
+	if _, err := c.Get(context.Background(), over.URL, webfetch.GetOptions{}); err == nil {
+		t.Error("a body of DefaultMaxBytes+1 succeeded; the default cap is not applied")
+	}
+}
+
+func TestGetFallsBackToMaxPageBytes(t *testing.T) {
+	c := configClient(webfetch.Config{UserAgent: "test"})
+
+	over := bodyServer(webfetch.MaxPageBytes + 1)
+	defer over.Close()
+	if _, err := c.Get(context.Background(), over.URL, webfetch.GetOptions{}); err == nil {
+		t.Error("a body of MaxPageBytes+1 succeeded with no configured cap")
+	}
+}
