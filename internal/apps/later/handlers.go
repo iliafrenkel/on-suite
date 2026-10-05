@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -63,6 +65,9 @@ type rowView struct {
 	Minutes  int
 	LinkOnly bool
 	Progress int // percent, 0-100
+
+	FaviconSrc string // "" when no <img> should be emitted
+	Initial    string // the site's first letter, for the badge
 }
 
 type indexView struct {
@@ -160,14 +165,19 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 		view.NextOffset = offset + pageSize
 	}
 	for _, it := range items {
-		view.Rows = append(view.Rows, rowView{
+		row := rowView{
 			ID:       it.ID,
 			Title:    it.Title,
 			Site:     it.SiteHost,
 			Minutes:  ReadingMinutes(it.WordCount),
 			LinkOnly: it.Content == ContentLinkOnly,
 			Progress: int(math.Round(it.Progress * 100)),
-		})
+			Initial:  siteInitial(it.SiteHost),
+		}
+		if it.FaviconShown {
+			row.FaviconSrc = "/later/favicon/" + it.FaviconHash
+		}
+		view.Rows = append(view.Rows, row)
 	}
 	for _, t := range tabs {
 		view.Tabs = append(view.Tabs, tabView{State: t.state, Label: t.label, Count: counts[t.state], Current: t.state == tab})
@@ -186,6 +196,16 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 	if err := a.deps.Render.Page(w, status, "later/index", page); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
+}
+
+// siteInitial is the upper-cased first letter of a site, for the badge shown
+// when it has no icon.
+func siteInitial(site string) string {
+	r, _ := utf8.DecodeRuneInString(site)
+	if r == utf8.RuneError {
+		return ""
+	}
+	return string(unicode.ToUpper(r))
 }
 
 // badURLMessage is shown in the save form for a URL Later can't use.

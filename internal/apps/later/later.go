@@ -75,6 +75,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /a/{id}/text", a.pasteText)
 	r.HandleFunc("GET /later.js", a.script)
 	r.HandleFunc("GET /img/{hash}", a.image)
+	r.HandleFunc("GET /favicon/{hash}", a.favicon)
 }
 
 // imageDownloadEvery is how often stored articles' missing images are

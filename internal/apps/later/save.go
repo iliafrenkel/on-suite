@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/article"
+	"github.com/iliafrenkel/on-suite/internal/platform/favicon"
 	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
@@ -36,9 +37,11 @@ func (a *App) fetchArticle(ctx context.Context, pageURL string) NewArticle {
 	res, err := a.client.Get(ctx, pageURL, webfetch.GetOptions{})
 	if err != nil {
 		n.ExtractError = "Couldn't fetch the page: " + err.Error()
+		n.FaviconURL = favicon.Discover(nil, pageURL)
 		return n
 	}
 	n.Title = pageTitle(res.Body)
+	n.FaviconURL = favicon.Discover(res.Body, res.FinalURL)
 	if !isHTML(res.ContentType) {
 		n.ExtractError = fmt.Sprintf("The page isn't HTML (%s).", res.ContentType)
 		return n

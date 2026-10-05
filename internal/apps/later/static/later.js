@@ -3,6 +3,16 @@
 "use strict";
 
 (function () {
+	// A broken site icon is swapped for its letter badge. "error" doesn't
+	// bubble, so listen in the capture phase.
+	document.addEventListener("error", function (e) {
+		var img = e.target;
+		if (!(img instanceof HTMLImageElement) || !img.classList.contains("later-favicon")) return;
+		var badge = img.nextElementSibling;
+		img.remove();
+		if (badge) badge.hidden = false;
+	}, true);
+
 	document.addEventListener("submit", function (e) {
 		var form = e.target;
 		if (!(form instanceof HTMLFormElement) || !form.dataset.laterConfirm) return;
