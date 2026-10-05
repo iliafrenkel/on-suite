@@ -27,6 +27,36 @@ func TestWordCountSeparatesAtElementBoundaries(t *testing.T) {
 	}
 }
 
+func TestWordCountIgnoresInlineElements(t *testing.T) {
+	if got := later.WordCount(`<p>foo<em>bar</em>baz</p>`); got != 1 {
+		t.Errorf("WordCount = %d, want 1", got)
+	}
+}
+
+func TestWordCountWithLink(t *testing.T) {
+	if got := later.WordCount(`<p>See <a href="x">link</a>.</p>`); got != 2 {
+		t.Errorf("WordCount = %d, want 2", got)
+	}
+}
+
+func TestWordCountWithListItems(t *testing.T) {
+	if got := later.WordCount(`<ul><li>one</li><li>two</li></ul>`); got != 2 {
+		t.Errorf("WordCount = %d, want 2", got)
+	}
+}
+
+func TestWordCountWithLineBreak(t *testing.T) {
+	if got := later.WordCount(`line<br>break`); got != 2 {
+		t.Errorf("WordCount = %d, want 2", got)
+	}
+}
+
+func TestWordCountWithEmptyInput(t *testing.T) {
+	if got := later.WordCount(``); got != 0 {
+		t.Errorf("WordCount = %d, want 0", got)
+	}
+}
+
 func TestReadingMinutes(t *testing.T) {
 	for words, want := range map[int]int{0: 1, 1: 1, 230: 1, 231: 2, 2300: 10} {
 		if got := later.ReadingMinutes(words); got != want {

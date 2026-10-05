@@ -10,8 +10,49 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
+// isBlockElement returns true if the element is a block-level element.
+func isBlockElement(a atom.Atom) bool {
+	blockElements := map[atom.Atom]bool{
+		atom.P:          true,
+		atom.Div:        true,
+		atom.H1:         true,
+		atom.H2:         true,
+		atom.H3:         true,
+		atom.H4:         true,
+		atom.H5:         true,
+		atom.H6:         true,
+		atom.Li:         true,
+		atom.Ul:         true,
+		atom.Ol:         true,
+		atom.Dl:         true,
+		atom.Dt:         true,
+		atom.Dd:         true,
+		atom.Blockquote: true,
+		atom.Pre:        true,
+		atom.Figure:     true,
+		atom.Figcaption: true,
+		atom.Table:      true,
+		atom.Thead:      true,
+		atom.Tbody:      true,
+		atom.Tfoot:      true,
+		atom.Tr:         true,
+		atom.Td:         true,
+		atom.Th:         true,
+		atom.Caption:    true,
+		atom.Section:    true,
+		atom.Article:    true,
+		atom.Header:     true,
+		atom.Footer:     true,
+		atom.Aside:      true,
+		atom.Nav:        true,
+		atom.Hr:         true,
+		atom.Br:         true,
+	}
+	return blockElements[a]
+}
+
 // plainText concatenates the text nodes of an HTML fragment, writing sep
-// after every element. With sep "" it is exactly the browser's textContent
+// after every block-level element. With sep "" it is exactly the browser's textContent
 // of the rendered fragment.
 func plainText(fragment, sep string) string {
 	ctx := &xhtml.Node{Type: xhtml.ElementNode, Data: "body", DataAtom: atom.Body}
@@ -28,7 +69,7 @@ func plainText(fragment, sep string) string {
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
 		}
-		if n.Type == xhtml.ElementNode {
+		if n.Type == xhtml.ElementNode && isBlockElement(n.DataAtom) {
 			b.WriteString(sep)
 		}
 	}
@@ -44,8 +85,9 @@ func plainText(fragment, sep string) string {
 // without mirroring any rules.
 func ContentText(fragment string) string { return plainText(fragment, "") }
 
-// WordCount counts words with element boundaries as separators, so the end
-// of one paragraph and the start of the next are two words, not one.
+// WordCount counts words with block-level element boundaries as separators,
+// so the end of one paragraph and the start of the next are two words, not one.
+// Inline elements do not separate words.
 func WordCount(fragment string) int { return len(strings.Fields(plainText(fragment, " "))) }
 
 // wordsPerMinute is a comfortable reading pace for considered reading.

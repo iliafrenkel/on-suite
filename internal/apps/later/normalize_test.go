@@ -15,6 +15,7 @@ func TestNormalizeURL(t *testing.T) {
 		{"https://example.com/p?fbclid=1&gclid=2&mc_cid=3&mc_eid=4&ref_src=5", "https://example.com/p"},
 		{"https://example.com/p?b=2&a=1", "https://example.com/p?a=1&b=2"},
 		{"http://example.com/", "http://example.com/"},
+		{"https://user:pass@example.com/a", "https://example.com/a"},
 	} {
 		got, err := later.NormalizeURL(tc.in)
 		if err != nil || got != tc.want {

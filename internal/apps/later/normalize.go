@@ -14,7 +14,7 @@ var trackingParams = map[string]bool{
 
 // NormalizeURL is the form a URL is stored and de-duplicated in: http(s)
 // only, lower-case scheme and host, no fragment, no tracking parameters,
-// remaining query parameters in a stable (sorted) order.
+// no credentials, remaining query parameters in a stable (sorted) order.
 func NormalizeURL(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -27,6 +27,7 @@ func NormalizeURL(raw string) (string, error) {
 	u.Host = strings.ToLower(u.Host)
 	u.Fragment = ""
 	u.RawFragment = ""
+	u.User = nil
 
 	q := u.Query()
 	for k := range q {
