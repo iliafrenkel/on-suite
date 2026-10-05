@@ -12,6 +12,14 @@
 		img.remove();
 		if (badge) badge.hidden = false;
 	}, true);
+	// An icon can fail before this deferred script registers the listener
+	// (a cached bare 404, say), so also sweep the ones already broken.
+	document.querySelectorAll("img.later-favicon").forEach(function (img) {
+		if (!(img.complete && img.naturalWidth === 0)) return;
+		var badge = img.nextElementSibling;
+		img.remove();
+		if (badge) badge.hidden = false;
+	});
 
 	// The bookmarklet's address needs this site's origin, which only the
 	// browser knows for sure (proxies, ports). Clicking it here would be
@@ -162,7 +170,7 @@
 		// unless the reader has already taken over the scrolling.
 		restore();
 		window.addEventListener("load", function () { if (!touched) restore(); });
-		["wheel", "touchstart", "keydown", "mousedown"].forEach(function (name) {
+		["wheel", "touchstart", "keydown", "mousedown", "pointerdown"].forEach(function (name) {
 			window.addEventListener(name, function () { touched = true; }, { passive: true });
 		});
 
@@ -171,9 +179,13 @@
 			clearTimeout(timer);
 			timer = setTimeout(save, 2000);
 		}, { passive: true });
-		window.addEventListener("pagehide", function () {
+		function flush() {
 			var p = current();
 			if (touched && Math.abs(p - saved) >= 0.01) navigator.sendBeacon("/later/a/" + id + "/progress", body(p));
+		}
+		window.addEventListener("pagehide", flush);
+		document.addEventListener("visibilitychange", function () {
+			if (document.visibilityState === "hidden") flush();
 		});
 	})();
 

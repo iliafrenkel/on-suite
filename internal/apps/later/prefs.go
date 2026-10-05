@@ -28,6 +28,7 @@ func (p Prefs) Valid() bool {
 		(p.Width == "narrow" || p.Width == "medium" || p.Width == "wide")
 }
 
+// Prefs returns userID's Aa settings, or DefaultPrefs if they never changed any.
 func (st *Store) Prefs(ctx context.Context, userID int64) (Prefs, error) {
 	var p Prefs
 	err := st.db.QueryRowContext(ctx,
@@ -42,6 +43,8 @@ func (st *Store) Prefs(ctx context.Context, userID int64) (Prefs, error) {
 	return p, nil
 }
 
+// SetPrefs saves userID's Aa settings, replacing any earlier ones. It
+// rejects values the reading view has no class for.
 func (st *Store) SetPrefs(ctx context.Context, userID int64, p Prefs) error {
 	if !p.Valid() {
 		return ErrInvalid
