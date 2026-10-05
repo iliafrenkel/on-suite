@@ -87,6 +87,7 @@ type savedView struct {
 	Title    string
 	LinkOnly bool
 	Existing bool
+	NewTab   bool // the Open link opens a new tab (the popup is about to close)
 }
 
 var tabs = []struct {
@@ -217,11 +218,20 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageURL, err := NormalizeURL(r.PostFormValue("url"))
+	popup := r.PostFormValue("popup") == "1"
 	if err != nil {
+		if popup {
+			a.renderPopup(w, r, http.StatusUnprocessableEntity, popupView{Error: badURLMessage})
+			return
+		}
 		a.renderIndex(w, r, userID, StateUnread, http.StatusUnprocessableEntity, badURLMessage, r.PostFormValue("url"))
 		return
 	}
 	if existing, err := a.store.ArticleByURL(r.Context(), userID, pageURL); err == nil {
+		if popup {
+			http.Redirect(w, r, popupDoneURL(existing.ID, true), http.StatusSeeOther)
+			return
+		}
 		http.Redirect(w, r, fmt.Sprintf("/later/?tab=%s&saved=%d&existing=1", existing.State, existing.ID), http.StatusSeeOther)
 		return
 	} else if !errors.Is(err, ErrNotFound) {
@@ -235,7 +245,9 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := fmt.Sprintf("/later/?saved=%d", saved.ID)
-	if !created {
+	if popup {
+		target = popupDoneURL(saved.ID, !created)
+	} else if !created {
 		target = fmt.Sprintf("/later/?tab=%s&saved=%d&existing=1", saved.State, saved.ID)
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)

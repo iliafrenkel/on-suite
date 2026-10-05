@@ -18,6 +18,18 @@ for example. ON Later still saves the link and tells you why it couldn't
 read the page. Open the original, copy its text, and use **Paste text** to
 make it a normal article you can read here.
 
+## Saving from any page
+
+Save without leaving the page you're reading:
+
+1. At the top of ON Later, drag **Save to Later** onto your browser's
+   bookmarks bar.
+2. On any page, click that bookmark. A small window opens.
+3. Click **Save** (or press Enter). The window closes by itself.
+
+You need to be signed in to ON Suite in that browser. If the page is
+already in ON Later, the window says so and offers to open it.
+
 ## Finding your articles
 
 Articles are in three lists:

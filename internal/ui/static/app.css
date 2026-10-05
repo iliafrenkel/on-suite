@@ -3603,6 +3603,14 @@ input.flash-tag-entry:focus { outline: none; }
 .later-row-progress { width: 3rem; height: .25rem; }
 .later-more { list-style: none; padding: .75rem 0; text-align: center; }
 .later-empty { color: var(--c-text-dim); }
+/* The bookmarklet popup is a small window: hide the suite chrome too. */
+body:has(.later-popup) .shell-bar,
+body:has(.later-popup) .app-sidebar,
+body:has(.later-popup) .app-footer { display: none; }
+.later-popup { max-width: 26rem; margin: 1.5rem auto; padding: 0 1rem; }
+.later-popup-url { color: var(--c-text-faint); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.later-hint { font-size: var(--fs-sm); color: var(--c-text-faint); margin: 0; }
+.later-bookmarklet { display: inline-block; padding: .15rem .6rem; border: 1px dashed var(--c-border-firm); border-radius: var(--radius); cursor: grab; }
 /* The reading view takes the whole window: hide the suite chrome. */
 body:has(.later-reader) .shell-bar,
 body:has(.later-reader) .app-sidebar,

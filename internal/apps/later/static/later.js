@@ -13,6 +13,24 @@
 		if (badge) badge.hidden = false;
 	}, true);
 
+	// The bookmarklet's address needs this site's origin, which only the
+	// browser knows for sure (proxies, ports). Clicking it here would be
+	// blocked by our own CSP, so a click just explains what to do.
+	document.querySelectorAll("[data-later-bookmarklet]").forEach(function (a) {
+		a.href = "javascript:(function(){window.open('" + location.origin +
+			"/later/save?url='+encodeURIComponent(location.href),'onlater','popup,width=480,height=360');})();";
+		a.addEventListener("click", function (e) {
+			e.preventDefault();
+			a.title = "Drag this to your bookmarks bar";
+		});
+	});
+	document.querySelectorAll("[data-later-close]").forEach(function (b) {
+		b.addEventListener("click", function () { window.close(); });
+	});
+	if (document.querySelector("[data-later-autoclose]")) {
+		setTimeout(function () { window.close(); }, 1500);
+	}
+
 	document.addEventListener("submit", function (e) {
 		var form = e.target;
 		if (!(form instanceof HTMLFormElement) || !form.dataset.laterConfirm) return;

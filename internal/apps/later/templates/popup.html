@@ -1,0 +1,27 @@
+{{define "head"}}<script src="/later/later.js" defer></script>{{end}}
+
+{{define "content"}}
+<div class="later-popup stack">
+	<h1 class="later-popup-title">Save to ON Later</h1>
+	{{with .Data.Error}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
+	{{with .Data.Saved}}{{template "later-saved-note" .}}{{end}}
+	{{if .Data.Done}}
+	<p class="later-popup-done" data-later-autoclose>{{if not .Data.Saved}}Done. {{end}}You can close this window.</p>
+	{{end}}
+	{{if .Data.AlreadyID}}
+	<p>Already in ON Later. <a href="/later/a/{{.Data.AlreadyID}}" target="_blank" rel="noopener">Open</a></p>
+	<div class="dialog-actions"><button type="button" data-later-close>Close</button></div>
+	{{end}}
+	{{if .Data.URL}}
+	<p class="later-popup-url">{{.Data.URL}}</p>
+	<form method="post" action="/later/save" class="dialog-actions">
+		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+		<input type="hidden" name="url" value="{{.Data.URL}}">
+		<input type="hidden" name="popup" value="1">
+		<button class="primary" type="submit" autofocus>Save</button>
+		<button type="button" data-later-close>Cancel</button>
+	</form>
+	{{end}}
+	{{if .Data.Error}}<div class="dialog-actions"><button type="button" data-later-close>Close</button></div>{{end}}
+</div>
+{{end}}

@@ -11,14 +11,9 @@
 	</form>
 	{{with .Data.FormError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
 
-	{{with .Data.Saved}}
-	<p class="later-saved" role="status">
-		{{if .Existing}}You saved “{{.Title}}” before.
-		{{else if .LinkOnly}}Saved “{{.Title}}” as a link only — open it to add the text.
-		{{else}}Saved “{{.Title}}”.{{end}}
-		<a href="/later/a/{{.ID}}">Open</a>
-	</p>
-	{{end}}
+	{{with .Data.Saved}}{{template "later-saved-note" .}}{{end}}
+
+	<p class="later-hint">Save from any page: drag <a class="later-bookmarklet" data-later-bookmarklet href="/later/">Save to Later</a> to your bookmarks bar.</p>
 
 	<nav class="later-tabs" aria-label="Lists">
 		{{range .Data.Tabs}}
