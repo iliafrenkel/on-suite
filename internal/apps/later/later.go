@@ -1,15 +1,20 @@
 package later
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"net/http"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
-var _ app.App = (*App)(nil)
+var (
+	_ app.App       = (*App)(nil)
+	_ app.Scheduler = (*App)(nil)
+)
 
 //go:embed templates/*.html
 var templateFiles embed.FS
@@ -23,6 +28,8 @@ type App struct {
 	deps  app.Deps
 	// client is the only way this app reaches the network.
 	client *webfetch.Client
+	// imgSem bounds concurrent image downloads (views and the job share it).
+	imgSem chan struct{}
 }
 
 // New returns the app for registration in cmd/onsuite.
@@ -58,6 +65,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 		DefaultAccept:   "text/html, application/xhtml+xml;q=0.9, */*;q=0.5",
 		DefaultMaxBytes: webfetch.MaxPageBytes,
 	})
+	a.imgSem = make(chan struct{}, 4)
 	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("POST /save", a.save)
 	r.HandleFunc("GET /a/{id}", a.view)
@@ -66,6 +74,29 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /a/{id}/delete", a.delete)
 	r.HandleFunc("POST /a/{id}/text", a.pasteText)
 	r.HandleFunc("GET /later.js", a.script)
+	r.HandleFunc("GET /img/{hash}", a.image)
+}
+
+// imageDownloadEvery is how often stored articles' missing images are
+// back-filled. Images also arrive on first view; this makes sure the ones
+// nobody scrolled to are kept too.
+const imageDownloadEvery = 10 * time.Minute
+
+const imageDownloadBatch = 50
+
+func (a *App) Jobs(deps app.Deps) []app.Job {
+	return []app.Job{{
+		Name:        "download images",
+		Description: "Downloads and keeps images of saved articles that haven't been stored yet.",
+		Every:       imageDownloadEvery,
+		Run: func(ctx context.Context) error {
+			n, err := a.DownloadImages(ctx, imageDownloadBatch)
+			if n > 0 {
+				a.deps.Log.Info("later stored article images", "count", n)
+			}
+			return err
+		},
+	}}
 }
 
 // script serves later.js behind the same sign-in requirement as every
