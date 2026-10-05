@@ -1,0 +1,51 @@
+{{define "head"}}<script src="/later/later.js" defer></script>{{end}}
+
+{{define "content"}}
+<article class="later-article stack">
+	<header class="later-article-header stack">
+		<h1 class="later-article-title">{{.Data.Title}}</h1>
+		<p class="later-article-meta">
+			{{.Data.Site}}{{with .Data.Byline}} · {{.}}{{end}}
+			{{if not .Data.LinkOnly}} · {{.Data.Minutes}} min read{{end}}
+		</p>
+		{{if .Data.Existing}}<p class="later-note" role="status">You saved this before.</p>{{end}}
+		<div class="later-article-actions">
+			<a class="button" href="{{.Data.URL}}" target="_blank" rel="noopener noreferrer">Open original</a>
+			{{if .Data.Archived}}
+			<form method="post" action="/later/a/{{.Data.ID}}/unarchive">
+				<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+				<button type="submit">Move to unread</button>
+			</form>
+			{{else}}
+			<form method="post" action="/later/a/{{.Data.ID}}/archive">
+				<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+				<button class="primary" type="submit">Archive</button>
+			</form>
+			{{end}}
+			<form method="post" action="/later/a/{{.Data.ID}}/delete"
+			      data-later-confirm="Delete this article permanently? This can't be undone.">
+				<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+				<button class="danger" type="submit">Delete</button>
+			</form>
+		</div>
+	</header>
+
+	{{if .Data.LinkOnly}}
+	<section class="later-linkonly stack" aria-labelledby="later-linkonly-title">
+		<h2 id="later-linkonly-title">Couldn't read this page</h2>
+		<p>{{.Data.Reason}}</p>
+		<p>Open the original, copy the article's text, and paste it here to read it in ON Later.</p>
+		<form class="stack" method="post" action="/later/a/{{.Data.ID}}/text">
+			<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+			<label for="later-text">Article text</label>
+			<textarea id="later-text" name="text" rows="12" required></textarea>
+			{{with .Data.TextError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
+			<button class="primary" type="submit">Paste text</button>
+		</form>
+	</section>
+	{{else}}
+	<div class="later-article-body">{{.Data.Body}}</div>
+	{{end}}
+</article>
+{{template "later-confirm"}}
+{{end}}

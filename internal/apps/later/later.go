@@ -2,6 +2,7 @@ package later
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"net/http"
 
@@ -60,6 +61,11 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	})
 	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("POST /save", a.save)
+	r.HandleFunc("GET /a/{id}", a.view)
+	r.HandleFunc("POST /a/{id}/archive", a.setState(StateArchived, func(int64) string { return "/later/?tab=archived" }))
+	r.HandleFunc("POST /a/{id}/unarchive", a.setState(StateUnread, func(id int64) string { return fmt.Sprintf("/later/a/%d", id) }))
+	r.HandleFunc("POST /a/{id}/delete", a.delete)
+	r.HandleFunc("POST /a/{id}/text", a.pasteText)
 	r.HandleFunc("GET /later.js", a.script)
 }
 

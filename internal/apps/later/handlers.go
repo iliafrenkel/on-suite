@@ -3,9 +3,12 @@ package later
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -18,6 +21,17 @@ func (a *App) userID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return u.ID, true
+}
+
+// pathID parses the {id} path segment; anything but a positive integer is a
+// 404, the same as an article that isn't there.
+func (a *App) pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		a.deps.Errors.Status(w, r, http.StatusNotFound)
+		return 0, false
+	}
+	return id, true
 }
 
 // fail maps a store error to its response: someone else's row is a 404,
@@ -177,4 +191,146 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		target += "?existing=1"
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+type articleView struct {
+	ID      int64
+	Title   string
+	URL     string
+	Site    string
+	Byline  string
+	Minutes int
+	SavedAt time.Time
+	// Body is the stored snapshot. This is the only template.HTML conversion
+	// in the app, and it is safe because ContentHTML is only ever
+	// article.SanitizeWithImages output (the save path) or PastedHTML output
+	// (every character escaped); nothing else can write the column.
+	Body      template.HTML
+	LinkOnly  bool
+	Reason    string // ExtractError, for link-only
+	Archived  bool
+	Existing  bool // ?existing=1: "You saved this before."
+	TextError string
+}
+
+// blankTextMessage is shown when the paste-text form is submitted empty.
+const blankTextMessage = "Paste some text first."
+
+func (a *App) renderArticle(w http.ResponseWriter, r *http.Request, art Article, status int, textError string) {
+	view := articleView{
+		ID:        art.ID,
+		Title:     art.Title,
+		URL:       art.URL,
+		Site:      art.SiteName,
+		Byline:    art.Byline,
+		Minutes:   ReadingMinutes(art.WordCount),
+		SavedAt:   art.SavedAt,
+		Body:      template.HTML(art.ContentHTML),
+		LinkOnly:  art.Content == ContentLinkOnly,
+		Reason:    art.ExtractError,
+		Archived:  art.State == StateArchived,
+		Existing:  r.URL.Query().Get("existing") == "1",
+		TextError: textError,
+	}
+	if view.Site == "" {
+		view.Site = art.SiteHost
+	}
+	page := a.deps.Page(r, art.Title)
+	page.Data = view
+	if err := a.deps.Render.Page(w, status, "later/article", page); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
+}
+
+// view shows an article, marking it opened first so the page reflects the
+// new state.
+func (a *App) view(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	if err := a.store.MarkOpened(r.Context(), userID, id); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	art, err := a.store.Article(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.renderArticle(w, r, art, http.StatusOK, "")
+}
+
+// setState archives or un-archives an article, then goes to where the user
+// will want to be next.
+func (a *App) setState(state State, redirect func(id int64) string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := a.userID(w, r)
+		if !ok {
+			return
+		}
+		id, ok := a.pathID(w, r)
+		if !ok {
+			return
+		}
+		if err := a.store.SetState(r.Context(), userID, id, state); err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		http.Redirect(w, r, redirect(id), http.StatusSeeOther)
+	}
+}
+
+// delete removes an article and goes back to the list it was in. The article
+// is loaded first both to learn that list and to 404 for someone else's.
+func (a *App) delete(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	art, err := a.store.Article(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.store.Delete(r.Context(), userID, id); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/later/?tab="+string(art.State), http.StatusSeeOther)
+}
+
+// pasteText gives a link-only article the text the user pasted.
+func (a *App) pasteText(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	art, err := a.store.Article(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	text := r.PostFormValue("text")
+	if strings.TrimSpace(text) == "" {
+		a.renderArticle(w, r, art, http.StatusUnprocessableEntity, blankTextMessage)
+		return
+	}
+	if err := a.store.SetPastedText(r.Context(), userID, id, text); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/later/a/%d", id), http.StatusSeeOther)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -198,4 +199,190 @@ func TestIndexHasTheSaveForm(t *testing.T) {
 	}
 	doc.MustHave(`form[action="/later/save"] input[name="url"]`)
 	doc.MustHave(`form[action="/later/save"] input[type="hidden"]`)
+}
+
+// --- reading view -------------------------------------------------------
+
+func seedReadable(t *testing.T, s *server) later.Article {
+	t.Helper()
+	return seed(t, s, s.Alice.User.ID, later.NewArticle{
+		URL: "https://blog.example/essay", Title: "An Essay", SiteName: "Blog", Byline: "Jo",
+		ContentHTML: "<p>Hello reader</p>",
+	})
+}
+
+func seedLinkOnly(t *testing.T, s *server) later.Article {
+	t.Helper()
+	return seed(t, s, s.Alice.User.ID, later.NewArticle{
+		URL: "https://paywall.example/a", Title: "Walled", ExtractError: "The page had no article text.",
+	})
+}
+
+func articlePath(a later.Article, suffix string) string {
+	return fmt.Sprintf("/later/a/%d%s", a.ID, suffix)
+}
+
+func TestArticleRendersTheSnapshot(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+
+	if got := htmlassert.Text(doc.MustHave("h1")); !strings.Contains(got, "An Essay") {
+		t.Errorf("h1 = %q", got)
+	}
+	if got := htmlassert.Text(doc.MustHave(".later-article-body p")); got != "Hello reader" {
+		t.Errorf("body paragraph = %q", got)
+	}
+	link := doc.MustHave(`a[href="https://blog.example/essay"]`)
+	if got := htmlassert.Text(link); !strings.Contains(got, "Open original") {
+		t.Errorf("link text = %q", got)
+	}
+	if rel, _ := htmlassert.Attr(link, "rel"); !strings.Contains(rel, "noopener") {
+		t.Errorf("rel = %q, want noopener", rel)
+	}
+	meta := htmlassert.Text(doc.MustHave(".later-article-meta"))
+	for _, want := range []string{"Blog", "Jo", "1 min read"} {
+		if !strings.Contains(meta, want) {
+			t.Errorf("meta %q lacks %q", meta, want)
+		}
+	}
+	doc.MustHave(`script[src="/later/later.js"]`)
+}
+
+func TestOpeningAnUnreadArticleMovesItToReading(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	s.Get(t, s.Alice, articlePath(a, ""))
+	got, err := s.Store.Article(context.Background(), s.Alice.User.ID, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != later.StateReading {
+		t.Errorf("State = %q, want reading", got.State)
+	}
+}
+
+func TestArticleOfAnotherUserIs404(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	for _, c := range []struct{ method, suffix string }{
+		{"GET", ""}, {"POST", "/archive"}, {"POST", "/unarchive"}, {"POST", "/delete"}, {"POST", "/text"},
+	} {
+		var rec *httptest.ResponseRecorder
+		if c.method == "GET" {
+			rec = s.Do(t, s.Bob, httptest.NewRequest("GET", articlePath(a, c.suffix), nil))
+		} else {
+			rec = s.Post(t, s.Bob, articlePath(a, c.suffix), url.Values{"text": {"x"}})
+		}
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s %s as bob = %d, want 404", c.method, c.suffix, rec.Code)
+		}
+	}
+	if _, err := s.Store.Article(context.Background(), s.Alice.User.ID, a.ID); err != nil {
+		t.Errorf("alice's article was touched: %v", err)
+	}
+}
+
+func TestArticleSaysWhenItWasSavedBefore(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	if strings.Contains(s.Get(t, s.Alice, articlePath(a, "")).Text(), "You saved this before.") {
+		t.Error("note shown without ?existing=1")
+	}
+	doc := s.Get(t, s.Alice, articlePath(a, "?existing=1"))
+	if !strings.Contains(doc.Text(), "You saved this before.") {
+		t.Error("note missing with ?existing=1")
+	}
+}
+
+func TestLinkOnlyArticleOffersPasteText(t *testing.T) {
+	s := newServer(t)
+	a := seedLinkOnly(t, s)
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	text := doc.Text()
+	for _, want := range []string{"Couldn't read this page", "The page had no article text.", "Open original"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	doc.MustHave(fmt.Sprintf(`form[action="/later/a/%d/text"] textarea[name=text]`, a.ID))
+	doc.MustNotHave(".later-article-body")
+}
+
+func TestPastingTextMakesItReadable(t *testing.T) {
+	s := newServer(t)
+	a := seedLinkOnly(t, s)
+	s.Submit(t, s.Alice, articlePath(a, "/text"), url.Values{"text": {"Para one\n\nPara two"}}, articlePath(a, ""))
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	if n := len(doc.QueryAll(".later-article-body p")); n != 2 {
+		t.Errorf("got %d paragraphs, want 2", n)
+	}
+	doc.MustNotHave("textarea")
+}
+
+func TestPastingBlankTextIs422(t *testing.T) {
+	s := newServer(t)
+	a := seedLinkOnly(t, s)
+	rec := s.Post(t, s.Alice, articlePath(a, "/text"), url.Values{"text": {"  \n "}})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Paste some text first.") {
+		t.Error("message missing")
+	}
+	got, _ := s.Store.Article(context.Background(), s.Alice.User.ID, a.ID)
+	if got.Content != later.ContentLinkOnly {
+		t.Errorf("Content = %q, want link_only", got.Content)
+	}
+}
+
+func TestArchiveAndUnarchive(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	ctx, uid := context.Background(), s.Alice.User.ID
+
+	s.Submit(t, s.Alice, articlePath(a, "/archive"), url.Values{}, "/later/?tab=archived")
+	if got, _ := s.Store.Article(ctx, uid, a.ID); got.State != later.StateArchived {
+		t.Fatalf("State = %q, want archived", got.State)
+	}
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	if !strings.Contains(doc.Text(), "Move to unread") {
+		t.Error("archived article does not offer Move to unread")
+	}
+	if got, _ := s.Store.Article(ctx, uid, a.ID); got.State != later.StateArchived {
+		t.Errorf("opening an archived article changed it to %q", got.State)
+	}
+
+	s.Submit(t, s.Alice, articlePath(a, "/unarchive"), url.Values{}, articlePath(a, ""))
+	if got, _ := s.Store.Article(ctx, uid, a.ID); got.State != later.StateUnread {
+		t.Errorf("State = %q, want unread", got.State)
+	}
+}
+
+func TestDeleteRemovesTheArticle(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	form := doc.MustHave(`form[data-later-confirm]`)
+	if got, _ := htmlassert.Attr(form, "action"); got != articlePath(a, "/delete") {
+		t.Errorf("confirm form action = %q", got)
+	}
+	doc.MustHave("#later-confirm-dialog")
+
+	// Opening moved it to reading, so that is the tab to go back to.
+	s.Submit(t, s.Alice, articlePath(a, "/delete"), url.Values{}, "/later/?tab=reading")
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", articlePath(a, ""), nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET after delete = %d, want 404", rec.Code)
+	}
+}
+
+func TestArticleBodyKeepsOnlyStoredHTML(t *testing.T) {
+	s := newServer(t)
+	a := seed(t, s, s.Alice.User.ID, later.NewArticle{URL: "https://x.example/p", Title: "P", ContentHTML: "<p>x</p>"})
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	body := doc.MustHave(".later-article-body")
+	if len(doc.QueryAll(".later-article-body p")) != 1 || htmlassert.Text(body) != "x" {
+		t.Errorf("body = %q, want exactly one <p>x</p>", htmlassert.Text(body))
+	}
 }
