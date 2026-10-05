@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/url"
 	"strings"
 	"time"
@@ -311,6 +312,7 @@ func (st *Store) MarkOpened(ctx context.Context, userID, id int64) error {
 
 // SetState archives or un-archives an article. Reading is reached only by
 // opening, so asking for it (or an unknown state) is ErrInvalid.
+// Moving to unread also resets progress to 0.
 func (st *Store) SetState(ctx context.Context, userID, id int64, s State) error {
 	now := db.FormatTime(st.now())
 	switch s {
@@ -320,11 +322,23 @@ func (st *Store) SetState(ctx context.Context, userID, id int64, s State) error 
 			 WHERE id = ? AND user_id = ?`, now, now, id, userID)
 	case StateUnread:
 		return st.exec(ctx, "unarchive", `
-			UPDATE later_articles SET state = 'unread', archived_at = NULL, opened_at = NULL, updated_at = ?
+			UPDATE later_articles SET state = 'unread', progress = 0, archived_at = NULL, opened_at = NULL, updated_at = ?
 			 WHERE id = ? AND user_id = ?`, now, id, userID)
 	default:
 		return ErrInvalid
 	}
+}
+
+// SetProgress records how far through an article the reader has scrolled,
+// 0..1. It never changes the article's state.
+func (st *Store) SetProgress(ctx context.Context, userID, id int64, p float64) error {
+	if math.IsNaN(p) || math.IsInf(p, 0) {
+		return ErrInvalid
+	}
+	p = min(1, max(0, p))
+	return st.exec(ctx, "progress", `
+		UPDATE later_articles SET progress = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+		p, db.FormatTime(st.now()), id, userID)
 }
 
 // SetPastedText gives a link-only article the text the user pasted.
