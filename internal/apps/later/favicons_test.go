@@ -286,3 +286,61 @@ func TestFaviconRouteRejectsBadHashesAndOtherUsers(t *testing.T) {
 		t.Errorf("origin hit for a bad request: %d", o.hits.Load())
 	}
 }
+
+func TestCrossHostRedirectDoesNotChooseTheSiteIcon(t *testing.T) {
+	s, a := newSaveServer(t)
+	a.AllowPrivateFetchesForTest()
+	// B is where the redirect lands, and it advertises its own icon.
+	b := newFaviconOrigin(t) // 127.0.0.1:<port>
+	// A is the saved site; it hands the browser over to B.
+	aSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, b.URL+"/essay", http.StatusFound)
+	}))
+	t.Cleanup(aSrv.Close)
+	aURL := strings.Replace(aSrv.URL, "127.0.0.1", "localhost", 1) // a different host name than B
+
+	idFrom(t, save(t, s, s.Alice, aURL+"/story"))
+
+	items, err := s.Store.List(context.Background(), s.Alice.User.ID, later.StateUnread, 0, 10)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("List = %v, %v", items, err)
+	}
+	hash := items[0].FaviconHash
+	if want := webfetch.URLHash(aURL + "/favicon.ico"); hash != want {
+		t.Errorf("site favicon hash = %s, want the guess on the saved site %s (not the redirect target's icon)", hash, want)
+	}
+}
+
+func TestSiteFaviconIsRepairedOnlyOnceTheOldOneIsGivenUp(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		errorCount int
+		replaced   bool
+	}{
+		{"still retrying keeps first-wins", webfetch.MaxImageAttempts - 1, false},
+		{"given up is replaced", webfetch.MaxImageAttempts, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			oldURL, newURL := "https://example.com/old.png", "https://example.com/new.png"
+			f.saveIcon(t, f.alice.ID, "https://example.com/one", oldURL)
+			if _, err := f.db.Exec(`UPDATE later_favicons SET error_count = ? WHERE hash = ?`,
+				tc.errorCount, webfetch.URLHash(oldURL)); err != nil {
+				t.Fatal(err)
+			}
+			f.saveIcon(t, f.alice.ID, "https://example.com/two", newURL)
+
+			var hash string
+			if err := f.db.QueryRow(`SELECT hash FROM later_site_favicons WHERE site_host = 'example.com'`).Scan(&hash); err != nil {
+				t.Fatal(err)
+			}
+			want := webfetch.URLHash(oldURL)
+			if tc.replaced {
+				want = webfetch.URLHash(newURL)
+			}
+			if hash != want {
+				t.Errorf("site favicon hash = %s, want %s", hash, want)
+			}
+		})
+	}
+}

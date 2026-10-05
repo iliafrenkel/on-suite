@@ -220,8 +220,13 @@ func (st *Store) Save(ctx context.Context, userID int64, n NewArticle) (Article,
 			return Article{}, false, fmt.Errorf("later: save favicon: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO later_site_favicons (site_host, hash) VALUES (?, ?) ON CONFLICT (site_host) DO NOTHING`,
-			host, h); err != nil {
+			// First icon wins, unless the mapped one has been given up on:
+			// then a newly discovered icon repairs the site.
+			`INSERT INTO later_site_favicons (site_host, hash) VALUES (?, ?)
+			 ON CONFLICT (site_host) DO UPDATE SET hash = excluded.hash
+			  WHERE excluded.hash <> later_site_favicons.hash
+			    AND (SELECT error_count FROM later_favicons WHERE hash = later_site_favicons.hash) >= ?`,
+			host, h, webfetch.MaxImageAttempts); err != nil {
 			return Article{}, false, fmt.Errorf("later: link favicon: %w", err)
 		}
 	}

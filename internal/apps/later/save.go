@@ -41,7 +41,14 @@ func (a *App) fetchArticle(ctx context.Context, pageURL string) NewArticle {
 		return n
 	}
 	n.Title = pageTitle(res.Body)
-	n.FaviconURL = favicon.Discover(res.Body, res.FinalURL)
+	// Trust the page's own <link rel=icon> only when we ended up on the site
+	// that was saved: a redirect to another host must not choose that site's
+	// icon. Otherwise guess /favicon.ico on the saved site.
+	if siteHost(res.FinalURL) == siteHost(pageURL) {
+		n.FaviconURL = favicon.Discover(res.Body, res.FinalURL)
+	} else {
+		n.FaviconURL = favicon.Discover(nil, pageURL)
+	}
 	if !isHTML(res.ContentType) {
 		n.ExtractError = fmt.Sprintf("The page isn't HTML (%s).", res.ContentType)
 		return n
