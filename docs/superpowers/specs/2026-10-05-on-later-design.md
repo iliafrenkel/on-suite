@@ -52,10 +52,12 @@ Reader has. Apps never import each other, so that code moves out of
   function from source URL to served URL, so Reader keeps its proxy paths and
   Later gets its own. `TestReadabilityIsContained` now
   pins go-readability to this package.
-- **`internal/platform/favicon`** — favicon discovery (page `<link rel>`,
-  site homepage, `/favicon.ico`) and the give-up/repair rules from #451/#455.
-  Storage stays in each app; the package decides *what* to fetch and *when to
-  stop*, not where bytes live.
+- **`internal/platform/favicon`** — favicon discovery only (page
+  `<link rel>` and `/favicon.ico`). Storage stays in each app. Reader's
+  homepage lookup and the #451/#455 repair rule stay in Reader — they are tied
+  to its feed table, and ON Later always has the saved page's HTML, so
+  `favicon.Discover` on that page is enough. The give-up rule lives in
+  `webfetch.GivenUp`, shared with images.
 
 **This is a deliberate exception to PATTERNS.md's "cross-app mirroring".**
 That pattern is right for small domain logic like slug generation. This code

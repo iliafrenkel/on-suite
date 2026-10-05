@@ -17,7 +17,10 @@ feed Accept header, `/reader/img/` path).
 
 **Deviation from the spec:** the spec puts the favicon give-up rule in
 `favicon`. Reader applies the same rule to images and favicons, so it lives
-in `webfetch.GivenUp`. `favicon` is discovery only.
+in `webfetch.GivenUp`. `favicon` is discovery only. Reader's homepage lookup
+and the #451/#455 repair rule stay in Reader — they are tied to its feed
+table, and ON Later always has the saved page's HTML, so `favicon.Discover`
+on that page is enough.
 
 **Tech Stack:** Go, `github.com/go-shiori/go-readability`,
 `github.com/microcosm-cc/bluemonday`, `golang.org/x/net/html`.
