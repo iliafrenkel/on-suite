@@ -66,6 +66,8 @@ type rowView struct {
 	LinkOnly bool
 	Progress int // percent, 0-100
 
+	Highlights int
+
 	FaviconSrc string // "" when no <img> should be emitted
 	Initial    string // the site's first letter, for the badge
 }
@@ -174,6 +176,8 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 			LinkOnly: it.Content == ContentLinkOnly,
 			Progress: int(math.Round(it.Progress * 100)),
 			Initial:  siteInitial(it.SiteHost),
+
+			Highlights: it.Highlights,
 		}
 		if it.FaviconShown {
 			row.FaviconSrc = "/later/favicon/" + it.FaviconHash

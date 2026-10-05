@@ -593,3 +593,27 @@ func TestImagesToFetchSkipsCachedAndGivenUp(t *testing.T) {
 		t.Errorf("limit 1 = %+v", got)
 	}
 }
+
+func TestListCountsHighlights(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	two := f.saveDoc(t, f.alice.ID, "https://a.example/two", helloHTML)
+	none := f.saveDoc(t, f.alice.ID, "https://a.example/none", helloHTML)
+	if _, err := f.store.AddHighlight(ctx, two.ID, two.ContentText, 6, 11, "brave", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.AddHighlight(ctx, two.ID, two.ContentText, 16, 21, "world", "c"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.store.List(ctx, f.alice.ID, later.StateUnread, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[int64]int{}
+	for _, it := range got {
+		counts[it.ID] = it.Highlights
+	}
+	if len(counts) != 2 || counts[two.ID] != 2 || counts[none.ID] != 0 {
+		t.Errorf("highlight counts = %v, want %d:2 and %d:0", counts, two.ID, none.ID)
+	}
+}

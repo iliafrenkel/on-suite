@@ -3648,10 +3648,19 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-pref-row { display: flex; align-items: center; gap: .5rem; justify-content: space-between; }
 .later-pref-row form { margin: 0; }
 .later-pref-row button[aria-pressed="true"] { background: var(--c-accent-bg); color: var(--c-accent); }
-.later-reader .later-article { margin: 2rem auto; padding-inline: 1rem; }
+.later-reader .later-article { margin: 2rem auto; padding-inline: 1rem; position: relative; }
 .later-width-narrow .later-article { max-width: 56ch; }
 .later-width-medium .later-article { max-width: 68ch; }
 .later-width-wide .later-article { max-width: 84ch; }
+.later-margin { display: none; }
+.later-has-margin .later-margin { display: block; position: absolute; top: 0; left: calc(100% + 2rem); width: 14rem; }
+.later-margin-note { position: absolute; left: 0; right: 0; margin: 0; padding-left: .5rem; border-left: 2px solid var(--c-accent-attention);
+  font-size: var(--fs-sm); color: var(--c-text-dim); white-space: pre-wrap; cursor: pointer; }
+.later-margin-note[hidden] { display: none; }
+/* The 💬 marker for a commented highlight when there is no margin. CSS
+   content is not part of textContent, so offsets don't move. */
+.later-hl-commented.later-hl-end::after { content: "💬"; font-size: .75em; margin-left: .15em; }
+.later-has-margin .later-hl-commented.later-hl-end::after { content: none; }
 .later-font-serif .later-article-body { font-family: 'Source Serif 4', Georgia, serif; }
 .later-font-sans .later-article-body { font-family: var(--font-ui); }
 .later-size-1 .later-article-body { font-size: .95rem; }

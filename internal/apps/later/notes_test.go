@@ -601,3 +601,46 @@ func TestArticleHasTheEditPopover(t *testing.T) {
 	doc = s.Get(t, s.Alice, articlePath(lo, ""))
 	doc.MustNotHave("div#later-hl-edit")
 }
+
+func TestArticleRendersMarginNotes(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	postHighlight(t, s, a, 6, 11, "A")
+	postHighlight(t, s, a, 16, 21, "")
+	hs := storedHighlights(t, s, a)
+	if len(hs) != 2 {
+		t.Fatalf("stored %d highlights, want 2", len(hs))
+	}
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	doc.MustHave("article.later-article div#later-margin")
+	if got := attr(t, doc, "div#later-margin", "aria-hidden"); got != "true" {
+		t.Errorf("margin aria-hidden = %q, want true", got)
+	}
+	doc.MustNotHave("div#later-margin[hx-swap-oob]")
+	notes := doc.QueryAll("div#later-margin p.later-margin-note")
+	if len(notes) != 1 {
+		t.Fatalf("margin notes = %d, want 1 (the uncommented highlight has none)", len(notes))
+	}
+	if got, _ := htmlassert.Attr(notes[0], "data-later-hl-open"); got != strconv.FormatInt(hs[0].ID, 10) {
+		t.Errorf("note data-later-hl-open = %q, want %d", got, hs[0].ID)
+	}
+	if got := htmlassert.Text(notes[0]); got != "A" {
+		t.Errorf("note = %q, want A", got)
+	}
+}
+
+func TestHighlightSwapRefreshesTheMargin(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	rec := postHighlight(t, s, a, 6, 11, "A")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := attr(t, doc, "div#later-margin", "hx-swap-oob"); got != "true" {
+		t.Errorf("margin hx-swap-oob = %q, want true", got)
+	}
+	if got := htmlassert.Text(doc.MustHave("div#later-margin p.later-margin-note")); got != "A" {
+		t.Errorf("margin note = %q, want A", got)
+	}
+}

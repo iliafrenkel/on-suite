@@ -772,3 +772,44 @@ func TestArticleWithAStaleHighlightStillRenders(t *testing.T) {
 		t.Errorf("body text = %q, want Hello reader", got)
 	}
 }
+
+func TestRowShowsTheHighlightCount(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	ctx := context.Background()
+	two := seed(t, s, uid, later.NewArticle{URL: "https://a.example/two", Title: "Two", ContentHTML: helloHTML})
+	one := seed(t, s, uid, later.NewArticle{URL: "https://a.example/one", Title: "One", ContentHTML: helloHTML})
+	seed(t, s, uid, later.NewArticle{URL: "https://a.example/zero", Title: "Zero", ContentHTML: helloHTML})
+	for _, h := range []struct {
+		a          later.Article
+		start, end int
+	}{{two, 6, 11}, {two, 16, 21}, {one, 6, 11}} {
+		quote := string([]rune(h.a.ContentText)[h.start:h.end])
+		if _, err := s.Store.AddHighlight(ctx, h.a.ID, h.a.ContentText, h.start, h.end, quote, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc := s.Get(t, s.Alice, "/later/")
+	var got []string
+	for _, p := range doc.QueryAll("span.later-pill-hl") {
+		got = append(got, htmlassert.Text(p))
+	}
+	// Newest first: Zero (none), One, Two.
+	if len(got) != 2 || got[0] != "1 highlight" || got[1] != "2 highlights" {
+		t.Errorf("highlight pills = %q, want [1 highlight, 2 highlights]", got)
+	}
+}
+
+func TestDeleteConfirmationMentionsHighlights(t *testing.T) {
+	s := newServer(t)
+	a := seedHello(t, s)
+	const want = "Delete permanently? Highlights and notes go too."
+	list := s.Get(t, s.Alice, "/later/")
+	if got := attr(t, list, `form[action="/later/a/`+strconv.FormatInt(a.ID, 10)+`/delete"]`, "data-later-confirm"); got != want {
+		t.Errorf("row confirm = %q, want %q", got, want)
+	}
+	art := s.Get(t, s.Alice, articlePath(a, ""))
+	if got := attr(t, art, `.later-topbar form[data-later-confirm]`, "data-later-confirm"); got != want {
+		t.Errorf("article confirm = %q, want %q", got, want)
+	}
+}

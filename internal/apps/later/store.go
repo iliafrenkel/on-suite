@@ -112,6 +112,7 @@ type ListItem struct {
 	// an <img> is worth emitting (cached, or not yet given up on).
 	FaviconHash  string
 	FaviconShown bool
+	Highlights   int
 }
 
 // articleColumns is every column scanArticle reads, in order.
@@ -265,7 +266,8 @@ func (st *Store) List(ctx context.Context, userID int64, state State, offset, li
 	// order comes only from the listOrder map above, never from input.
 	rows, err := st.db.QueryContext(ctx, `
 		SELECT a.id, a.title, a.site_host, a.content, a.word_count, a.progress,
-		       COALESCE(sf.hash, ''), f.bytes IS NOT NULL, COALESCE(f.error_count, 0), f.fetched_at
+		       COALESCE(sf.hash, ''), f.bytes IS NOT NULL, COALESCE(f.error_count, 0), f.fetched_at,
+		       (SELECT count(*) FROM later_highlights h WHERE h.article_id = a.id)
 		  FROM later_articles a
 		  LEFT JOIN later_site_favicons sf ON sf.site_host = a.site_host
 		  LEFT JOIN later_favicons f ON f.hash = sf.hash
@@ -284,7 +286,7 @@ func (st *Store) List(ctx context.Context, userID int64, state State, offset, li
 		var errorCount int
 		var fetched sql.NullString
 		if err := rows.Scan(&it.ID, &it.Title, &it.SiteHost, &it.Content, &it.WordCount, &it.Progress,
-			&it.FaviconHash, &cached, &errorCount, &fetched); err != nil {
+			&it.FaviconHash, &cached, &errorCount, &fetched, &it.Highlights); err != nil {
 			return nil, fmt.Errorf("later: scan list: %w", err)
 		}
 		var attempt time.Time

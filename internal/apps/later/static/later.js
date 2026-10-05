@@ -225,3 +225,38 @@
 		});
 	})();
 
+
+	// Margin comments (spec: "comments in the right margin on wide
+	// screens"): when the window has room beside the column, each comment
+	// sits level with its highlight, pushed down if the one above runs long.
+	// Otherwise CSS hides the margin and the 💬 marker shows instead.
+	(function () {
+		var reader = document.getElementById("later-reader");
+		var article = reader && reader.querySelector(".later-article");
+		if (!article) return;
+		function layout() {
+			var margin = document.getElementById("later-margin");
+			if (!margin) return;
+			var rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+			var room = document.documentElement.clientWidth - article.getBoundingClientRect().right;
+			var fits = room >= 17 * rem; // 14rem notes + 2rem gap + 1rem edge
+			reader.classList.toggle("later-has-margin", fits);
+			if (!fits) return;
+			var top0 = article.getBoundingClientRect().top;
+			var next = 0;
+			margin.querySelectorAll(".later-margin-note").forEach(function (n) {
+				var mark = document.getElementById("later-h-" + n.dataset.laterHlOpen);
+				n.hidden = !mark;
+				if (!mark) return;
+				var top = Math.max(mark.getBoundingClientRect().top - top0, next);
+				n.style.top = top + "px";
+				next = top + n.offsetHeight + 8;
+			});
+		}
+		layout();
+		window.addEventListener("load", layout);
+		window.addEventListener("resize", layout);
+		document.body.addEventListener("htmx:afterSettle", layout);
+		// Aa changes and late images reflow the column.
+		if (typeof ResizeObserver === "function") new ResizeObserver(layout).observe(article);
+	})();

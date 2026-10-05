@@ -75,6 +75,11 @@ Click **Highlight** to mark it, or **Highlight + comment** to add a
 comment too. Highlights can't overlap. Every highlight is listed in the
 Notes panel; click one to jump to it.
 
+On a wide screen, comments sit in the margin beside their highlights;
+click one to edit it. On a narrow screen a 💬 after a highlight means it
+has a comment — tap the highlight to read it. The list shows how many
+highlights each article has.
+
 Click a highlight (or **Edit** next to it in the Notes panel) to change
 its comment or delete it. Deleting a highlight that has a comment asks
 first.
@@ -83,4 +88,5 @@ first.
 
 Each article in the list has a **⋯** menu to archive, move back to
 unread, or delete it without opening it. You can also open the article,
-choose **⋯**, then **Delete**. Deleting can't be undone.
+choose **⋯**, then **Delete**. Deleting removes its highlights and note too,
+and can't be undone.
