@@ -62,8 +62,7 @@ func (a *App) favicon(w http.ResponseWriter, r *http.Request) {
 		a.writeFeedIcon(w, r, icon)
 		return
 	}
-	if icon.ErrorCount >= maxImageFetchAttempts ||
-		(icon.ErrorCount > 0 && a.store.now().Sub(icon.FetchedAt) < imageRetryBackoff) {
+	if icon.GivenUp(a.store.now()) {
 		bareNotFound(w)
 		return
 	}

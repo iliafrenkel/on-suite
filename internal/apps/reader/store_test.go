@@ -908,6 +908,70 @@ func TestTreeLoadsFaviconURL(t *testing.T) {
 	}
 }
 
+// A favicon the proxy has given up on, for now or for good, is not offered
+// to the template, so the tree draws the RSS glyph instead of an <img> that
+// flashes broken until reader.js swaps it out (#455). Once the backoff
+// window has passed the proxy will try again, so the tree offers it again.
+func TestTreeHidesAFaviconTheProxyWillNotServe(t *testing.T) {
+	f := newStoreFixture(t)
+	ctx := context.Background()
+	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	f.store.SetClock(func() time.Time { return now })
+
+	sub, err := f.store.Subscribe(ctx, f.alice.ID, "https://example.com/feed.xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const icon = "https://example.com/favicon.ico"
+	if err := f.store.SetFaviconIfEmpty(ctx, sub.FeedID, icon); err != nil {
+		t.Fatal(err)
+	}
+	hash := reader.FaviconHash(icon)
+	path := func() string {
+		t.Helper()
+		tree, err := f.store.Tree(ctx, f.alice.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(tree.Root) != 1 {
+			t.Fatalf("tree root = %+v", tree.Root)
+		}
+		return tree.Root[0].FaviconPath()
+	}
+
+	if path() == "" {
+		t.Error("a favicon not fetched yet should still be offered")
+	}
+
+	if err := f.store.SaveFeedIconFailure(ctx, hash, "boom", now); err != nil {
+		t.Fatal(err)
+	}
+	if got := path(); got != "" {
+		t.Errorf("FaviconPath() = %q inside the retry backoff, want empty", got)
+	}
+
+	now = now.Add(2 * time.Hour)
+	if path() == "" {
+		t.Error("a favicon past its retry backoff should be offered again")
+	}
+
+	for range 2 {
+		if err := f.store.SaveFeedIconFailure(ctx, hash, "boom", now.Add(-2*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := path(); got != "" {
+		t.Errorf("FaviconPath() = %q after the last attempt, want empty", got)
+	}
+
+	if err := f.store.SaveFeedIconBytes(ctx, hash, "image/x-icon", []byte{0x00, 0x01}, now); err != nil {
+		t.Fatal(err)
+	}
+	if path() == "" {
+		t.Error("a cached favicon should be offered")
+	}
+}
+
 // Moving a feed keeps the subscription itself, so its read and starred
 // state survive; unsubscribing and re-adding, the only way before #420,
 // threw that away.
