@@ -77,7 +77,8 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 			a.renderPopup(w, r, http.StatusUnprocessableEntity, popupView{Error: badURLMessage})
 			return
 		}
-		a.renderIndex(w, r, userID, StateUnread, http.StatusUnprocessableEntity, saveForm{
+		q := listQuery{Tab: parseTab(r.PostFormValue("tab")), Tag: tagParam(r.PostFormValue("tag"))}
+		a.renderIndex(w, r, userID, q, http.StatusUnprocessableEntity, saveForm{
 			Error: badURLMessage, URL: r.PostFormValue("url"), Tags: r.PostFormValue("tags"),
 		})
 		return

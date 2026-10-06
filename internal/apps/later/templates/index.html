@@ -5,6 +5,9 @@
 	<h1 class="visually-hidden">ON Later</h1>
 	<form class="later-save" method="post" action="/later/save">
 		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+		{{/* So a rejected save comes back to this tab and tag (#523). */}}
+		<input type="hidden" name="tab" value="{{.Data.Tab}}">
+		{{with .Data.Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}
 		<label class="visually-hidden" for="later-url">Web address</label>
 		<input id="later-url" class="later-save-input" name="url" type="text" inputmode="url" placeholder="Paste a URL to save…" value="{{.Data.Form.URL}}">
 		<label class="visually-hidden" for="later-save-tags">Tags</label>
