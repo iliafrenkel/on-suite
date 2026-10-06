@@ -106,3 +106,29 @@ func (st *Store) ImagesToFetch(ctx context.Context, limit int) ([]Image, error) 
 	}
 	return out, nil
 }
+
+// ImageSources maps each of an article's image hashes to the URL it was
+// downloaded from. Like Highlights it doesn't check ownership: callers load
+// the article owner-scoped first.
+func (st *Store) ImageSources(ctx context.Context, articleID int64) (map[string]string, error) {
+	rows, err := st.db.QueryContext(ctx, `
+		SELECT i.hash, i.src_url FROM later_article_images ai
+		  JOIN later_images i ON i.hash = ai.hash
+		 WHERE ai.article_id = ?`, articleID)
+	if err != nil {
+		return nil, fmt.Errorf("later: image sources: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]string{}
+	for rows.Next() {
+		var hash, src string
+		if err := rows.Scan(&hash, &src); err != nil {
+			return nil, fmt.Errorf("later: scan image source: %w", err)
+		}
+		out[hash] = src
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("later: image sources: %w", err)
+	}
+	return out, nil
+}

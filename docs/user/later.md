@@ -84,8 +84,8 @@ An article opens full screen. The top bar has:
 - **Notes** — opens the Notes panel (see below).
 - **Archive** — move the article to Archived (or **Move to unread** if it
   is already archived).
-- **⋯** — **Open original** opens the saved page on its own site, and
-  **Delete** removes the article.
+- **⋯** — change the article's **Tags**, **Download as Markdown**, **Open
+  original** to see the page on its own site, or **Delete** the article.
 
 ON Later remembers where you stopped and opens there next time. The
 line under the top bar shows how far through you are, and the bar shows the
@@ -111,6 +111,15 @@ highlights each article has.
 Click a highlight (or **Edit** next to it in the Notes panel) to change
 its comment or delete it. Deleting a highlight that has a comment asks
 first.
+
+## Downloading an article
+
+To keep a copy outside ON Suite, open the article, choose **⋯**, then
+**Download as Markdown**. You get a file called `later-article.md` with
+the title, the original address, your note, your highlights with their
+comments, and then the article itself. Pictures become links to where
+they came from. Markdown is plain text, so any text editor opens it, and
+note-taking apps such as Obsidian show it formatted.
 
 ## Deleting an article
 
