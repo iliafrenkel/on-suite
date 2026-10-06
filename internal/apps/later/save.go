@@ -3,7 +3,6 @@ package later
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"mime"
 	"strings"
 	"time"
@@ -36,7 +35,8 @@ func (a *App) fetchArticle(ctx context.Context, pageURL string) NewArticle {
 	n := NewArticle{URL: pageURL}
 	res, err := a.client.Get(ctx, pageURL, webfetch.GetOptions{})
 	if err != nil {
-		n.ExtractError = "Couldn't fetch the page: " + err.Error()
+		a.deps.Log.Info("later page fetch failed", "url", pageURL, "error", err)
+		n.ExtractError = fetchReason(res, err)
 		n.FaviconURL = favicon.Discover(nil, pageURL)
 		return n
 	}
@@ -50,12 +50,14 @@ func (a *App) fetchArticle(ctx context.Context, pageURL string) NewArticle {
 		n.FaviconURL = favicon.Discover(nil, pageURL)
 	}
 	if !isHTML(res.ContentType) {
-		n.ExtractError = fmt.Sprintf("The page isn't HTML (%s).", res.ContentType)
+		a.deps.Log.Info("later page is not HTML", "url", pageURL, "content_type", res.ContentType)
+		n.ExtractError = notHTMLReason(res.ContentType)
 		return n
 	}
 	ex, err := article.Extract(res.Body, res.FinalURL, laterImageSrc)
 	if err != nil {
-		n.ExtractError = "Couldn't find an article on the page: " + err.Error()
+		a.deps.Log.Info("later article extraction failed", "url", pageURL, "error", err)
+		n.ExtractError = noArticleReason
 		return n
 	}
 	if ex.Title != "" {

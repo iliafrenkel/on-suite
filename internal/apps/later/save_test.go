@@ -152,6 +152,9 @@ func TestSaveKeepsALinkOnlyItemWhenExtractionFails(t *testing.T) {
 	if got.Title != "Members only" {
 		t.Errorf("Title = %q, want the page's <title>", got.Title)
 	}
+	if want := "ON Later couldn't find an article on this page. It may be behind a sign-in, or built by scripts."; got.ExtractError != want {
+		t.Errorf("ExtractError = %q, want %q", got.ExtractError, want)
+	}
 }
 
 func TestSaveKeepsALinkOnlyItemWhenTheFetchFails(t *testing.T) {
@@ -164,8 +167,8 @@ func TestSaveKeepsALinkOnlyItemWhenTheFetchFails(t *testing.T) {
 	if got.Title != "127.0.0.1" {
 		t.Errorf("Title = %q, want the host", got.Title)
 	}
-	if !strings.Contains(got.ExtractError, "404") {
-		t.Errorf("ExtractError = %q, want it to mention 404", got.ExtractError)
+	if want := "The page wasn't found. The link may be broken or the page removed."; got.ExtractError != want {
+		t.Errorf("ExtractError = %q, want %q", got.ExtractError, want)
 	}
 }
 
@@ -175,8 +178,8 @@ func TestSaveKeepsALinkOnlyItemForNonHTML(t *testing.T) {
 	origin := pageOrigin(t, "application/pdf", "%PDF-1.4 not really")
 
 	got := linkOnly(t, s, save(t, s, s.Alice, origin.URL+"/paper.pdf"))
-	if !strings.Contains(got.ExtractError, "application/pdf") {
-		t.Errorf("ExtractError = %q, want the content type", got.ExtractError)
+	if want := "This link isn't a web page (it's a PDF), so there's no article to read."; got.ExtractError != want {
+		t.Errorf("ExtractError = %q, want %q", got.ExtractError, want)
 	}
 }
 
@@ -192,7 +195,10 @@ func TestSaveGivesUpAfterTheTimeout(t *testing.T) {
 	}))
 	t.Cleanup(origin.Close)
 
-	linkOnly(t, s, save(t, s, s.Alice, origin.URL+"/slow"))
+	got := linkOnly(t, s, save(t, s, s.Alice, origin.URL+"/slow"))
+	if want := "The site took too long to answer."; got.ExtractError != want {
+		t.Errorf("ExtractError = %q, want %q", got.ExtractError, want)
+	}
 }
 
 func TestSaveRejectsAnInvalidURL(t *testing.T) {
@@ -217,8 +223,8 @@ func TestSaveRejectsAnInvalidURL(t *testing.T) {
 func TestSaveRefusesPrivateAddressesWithTheRealGuard(t *testing.T) {
 	s, _ := newSaveServer(t)
 	got := linkOnly(t, s, save(t, s, s.Alice, "http://127.0.0.1:1/x"))
-	if !strings.Contains(got.ExtractError, "blocked address") {
-		t.Errorf("ExtractError = %q, want blocked address", got.ExtractError)
+	if want := "That address is on a private network, so ON Later won't fetch it."; got.ExtractError != want {
+		t.Errorf("ExtractError = %q, want %q", got.ExtractError, want)
 	}
 }
 
