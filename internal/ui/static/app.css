@@ -3610,6 +3610,9 @@ input.flash-tag-entry:focus { outline: none; }
 .later-row-meta { display: flex; flex-wrap: wrap; gap: .5rem; font-size: var(--fs-sm); color: var(--c-text-faint); }
 .later-pill { border-radius: 999px; padding: 0 .5rem; font-size: var(--fs-xs); background: var(--c-bg-inset); color: var(--c-text-dim); }
 .later-pill-linkonly { background: var(--c-accent-attention-bg); color: var(--c-accent-attention); }
+/* Search results' Unread / Reading / Archived: outlined rather than filled,
+ * so it reads apart from the grey highlight-count pill but stays quiet (#526). */
+.later-pill-state { background: none; box-shadow: inset 0 0 0 1px var(--c-border-firm); }
 .later-row-progress { width: 3rem; height: .25rem; }
 .later-more { list-style: none; padding: .75rem 0; text-align: center; }
 .later-empty { color: var(--c-text-dim); }
