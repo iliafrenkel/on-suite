@@ -24,6 +24,12 @@ since the last tag, the same classification `.goreleaser.yaml`'s
 | only `fix:`/`refactor:`/`perf:`/`chore:` (or unlabeled)         | patch (`N.M.(P+1)`) |
 | only `docs:`/`test:`                                            | no release needed  |
 
+A major bump may also be chosen by hand for a product milestone, such as a
+new app or a big set of features, even with no breaking change. That's
+what v2.0.0 (admin tools and built-in help) and v3.0.0 (ON Later) are.
+`next-version.sh` applies only the table above, so its output is a
+suggestion: when a release is a milestone, tag the next major instead.
+
 ## Cutting a release
 
 1. Make sure `main` is green and up to date:
