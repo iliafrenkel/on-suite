@@ -53,6 +53,14 @@ func TestArticleHasTheNotesPanel(t *testing.T) {
 	if got := attr(t, doc, "label.later-notes-toggle", "for"); got != "later-notes-open" {
 		t.Errorf("toggle label for = %q", got)
 	}
+	// The panel's ✕ is a label for the checkbox too; naming the checkbox
+	// after the toggle alone stops the two being read out together (#517).
+	if got := attr(t, doc, "input#later-notes-open", "aria-labelledby"); got != "later-notes-toggle" {
+		t.Errorf("toggle aria-labelledby = %q, want later-notes-toggle", got)
+	}
+	if got := attr(t, doc, "label.later-notes-toggle", "id"); got != "later-notes-toggle" {
+		t.Errorf("toggle label id = %q, want later-notes-toggle", got)
+	}
 	if got := strings.Join(strings.Fields(htmlassert.Text(doc.MustHave("label.later-notes-toggle"))), " "); got != "Notes · 0" {
 		t.Errorf("toggle text = %q, want %q", got, "Notes · 0")
 	}
@@ -192,6 +200,14 @@ func TestSavingTheNoteOverHTMXRefreshesTheOtherCopy(t *testing.T) {
 	}
 	if text := htmlassert.Text(status); text != "Saved" {
 		t.Errorf("status = %q, want Saved", text)
+	}
+	// The other copy's "Saved" is stale once its text is replaced (#517).
+	other := doc.MustHave("span#later-note-status-end")
+	if v, _ := htmlassert.Attr(other, "hx-swap-oob"); v != "innerHTML" {
+		t.Errorf("other status hx-swap-oob = %q, want innerHTML", v)
+	}
+	if text := htmlassert.Text(other); text != "" {
+		t.Errorf("other status = %q, want empty", text)
 	}
 	doc.MustNotHave("#later-note-panel")
 }

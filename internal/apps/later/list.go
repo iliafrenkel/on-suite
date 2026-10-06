@@ -127,6 +127,9 @@ type indexView struct {
 	Q         string // the search box's value
 	Searching bool
 	ClearURL  string // the tab the search was started from
+	// SearchStatus is the result count read out after a live search,
+	// e.g. "3 results"; "" when not searching.
+	SearchStatus string
 }
 
 // newRow is the list row for it.
@@ -276,6 +279,9 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 		view.NextURL = q.url(offset + pageSize)
 	}
 	view.Rows = rows
+	if view.Searching {
+		view.SearchStatus = searchStatus(len(rows), view.NextURL != "")
+	}
 
 	page := a.deps.Page(r, "ON Later")
 	page.Data = view
@@ -285,7 +291,7 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 		case offset > 0:
 			block = "rows"
 		case web.HTMXTarget(r) == "later-list":
-			block = "later-list"
+			block = "later-list-swap"
 		}
 	}
 	if block != "" {
@@ -307,4 +313,18 @@ func siteInitial(site string) string {
 		return ""
 	}
 	return string(unicode.ToUpper(r))
+}
+
+// searchStatus is the result count for screen readers. more means there's
+// another page, so the count is a lower bound.
+func searchStatus(n int, more bool) string {
+	switch {
+	case n == 0:
+		return "Nothing matches"
+	case more:
+		return fmt.Sprintf("%d+ results", n)
+	case n == 1:
+		return "1 result"
+	}
+	return fmt.Sprintf("%d results", n)
 }

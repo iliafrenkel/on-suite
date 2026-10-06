@@ -29,11 +29,18 @@
 		       hx-include="closest form" hx-trigger="input changed delay:300ms, search"
 		       hx-replace-url="true">
 	</form>
+	{{template "later-search-status" (dict "Text" "" "OOB" false)}}
 
 	{{template "later-list" .}}
 {{template "later-confirm"}}
 </div>
 {{end}}
+
+{{/* The search box's answer: the list, plus the result count for screen
+     readers on a status line that lives outside the list (#524). */}}
+{{define "later-list-swap"}}{{template "later-list" .}}{{template "later-search-status" (dict "Text" .Data.SearchStatus "OOB" true)}}{{end}}
+
+{{define "later-search-status"}}<p class="visually-hidden" id="later-search-status" role="status"{{if .OOB}} hx-swap-oob="innerHTML"{{end}}>{{.Text}}</p>{{end}}
 
 {{define "later-list"}}
 <div id="later-list" class="later-list stack">

@@ -320,6 +320,51 @@ func TestSearchHTMXAnswersTheListOnly(t *testing.T) {
 	}
 }
 
+// listFragment fetches url as the search box does and parses the answer.
+func listFragment(t *testing.T, s *server, url string) *htmlassert.Doc {
+	t.Helper()
+	req := httptest.NewRequest("GET", url, nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "later-list")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	return htmlassert.Parse(t, rec.Body.String())
+}
+
+// The search box tells screen readers how many results it found on a
+// status line outside the swapped list, so the rows aren't read out on
+// every keystroke (#524).
+func TestSearchAnnouncesTheResultCount(t *testing.T) {
+	s := newServer(t)
+	seedStates(t, s)
+
+	doc := s.Get(t, s.Alice, "/later/")
+	if got := attr(t, doc, "#later-search-status", "role"); got != "status" {
+		t.Errorf("status line role = %q", got)
+	}
+	if got := htmlassert.Text(doc.MustHave("#later-search-status")); got != "" {
+		t.Errorf("status on page load = %q, want empty", got)
+	}
+	doc.MustNotHave("#later-list #later-search-status")
+
+	for _, tt := range []struct{ url, want string }{
+		{"/later/?q=one", "3 results"},
+		{"/later/?q=archived", "1 result"},
+		{"/later/?q=zzzz", "Nothing matches"},
+		{"/later/", ""},
+	} {
+		frag := listFragment(t, s, tt.url)
+		if got := attr(t, frag, "#later-search-status", "hx-swap-oob"); got != "innerHTML" {
+			t.Errorf("%s: hx-swap-oob = %q", tt.url, got)
+		}
+		if got := htmlassert.Text(frag.MustHave("#later-search-status")); got != tt.want {
+			t.Errorf("%s: status = %q, want %q", tt.url, got, tt.want)
+		}
+	}
+}
+
 func TestSearchBoxKeepsTheQueryTabAndTag(t *testing.T) {
 	s := newServer(t)
 	seedTagged(t, s, "https://a.example/1", "Essay", "essays")
