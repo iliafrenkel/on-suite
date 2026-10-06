@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/later"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
@@ -811,5 +812,98 @@ func TestDeleteConfirmationMentionsHighlights(t *testing.T) {
 	art := s.Get(t, s.Alice, articlePath(a, ""))
 	if got := attr(t, art, `.later-topbar form[data-later-confirm]`, "data-later-confirm"); got != want {
 		t.Errorf("article confirm = %q, want %q", got, want)
+	}
+}
+
+// rowTitles is the list's row titles, top to bottom.
+func rowTitles(doc *htmlassert.Doc) []string {
+	var out []string
+	for _, l := range doc.QueryAll(".later-row-title") {
+		out = append(out, strings.TrimSpace(htmlassert.Text(l)))
+	}
+	return out
+}
+
+func TestIndexOrdersEachTab(t *testing.T) {
+	s := newServer(t)
+	ctx, uid := context.Background(), s.Alice.User.ID
+	arts := map[string]later.Article{}
+	for _, title := range []string{"A", "B", "C", "D", "E", "F"} {
+		arts[title] = seed(t, s, uid, later.NewArticle{URL: "https://o.example/" + title, Title: title, ContentHTML: words(5)})
+		s.Clock.Advance(time.Minute)
+	}
+	// Reading is newest-opened first, Archived newest-archived first, and
+	// Unread newest-saved first.
+	for _, title := range []string{"B", "A"} {
+		if err := s.Store.MarkOpened(ctx, uid, arts[title].ID); err != nil {
+			t.Fatal(err)
+		}
+		s.Clock.Advance(time.Minute)
+	}
+	for _, title := range []string{"E", "F"} {
+		if err := s.Store.SetState(ctx, uid, arts[title].ID, later.StateArchived); err != nil {
+			t.Fatal(err)
+		}
+		s.Clock.Advance(time.Minute)
+	}
+	for tab, want := range map[string][]string{
+		"unread":   {"D", "C"},
+		"reading":  {"A", "B"},
+		"archived": {"F", "E"},
+	} {
+		if got := rowTitles(s.Get(t, s.Alice, "/later/?tab="+tab)); strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("%s rows = %v, want %v", tab, got, want)
+		}
+	}
+}
+
+func TestIndexIgnoresABadOffset(t *testing.T) {
+	s := newServer(t)
+	seedStates(t, s)
+	for _, off := range []string{"-5", "abc"} {
+		doc := s.Get(t, s.Alice, "/later/?tab=unread&offset="+off)
+		if n := len(doc.QueryAll(".later-row")); n != 2 {
+			t.Errorf("offset=%s shows %d rows, want the first page's 2", off, n)
+		}
+	}
+}
+
+func TestRowShowsReadingProgress(t *testing.T) {
+	s := newServer(t)
+	a := seedReadable(t, s)
+	ctx, uid := context.Background(), s.Alice.User.ID
+	if err := s.Store.MarkOpened(ctx, uid, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.SetProgress(ctx, uid, a.ID, 0.42); err != nil {
+		t.Fatal(err)
+	}
+	bar := s.Get(t, s.Alice, "/later/?tab=reading").MustHave("progress.later-row-progress")
+	if v, _ := htmlassert.Attr(bar, "value"); v != "42" {
+		t.Errorf("progress value = %q, want 42", v)
+	}
+	// An article not yet scrolled shows no bar.
+	seed(t, s, uid, later.NewArticle{URL: "https://o.example/new", Title: "New", ContentHTML: words(5)})
+	s.Get(t, s.Alice, "/later/?tab=unread").MustNotHave("progress.later-row-progress")
+}
+
+func TestMidPageLoadMoreOffersTheNextPage(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	for i := 0; i < 101; i++ {
+		seed(t, s, uid, later.NewArticle{URL: fmt.Sprintf("https://p.example/%d", i), Title: fmt.Sprintf("Item %d", i), ContentHTML: words(5)})
+	}
+	req := httptest.NewRequest("GET", "/later/?tab=unread&offset=50", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	frag := htmlassert.Parse(t, rec.Body.String())
+	if n := len(frag.QueryAll(".later-row")); n != 50 {
+		t.Errorf("fragment has %d rows, want 50", n)
+	}
+	if got, _ := htmlassert.Attr(frag.MustHave(".later-more button"), "hx-get"); got != "/later/?tab=unread&offset=100" {
+		t.Errorf("next hx-get = %q, want offset=100", got)
 	}
 }

@@ -617,3 +617,28 @@ func TestListCountsHighlights(t *testing.T) {
 		t.Errorf("highlight counts = %v, want %d:2 and %d:0", counts, two.ID, none.ID)
 	}
 }
+
+// Save is one transaction: an image that can't be written takes the
+// article, and the images already written, down with it.
+func TestSaveRollsBackWhenAnImageWriteFails(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if _, err := f.db.Exec(`
+		CREATE TRIGGER fail_second_image BEFORE INSERT ON later_article_images
+		WHEN (SELECT count(*) FROM later_article_images) >= 1
+		BEGIN SELECT RAISE(ABORT, 'disk full'); END`); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := f.store.Save(ctx, f.alice.ID, later.NewArticle{
+		URL: "https://example.com/p", Title: "T", ContentHTML: "<p>body</p>",
+		Images: map[string]string{"h1": "https://example.com/1.png", "h2": "https://example.com/2.png"},
+	})
+	if err == nil {
+		t.Fatal("Save succeeded despite a failing image write")
+	}
+	for _, table := range []string{"later_articles", "later_images", "later_article_images"} {
+		if n := f.countRows(t, `SELECT count(*) FROM `+table); n != 0 {
+			t.Errorf("%s has %d rows after the failed save, want 0", table, n)
+		}
+	}
+}
