@@ -11,6 +11,9 @@ func TestHTMLToMarkdown(t *testing.T) {
 		want       string
 	}{
 		{"empty", ``, 0, ``},
+		{"linked image becomes the link's text", `<p><a href="https://e.example/big.jpg"><img src="/later/img/abc" alt="A cat"></a></p>`, 0, "[A cat](https://e.example/big.jpg)"},
+		{"linked image without alt", `<p><a href="https://e.example/p"><img src="/later/img/abc"></a></p>`, 0, "[Image](https://e.example/p)"},
+		{"br in a table cell", `<table><tr><td>a<br>b</td></tr></table>`, 0, "| a b |\n| --- |"},
 		{"paragraphs", `<p>One</p><p>Two</p>`, 0, "One\n\nTwo"},
 		{"whitespace collapses", "<p>  a\n  b  </p>", 0, "a b"},
 		{"headings", `<h1>Title</h1><h3>Sub <em>part</em></h3>`, 0, "# Title\n\n### Sub *part*"},

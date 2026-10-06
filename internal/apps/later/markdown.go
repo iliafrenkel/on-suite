@@ -22,6 +22,9 @@ type mdConverter struct {
 	// shift moves headings down this many levels (capped at ######), so an
 	// article's <h1> sits under the downloaded file's own headings.
 	shift int
+	// inLink is set while rendering a link's children: CommonMark forbids
+	// links inside links, so an image there renders as its alt text only.
+	inLink bool
 }
 
 // htmlToMarkdown converts a sanitised HTML fragment to Markdown blocks
@@ -146,7 +149,7 @@ func (c mdConverter) table(n *xhtml.Node) []string {
 				var cells []string
 				for td := ch.FirstChild; td != nil; td = td.NextSibling {
 					if td.Type == xhtml.ElementNode && (td.DataAtom == atom.Td || td.DataAtom == atom.Th) {
-						cell := mdOneLine(strings.Join(c.blocks(td), " "))
+						cell := mdOneLine(strings.ReplaceAll(strings.Join(c.blocks(td), " "), "\\\n", " "))
 						cells = append(cells, strings.ReplaceAll(cell, "|", `\|`))
 					}
 				}
@@ -193,6 +196,12 @@ func (c mdConverter) inline(n *xhtml.Node) string {
 		return "\n"
 	case atom.Img:
 		alt := mdEscape(strings.Join(strings.Fields(mdAttr(n, "alt")), " "))
+		if c.inLink {
+			if alt == "" {
+				alt = "Image"
+			}
+			return alt
+		}
 		href := c.image(mdAttr(n, "src"))
 		if href == "" {
 			return alt
@@ -202,7 +211,9 @@ func (c mdConverter) inline(n *xhtml.Node) string {
 		}
 		return "[" + alt + "](" + mdLink(href) + ")"
 	case atom.A:
-		text := c.inlineChildren(n)
+		inner := c
+		inner.inLink = true
+		text := inner.inlineChildren(n)
 		href := mdAttr(n, "href")
 		if strings.TrimSpace(text) == "" || href == "" {
 			return text
