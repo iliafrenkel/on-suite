@@ -344,3 +344,40 @@ func TestSiteFaviconIsRepairedOnlyOnceTheOldOneIsGivenUp(t *testing.T) {
 		})
 	}
 }
+
+// Articles saved before L1b have no site favicon, and re-saving them returns
+// early, so the job back-fills a /favicon.ico guess (#514). It never
+// replaces a site's existing icon.
+func TestGuessMissingFaviconsBackFillsOldSites(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.save(t, "http://www.old.example/post", "old") // no FaviconURL: saved before L1b
+	f.saveIcon(t, f.alice.ID, "https://known.example/p", "https://known.example/icon.png")
+
+	n, err := f.store.GuessMissingFavicons(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("guessed = %d, want 1", n)
+	}
+	var src string
+	if err := f.db.QueryRow(`
+		SELECT f.src_url FROM later_site_favicons sf JOIN later_favicons f ON f.hash = sf.hash
+		 WHERE sf.site_host = 'old.example'`).Scan(&src); err != nil {
+		t.Fatal(err)
+	}
+	if want := "http://www.old.example/favicon.ico"; src != want {
+		t.Errorf("old.example icon = %q, want %q", src, want)
+	}
+	var hash string
+	if err := f.db.QueryRow(`SELECT hash FROM later_site_favicons WHERE site_host = 'known.example'`).Scan(&hash); err != nil {
+		t.Fatal(err)
+	}
+	if want := webfetch.URLHash("https://known.example/icon.png"); hash != want {
+		t.Error("the back-fill replaced a site's existing icon")
+	}
+	if n, err := f.store.GuessMissingFavicons(ctx); err != nil || n != 0 {
+		t.Errorf("second run = %d, %v; want 0, nil", n, err)
+	}
+}

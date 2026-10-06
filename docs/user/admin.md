@@ -199,7 +199,10 @@ The jobs are:
   sounds and tags that no card uses any more.
 - **download images** — every 10 minutes, downloads the pictures in saved
   ON Later articles that haven't been stored yet, so an article keeps its
-  pictures even if the original site removes them.
+  pictures even if the original site removes them. It also deletes stored
+  pictures no article uses any more (for example after a user is
+  deleted), and gives sites saved before ON Later showed site icons their
+  icon.
 
 ### Running a job now
 
