@@ -283,7 +283,7 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 		view.SearchStatus = searchStatus(len(rows), view.NextURL != "")
 	}
 
-	page := a.deps.Page(r, "ON Later")
+	page := a.deps.Page(r, "Articles")
 	page.Data = view
 	block := ""
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {

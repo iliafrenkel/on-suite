@@ -331,14 +331,10 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	// nothing.
 	view.List.ActiveID = opts.Article.ID
 
-	// The shell crumb and <title> follow the selected feed, not the generic
-	// "All articles" list heading — ScopeAll keeps the app's own name so the
-	// tab and breadcrumb do not read "All articles · ON Suite" on the default
-	// view.
-	pageTitle := "ON Reader"
-	if lc.Scope != ScopeAll {
-		pageTitle = listTitleStr
-	}
+	// The shell crumb and <title> follow the selected feed or folder; the
+	// default view is "All articles", like Paste's "Snippets", so the crumb
+	// doesn't repeat the app name (#530).
+	pageTitle := listTitleStr
 	if opts.Article.Selected {
 		pageTitle = opts.Article.Title
 	}
