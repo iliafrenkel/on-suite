@@ -18,7 +18,9 @@
 # feat commit.
 #
 # This only prints a suggestion — it does not tag or push anything. Review
-# it, then follow docs/developers/releasing.md's own tagging steps.
+# it, then follow docs/developers/releasing.md's own tagging steps. A
+# product milestone (a new app, say) may take a major bump by hand even
+# with no breaking change; that is a judgement this script doesn't make.
 set -euo pipefail
 
 last_tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
