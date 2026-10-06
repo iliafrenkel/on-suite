@@ -24,7 +24,7 @@ func imageLink(sources map[string]string) func(src string) string {
 func articleMarkdown(art Article, tags []string, hls []Highlight, sources map[string]string) string {
 	parts := []string{"# " + mdEscape(mdOneLine(art.Title))}
 
-	meta := []string{"Source: <" + art.URL + ">"}
+	meta := []string{"Source: <" + mdLink(art.URL) + ">"}
 	if b := mdOneLine(art.Byline); b != "" {
 		meta = append(meta, "Author: "+mdEscape(b))
 	}

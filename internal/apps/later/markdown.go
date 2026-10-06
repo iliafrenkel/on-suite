@@ -291,6 +291,10 @@ func mdParagraph(run string) string {
 	var lines []string
 	for _, l := range strings.Split(run, "\n") {
 		if l = strings.Join(strings.Fields(l), " "); l != "" {
+			// A literal "[" is always escaped, so "![" can only be a "!" in
+			// the text right before a link, which Markdown would show as an
+			// image.
+			l = strings.ReplaceAll(l, "![", "\\![")
 			lines = append(lines, mdLineStart(l))
 		}
 	}

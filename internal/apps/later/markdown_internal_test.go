@@ -21,6 +21,7 @@ func TestHTMLToMarkdown(t *testing.T) {
 		{"emphasis keeps spaces outside", `<p>a<em> b </em>c</p>`, 0, "a *b* c"},
 		{"strong and strike", `<p><strong>bold</strong> <b>b</b> <del>gone</del> <s>x</s></p>`, 0, "**bold** **b** ~~gone~~ ~~x~~"},
 		{"link", `<p>See <a href="https://e.example/a_(b)" rel="nofollow">here</a>.</p>`, 0, "See [here](https://e.example/a_%28b%29)."},
+		{"bang before a link stays text", `<p>Wow!<a href="https://e.example/">x</a></p>`, 0, "Wow\\![x](https://e.example/)"},
 		{"link without text is dropped", `<p><a href="https://e.example/"></a>x</p>`, 0, "x"},
 		{"inline escaping", `<p>a*b_c [d] \e &lt;f&gt; ~g</p>`, 0, `a\*b\_c \[d\] \\e \<f> \~g`},
 		{"line starts escaped", `<p># not a heading</p><p>1. not a list</p><p>- nor this</p>`, 0, "\\# not a heading\n\n1\\. not a list\n\n\\- nor this"},
