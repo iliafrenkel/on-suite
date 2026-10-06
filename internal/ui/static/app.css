@@ -3685,7 +3685,7 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-margin-note[hidden] { display: none; }
 /* The 💬 marker for a commented highlight when there is no margin. CSS
    content is not part of textContent, so offsets don't move. */
-.later-hl-commented.later-hl-end::after { content: "💬"; font-size: .75em; margin-left: .15em; }
+.later-hl-commented.later-hl-end::after { content: "💬"; font-size: .9em; margin-left: .15em; }
 .later-has-margin .later-hl-commented.later-hl-end::after { content: none; }
 .later-font-serif .later-article-body { font-family: 'Source Serif 4', Georgia, serif; }
 .later-font-sans .later-article-body { font-family: var(--font-ui); }
@@ -3699,6 +3699,10 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-article-body { line-height: 1.65; overflow-wrap: anywhere; }
 .later-article-body img { max-width: 100%; height: auto; }
 .later-article-body pre { overflow-x: auto; }
+/* A code block's fill is close to the highlight tint, so a highlight in
+ * code gets a stronger tint and an underline (#517). */
+.later-article-body pre .later-hl { background: color-mix(in srgb, var(--c-accent-attention) 25%, transparent);
+  box-shadow: inset 0 -2px var(--c-accent-attention); }
 .later-article-body table { display: block; max-width: 100%; overflow-x: auto; }
 .later-linkonly { border: var(--border); border-radius: var(--radius); padding: 1rem; background: var(--c-bg-subtle); }
 .later-linkonly textarea { width: 100%; }
@@ -3712,7 +3716,7 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-notes-open:checked ~ .later-notes { transform: none; visibility: visible; }
 .later-notes-head { display: flex; align-items: center; justify-content: space-between; }
 .later-notes-head h2 { margin: 0; font-size: var(--fs-lg); }
-.later-notes h3 { margin: 0; font-size: var(--fs-base); }
+.later-notes h3 { margin: var(--s-5) 0 0; font-size: var(--fs-base); }
 .later-notes-close { cursor: pointer; padding: .2rem .5rem; }
 .later-notes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .75rem; }
 .later-popover { position: absolute; z-index: 4; width: min(20rem, calc(100vw - 1rem)); padding: .75rem;

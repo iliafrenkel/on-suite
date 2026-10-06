@@ -6,13 +6,13 @@
 <div class="later-reader later-font-{{$d.Prefs.Font}} later-size-{{$d.Prefs.Size}} later-width-{{$d.Prefs.Width}}"
      id="later-reader" data-article-id="{{$d.ID}}" data-minutes="{{$d.Minutes}}"
      {{if not $d.LinkOnly}}data-progress="{{$d.Progress}}"{{end}}>
-	<input type="checkbox" id="later-notes-open" class="visually-hidden later-notes-open" aria-controls="later-notes">
+	<input type="checkbox" id="later-notes-open" class="visually-hidden later-notes-open" aria-controls="later-notes" aria-labelledby="later-notes-toggle">
 	<div class="later-sticky">
 	<div class="later-topbar">
 		<a class="later-back" href="/later/?tab={{$d.Tab}}">← Later</a>
 		<span class="later-topbar-title">{{$d.Title}}</span>
 		{{if not $d.LinkOnly}}<span class="later-left" data-later-left>{{$d.Minutes}} min left</span>{{end}}
-		<label class="later-notes-toggle" for="later-notes-open">Notes · {{template "later-notes-count" $d}}</label>
+		<label class="later-notes-toggle" id="later-notes-toggle" for="later-notes-open">Notes · {{template "later-notes-count" $d}}</label>
 		<details class="later-menu later-aa">
 			<summary aria-label="Reading settings">Aa</summary>
 			<div class="later-menu-panel stack">
@@ -193,7 +193,7 @@
 
 {{define "later-note-text"}}<textarea id="later-note-{{.Copy}}" name="note" rows="{{if eq .Copy "panel"}}8{{else}}5{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.D.Note}}</textarea>{{end}}
 
-{{define "later-note-saved"}}{{template "later-note-text" (dict "D" .D "Copy" .Other "OOB" true)}}<span class="later-note-status" id="later-note-status-{{.Copy}}" role="status" hx-swap-oob="innerHTML">Saved</span>{{end}}
+{{define "later-note-saved"}}{{template "later-note-text" (dict "D" .D "Copy" .Other "OOB" true)}}<span class="later-note-status" id="later-note-status-{{.Copy}}" role="status" hx-swap-oob="innerHTML">Saved</span><span class="later-note-status" id="later-note-status-{{.Other}}" role="status" hx-swap-oob="innerHTML"></span>{{end}}
 
 {{define "later-notes-count"}}<span id="later-notes-count"{{if .OOB}} hx-swap-oob="true"{{end}}>{{len .Highlights}}</span>{{end}}
 

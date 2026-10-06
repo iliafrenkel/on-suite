@@ -124,6 +124,19 @@
 		var editForm = edit.querySelector("[data-later-hl-edit-form]");
 		var deleteForm = edit.querySelector("[data-later-hl-delete-form]");
 		var editError = edit.querySelector("[data-later-hl-error]");
+		var returnTo = null; // the highlight id whose Edit button opened the popover
+
+		// closeEdit hides the popover and, when the panel's Edit button opened
+		// it, puts focus back there. The button is found afresh because a save
+		// redraws the notes list.
+		var closeEdit = function (refocus) {
+			edit.hidden = true;
+			var id = returnTo;
+			returnTo = null;
+			if (!refocus || !id) return;
+			var btn = document.querySelector('.later-notes-item[data-highlight-id="' + id + '"] .later-notes-edit');
+			if (btn) btn.focus();
+		};
 
 		var openEdit = function (id, anchor) {
 			var item = document.querySelector('.later-notes-item[data-highlight-id="' + id + '"]');
@@ -140,6 +153,7 @@
 			editError.hidden = true;
 			close(); // the new-highlight popover
 			edit.hidden = false;
+			returnTo = anchor.matches(".later-notes-edit") ? id : null;
 			place(edit, anchor.getBoundingClientRect());
 			editForm.elements.comment.focus();
 		};
@@ -154,15 +168,16 @@
 				openEdit(opener.dataset.laterHlOpen || opener.dataset.highlightId, opener);
 				return;
 			}
-			if (!edit.hidden && !edit.contains(e.target)) edit.hidden = true;
+			// An outside click leaves focus where the click put it.
+			if (!edit.hidden && !edit.contains(e.target)) closeEdit(false);
 		});
 		document.addEventListener("keydown", function (e) {
-			if (e.key !== "Escape" || document.querySelector("dialog[open]")) return;
-			edit.hidden = true;
+			if (e.key !== "Escape" || edit.hidden || document.querySelector("dialog[open]")) return;
+			closeEdit(true);
 		});
 		document.body.addEventListener("htmx:afterRequest", function (e) {
 			if (e.detail.elt !== editForm && e.detail.elt !== deleteForm) return;
-			if (e.detail.successful) { edit.hidden = true; return; }
+			if (e.detail.successful) { closeEdit(true); return; }
 			editError.textContent = "Couldn't save that. Try again.";
 			editError.hidden = false;
 		});
