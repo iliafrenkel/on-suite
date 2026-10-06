@@ -3,11 +3,13 @@ package later_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -205,5 +207,138 @@ func TestDownloadImagesBackFillsAndKeepsImagesForever(t *testing.T) {
 	s.Clock.Advance(365 * 24 * time.Hour)
 	if rec := getImage(s, s.Alice, pic); rec.Code != 200 || !bytes.Equal(rec.Body.Bytes(), tinyPNG(t)) {
 		t.Errorf("image after a year: status %d", rec.Code)
+	}
+}
+
+// blockingOrigin serves a PNG at any path, but only once release is closed.
+// It counts requests in flight and the most it ever saw at once.
+type blockingOrigin struct {
+	*httptest.Server
+	release           chan struct{}
+	arrived           chan struct{}
+	inFlight, maxSeen atomic.Int32
+}
+
+func newBlockingOrigin(t *testing.T) *blockingOrigin {
+	t.Helper()
+	pic := tinyPNG(t)
+	o := &blockingOrigin{release: make(chan struct{}), arrived: make(chan struct{}, 64)}
+	o.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := o.inFlight.Add(1)
+		defer o.inFlight.Add(-1)
+		for {
+			m := o.maxSeen.Load()
+			if n <= m || o.maxSeen.CompareAndSwap(m, n) {
+				break
+			}
+		}
+		o.arrived <- struct{}{}
+		select {
+		case <-o.release:
+		case <-r.Context().Done():
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pic)
+	}))
+	t.Cleanup(o.Close)
+	t.Cleanup(func() {
+		select {
+		case <-o.release:
+		default:
+			close(o.release)
+		}
+	})
+	return o
+}
+
+// seedImages saves an article for Alice linking n images on o; it returns
+// their hashes.
+func seedImages(t *testing.T, s *server, o *blockingOrigin, n int) []string {
+	t.Helper()
+	imgs := map[string]string{}
+	var hashes []string
+	for i := 0; i < n; i++ {
+		src := fmt.Sprintf("%s/%d.png", o.URL, i)
+		h := webfetch.URLHash(src)
+		imgs[h] = src
+		hashes = append(hashes, h)
+	}
+	seed(t, s, s.Alice.User.ID, later.NewArticle{URL: o.URL + "/essay", Title: "Pictures", ContentHTML: "<p>x</p>", Images: imgs})
+	return hashes
+}
+
+func TestImageFetchesAreBoundedToFourAtOnce(t *testing.T) {
+	s, a := newSaveServer(t)
+	a.AllowPrivateFetchesForTest()
+	o := newBlockingOrigin(t)
+	hashes := seedImages(t, s, o, 6)
+
+	var wg sync.WaitGroup
+	codes := make([]int, len(hashes))
+	for i, h := range hashes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			codes[i] = getImage(s, s.Alice, h).Code
+		}()
+	}
+	for range 4 {
+		select {
+		case <-o.arrived:
+		case <-time.After(5 * time.Second):
+			t.Fatal("fewer than 4 fetches started")
+		}
+	}
+	select {
+	case <-o.arrived:
+		t.Error("a fifth fetch started while four were in flight")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(o.release)
+	wg.Wait()
+	if m := o.maxSeen.Load(); m != 4 {
+		t.Errorf("most fetches at once = %d, want 4", m)
+	}
+	for i, c := range codes {
+		if c != http.StatusOK {
+			t.Errorf("image %d status = %d, want 200", i, c)
+		}
+	}
+}
+
+// The viewer leaving says nothing about the publisher's image, so a
+// canceled request records no failure and leaves the image retryable.
+func TestACanceledImageFetchRecordsNoFailure(t *testing.T) {
+	s, a := newSaveServer(t)
+	a.AllowPrivateFetchesForTest()
+	o := newBlockingOrigin(t)
+	hash := seedImages(t, s, o, 1)[0]
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("GET", "/later/img/"+hash, nil).WithContext(ctx)
+	for _, c := range s.Alice.Cookies {
+		req.AddCookie(c)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.Handler.ServeHTTP(httptest.NewRecorder(), req)
+	}()
+	select {
+	case <-o.arrived:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the fetch never started")
+	}
+	cancel()
+	<-done
+
+	img, err := s.Store.ImageForUser(context.Background(), s.Alice.User.ID, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img.ErrorCount != 0 || !img.FetchedAt.IsZero() || img.Cached() {
+		t.Errorf("after a canceled fetch: ErrorCount %d, FetchedAt %v, cached %v; want nothing recorded",
+			img.ErrorCount, img.FetchedAt, img.Cached())
 	}
 }

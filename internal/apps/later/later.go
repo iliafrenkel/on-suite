@@ -105,9 +105,19 @@ const imageDownloadBatch = 50
 func (a *App) Jobs(deps app.Deps) []app.Job {
 	return []app.Job{{
 		Name:        "download images",
-		Description: "Downloads and keeps images of saved articles that haven't been stored yet.",
+		Description: "Downloads and keeps images of saved articles that haven't been stored yet, frees images no article uses, and guesses icons for sites without one.",
 		Every:       imageDownloadEvery,
 		Run: func(ctx context.Context) error {
+			if n, err := a.store.SweepOrphanImages(ctx); err != nil {
+				return err
+			} else if n > 0 {
+				a.deps.Log.Info("later freed orphaned images", "count", n)
+			}
+			if n, err := a.store.GuessMissingFavicons(ctx); err != nil {
+				return err
+			} else if n > 0 {
+				a.deps.Log.Info("later guessed site favicons", "count", n)
+			}
 			n, err := a.DownloadImages(ctx, imageDownloadBatch)
 			if n > 0 {
 				a.deps.Log.Info("later stored article images", "count", n)

@@ -132,3 +132,17 @@ func (st *Store) ImageSources(ctx context.Context, articleID int64) (map[string]
 	}
 	return out, nil
 }
+
+// SweepOrphanImages deletes stored images no article links to any more.
+// Deleting an article sweeps its own images, but deleting a user only
+// cascades to the links, leaving the content-addressed rows behind (#509).
+func (st *Store) SweepOrphanImages(ctx context.Context) (int64, error) {
+	res, err := st.db.ExecContext(ctx, `
+		DELETE FROM later_images
+		 WHERE NOT EXISTS (SELECT 1 FROM later_article_images ai WHERE ai.hash = later_images.hash)`)
+	if err != nil {
+		return 0, fmt.Errorf("later: sweep orphan images: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}

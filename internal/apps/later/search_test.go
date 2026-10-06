@@ -3,6 +3,7 @@ package later_test
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -100,13 +101,36 @@ func TestSearchFindsEveryStateButOnlyYours(t *testing.T) {
 	}
 }
 
-func TestSearchRanksTitleMatchesFirst(t *testing.T) {
+// Every article below has a title and a body of the same length, so only
+// the column weights (title 10, text 1, highlights 4, note 4) can order
+// them: a title match first, then highlight and note matches, then text.
+func TestSearchRanksByWhereItMatched(t *testing.T) {
 	f := newFixture(t)
-	body := f.saveBody(t, f.alice.ID, "https://a.example/1", "Other things", "some gardening tips")
-	title := f.saveBody(t, f.alice.ID, "https://a.example/2", "Gardening", "nothing here")
-	got := hitIDs(f.search(t, "gardening", ""))
-	if len(got) != 2 || got[0] != title.ID || got[1] != body.ID {
-		t.Errorf("order = %v, want title match %d then body match %d", got, title.ID, body.ID)
+	ctx := context.Background()
+	const plain = "aaaa bbbb cccc dddd"
+	text := f.saveBody(t, f.alice.ID, "https://a.example/1", "Plain notes", "otter bbbb cccc dddd")
+	title := f.saveBody(t, f.alice.ID, "https://a.example/2", "Otter notes", plain)
+	hl := f.saveBody(t, f.alice.ID, "https://a.example/3", "Plain notes", plain)
+	if _, err := f.store.AddHighlight(ctx, hl.ID, hl.ContentText, 0, 4, "aaaa", "otter"); err != nil {
+		t.Fatal(err)
+	}
+	note := f.saveBody(t, f.alice.ID, "https://a.example/4", "Plain notes", plain)
+	if err := f.store.SetNote(ctx, f.alice.ID, note.ID, "otter"); err != nil {
+		t.Fatal(err)
+	}
+
+	got := hitIDs(f.search(t, "otter", ""))
+	if len(got) != 4 {
+		t.Fatalf("hits = %v, want 4", got)
+	}
+	if got[0] != title.ID {
+		t.Errorf("first = %d, want the title match %d", got[0], title.ID)
+	}
+	if mid := []int64{got[1], got[2]}; !slices.Contains(mid, hl.ID) || !slices.Contains(mid, note.ID) {
+		t.Errorf("middle = %v, want the highlight %d and note %d matches", mid, hl.ID, note.ID)
+	}
+	if got[3] != text.ID {
+		t.Errorf("last = %d, want the text match %d", got[3], text.ID)
 	}
 }
 

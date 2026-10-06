@@ -217,21 +217,8 @@ func (st *Store) Save(ctx context.Context, userID int64, n NewArticle) (Article,
 		}
 	}
 	if n.FaviconURL != "" {
-		h := webfetch.URLHash(n.FaviconURL)
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO later_favicons (hash, src_url) VALUES (?, ?) ON CONFLICT (hash) DO NOTHING`,
-			h, n.FaviconURL); err != nil {
-			return Article{}, false, fmt.Errorf("later: save favicon: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx,
-			// First icon wins, unless the mapped one has been given up on:
-			// then a newly discovered icon repairs the site.
-			`INSERT INTO later_site_favicons (site_host, hash) VALUES (?, ?)
-			 ON CONFLICT (site_host) DO UPDATE SET hash = excluded.hash
-			  WHERE excluded.hash <> later_site_favicons.hash
-			    AND (SELECT error_count FROM later_favicons WHERE hash = later_site_favicons.hash) >= ?`,
-			host, h, webfetch.MaxImageAttempts); err != nil {
-			return Article{}, false, fmt.Errorf("later: link favicon: %w", err)
+		if err := linkSiteFavicon(ctx, tx, host, n.FaviconURL); err != nil {
+			return Article{}, false, err
 		}
 	}
 	if err := linkTags(ctx, tx, userID, id, cleanTags(n.Tags)); err != nil {
@@ -261,6 +248,27 @@ var listOrder = map[State]string{
 	StateUnread:   "a.saved_at DESC, a.id DESC",
 	StateReading:  "a.opened_at DESC, a.id DESC",
 	StateArchived: "a.archived_at DESC, a.id DESC",
+}
+
+// linkSiteFavicon records iconURL as host's icon. The first icon wins,
+// unless the mapped one has been given up on: then a newly discovered icon
+// repairs the site.
+func linkSiteFavicon(ctx context.Context, tx *sql.Tx, host, iconURL string) error {
+	h := webfetch.URLHash(iconURL)
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO later_favicons (hash, src_url) VALUES (?, ?) ON CONFLICT (hash) DO NOTHING`,
+		h, iconURL); err != nil {
+		return fmt.Errorf("later: save favicon: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO later_site_favicons (site_host, hash) VALUES (?, ?)
+		ON CONFLICT (site_host) DO UPDATE SET hash = excluded.hash
+		 WHERE excluded.hash <> later_site_favicons.hash
+		   AND (SELECT error_count FROM later_favicons WHERE hash = later_site_favicons.hash) >= ?`,
+		host, h, webfetch.MaxImageAttempts); err != nil {
+		return fmt.Errorf("later: link favicon: %w", err)
+	}
+	return nil
 }
 
 // listSelect is every column scanListItem reads: an article a, the favicon

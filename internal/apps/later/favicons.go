@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
+	"github.com/iliafrenkel/on-suite/internal/platform/favicon"
 	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
@@ -65,6 +66,57 @@ func (st *Store) SaveFaviconFailure(ctx context.Context, hash, msg string) error
 		UPDATE later_favicons
 		   SET error_count = error_count + 1, last_error = ?, fetched_at = ?
 		 WHERE hash = ?`, msg, db.FormatTime(st.now()), hash)
+}
+
+// GuessMissingFavicons gives every site with articles but no icon the
+// /favicon.ico guess, as Save does for a link-only item. Articles saved
+// before site icons existed have none, and saving the same URL again
+// returns early, so without this their sites keep letter badges (#514).
+// The guess is made from one of the site's own article URLs, so it keeps
+// the scheme and any "www." the site_host drops.
+func (st *Store) GuessMissingFavicons(ctx context.Context) (int, error) {
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("later: begin favicon guess: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT a.site_host, min(a.url)
+		  FROM later_articles a
+		 WHERE a.site_host <> ''
+		   AND NOT EXISTS (SELECT 1 FROM later_site_favicons sf WHERE sf.site_host = a.site_host)
+		 GROUP BY a.site_host`)
+	if err != nil {
+		return 0, fmt.Errorf("later: sites without favicons: %w", err)
+	}
+	guesses := map[string]string{}
+	for rows.Next() {
+		var host, pageURL string
+		if err := rows.Scan(&host, &pageURL); err != nil {
+			_ = rows.Close()
+			return 0, fmt.Errorf("later: sites without favicons: %w", err)
+		}
+		if icon := favicon.Discover(nil, pageURL); icon != "" {
+			guesses[host] = icon
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, fmt.Errorf("later: sites without favicons: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, fmt.Errorf("later: sites without favicons: %w", err)
+	}
+	for host, icon := range guesses {
+		if err := linkSiteFavicon(ctx, tx, host, icon); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("later: commit favicon guess: %w", err)
+	}
+	return len(guesses), nil
 }
 
 // bareNotFound answers a missing icon with a status only. The list asks for
