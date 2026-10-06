@@ -53,6 +53,9 @@ func TestExportCmdWritesJSONToStdout(t *testing.T) {
 	if _, ok := doc.Apps["paste"]; !ok {
 		t.Errorf("no paste key in apps: %v", doc.Apps)
 	}
+	if _, ok := doc.Apps["later"]; !ok {
+		t.Errorf("no later key in apps: %v", doc.Apps)
+	}
 }
 
 func TestExportCmdWritesToAFile(t *testing.T) {

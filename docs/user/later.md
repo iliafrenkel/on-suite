@@ -121,6 +121,11 @@ comments, and then the article itself. Pictures become links to where
 they came from. Markdown is plain text, so any text editor opens it, and
 note-taking apps such as Obsidian show it formatted.
 
+The admin can also export all your ON Notes, ON Paste, ON Reader, ON Later
+and ON Flash data as a single file for you. Ask them if you'd like a
+complete copy (the [Admin guide](admin.md#exporting-someones-data)
+explains how).
+
 ## Deleting an article
 
 Each article in the list has a **⋯** menu to archive, move back to

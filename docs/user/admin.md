@@ -269,10 +269,12 @@ running. The self-hosting guide explains
 onsuite export sam --data-dir /var/lib/onsuite --out sam.json
 ```
 
-This writes one person's ON Notes, ON Paste, ON Reader and ON Flash data
-into a single file you can give them. ON Flash decks come with their review
+This writes one person's ON Notes, ON Paste, ON Reader, ON Later and ON
+Flash data into a single file you can give them. ON Flash decks come with their review
 progress; pictures and sounds uploaded to cards aren't included, only ones
-added from a web address.
+added from a web address. ON Later articles come with their text,
+highlights, comments, notes and tags; their pictures aren't included, only
+the web address each one came from.
 Shared ON Notes bullets keep their share link in the file, so treat the
 file as private; ON Paste's share links aren't included. See
 [Exporting your data](https://github.com/iliafrenkel/on-suite/blob/main/docs/self-hosting/deploying.md#exporting-your-data).

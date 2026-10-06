@@ -14,6 +14,7 @@ import (
 var (
 	_ app.App       = (*App)(nil)
 	_ app.Scheduler = (*App)(nil)
+	_ app.Exporter  = (*App)(nil)
 )
 
 //go:embed templates/*.html
