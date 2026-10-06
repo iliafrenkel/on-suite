@@ -85,6 +85,9 @@ appear.
   counts once), **Articles**, **Cached images** and **Last poll** (how
   long ago a feed was last checked). **Failing feeds** appears only when a
   feed keeps failing to load; ON Reader then tries it less often.
+- **ON Later** — **Articles** saved by everyone, split into **Unread**,
+  **Reading** and **Archived**, the number of **Highlights**, and **Stored
+  images** (how much space the pictures kept with saved articles take).
 
 ## Managing users
 
@@ -194,6 +197,9 @@ The jobs are:
   ON Reader's search up to date.
 - **purge orphan media and tags** — once a day, deletes ON Flash pictures,
   sounds and tags that no card uses any more.
+- **download images** — every 10 minutes, downloads the pictures in saved
+  ON Later articles that haven't been stored yet, so an article keeps its
+  pictures even if the original site removes them.
 
 ### Running a job now
 
@@ -269,10 +275,12 @@ running. The self-hosting guide explains
 onsuite export sam --data-dir /var/lib/onsuite --out sam.json
 ```
 
-This writes one person's ON Notes, ON Paste, ON Reader and ON Flash data
-into a single file you can give them. ON Flash decks come with their review
-progress; pictures and sounds uploaded to cards aren't included, only ones
-added from a web address.
+This writes one person's ON Notes, ON Paste, ON Reader, ON Later and ON
+Flash data into a single file you can give them. ON Flash decks come with
+their review progress; pictures and sounds uploaded to cards aren't
+included, only ones added from a web address. ON Later articles come with
+their text, highlights, comments, notes and tags; their pictures aren't
+included, only the web address each one came from.
 Shared ON Notes bullets keep their share link in the file, so treat the
 file as private; ON Paste's share links aren't included. See
 [Exporting your data](https://github.com/iliafrenkel/on-suite/blob/main/docs/self-hosting/deploying.md#exporting-your-data).

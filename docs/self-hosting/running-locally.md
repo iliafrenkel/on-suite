@@ -163,7 +163,7 @@ cat > ~/.local/share/applications/onsuite.desktop <<EOF
 [Desktop Entry]
 Type=Application
 Name=ON Suite
-Comment=Notes, snippets, feeds and flash cards
+Comment=Notes, snippets, feeds, saved articles and flash cards
 Exec=$HOME/.local/opt/onsuite/onsuite-launch
 Terminal=true
 Categories=Office;

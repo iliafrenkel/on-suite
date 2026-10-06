@@ -14,6 +14,8 @@ import (
 var (
 	_ app.App       = (*App)(nil)
 	_ app.Scheduler = (*App)(nil)
+	_ app.Exporter  = (*App)(nil)
+	_ app.Stater    = (*App)(nil)
 )
 
 //go:embed templates/*.html
@@ -78,6 +80,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /a/{id}/progress", a.progress)
 	r.HandleFunc("POST /a/{id}/note", a.setNote)
 	r.HandleFunc("POST /a/{id}/tags", a.setTags)
+	r.HandleFunc("GET /a/{id}/markdown", a.markdown)
 	r.HandleFunc("POST /prefs", a.setPrefs)
 	r.HandleFunc("POST /a/{id}/highlights", a.addHighlight)
 	r.HandleFunc("POST /a/{id}/highlights/comment", a.changeHighlight(func(r *http.Request, art Article, hid int64) error {

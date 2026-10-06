@@ -105,6 +105,7 @@ func Seed(ctx context.Context, dataDir string, now time.Time) (string, error) {
 		func() error { return seedPastes(ctx, paste.NewStore(handle), demo.ID, now, dataDir) },
 		func() error { return seedNotes(ctx, notes.NewStore(handle), demo.ID, now, dataDir) },
 		func() error { return seedReader(ctx, reader.NewStore(handle), demo.ID, now) },
+		func() error { return seedLater(ctx, later.NewStore(handle), demo.ID, now) },
 		func() error { return seedFlash(ctx, flash.NewStore(handle), demo.ID, sam.ID, now) },
 	}
 	for _, step := range steps {

@@ -114,8 +114,8 @@ HTMX is vendored at `internal/ui/static/htmx.min.js` (see `VENDOR.md` next
 to it) and loaded by `base.html` together with three small platform scripts:
 `theme.js`, `htmx-notices.js` and `connectivity.js`. Apps that need
 behaviour HTMX can't express ship one script of their own —
-`notes.js`, `reader.js`, `flash.js` — embedded and served from a route in
-the app.
+`notes.js`, `reader.js`, `flash.js`, `later.js` and `highlight.js` —
+embedded and served from a route in the app.
 
 For an HTMX request, a handler usually renders one named block instead of
 the whole page, with `Render.Fragment(w, status, "paste/index",

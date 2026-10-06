@@ -73,6 +73,7 @@
 					<input id="later-tags-input" name="tags" type="text" value="{{$d.TagsValue}}" placeholder="essays, ai" autocomplete="off">
 					<button type="submit">Save tags</button>
 				</form>
+				<a href="/later/a/{{$d.ID}}/markdown" download>Download as Markdown</a>
 				{{/* The href is safe: NormalizeURL only stores http(s) URLs. */}}
 				<a href="{{$d.URL}}" target="_blank" rel="noopener noreferrer">Open original</a>
 				<form method="post" action="/later/a/{{$d.ID}}/delete"

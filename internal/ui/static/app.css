@@ -3653,6 +3653,7 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-menu > summary { list-style: none; cursor: pointer; padding: .2rem .5rem; border: var(--border); border-radius: var(--radius); }
 .later-menu > summary::-webkit-details-marker { display: none; }
 .later-menu-panel { position: absolute; right: 0; top: calc(100% + .25rem); min-width: 13rem; padding: .75rem; background: var(--c-bg); border: var(--border); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+.later-menu-panel > a { display: block; }
 @media (max-width: 40rem) {
   .later-menu { position: static; }
   .later-save { flex-wrap: wrap; }

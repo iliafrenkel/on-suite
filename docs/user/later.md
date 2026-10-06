@@ -46,6 +46,8 @@ Articles are in three lists:
 - **Archived** — finished. Click **Archive** when you're done with an
   article; **Move to unread** brings it back.
 
+![The ON Later list: Unread, Reading and Archived tabs, tag chips, and rows with reading time, tags and a link-only article](images/later-list.png)
+
 ## Tags
 
 Tags group articles however suits you — `essays`, `work`, `to cook`.
@@ -74,6 +76,8 @@ searched for marked.
 A selected tag narrows the search too. Click **Clear search**, or empty the
 box, to go back to the list you were on.
 
+![Search results for "patience", each with a line showing whether it matched in a highlight, the note or the text](images/later-search.png)
+
 ## Reading an article
 
 An article opens full screen. The top bar has:
@@ -84,8 +88,10 @@ An article opens full screen. The top bar has:
 - **Notes** — opens the Notes panel (see below).
 - **Archive** — move the article to Archived (or **Move to unread** if it
   is already archived).
-- **⋯** — **Open original** opens the saved page on its own site, and
-  **Delete** removes the article.
+- **⋯** — change the article's **Tags**, **Download as Markdown**, **Open
+  original** to see the page on its own site, or **Delete** the article.
+
+![An article open in ON Later, with highlighted passages and their comments in the margin](images/later-reading.png)
 
 ON Later remembers where you stopped and opens there next time. The
 line under the top bar shows how far through you are, and the bar shows the
@@ -97,6 +103,8 @@ minutes left. **Move to unread** starts the article again from the top.
 the whole article in the note at the top; it saves when you click
 elsewhere. The same note is at the end of the article, so you can write
 it as soon as you finish reading.
+
+![The Notes panel open beside the article, with the note at the top and every highlight listed below it](images/later-notes.png)
 
 Select a passage in the article and a small box appears under it.
 Click **Highlight** to mark it, or **Highlight + comment** to add a
@@ -111,6 +119,20 @@ highlights each article has.
 Click a highlight (or **Edit** next to it in the Notes panel) to change
 its comment or delete it. Deleting a highlight that has a comment asks
 first.
+
+## Downloading an article
+
+To keep a copy outside ON Suite, open the article, choose **⋯**, then
+**Download as Markdown**. You get a file called `later-article.md` with
+the title, the original address, your note, your highlights with their
+comments, and then the article itself. Pictures become links to where
+they came from. Markdown is plain text, so any text editor opens it, and
+note-taking apps such as Obsidian show it formatted.
+
+The admin can also export all your ON Notes, ON Paste, ON Reader, ON Later
+and ON Flash data as a single file for you. Ask them if you'd like a
+complete copy (the [Admin guide](admin.md#exporting-someones-data)
+explains how).
 
 ## Deleting an article
 

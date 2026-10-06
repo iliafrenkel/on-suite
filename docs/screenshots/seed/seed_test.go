@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
+	"github.com/iliafrenkel/on-suite/internal/apps/later"
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/apps/paste"
 	"github.com/iliafrenkel/on-suite/internal/apps/reader"
@@ -139,6 +140,21 @@ func TestSeedFillsEveryApp(t *testing.T) {
 		t.Errorf("reader daily stats = %+v, %v; want some reading history", days, err)
 	}
 
+	// Later: articles in every state, one link-only, highlights and a
+	// note — and nothing for the image job to fetch: the demo must never
+	// reach the network.
+	ls := later.NewStore(handle)
+	counts, err := ls.Counts(ctx, demo.ID, "")
+	if err != nil || counts[later.StateUnread] < 3 || counts[later.StateReading] < 1 || counts[later.StateArchived] < 1 {
+		t.Errorf("later counts = %v, %v; want unread >= 3, reading >= 1, archived >= 1", counts, err)
+	}
+	if hl, err := ls.Highlights(ctx, 1); err != nil || len(hl) < 3 {
+		t.Errorf("later article 1 highlights = %d, %v; want >= 3", len(hl), err)
+	}
+	if imgs, err := ls.ImagesToFetch(ctx, 100); err != nil || len(imgs) != 0 {
+		t.Errorf("later images to fetch = %d, %v; want none", len(imgs), err)
+	}
+
 	// Flash: decks with cards, a review history and a streak.
 	fs := flash.NewStore(handle)
 	decks, _ := fs.ListDecks(ctx, demo.ID)
@@ -165,11 +181,12 @@ var shotIDs = map[string]map[int64]string{
 	"notes":  {25: "Before we go"},
 	"reader": {10: "The Orionids peak this month: how to watch"},
 	"flash":  {1: "Japanese travel phrases", 2: "F1 circuits"},
+	"later":  {1: "The case for reading slowly"},
 }
 
 // shotIDRe finds the seeded IDs in shots.go URLs: /paste/3, /notes/25,
-// /reader/item/10, /flash/2/cards/, /flash/review/2.
-var shotIDRe = regexp.MustCompile(`URL: "/(paste|notes|reader/item|flash(?:/review)?)/(\d+)`)
+// /reader/item/10, /flash/2/cards/, /flash/review/2, /later/a/1.
+var shotIDRe = regexp.MustCompile(`URL: "/(paste|notes|reader/item|flash(?:/review)?|later/a)/(\d+)`)
 
 func TestShotIDsPointAtTheIntendedItems(t *testing.T) {
 	src, err := os.ReadFile("../capture/shots.go")
@@ -215,6 +232,10 @@ func TestShotIDsPointAtTheIntendedItems(t *testing.T) {
 		"reader": func(id int64) (string, error) {
 			it, err := reader.NewStore(handle).Item(ctx, demo.ID, id)
 			return it.Title, err
+		},
+		"later": func(id int64) (string, error) {
+			a, err := later.NewStore(handle).Article(ctx, demo.ID, id)
+			return a.Title, err
 		},
 		"flash": func(id int64) (string, error) {
 			d, err := flash.NewStore(handle).DeckByID(ctx, demo.ID, id)

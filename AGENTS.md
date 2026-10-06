@@ -10,9 +10,11 @@ not built for SaaS scale — no multi-tenancy, no CGO, no Node/npm/JS build
 step. **ON Paste** (snippets with syntax highlighting and shareable links),
 **ON Notes** (a hierarchical outliner, still being built out), **ON
 Reader** (a feed reader, with search, OPML import/export, full-article
-extraction, and reading-stats), and **ON Flash** (flash cards with FSRS
-review, import from AI-written Markdown/JSON, media, household sharing and
-stats) are all registered today.
+extraction, and reading-stats), **ON Later** (a read-it-later app: save
+pages, read them in a calm view, highlight, comment and tag them, export as
+Markdown), and **ON Flash** (flash cards with FSRS review, import from
+AI-written Markdown/JSON, media, household sharing and stats) are all
+registered today.
 
 Full rationale for every design choice below lives in
 [docs/superpowers/specs/2026-08-18-on-suite-platform-design.md](docs/superpowers/specs/2026-08-18-on-suite-platform-design.md).
