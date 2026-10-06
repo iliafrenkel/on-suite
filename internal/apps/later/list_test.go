@@ -131,6 +131,39 @@ func TestLoadMoreKeepsTheTag(t *testing.T) {
 	}
 }
 
+// The next page of a tagged list holds only that tag's rows.
+func TestLoadMoreFragmentKeepsTheTag(t *testing.T) {
+	s := newServer(t)
+	for i := 0; i < 3; i++ {
+		seedTagged(t, s, fmt.Sprintf("https://u.example/%d", i), fmt.Sprintf("Untagged %d", i))
+	}
+	for i := 0; i < 51; i++ {
+		seedTagged(t, s, fmt.Sprintf("https://p.example/%d", i), fmt.Sprintf("Item %d", i), "bulk")
+	}
+	req := httptest.NewRequest("GET", "/later/?tab=unread&tag=bulk&offset=50", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := s.Do(t, s.Alice, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	frag := htmlassert.Parse(t, rec.Body.String())
+	rows := texts(frag.QueryAll(".later-row-title"))
+	if len(rows) != 1 || !strings.HasPrefix(rows[0], "Item ") {
+		t.Errorf("next page = %q, want the one remaining bulk row", rows)
+	}
+}
+
+// ?tag= takes one tag: of a list, only the first counts.
+func TestTagParamUsesTheFirstTag(t *testing.T) {
+	s := newServer(t)
+	seedTagged(t, s, "https://a.example/1", "Tagged A", "a")
+	seedTagged(t, s, "https://a.example/2", "Tagged B", "b")
+	doc := s.Get(t, s.Alice, "/later/?tag=a,b")
+	if rows := texts(doc.QueryAll(".later-row-title")); len(rows) != 1 || rows[0] != "Tagged A" {
+		t.Errorf("?tag=a,b rows = %q, want [Tagged A]", rows)
+	}
+}
+
 func storedTags(t *testing.T, s *server, a later.Article) []string {
 	t.Helper()
 	got, err := s.Store.ArticleTags(context.Background(), s.Alice.User.ID, a.ID)
@@ -163,7 +196,13 @@ func TestSetTagsGoesBackToTheArticleByDefault(t *testing.T) {
 	s := newServer(t)
 	a := seedReadable(t, s)
 	s.Submit(t, s.Alice, articlePath(a, "/tags"), url.Values{"tags": {"x"}}, articlePath(a, ""))
-	s.Submit(t, s.Alice, articlePath(a, "/tags"), url.Values{"tags": {"x"}, "back": {"https://evil.example/"}}, articlePath(a, ""))
+	if got := storedTags(t, s, a); !slices.Equal(got, []string{"x"}) {
+		t.Errorf("tags = %q, want [x]", got)
+	}
+	s.Submit(t, s.Alice, articlePath(a, "/tags"), url.Values{"tags": {"y"}, "back": {"https://evil.example/"}}, articlePath(a, ""))
+	if got := storedTags(t, s, a); !slices.Equal(got, []string{"y"}) {
+		t.Errorf("tags = %q, want [y]", got)
+	}
 }
 
 func TestSetTagsOnSomeoneElsesArticleIs404(t *testing.T) {
