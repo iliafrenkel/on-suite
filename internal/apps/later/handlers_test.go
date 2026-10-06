@@ -444,11 +444,16 @@ func TestListIgnoresAMalformedSavedId(t *testing.T) {
 	}
 }
 
+// The list names its page "Articles", as Paste's says "Snippets", so the
+// crumb doesn't repeat the app name (#530).
 func TestListHasATitle(t *testing.T) {
 	s := newServer(t)
 	doc := s.Get(t, s.Alice, "/later/")
-	if got := htmlassert.Text(doc.MustHave("title")); !strings.Contains(got, "ON Later") {
-		t.Errorf("title = %q", got)
+	if got := htmlassert.Text(doc.MustHave("title")); got != "Articles · ON Suite" {
+		t.Errorf("title = %q, want Articles · ON Suite", got)
+	}
+	if got := strings.Join(strings.Fields(strings.ReplaceAll(htmlassert.Text(doc.MustHave("#shell-crumb-tail")), "/", " / ")), " "); got != "/ ON Later / Articles" {
+		t.Errorf("crumb tail = %q, want / ON Later / Articles", got)
 	}
 }
 

@@ -216,8 +216,8 @@ func (a *App) savedNote(r *http.Request, userID int64) *savedView {
 	}
 }
 
-func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, tab State, status int, form saveForm) {
-	a.renderListPage(w, r, userID, listQuery{Tab: tab}, 0, status, form, nil)
+func (a *App) renderIndex(w http.ResponseWriter, r *http.Request, userID int64, q listQuery, status int, form saveForm) {
+	a.renderListPage(w, r, userID, q, 0, status, form, nil)
 }
 
 // renderListPage draws the list page: a tab, or search results when the
@@ -283,7 +283,7 @@ func (a *App) renderListPage(w http.ResponseWriter, r *http.Request, userID int6
 		view.SearchStatus = searchStatus(len(rows), view.NextURL != "")
 	}
 
-	page := a.deps.Page(r, "ON Later")
+	page := a.deps.Page(r, "Articles")
 	page.Data = view
 	block := ""
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {

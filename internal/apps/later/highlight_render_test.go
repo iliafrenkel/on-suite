@@ -85,3 +85,20 @@ func TestRenderHighlightsNeverPutsAMarkInATableSection(t *testing.T) {
 		t.Errorf("drawing changed the text: %q", later.ContentText(got))
 	}
 }
+
+// Article ids come before the reading view's own in the DOM, so an article
+// id like later-margin would shadow the view's element (#518). Rendering
+// prefixes every article id, and the in-page links pointing at them, with
+// or without highlights to draw.
+func TestRenderHighlightsPrefixesArticleIDs(t *testing.T) {
+	in := `<h2 id="later-margin">Notes</h2><p><a href="#later-margin">up</a> <a href="https://x.example/#top">out</a> <a href="#">bare</a></p>`
+	want := `<h2 id="art-later-margin">Notes</h2><p><a href="#art-later-margin">up</a> <a href="https://x.example/#top">out</a> <a href="#">bare</a></p>`
+	if got := later.RenderHighlights(in, later.ContentText(in), nil); got != want {
+		t.Errorf("without highlights:\n got %s\nwant %s", got, want)
+	}
+	hs := []later.Highlight{hl(in, 1, 0, 5, "")}
+	got := later.RenderHighlights(in, later.ContentText(in), hs)
+	if !strings.Contains(got, `<h2 id="art-later-margin"><mark `) || !strings.Contains(got, `href="#art-later-margin"`) {
+		t.Errorf("with highlights: %s", got)
+	}
+}

@@ -427,6 +427,19 @@ func TestArticleFromAnotherUsersFeedIs404(t *testing.T) {
 	}
 }
 
+// The default view names its page "All articles", so the crumb doesn't
+// repeat the app name (#530).
+func TestDefaultViewCrumbSaysAllArticles(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/reader/")
+	if got := htmlassert.Text(doc.MustHave("title")); got != "All articles · ON Suite" {
+		t.Errorf("title = %q, want All articles · ON Suite", got)
+	}
+	if got := strings.Join(strings.Fields(strings.ReplaceAll(htmlassert.Text(doc.MustHave("#shell-crumb-tail")), "/", " / ")), " "); got != "/ ON Reader / All articles" {
+		t.Errorf("crumb tail = %q, want / ON Reader / All articles", got)
+	}
+}
+
 // TestSelectingAFeedUpdatesTheShellCrumb pins the shell OOB swap: without it,
 // selecting a feed over HTMX would replace the panes while leaving the page
 // <title> and breadcrumb showing whatever was there before — the exact

@@ -270,6 +270,45 @@ func TestSaveBoxKeepsTagsOnABadURL(t *testing.T) {
 	}
 }
 
+// A rejected save comes back to the tab and tag it was made from (#523).
+func TestSaveBoxKeepsTheTabAndTagOnABadURL(t *testing.T) {
+	s := newServer(t)
+	for _, a := range []later.Article{
+		seedTagged(t, s, "https://a.example/1", "Essay", "essays"),
+		seedTagged(t, s, "https://a.example/2", "Other", "misc"),
+	} {
+		if err := s.Store.SetState(context.Background(), s.Alice.User.ID, a.ID, later.StateArchived); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	doc := s.Get(t, s.Alice, "/later/?tab=archived&tag=essays")
+	if got := attr(t, doc, "form.later-save input[name=tab]", "value"); got != "archived" {
+		t.Errorf("save form tab = %q, want archived", got)
+	}
+	if got := attr(t, doc, "form.later-save input[name=tag]", "value"); got != "essays" {
+		t.Errorf("save form tag = %q, want essays", got)
+	}
+
+	rec := s.Post(t, s.Alice, "/later/save", url.Values{"url": {"not a url"}, "tab": {"archived"}, "tag": {"essays"}})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", rec.Code)
+	}
+	doc = htmlassert.Parse(t, rec.Body.String())
+	var current []string
+	for _, tab := range doc.QueryAll(".later-tab") {
+		if v, _ := htmlassert.Attr(tab, "aria-current"); v == "page" {
+			current = append(current, strings.Fields(htmlassert.Text(tab))[0])
+		}
+	}
+	if !slices.Equal(current, []string{"Archived"}) {
+		t.Errorf("current tab = %q, want [Archived]", current)
+	}
+	if rows := texts(doc.QueryAll(".later-row-title")); !slices.Equal(rows, []string{"Essay"}) {
+		t.Errorf("rows = %q, want the essays-tagged archived row", rows)
+	}
+}
+
 func TestPopupHasATagsField(t *testing.T) {
 	s := newServer(t)
 	doc := s.Get(t, s.Alice, "/later/save?url=https://example.com/a")
