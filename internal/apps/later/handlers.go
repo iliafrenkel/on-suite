@@ -140,11 +140,12 @@ type articleView struct {
 	Byline  string
 	Minutes int
 	SavedAt time.Time
-	// Body is ContentHTML or RenderHighlights over it. This is the only
+	// Body is RenderHighlights over ContentHTML. This is the only
 	// template.HTML conversion in the app, and it is safe because ContentHTML
 	// is only ever article.SanitizeWithImages output (the save path) or
 	// PastedHTML output (every character escaped); nothing else can write the
-	// column. RenderHighlights re-serialises that parsed tree and adds only
+	// column. RenderHighlights re-serialises that parsed tree, prefixes its
+	// existing ids and fragment hrefs with a fixed string, and adds only
 	// <mark> elements whose attributes this package builds from integers and
 	// fixed class names.
 	Body      template.HTML

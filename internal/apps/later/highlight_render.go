@@ -15,11 +15,14 @@ import (
 // does, so the text it counts is exactly the text the offsets index into.
 // A highlight crossing element boundaries becomes one <mark> per text node
 // it touches; the first carries id="later-h-{ID}" for links to it.
+//
+// It also gives every article id, and every in-page link to one, the
+// articleIDPrefix, highlights or not: the article comes before the reading
+// view's own elements, so an article id such as "later-margin" would
+// otherwise be the one getElementById finds (#518). Ids aren't text, so
+// highlight offsets are unaffected.
 func RenderHighlights(fragment, text string, hs []Highlight) string {
 	spans := drawable(text, hs)
-	if len(spans) == 0 {
-		return fragment
-	}
 	ctx := &xhtml.Node{Type: xhtml.ElementNode, Data: "body", DataAtom: atom.Body}
 	nodes, err := xhtml.ParseFragment(strings.NewReader(fragment), ctx)
 	if err != nil {
@@ -30,8 +33,11 @@ func RenderHighlights(fragment, text string, hs []Highlight) string {
 	for _, n := range nodes {
 		root.AppendChild(n)
 	}
-	m := marker{spans: spans, started: map[int64]bool{}}
-	m.walk(root)
+	prefixIDs(root)
+	if len(spans) > 0 {
+		m := marker{spans: spans, started: map[int64]bool{}}
+		m.walk(root)
+	}
 	var b strings.Builder
 	for c := root.FirstChild; c != nil; c = c.NextSibling {
 		if err := xhtml.Render(&b, c); err != nil {
@@ -39,6 +45,30 @@ func RenderHighlights(fragment, text string, hs []Highlight) string {
 		}
 	}
 	return b.String()
+}
+
+// articleIDPrefix starts every id taken from an article. No id of the
+// reading view's own starts with it; they all start with "later-".
+const articleIDPrefix = "art-"
+
+// prefixIDs puts articleIDPrefix on every id under n and on every href that
+// is a fragment link to one ("#x"; a bare "#" names nothing and is kept).
+func prefixIDs(n *xhtml.Node) {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != xhtml.ElementNode {
+			continue
+		}
+		for i, a := range c.Attr {
+			switch {
+			case a.Namespace != "":
+			case a.Key == "id" && a.Val != "":
+				c.Attr[i].Val = articleIDPrefix + a.Val
+			case a.Key == "href" && len(a.Val) > 1 && a.Val[0] == '#':
+				c.Attr[i].Val = "#" + articleIDPrefix + a.Val[1:]
+			}
+		}
+		prefixIDs(c)
+	}
 }
 
 // drawable is hs that still match text, in text order, without overlaps
