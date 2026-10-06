@@ -66,6 +66,13 @@
 		<details class="later-menu">
 			<summary aria-label="More actions">⋯</summary>
 			<div class="later-menu-panel stack">
+				<form class="later-tags-form stack" method="post" action="/later/a/{{$d.ID}}/tags">
+					<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+					<input type="hidden" name="back" value="{{$d.Back}}">
+					<label for="later-tags-input">Tags</label>
+					<input id="later-tags-input" name="tags" type="text" value="{{$d.TagsValue}}" placeholder="essays, ai" autocomplete="off">
+					<button type="submit">Save tags</button>
+				</form>
 				{{/* The href is safe: NormalizeURL only stores http(s) URLs. */}}
 				<a href="{{$d.URL}}" target="_blank" rel="noopener noreferrer">Open original</a>
 				<form method="post" action="/later/a/{{$d.ID}}/delete"
@@ -85,6 +92,8 @@
 				{{$d.Site}}{{with $d.Byline}} · {{.}}{{end}}
 				{{if not $d.LinkOnly}} · {{$d.Minutes}} min read{{end}}
 			</p>
+			{{if $d.Tags}}<p class="later-article-tags">{{range $d.Tags}}<a class="later-pill later-pill-tag" href="{{.URL}}">{{.Name}}</a>
+			{{end}}</p>{{end}}
 		</header>
 
 		{{if $d.LinkOnly}}

@@ -6,27 +6,57 @@
 	<form class="later-save" method="post" action="/later/save">
 		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
 		<label class="visually-hidden" for="later-url">Web address</label>
-		<input id="later-url" class="later-save-input" name="url" type="text" inputmode="url" placeholder="Paste a URL to save…" value="{{.Data.FormValue}}">
+		<input id="later-url" class="later-save-input" name="url" type="text" inputmode="url" placeholder="Paste a URL to save…" value="{{.Data.Form.URL}}">
+		<label class="visually-hidden" for="later-save-tags">Tags</label>
+		<input id="later-save-tags" class="later-save-tags" name="tags" type="text" placeholder="Tags, comma-separated" autocomplete="off" value="{{.Data.Form.Tags}}">
 		<button class="primary" type="submit">Save</button>
 	</form>
-	{{with .Data.FormError}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
+	{{with .Data.Form.Error}}<p class="later-form-error" role="alert">{{.}}</p>{{end}}
 
 	{{with .Data.Saved}}{{template "later-saved-note" .}}{{end}}
 
 	<p class="later-hint">Save from any page: drag <a class="later-bookmarklet" data-later-bookmarklet href="/later/">Save to Later</a> to your bookmarks bar.</p>
 
+	{{/* The live filter, as in ON Notes and ON Reader: hx-replace-url so
+	     typing doesn't push one history entry per keystroke, and "search"
+	     fires at once when the native clear (x) button is used. */}}
+	<form class="later-search" method="get" action="/later/" role="search">
+		<input type="hidden" name="tab" value="{{.Data.Tab}}">
+		{{with .Data.Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}
+		<label class="visually-hidden" for="later-q">Search articles</label>
+		<input type="search" id="later-q" name="q" value="{{.Data.Q}}" placeholder="Search all articles…"
+		       hx-get="/later/" hx-target="#later-list" hx-swap="outerHTML"
+		       hx-include="closest form" hx-trigger="input changed delay:300ms, search"
+		       hx-replace-url="true">
+	</form>
+
+	{{template "later-list" .}}
+{{template "later-confirm"}}
+</div>
+{{end}}
+
+{{define "later-list"}}
+<div id="later-list" class="later-list stack">
+	{{if .Data.Searching}}
+	<p class="later-search-head">Results from all lists{{with .Data.Tag}} tagged “{{.}}”{{end}} <a href="{{.Data.ClearURL}}">Clear search</a></p>
+	{{else}}
 	<nav class="later-tabs" aria-label="Lists">
 		{{range .Data.Tabs}}
-		<a class="later-tab" href="/later/?tab={{.State}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}} <span class="later-tab-count">{{.Count}}</span></a>
+		<a class="later-tab" href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}} <span class="later-tab-count">{{.Count}}</span></a>
 		{{end}}
 	</nav>
-
+	{{end}}
+	{{if .Data.Chips}}
+	<nav class="later-tags" aria-label="Tags">
+		{{range .Data.Chips}}<a class="later-tag-chip" href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>{{.Name}}</a>
+		{{end}}
+	</nav>
+	{{end}}
 	{{if .Data.Rows}}
 	<ul class="later-rows">{{template "rows" .}}</ul>
 	{{else}}
 	<p class="later-empty">{{.Data.EmptyText}}</p>
 	{{end}}
-{{template "later-confirm"}}
 </div>
 {{end}}
 
@@ -42,32 +72,42 @@
 		<span class="later-row-text">
 			<span class="later-row-title">{{.Title}}</span>
 			<span class="later-row-meta">
+				{{if $.Data.Searching}}<span class="later-pill later-pill-state">{{.StateLabel}}</span>{{end}}
 				<span>{{.Site}}</span>
 				{{if .LinkOnly}}<span class="later-pill later-pill-linkonly">link only — add text</span>
 				{{else}}<span>{{.Minutes}} min</span>{{end}}
 				{{if .Highlights}}<span class="later-pill later-pill-hl">{{.Highlights}} {{if eq .Highlights 1}}highlight{{else}}highlights{{end}}</span>{{end}}
+				{{range .Tags}}<span class="later-pill later-pill-tag">{{.}}</span>{{end}}
 			</span>
+			{{with .Snippet}}<span class="later-row-snippet"><span class="later-snippet-in">{{.In}}</span> {{range .Parts}}{{if .Hit}}<mark>{{.Text}}</mark>{{else}}{{.Text}}{{end}}{{end}}</span>{{end}}
 		</span>
 	</a>
 	<details class="later-menu later-row-menu">
 		<summary aria-label="Actions for {{.Title}}">⋯</summary>
 		<div class="later-menu-panel stack">
-			{{if eq $.Data.Tab "archived"}}
+			<form class="later-tags-form stack" method="post" action="/later/a/{{.ID}}/tags">
+				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+				<input type="hidden" name="back" value="{{$.Data.Back}}">
+				<label for="later-tags-{{.ID}}">Tags</label>
+				<input id="later-tags-{{.ID}}" name="tags" type="text" value="{{.TagsValue}}" placeholder="essays, ai" autocomplete="off">
+				<button type="submit">Save tags</button>
+			</form>
+			{{if .Archived}}
 			<form method="post" action="/later/a/{{.ID}}/unarchive">
 				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
-				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<input type="hidden" name="back" value="{{$.Data.Back}}">
 				<button type="submit">Move to unread</button>
 			</form>
 			{{else}}
 			<form method="post" action="/later/a/{{.ID}}/archive">
 				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
-				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<input type="hidden" name="back" value="{{$.Data.Back}}">
 				<button type="submit">Archive</button>
 			</form>
 			{{end}}
 			<form method="post" action="/later/a/{{.ID}}/delete" data-later-confirm="Delete permanently? Highlights and notes go too.">
 				<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
-				<input type="hidden" name="back" value="/later/?tab={{$.Data.Tab}}">
+				<input type="hidden" name="back" value="{{$.Data.Back}}">
 				<button class="danger" type="submit">Delete</button>
 			</form>
 		</div>
@@ -75,10 +115,10 @@
 	{{if .Progress}}<progress class="later-row-progress" max="100" value="{{.Progress}}">{{.Progress}}%</progress>{{end}}
 </li>
 {{end}}
-{{if .Data.NextOffset}}
+{{if .Data.NextURL}}
 <li class="later-more">
 	<button type="button"
-	        hx-get="/later/?tab={{.Data.Tab}}&amp;offset={{.Data.NextOffset}}"
+	        hx-get="{{.Data.NextURL}}"
 	        hx-target="closest li" hx-swap="outerHTML">Load more</button>
 </li>
 {{end}}

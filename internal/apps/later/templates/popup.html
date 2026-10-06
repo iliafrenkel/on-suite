@@ -14,12 +14,16 @@
 	{{end}}
 	{{if .Data.URL}}
 	<p class="later-popup-url">{{.Data.URL}}</p>
-	<form method="post" action="/later/save" class="dialog-actions">
+	<form method="post" action="/later/save" class="stack">
 		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
 		<input type="hidden" name="url" value="{{.Data.URL}}">
 		<input type="hidden" name="popup" value="1">
-		<button class="primary" type="submit" autofocus>Save</button>
-		<button type="button" data-later-close>Cancel</button>
+		<label for="later-popup-tags">Tags (optional)</label>
+		<input id="later-popup-tags" name="tags" type="text" placeholder="essays, ai" autocomplete="off">
+		<div class="dialog-actions">
+			<button class="primary" type="submit" autofocus>Save</button>
+			<button type="button" data-later-close>Cancel</button>
+		</div>
 	</form>
 	{{end}}
 	{{if .Data.Error}}<div class="dialog-actions"><button type="button" data-later-close>Close</button></div>{{end}}
