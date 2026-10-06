@@ -3635,7 +3635,7 @@ body:has(.later-popup) .app-sidebar,
 body:has(.later-popup) .app-footer { display: none; }
 .later-popup { max-width: 26rem; margin: 1.5rem auto; padding: 0 1rem; }
 .later-popup-url { color: var(--c-text-faint); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.later-hint { font-size: var(--fs-sm); color: var(--c-text-faint); margin: 0; }
+.later-hint { font-size: var(--fs-sm); color: var(--c-text-faint); text-align: center; }
 .later-bookmarklet { display: inline-block; padding: .15rem .6rem; border: 1px dashed var(--c-border-firm); border-radius: var(--radius); cursor: grab; }
 /* The reading view takes the whole window: hide the suite chrome. */
 body:has(.later-reader) .shell-bar,
