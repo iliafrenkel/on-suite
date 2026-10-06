@@ -80,7 +80,7 @@ on-suite/
 
 ## Inside an app
 
-The four apps share a shape, so once you know one you can find your way
+The five apps share a shape, so once you know one you can find your way
 around the others. Using `internal/apps/paste` as the example:
 
 | File | Holds |
@@ -101,7 +101,7 @@ after the app.
 
 | Looking for | Look in |
 | --- | --- |
-| an app's routes | its `Mount` method: `internal/apps/<app>/app.go`, or `paste.go` / `flash.go` |
+| an app's routes | its `Mount` method: `internal/apps/<app>/app.go`, or `paste.go` / `flash.go` / `later.go` |
 | the platform's own routes | `buildStack` in `cmd/onsuite/stack.go`, and `Routes` in `web/login.go`, `usermgmt/usermgmt.go`, `jobsadmin/jobsadmin.go` |
 | every route at once | the admin dashboard (`/admin/`) lists them all, with public ones marked |
 | a page's template | `internal/apps/<app>/templates/<page>.html`; the `render` name is `<app>/<page>` |
