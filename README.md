@@ -7,7 +7,7 @@ own computer.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
-    <img src="docs/images/hero-light.png" alt="The ON Suite dashboard, with a card for each app: ON Notes, ON Paste, ON Reader and ON Flash" width="100%">
+    <img src="docs/images/hero-light.png" alt="The ON Suite dashboard, with a card for each app: ON Notes, ON Paste, ON Reader, ON Later and ON Flash" width="100%">
   </picture>
 </p>
 
@@ -42,7 +42,7 @@ multi-tenant hardening, this isn't it. It's the opposite bet, optimised for
 
 ## The apps
 
-Sign in once and move freely between four apps.
+Sign in once and move freely between five apps.
 
 ### ON Notes
 
@@ -84,6 +84,22 @@ The newest articles from your favourite websites in one place, so you don't
 have to visit each site to see what's new. Sort feeds into folders, star
 what you want to keep and fetch the full article when a feed only sends a
 summary. [Read the ON Reader guide →](docs/user/reader.md)
+
+### ON Later
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-later-dark.png">
+    <img src="docs/images/app-later-light.png" alt="ON Later: an essay open in a calm reading view, with highlighted passages and comments in the margin">
+  </picture>
+</p>
+
+A private read-it-later shelf for writing that deserves more than a skim.
+Save a page from its address, a bookmarklet or ON Reader, and ON Later
+keeps a clean copy — text and pictures — to read in a quiet view.
+Highlight passages, comment on them, keep a note on the whole article, and
+download it all as Markdown.
+[Read the ON Later guide →](docs/user/later.md)
 
 ### ON Flash
 

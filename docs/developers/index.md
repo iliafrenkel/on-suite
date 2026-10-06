@@ -4,9 +4,9 @@
 you don't need to know anything about this repository yet.*
 
 ON Suite is a self-hosted set of small web apps for one household — ON Paste,
-ON Notes, ON Reader and ON Flash — sharing one account system, one shell, one
-SQLite file and one Go binary. It is deliberately small and opinionated: the
-constraints below are what keep it that way.
+ON Notes, ON Reader, ON Later and ON Flash — sharing one account system, one
+shell, one SQLite file and one Go binary. It is deliberately small and
+opinionated: the constraints below are what keep it that way.
 
 ## The ground rules
 

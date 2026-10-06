@@ -57,6 +57,16 @@ var shots = []shot{
 		document.querySelector('details.reader-mark-all-menu').open = true;`},
 	{Name: "docs/user/images/reader-stats.png", URL: "/reader/stats", Height: 660},
 
+	// docs/user/later.md
+	// Article 1 is already Reading in the seed, so opening it changes no
+	// tab. The search shot loads the results page directly (?q=).
+	{Name: "docs/user/images/later-list.png", URL: "/later/", Height: 590},
+	{Name: "docs/user/images/later-search.png", URL: "/later/?q=patience", Height: 640},
+	{Name: "docs/user/images/later-reading.png", URL: "/later/a/1", Height: 1005},
+	{Name: "docs/user/images/later-notes.png", URL: "/later/a/1", Height: 760, Setup: `
+		document.getElementById('later-notes-open').checked = true;
+		await new Promise(r => setTimeout(r, 600));`},
+
 	// docs/user/flash.md
 	// Nothing here grades a card or answers sam's pending gift: the review
 	// shot only turns the card over, so due counts and stats stay as seeded.
@@ -85,15 +95,17 @@ var shots = []shot{
 
 	// README.md — the hero and one thumbnail per app, light and dark, at the
 	// default 1280×800 (thumbnails show at about half width).
-	// The hero is the dashboard, cropped: it shows all four apps at a glance.
-	{Name: "docs/images/hero-light.png", URL: "/", Height: 440},
-	{Name: "docs/images/hero-dark.png", URL: "/", Height: 440, Theme: "dark"},
+	// The hero is the dashboard, cropped: it shows all five apps at a glance.
+	{Name: "docs/images/hero-light.png", URL: "/", Height: 490},
+	{Name: "docs/images/hero-dark.png", URL: "/", Height: 490, Theme: "dark"},
 	{Name: "docs/images/app-paste-light.png", URL: "/paste/7"},
 	{Name: "docs/images/app-paste-dark.png", URL: "/paste/7", Theme: "dark"},
 	{Name: "docs/images/app-notes-light.png", URL: "/notes/"},
 	{Name: "docs/images/app-notes-dark.png", URL: "/notes/", Theme: "dark"},
 	{Name: "docs/images/app-reader-light.png", URL: "/reader/item/10?scope=all&filter=all", Setup: readerScrollToActive},
 	{Name: "docs/images/app-reader-dark.png", URL: "/reader/item/10?scope=all&filter=all", Theme: "dark", Setup: readerScrollToActive},
+	{Name: "docs/images/app-later-light.png", URL: "/later/a/1"},
+	{Name: "docs/images/app-later-dark.png", URL: "/later/a/1", Theme: "dark"},
 	{Name: "docs/images/app-flash-light.png", URL: "/flash/2/cards/"},
 	{Name: "docs/images/app-flash-dark.png", URL: "/flash/2/cards/", Theme: "dark"},
 }
