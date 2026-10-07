@@ -2,7 +2,7 @@
      you, before you add it (UI overhaul spec §6). */}}
 {{define "deck-detail-gift"}}
 {{with .Gift}}
-<div class="flash-gift deck-c-{{.Color}}" id="deck-detail-gift">
+<div class="flash-gift swatch-c-{{.Color}}" id="deck-detail-gift">
 	<div class="notes-toolbar flash-deck-toolbar">{{template "flash-pane-back"}}</div>
 	<div class="flash-deck-hero">
 		{{template "flash-stack" (dict "Size" "lg")}}

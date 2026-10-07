@@ -1,0 +1,46 @@
+{{define "head"}}<script src="/focus/home.js" defer></script>{{end}}
+
+{{define "content"}}
+<div class="focus-page stack">
+	<div class="focus-toolbar">
+		<h1>Timers</h1>
+		<a class="button primary" href="/focus/new">+ New timer</a>
+	</div>
+	{{if .Data.Tiles}}
+	<ul class="focus-tiles" data-focus-tiles>
+		{{range .Data.Tiles}}
+		<li class="focus-tile swatch-c-{{.Color}}" data-id="{{.ID}}" draggable="true">
+			<div class="focus-tile-head">
+				<a class="focus-tile-name" href="/focus/timers/{{.ID}}/edit" draggable="false">{{.Name}}</a>
+				<details class="focus-menu">
+					<summary aria-label="Actions for {{.Name}}">⋯</summary>
+					<div class="focus-menu-panel stack">
+						<a href="/focus/timers/{{.ID}}/edit">Edit</a>
+						<form method="post" action="/focus/timers/{{.ID}}/duplicate">
+							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+							<button type="submit">Duplicate</button>
+						</form>
+						<form method="post" action="/focus/timers/{{.ID}}/delete" data-focus-confirm="Delete “{{.Name}}”? Sessions already in your history are kept.">
+							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+							<button class="danger" type="submit">Delete</button>
+						</form>
+					</div>
+				</details>
+			</div>
+			<span class="focus-tile-summary">{{.Summary}}</span>
+			<div class="focus-tile-foot">
+				<span class="focus-pill">{{.Total}}</span>
+				<a class="focus-play" href="/focus/run/{{.ID}}" draggable="false" aria-label="Start {{.Name}}">▶</a>
+			</div>
+		</li>
+		{{end}}
+	</ul>
+	{{else}}
+	<div class="focus-empty stack">
+		<p>No timers yet. Make one for anything you want to give your full attention to — a 15-minute reflection, a 50-minute deep-work block with breaks.</p>
+		<p><a class="button primary" href="/focus/new">Create your first timer</a></p>
+	</div>
+	{{end}}
+</div>
+{{template "focus-confirm"}}
+{{end}}

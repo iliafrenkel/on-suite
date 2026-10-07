@@ -15,6 +15,10 @@ on-suite/
 │   │   │   ├── static/           flash.js, served by the app itself
 │   │   │   ├── templates/        page templates and *.partial.html blocks
 │   │   │   └── testdata/         an example import deck
+│   │   ├── focus/                ON Focus: focus timers — saved timers (single or intervals); running view and history to come
+│   │   │   ├── migrations/
+│   │   │   ├── static/           home.js
+│   │   │   └── templates/
 │   │   ├── later/                ON Later: read-it-later — save, reading view, highlights, tags, search, export
 │   │   │   ├── migrations/
 │   │   │   ├── static/           later.js, highlight.js
@@ -80,7 +84,7 @@ on-suite/
 
 ## Inside an app
 
-The five apps share a shape, so once you know one you can find your way
+The six apps share a shape, so once you know one you can find your way
 around the others. Using `internal/apps/paste` as the example:
 
 | File | Holds |

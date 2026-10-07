@@ -10,8 +10,8 @@ import (
 )
 
 // appClassPattern matches a class name owned by one app's CSS section in
-// app.css (reader-*, notes-*, paste-*, flash-*, later-*).
-var appClassPattern = regexp.MustCompile(`^(reader|notes|paste|flash|later)-`)
+// app.css (reader-*, notes-*, paste-*, flash-*, later-*, focus-*).
+var appClassPattern = regexp.MustCompile(`^(reader|notes|paste|flash|later|focus)-`)
 
 var classAttrPattern = regexp.MustCompile(`class="([^"]*)"`)
 

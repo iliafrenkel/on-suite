@@ -1,0 +1,27 @@
+{{/* focus-confirm is the app's confirmation dialog, driven by home.js for
+     forms marked data-focus-confirm (the dialog later.js uses). Without
+     JavaScript the form simply submits. */}}
+{{define "focus-confirm"}}
+<dialog id="focus-confirm-dialog" class="focus-dialog">
+	<p id="focus-confirm-message"></p>
+	<div class="dialog-actions">
+		<button type="button" id="focus-confirm-ok" class="danger">Delete</button>
+		<button type="button" id="focus-confirm-cancel">Cancel</button>
+	</div>
+</dialog>
+{{end}}
+
+{{/* focus-number is one whole-number field. Pass a dict with Name (the
+     form field), Label, Min, Max, Value, Error and an optional Hint. */}}
+{{define "focus-number"}}
+<div class="field focus-number">
+	<label for="focus-{{.Name}}">{{.Label}}</label>
+	<input id="focus-{{.Name}}" name="{{.Name}}" type="number" inputmode="numeric" min="{{.Min}}" max="{{.Max}}" step="1" value="{{.Value}}"{{if .Error}} aria-invalid="true" aria-describedby="focus-{{.Name}}-error"{{end}}>
+	{{with .Hint}}<p class="focus-hint">{{.}}</p>{{end}}
+	{{with .Error}}<p class="focus-field-error" id="focus-{{$.Name}}-error">{{.}}</p>{{end}}
+</div>
+{{end}}
+
+{{/* focus-error is a field's message, for the fields focus-number doesn't
+     draw. Pass a dict with Name and Error. */}}
+{{define "focus-error"}}{{with .Error}}<p class="focus-field-error" id="focus-{{$.Name}}-error">{{.}}</p>{{end}}{{end}}

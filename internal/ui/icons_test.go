@@ -8,7 +8,7 @@ import (
 )
 
 func TestIconForKnownApps(t *testing.T) {
-	for _, id := range []string{"paste", "notes", "reader", "flash", "admin", "later"} {
+	for _, id := range []string{"paste", "notes", "reader", "flash", "admin", "later", "focus"} {
 		got := string(ui.IconFor(id))
 		if !strings.Contains(got, "<svg") {
 			t.Errorf("IconFor(%q) = %q, want it to contain <svg", id, got)
@@ -32,7 +32,7 @@ func TestIconForUnknownAppFallsBackToTile(t *testing.T) {
 
 func TestIconForIsDistinctPerApp(t *testing.T) {
 	seen := map[string]bool{}
-	for _, id := range []string{"paste", "notes", "reader", "flash", "admin", "later"} {
+	for _, id := range []string{"paste", "notes", "reader", "flash", "admin", "later", "focus"} {
 		svg := string(ui.IconFor(id))
 		if seen[svg] {
 			t.Errorf("icon for %q duplicates an earlier icon", id)
@@ -42,7 +42,7 @@ func TestIconForIsDistinctPerApp(t *testing.T) {
 }
 
 func TestIconStrokeWidthIsConsistent(t *testing.T) {
-	for _, id := range []string{"paste", "notes", "reader", "admin", "flash", "later"} {
+	for _, id := range []string{"paste", "notes", "reader", "admin", "flash", "later", "focus"} {
 		got := string(ui.IconFor(id))
 		if strings.Contains(got, `stroke-width="1.8"`) {
 			t.Errorf("IconFor(%q) still uses stroke-width 1.8, want the shared 1.5 line-icon weight", id)

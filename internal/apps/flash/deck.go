@@ -28,7 +28,7 @@ const (
 
 // DeckColors is the fixed palette a deck's owner picks from, in the order
 // the swatch picker shows them. The names — not hex values — are stored:
-// templates turn one into a deck-c-<name> class and app.css decides what
+// templates turn one into a swatch-c-<name> class and app.css decides what
 // that looks like in light and dark mode (UI overhaul spec §1.2).
 var DeckColors = []string{"teal", "blue", "purple", "pink", "coral", "amber", "green", "gray"}
 

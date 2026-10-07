@@ -53,7 +53,7 @@ curl -s localhost:8080/healthz
 ```
 
 Then open <http://localhost:8080/>. You'll be redirected to `/login`; sign in
-and you land on the dashboard with all five apps in the sidebar. Because the
+and you land on the dashboard with all six apps in the sidebar. Because the
 account is an admin, the sidebar also has an **Admin** entry, which leads to
 the admin dashboard (`/admin/`), user management (`/admin/users`) and jobs
 (`/admin/jobs`).

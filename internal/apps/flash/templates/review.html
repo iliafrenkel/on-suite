@@ -8,7 +8,7 @@
 {{end}}
 
 {{define "review-body"}}
-<div class="flash-review{{with .Color}} deck-c-{{.}}{{end}}">
+<div class="flash-review{{with .Color}} swatch-c-{{.}}{{end}}">
 	<div class="flash-review-top">
 		<a class="toolbar-btn flash-review-stop" href="{{.StopURL}}">{{ticon "arrow-left"}}Stop</a>
 		<span class="flash-review-scope">{{.ScopeName}}</span>
@@ -80,7 +80,7 @@
 {{with .Summary}}
 <div class="flash-review-summary">
 	{{if .Reviewed}}
-	<div class="flash-celebrate" aria-hidden="true">{{range $.CelebrationColors}}<span class="deck-c-{{.}}"></span>{{end}}</div>
+	<div class="flash-celebrate" aria-hidden="true">{{range $.CelebrationColors}}<span class="swatch-c-{{.}}"></span>{{end}}</div>
 	<h2>Nice work!</h2>
 	<p class="flash-summary-lead">You reviewed {{.Reviewed}} card{{if ne .Reviewed 1}}s{{end}} today.</p>
 	{{if .Segments}}

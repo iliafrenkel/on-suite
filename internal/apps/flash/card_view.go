@@ -14,7 +14,7 @@ import (
 // Answer are already-safe HTML from renderCardFaces.
 type cardFace struct {
 	ID, DeckID int64
-	Color      string // the deck's colour name, for a deck-c-* class
+	Color      string // the deck's colour name, for a swatch-c-* class
 	IsCloze    bool
 	Question   template.HTML
 	Answer     template.HTML

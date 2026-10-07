@@ -53,7 +53,7 @@
 	<ul class="flash-load-list">
 		{{range .Rows}}
 		<li>
-			<a class="flash-load-row deck-c-{{.Deck.Color}}" href="/flash/{{.Deck.ID}}" hx-get="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">
+			<a class="flash-load-row swatch-c-{{.Deck.Color}}" href="/flash/{{.Deck.ID}}" hx-get="/flash/{{.Deck.ID}}" hx-target="#deck-detail" hx-push-url="true">
 				{{template "flash-stack" (dict "Size" "sm")}}
 				<span class="flash-load-main">
 					<span class="flash-load-name">{{.Deck.Name}}</span>

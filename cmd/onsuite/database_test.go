@@ -51,8 +51,8 @@ func TestOpenDatabaseSkipsMigrationsForADisabledApp(t *testing.T) {
 			t.Errorf("NavItems() includes disabled app %q: %v", id, ids)
 		}
 	}
-	if len(ids) != 4 {
-		t.Errorf("NavItems() = %v, want exactly flash, later, notes, and paste", ids)
+	if len(ids) != 5 {
+		t.Errorf("NavItems() = %v, want exactly flash, focus, later, notes, and paste", ids)
 	}
 }
 
@@ -160,7 +160,7 @@ func TestOpenDatabaseExportBuildsAConfigLiteralSoDisablingNeverApplies(t *testin
 		t.Fatalf("openDatabase: %v", err)
 	}
 	defer func() { _ = handle.Close() }()
-	if len(registry.NavItems()) != 5 {
-		t.Errorf("NavItems() has %d entries, want 5 (flash, later, notes, paste, reader)", len(registry.NavItems()))
+	if len(registry.NavItems()) != 6 {
+		t.Errorf("NavItems() has %d entries, want 6 (flash, focus, later, notes, paste, reader)", len(registry.NavItems()))
 	}
 }

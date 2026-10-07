@@ -369,7 +369,7 @@ One PR each, in order.
 
 | Phase | Issue | Scope |
 |---|---|---|
-| F1 | #493 Saved timers | Swatch rename; app skeleton and registration; both migrations; `Phases`; home with tiles (today strip shows zeros until F3); create, edit, duplicate, delete, reorder. ▶ opens a placeholder running page |
+| F1 | #493 Saved timers | Swatch rename; app skeleton and registration; both migrations; `Phases`; home with tiles; create, edit, duplicate, delete, reorder (home.js); short user guide. ▶ opens a placeholder running page |
 | F2 | #494 Running a timer | Focus mode page, ring and dots, controls and keys, auto-advance and waiting, chimes, notifications, tab title, `localStorage` resume, home resume banner |
 | F3 | #495 History and stats | Recording endpoint with beacon and Retry; today strip; History page; session delete; `Exporter`; admin card |
 | F4 | #496 Polish | Screen Wake Lock while running; home shortcuts (N new timer, 1–9 start the *n*th timer); dark-mode pass; user guide and screenshots |

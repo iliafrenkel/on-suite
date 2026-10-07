@@ -1,0 +1,10 @@
+{{define "content"}}
+<div class="focus-run stack">
+	<h1>{{.Data.Name}}</h1>
+	<p class="focus-hint">The full-screen running view is coming next. Here's how this timer runs:</p>
+	<ol class="focus-run-phases">
+		{{range .Data.Phases}}<li>{{.Label}} — {{.Length}}</li>{{end}}
+	</ol>
+	<p><a href="/focus/timers/{{.Data.ID}}/edit">Edit this timer</a> · <a href="/focus/">Back to timers</a></p>
+</div>
+{{end}}

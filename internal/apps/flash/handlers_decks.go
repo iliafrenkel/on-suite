@@ -159,7 +159,7 @@ type deckDetailView struct {
 
 // deckColorOption is one swatch in the colour picker.
 type deckColorOption struct {
-	Name  string // a DeckColors entry, the radio value and the deck-c-* class suffix
+	Name  string // a DeckColors entry, the radio value and the swatch-c-* class suffix
 	Label string // its accessible name, e.g. "Teal"
 }
 

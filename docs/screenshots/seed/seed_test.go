@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
+	"github.com/iliafrenkel/on-suite/internal/apps/focus"
 	"github.com/iliafrenkel/on-suite/internal/apps/later"
 	"github.com/iliafrenkel/on-suite/internal/apps/notes"
 	"github.com/iliafrenkel/on-suite/internal/apps/paste"
@@ -153,6 +154,12 @@ func TestSeedFillsEveryApp(t *testing.T) {
 	}
 	if imgs, err := ls.ImagesToFetch(ctx, 100); err != nil || len(imgs) != 0 {
 		t.Errorf("later images to fetch = %d, %v; want none", len(imgs), err)
+	}
+
+	// Focus: a few timers of both kinds.
+	timers, err := focus.NewStore(handle).Timers(ctx, demo.ID)
+	if err != nil || len(timers) < 4 {
+		t.Errorf("focus timers = %d, %v; want >= 4", len(timers), err)
 	}
 
 	// Flash: decks with cards, a review history and a streak.
