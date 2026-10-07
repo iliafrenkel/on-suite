@@ -201,3 +201,20 @@ func TestRunPageIsNotFoundForSomeoneElse(t *testing.T) {
 		t.Errorf("bob run page = %d, want 404", rec.Code)
 	}
 }
+
+func TestScriptsAreServed(t *testing.T) {
+	s := newServer(t)
+	for _, name := range []string{
+		"home.js",
+		"session.js",
+	} {
+		rec := s.Do(t, s.Alice, httptestGet("/focus/"+name))
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET /focus/%s = %d, want 200", name, rec.Code)
+			continue
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/javascript") {
+			t.Errorf("GET /focus/%s Content-Type = %q", name, ct)
+		}
+	}
+}
