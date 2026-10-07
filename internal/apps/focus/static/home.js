@@ -119,8 +119,6 @@
 		Notification.requestPermission().then(go, go);
 	});
 
-	// The resume banner (spec: "Resume"): a session running in this
-	// browser, read from the state the running page keeps.
 	// A page restored from the back/forward cache still holds the session
 	// the banner was built from, and would resume or clear that stale copy
 	// over whatever is in localStorage now. Reload so it starts from storage.
@@ -128,6 +126,8 @@
 		if (e.persisted) window.location.reload();
 	});
 
+	// The resume banner (spec: "Resume"): a session running in this
+	// browser, read from the state the running page keeps.
 	var S = window.OnFocus && window.OnFocus.session;
 	var banner = document.querySelector("[data-focus-resume]");
 	var stored = S && banner ? S.load() : null;
