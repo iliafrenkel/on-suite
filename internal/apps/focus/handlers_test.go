@@ -207,6 +207,7 @@ func TestScriptsAreServed(t *testing.T) {
 	for _, name := range []string{
 		"home.js",
 		"session.js",
+		"chimes.js",
 	} {
 		rec := s.Do(t, s.Alice, httptestGet("/focus/"+name))
 		if rec.Code != http.StatusOK {

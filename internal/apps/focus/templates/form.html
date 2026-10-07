@@ -1,3 +1,4 @@
+{{define "head"}}<script src="/focus/chimes.js" defer></script>{{end}}
 {{define "content"}}
 {{$d := .Data}}
 <form class="focus-form stack" method="post" action="{{$d.Action}}" novalidate>
@@ -47,9 +48,12 @@
 
 	<div class="field">
 		<label for="focus-chime">Chime when a phase ends</label>
-		<select id="focus-chime" name="chime"{{if index $d.Errors "chime"}} aria-invalid="true" aria-describedby="focus-chime-error"{{end}}>
-			{{range $d.Chimes}}<option value="{{.Name}}"{{if eq .Name $d.Values.Chime}} selected{{end}}>{{.Label}}</option>{{end}}
-		</select>
+		<div class="focus-chime-row">
+			<select id="focus-chime" name="chime"{{if index $d.Errors "chime"}} aria-invalid="true" aria-describedby="focus-chime-error"{{end}}>
+				{{range $d.Chimes}}<option value="{{.Name}}"{{if eq .Name $d.Values.Chime}} selected{{end}}>{{.Label}}</option>{{end}}
+			</select>
+			<button type="button" class="focus-chime-preview" data-focus-chime-preview="focus-chime" aria-label="Play this chime" hidden>▶</button>
+		</div>
 		{{template "focus-error" (dict "Name" "chime" "Error" (index $d.Errors "chime"))}}
 	</div>
 
