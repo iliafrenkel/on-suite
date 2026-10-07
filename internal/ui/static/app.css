@@ -3997,3 +3997,14 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 .focus-sound-hint { margin: 0; color: var(--c-text-faint); font-size: var(--fs-sm); text-align: center; }
 .focus-done { display: flex; flex-direction: column; align-items: center; gap: var(--s-4); text-align: center; }
 .focus-done-title { margin: 0; font-size: var(--fs-xl); }
+
+.focus-resume {
+	margin: 0;
+	padding: var(--s-2) var(--s-3);
+	border: var(--border);
+	border-left: 4px solid var(--swatch, var(--c-accent));
+	border-radius: var(--radius);
+	color: var(--c-text-dim);
+	font-size: var(--fs-sm);
+}
+.focus-resume a { font-weight: 600; }

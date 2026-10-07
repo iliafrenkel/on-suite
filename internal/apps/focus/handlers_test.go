@@ -279,6 +279,22 @@ func TestRunPageIsNotFoundForSomeoneElse(t *testing.T) {
 	}
 }
 
+func TestIndexHasTheResumeBannerSlot(t *testing.T) {
+	s := newServer(t)
+	// Both with and without timers: a session can outlive its timer's tile.
+	for _, seed := range []bool{false, true} {
+		if seed {
+			seedTimer(t, s, s.Alice.User.ID, single("Reading", 30))
+		}
+		doc := s.Get(t, s.Alice, "/focus/")
+		doc.MustHave(`script[src="/focus/session.js"]`)
+		banner := doc.MustHave("[data-focus-resume]")
+		if _, ok := htmlassert.Attr(banner, "hidden"); !ok {
+			t.Errorf("seed=%v: the banner should start hidden", seed)
+		}
+	}
+}
+
 func TestScriptsAreServed(t *testing.T) {
 	s := newServer(t)
 	for _, name := range []string{

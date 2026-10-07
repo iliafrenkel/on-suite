@@ -1,6 +1,7 @@
 // ON Focus's home-page script. Forms marked data-focus-confirm ask first,
 // in the app's own dialog (later.js's pattern); without JavaScript the form
-// simply submits. Tiles can also be dragged to reorder.
+// simply submits. Tiles can also be dragged to reorder. It also shows the
+// resume banner and asks for notification permission on ▶.
 "use strict";
 
 (function () {
@@ -104,5 +105,52 @@
 		document.body.addEventListener("htmx:afterRequest", function (evt) {
 			if (isOrder(evt) && evt.detail.successful) OnSuite.notices.clear("focus-order-error");
 		});
+	}
+
+	// Ask for notification permission on the first ▶ (spec: "Notification
+	// permission": on a Start click, never on page load). The prompt would
+	// vanish if the page navigated away under it, so wait for the answer.
+	document.addEventListener("click", function (e) {
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		var play = e.target.closest && e.target.closest(".focus-play");
+		if (!play || !("Notification" in window) || Notification.permission !== "default") return;
+		e.preventDefault();
+		function go() { window.location.assign(play.href); }
+		Notification.requestPermission().then(go, go);
+	});
+
+	// The resume banner (spec: "Resume"): a session running in this
+	// browser, read from the state the running page keeps.
+	var S = window.OnFocus && window.OnFocus.session;
+	var banner = document.querySelector("[data-focus-resume]");
+	var stored = S && banner ? S.load() : null;
+	if (stored) {
+		var link = document.createElement("a");
+		link.href = "/focus/run/" + stored.timerId;
+		banner.classList.add("swatch-c-" + stored.color);
+		banner.appendChild(link);
+		banner.hidden = false;
+		var bannerTicker = window.setInterval(updateBanner, 1000);
+		updateBanner();
+	}
+
+	function updateBanner() {
+		var now = Date.now();
+		S.advance(stored, now);
+		if (stored.finished) {
+			// Recording it is F3 (#495); until then a finished session is
+			// simply cleared.
+			window.clearInterval(bannerTicker);
+			S.clear();
+			banner.textContent = stored.timerName + " finished — " + S.focused(S.focusSeconds(stored, now)) + " focused.";
+			return;
+		}
+		if (stored.waiting) {
+			var up = S.upcoming(stored);
+			link.textContent = stored.timerName + " — ready for " + (up.kind === "focus" ? "round " + up.round : "a break");
+			return;
+		}
+		var left = S.clock(S.remaining(stored, now)) + " left";
+		link.textContent = "Resume " + stored.timerName + " — " + (stored.pausedAt !== null ? "paused, " + left : left);
 	}
 })();
