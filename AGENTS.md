@@ -12,8 +12,10 @@ step. **ON Paste** (snippets with syntax highlighting and shareable links),
 Reader** (a feed reader, with search, OPML import/export, full-article
 extraction, and reading-stats), **ON Later** (a read-it-later app: save
 pages, read them in a calm view, highlight, comment and tag them, export as
-Markdown), and **ON Flash** (flash cards with FSRS review, import from
-AI-written Markdown/JSON, media, household sharing and stats) are all
+Markdown), **ON Flash** (flash cards with FSRS review, import from
+AI-written Markdown/JSON, media, household sharing and stats), and **ON
+Focus** (saved, reusable focus timers — single blocks or Pomodoro-style
+intervals; the running view and history are still being built out) are all
 registered today.
 
 Full rationale for every design choice below lives in
