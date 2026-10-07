@@ -1,0 +1,12 @@
+{{/* focus-confirm is the app's confirmation dialog, driven by home.js for
+     forms marked data-focus-confirm (the dialog later.js uses). Without
+     JavaScript the form simply submits. */}}
+{{define "focus-confirm"}}
+<dialog id="focus-confirm-dialog" class="focus-dialog">
+	<p id="focus-confirm-message"></p>
+	<div class="dialog-actions">
+		<button type="button" id="focus-confirm-ok" class="danger">Delete</button>
+		<button type="button" id="focus-confirm-cancel">Cancel</button>
+	</div>
+</dialog>
+{{end}}
