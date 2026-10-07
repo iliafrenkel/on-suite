@@ -3862,3 +3862,29 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 }
 .focus-menu-panel form { margin: 0; }
 .focus-menu-panel button, .focus-menu-panel a { display: block; width: 100%; text-align: left; }
+
+.focus-form { max-width: var(--measure); }
+.focus-form fieldset { border: 0; padding: 0; margin: 0; }
+.focus-form legend { font-weight: 600; margin-bottom: var(--s-2); }
+.focus-choice { display: flex; align-items: center; gap: var(--s-2); font-weight: 400; }
+.focus-number input { max-width: 8rem; }
+.focus-number-row { display: flex; flex-wrap: wrap; gap: var(--s-4); }
+.focus-hint { margin: var(--s-1) 0 0; color: var(--c-text-faint); font-size: var(--fs-sm); }
+.focus-field-error { margin: var(--s-1) 0 0; color: var(--c-danger); font-size: var(--fs-sm); }
+.focus-form-actions { display: flex; align-items: center; gap: var(--s-3); }
+/* Interval fields only matter for interval timers; no script needed. */
+.focus-form:has(input[name="kind"][value="single"]:checked) .focus-intervals { display: none; }
+
+.focus-swatches { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.focus-swatch {
+	width: 2.75rem;
+	height: 2.75rem;
+	margin: 0;
+	border-radius: 50%;
+	background: var(--swatch);
+	border: 3px solid var(--c-bg);
+	box-shadow: 0 0 0 1px var(--c-border-firm);
+	cursor: pointer;
+}
+.focus-swatch-input:checked + .focus-swatch { box-shadow: 0 0 0 3px var(--c-text); }
+.focus-swatch-input:focus-visible + .focus-swatch { outline: var(--ring); outline-offset: 3px; }

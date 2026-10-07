@@ -51,6 +51,10 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 		a.store.SetClock(deps.Now)
 	}
 	r.HandleFunc("GET /{$}", a.index)
+	r.HandleFunc("GET /new", a.newForm)
+	r.HandleFunc("POST /timers", a.create)
+	r.HandleFunc("GET /timers/{id}/edit", a.editForm)
+	r.HandleFunc("POST /timers/{id}", a.update)
 	r.HandleFunc("POST /timers/{id}/duplicate", a.duplicate)
 	r.HandleFunc("POST /timers/{id}/delete", a.delete)
 	r.HandleFunc("GET /home.js", a.script("home.js"))

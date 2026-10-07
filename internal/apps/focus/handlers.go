@@ -2,6 +2,7 @@ package focus
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -119,4 +120,89 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/focus/", http.StatusSeeOther)
+}
+
+func (a *App) newForm(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.userID(w, r); !ok {
+		return
+	}
+	view := newFormView("/focus/timers", "New timer", "Create timer", valuesOf(DefaultInput()), nil)
+	a.render(w, r, http.StatusOK, "focus/form", "New timer", view)
+}
+
+func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	t, err := a.store.Timer(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	view := newFormView(fmt.Sprintf("/focus/timers/%d", id), "Edit timer", "Save changes", editValues(t), nil)
+	a.render(w, r, http.StatusOK, "focus/form", "Edit timer", view)
+}
+
+func (a *App) create(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	in, values, errs := parseForm(r.PostFormValue)
+	if len(errs) == 0 {
+		_, err := a.store.CreateTimer(r.Context(), userID, in)
+		if err == nil {
+			http.Redirect(w, r, "/focus/", http.StatusSeeOther)
+			return
+		}
+		var ve *ValidationError
+		if !errors.As(err, &ve) {
+			a.fail(w, r, err)
+			return
+		}
+		errs = ve.Fields
+	} else {
+		errs = merge(errs, in.Normalize().Validate())
+	}
+	view := newFormView("/focus/timers", "New timer", "Create timer", values, errs)
+	a.render(w, r, http.StatusUnprocessableEntity, "focus/form", "New timer", view)
+}
+
+func (a *App) update(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	// Someone else's timer is a 404 even when the form is also invalid.
+	if _, err := a.store.Timer(r.Context(), userID, id); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	in, values, errs := parseForm(r.PostFormValue)
+	if len(errs) == 0 {
+		_, err := a.store.UpdateTimer(r.Context(), userID, id, in)
+		if err == nil {
+			http.Redirect(w, r, "/focus/", http.StatusSeeOther)
+			return
+		}
+		var ve *ValidationError
+		if !errors.As(err, &ve) {
+			a.fail(w, r, err)
+			return
+		}
+		errs = ve.Fields
+	} else {
+		errs = merge(errs, in.Normalize().Validate())
+	}
+	view := newFormView(fmt.Sprintf("/focus/timers/%d", id), "Edit timer", "Save changes", values, errs)
+	a.render(w, r, http.StatusUnprocessableEntity, "focus/form", "Edit timer", view)
 }

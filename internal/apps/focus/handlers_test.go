@@ -131,3 +131,5 @@ func TestDuplicateAndDeleteAreNotFoundForSomeoneElse(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func httptestGet(path string) *http.Request { return httptest.NewRequest("GET", path, nil) }

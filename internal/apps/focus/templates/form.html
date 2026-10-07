@@ -1,0 +1,63 @@
+{{define "content"}}
+{{$d := .Data}}
+<form class="focus-form stack" method="post" action="{{$d.Action}}" novalidate>
+	<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+	<h1>{{$d.Heading}}</h1>
+	{{if $d.Errors}}<div class="notice notice-error" role="alert">Please fix the fields marked below.</div>{{end}}
+
+	<div class="field">
+		<label for="focus-name">Name</label>
+		<input id="focus-name" name="name" type="text" maxlength="80" placeholder="Deep work" value="{{$d.Values.Name}}"{{if index $d.Errors "name"}} aria-invalid="true" aria-describedby="focus-name-error"{{end}}>
+		{{template "focus-error" (dict "Name" "name" "Error" (index $d.Errors "name"))}}
+	</div>
+
+	<fieldset class="field focus-swatch-field">
+		<legend>Colour</legend>
+		<div class="focus-swatches">
+			{{range $d.Colors}}
+			<input type="radio" class="visually-hidden focus-swatch-input" name="color" value="{{.Name}}" id="focus-color-{{.Name}}"{{if eq .Name $d.Values.Color}} checked{{end}}>
+			<label class="focus-swatch swatch-c-{{.Name}}" for="focus-color-{{.Name}}"><span class="visually-hidden">{{.Label}}</span></label>
+			{{end}}
+		</div>
+		{{template "focus-error" (dict "Name" "color" "Error" (index $d.Errors "color"))}}
+	</fieldset>
+
+	<fieldset class="field focus-kind">
+		<legend>Kind</legend>
+		<label class="focus-choice"><input type="radio" name="kind" value="single"{{if eq $d.Values.Kind "single"}} checked{{end}}> Single block</label>
+		<label class="focus-choice"><input type="radio" name="kind" value="intervals"{{if eq $d.Values.Kind "intervals"}} checked{{end}}> Intervals — focus and breaks, in rounds</label>
+		{{template "focus-error" (dict "Name" "kind" "Error" (index $d.Errors "kind"))}}
+	</fieldset>
+
+	{{template "focus-number" (dict "Name" "focus" "Label" "Focus (minutes)" "Min" 1 "Max" 180 "Value" $d.Values.Focus "Error" (index $d.Errors "focus"))}}
+
+	{{/* Shown only while Intervals is picked (CSS :has(), no script). */}}
+	<fieldset class="focus-intervals stack">
+		<legend class="visually-hidden">Intervals</legend>
+		<div class="focus-number-row">
+			{{template "focus-number" (dict "Name" "break" "Label" "Break (minutes)" "Min" 1 "Max" 60 "Value" $d.Values.Break "Error" (index $d.Errors "break"))}}
+			{{template "focus-number" (dict "Name" "long_break" "Label" "Long break (minutes)" "Min" 1 "Max" 60 "Value" $d.Values.LongBreak "Error" (index $d.Errors "long_break"))}}
+		</div>
+		<div class="focus-number-row">
+			{{template "focus-number" (dict "Name" "rounds" "Label" "Rounds" "Min" 1 "Max" 12 "Value" $d.Values.Rounds "Error" (index $d.Errors "rounds"))}}
+			{{template "focus-number" (dict "Name" "long_break_every" "Label" "Long break every" "Min" 1 "Max" 12 "Value" $d.Values.LongBreakEvery "Error" (index $d.Errors "long_break_every") "Hint" "rounds. Set it to the number of rounds for no long break.")}}
+		</div>
+		<label class="focus-choice"><input type="checkbox" name="auto_advance" value="1"{{if $d.Values.AutoAdvance}} checked{{end}}> Start next phase automatically</label>
+	</fieldset>
+
+	<div class="field">
+		<label for="focus-chime">Chime when a phase ends</label>
+		<select id="focus-chime" name="chime"{{if index $d.Errors "chime"}} aria-invalid="true" aria-describedby="focus-chime-error"{{end}}>
+			{{range $d.Chimes}}<option value="{{.Name}}"{{if eq .Name $d.Values.Chime}} selected{{end}}>{{.Label}}</option>{{end}}
+		</select>
+		{{template "focus-error" (dict "Name" "chime" "Error" (index $d.Errors "chime"))}}
+	</div>
+
+	<label class="focus-choice"><input type="checkbox" name="keep_history" value="1"{{if $d.Values.KeepHistory}} checked{{end}}> Keep history — record sessions of this timer</label>
+
+	<div class="focus-form-actions">
+		<button class="primary" type="submit">{{$d.Submit}}</button>
+		<a href="/focus/">Cancel</a>
+	</div>
+</form>
+{{end}}
