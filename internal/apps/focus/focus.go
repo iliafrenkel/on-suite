@@ -54,6 +54,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /new", a.newForm)
 	r.HandleFunc("POST /timers", a.create)
 	r.HandleFunc("GET /timers/{id}/edit", a.editForm)
+	r.HandleFunc("POST /timers/order", a.order)
 	r.HandleFunc("POST /timers/{id}", a.update)
 	r.HandleFunc("POST /timers/{id}/duplicate", a.duplicate)
 	r.HandleFunc("POST /timers/{id}/delete", a.delete)

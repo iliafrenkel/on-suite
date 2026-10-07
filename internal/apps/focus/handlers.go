@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -205,4 +206,28 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 	}
 	view := newFormView(fmt.Sprintf("/focus/timers/%d", id), "Edit timer", "Save changes", values, errs)
 	a.render(w, r, http.StatusUnprocessableEntity, "focus/form", "Edit timer", view)
+}
+
+// order saves the tile order after a drag. ids is the comma-separated list
+// home.js sends; anything unparseable is a 400, like a list the store
+// refuses.
+func (a *App) order(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	var ids []int64
+	for _, part := range strings.Split(r.PostFormValue("ids"), ",") {
+		id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+		if err != nil || id <= 0 {
+			a.deps.Errors.Status(w, r, http.StatusBadRequest)
+			return
+		}
+		ids = append(ids, id)
+	}
+	if err := a.store.ReorderTimers(r.Context(), userID, ids); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -133,3 +133,31 @@ func TestDuplicateAndDeleteAreNotFoundForSomeoneElse(t *testing.T) {
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
 func httptestGet(path string) *http.Request { return httptest.NewRequest("GET", path, nil) }
+
+func TestReorderSavesTheNewOrder(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	a, b, c := seedTimer(t, s, uid, single("A", 5)), seedTimer(t, s, uid, single("B", 5)), seedTimer(t, s, uid, single("C", 5))
+	ids := itoa(c.ID) + "," + itoa(a.ID) + "," + itoa(b.ID)
+	rec := s.PostHX(t, s.Alice, "/focus/timers/order", url.Values{"ids": {ids}})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("POST order = %d, want 204; body %s", rec.Code, rec.Body.String())
+	}
+	ts, _ := s.Store.Timers(context.Background(), uid)
+	if got := strings.Join(names(ts), ""); got != "CAB" {
+		t.Errorf("order = %s, want CAB", got)
+	}
+}
+
+func TestReorderRejectsBadIDs(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	a, b := seedTimer(t, s, uid, single("A", 5)), seedTimer(t, s, uid, single("B", 5))
+	theirs := seedTimer(t, s, s.Bob.User.ID, single("Bob", 5))
+	for _, ids := range []string{"", "x,y", itoa(a.ID), itoa(a.ID) + "," + itoa(theirs.ID), itoa(a.ID) + "," + itoa(b.ID) + ",-1"} {
+		rec := s.PostHX(t, s.Alice, "/focus/timers/order", url.Values{"ids": {ids}})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("ids %q = %d, want 400", ids, rec.Code)
+		}
+	}
+}
