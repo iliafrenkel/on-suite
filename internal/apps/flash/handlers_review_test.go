@@ -906,7 +906,7 @@ func TestUndoFromSummaryBringsCardBackAndReducesTally(t *testing.T) {
 }
 
 // TestReviewColourMatchesDeckForOneDeckScope is #338 bullet 4's single-deck
-// case: the progress stripe on .flash-review carries a deck-c-<color> class
+// case: the progress stripe on .flash-review carries a swatch-c-<color> class
 // matching the scoped deck's own colour.
 func TestReviewColourMatchesDeckForOneDeckScope(t *testing.T) {
 	s := newServer(t)
@@ -922,8 +922,8 @@ func TestReviewColourMatchesDeckForOneDeckScope(t *testing.T) {
 	doc := s.Get(t, s.Alice, "/flash/review/"+itoa(deck.ID))
 	stripe := doc.MustHave(".flash-review")
 	class, _ := htmlassert.Attr(stripe, "class")
-	if !strings.Contains(class, "deck-c-purple") {
-		t.Errorf(".flash-review class = %q, want it to contain deck-c-purple", class)
+	if !strings.Contains(class, "swatch-c-purple") {
+		t.Errorf(".flash-review class = %q, want it to contain swatch-c-purple", class)
 	}
 }
 
@@ -965,8 +965,8 @@ func TestReviewAllColourTracksCurrentCard(t *testing.T) {
 	// deck B was created last, so ListDecks (newest first) puts it first:
 	// its card is the initial head, and the stripe follows its colour.
 	doc := s.Get(t, s.Alice, "/flash/review")
-	if got := stripeClass(doc); !strings.Contains(got, "deck-c-pink") {
-		t.Errorf(".flash-review class = %q, want it to contain deck-c-pink", got)
+	if got := stripeClass(doc); !strings.Contains(got, "swatch-c-pink") {
+		t.Errorf(".flash-review class = %q, want it to contain swatch-c-pink", got)
 	}
 
 	rec := s.PostHX(t, s.Alice, "/flash/review/grade", url.Values{"card_id": {itoa(cardB.ID)}, "rating": {"3"}})
@@ -974,8 +974,8 @@ func TestReviewAllColourTracksCurrentCard(t *testing.T) {
 		t.Fatalf("grade = %d, want 200", rec.Code)
 	}
 	after := htmlassert.Parse(t, rec.Body.String())
-	if got := stripeClass(after); !strings.Contains(got, "deck-c-blue") {
-		t.Errorf("after grading, .flash-review class = %q, want it to contain deck-c-blue", got)
+	if got := stripeClass(after); !strings.Contains(got, "swatch-c-blue") {
+		t.Errorf("after grading, .flash-review class = %q, want it to contain swatch-c-blue", got)
 	}
 }
 

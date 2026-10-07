@@ -13,7 +13,7 @@
        CancelURL, CancelLabel — where Cancel and the back button go
        ShowAddAnother — show "Save and add another" (new cards only) */}}
 {{define "card-editor"}}
-<form class="flash-editor deck-c-{{.Form.Deck.Color}}" id="{{.FormID}}" method="post" action="{{.Action}}" enctype="multipart/form-data"
+<form class="flash-editor swatch-c-{{.Form.Deck.Color}}" id="{{.FormID}}" method="post" action="{{.Action}}" enctype="multipart/form-data"
       hx-post="{{.Action}}" hx-encoding="multipart/form-data" hx-target="#deck-detail" hx-swap="innerHTML">
 	<input type="hidden" name="{{csrfField}}" value="{{.Form.CSRFToken}}">
 	<div class="notes-toolbar flash-deck-toolbar">

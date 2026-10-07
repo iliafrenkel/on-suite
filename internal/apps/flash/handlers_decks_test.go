@@ -382,7 +382,7 @@ func TestDeckListShowsColorAndDueBadge(t *testing.T) {
 
 	doc := s.Get(t, s.Alice, "/flash/")
 	doc.MustHave(`#deck-list a.deck-row`)
-	doc.MustHave(`#deck-list .deck-c-blue`)
+	doc.MustHave(`#deck-list .swatch-c-blue`)
 	badge := doc.MustHave(`#deck-list .flash-due-badge`)
 	if got := htmlassert.Text(badge); got != "2 to review" {
 		t.Errorf("due badge accessible text = %q, want %q", got, "2 to review")
@@ -510,7 +510,7 @@ func TestDeckFragmentCarriesOutOfBandListAndToolbar(t *testing.T) {
 			t.Errorf("%s in the fragment is not marked hx-swap-oob", id)
 		}
 	}
-	doc.MustHave(`#deck-list .deck-c-green`)
+	doc.MustHave(`#deck-list .swatch-c-green`)
 }
 
 // TestOutOfBandReviewAllBadgeMatchesFullPageCount pins #316: the OOB

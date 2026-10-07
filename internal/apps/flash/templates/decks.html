@@ -63,7 +63,7 @@
 {{end}}
 
 {{define "deck-detail-view"}}
-<div class="flash-deck-view deck-c-{{.Deck.Color}}" id="deck-detail-view">
+<div class="flash-deck-view swatch-c-{{.Deck.Color}}" id="deck-detail-view">
 	{{template "deck-toolbar" (dict "Deck" .Deck "Active" "" "CSRFToken" .CSRFToken "View" .)}}
 	{{with .Notice}}<div class="notice flash-notice" role="status">{{.}}</div>{{end}}
 
@@ -116,7 +116,7 @@
 	<div class="flash-swatches">
 		{{range .Colors}}
 		<input type="radio" class="visually-hidden flash-swatch-input" name="color" value="{{.Name}}" id="deck-color-{{$.IDSuffix}}-{{.Name}}"{{if eq .Name $.Value}} checked{{end}}>
-		<label class="flash-swatch deck-c-{{.Name}}" for="deck-color-{{$.IDSuffix}}-{{.Name}}"><span class="visually-hidden">{{.Label}}</span></label>
+		<label class="flash-swatch swatch-c-{{.Name}}" for="deck-color-{{$.IDSuffix}}-{{.Name}}"><span class="visually-hidden">{{.Label}}</span></label>
 		{{end}}
 	</div>
 </fieldset>
@@ -210,7 +210,7 @@
 <ul class="deck-list" id="deck-list"{{if .OOB}} hx-swap-oob="true"{{end}}>
 	{{range .Gifts}}
 	<li>
-		<a class="deck-row deck-row-gift deck-c-{{.DeckColor}}{{if eq .ShareID $.ActiveGiftID}} deck-row-active{{end}}" href="/flash/shared/{{.ShareID}}" hx-get="/flash/shared/{{.ShareID}}" hx-target="#deck-detail" hx-push-url="true"{{if eq .ShareID $.ActiveGiftID}} aria-current="true"{{end}}>
+		<a class="deck-row deck-row-gift swatch-c-{{.DeckColor}}{{if eq .ShareID $.ActiveGiftID}} deck-row-active{{end}}" href="/flash/shared/{{.ShareID}}" hx-get="/flash/shared/{{.ShareID}}" hx-target="#deck-detail" hx-push-url="true"{{if eq .ShareID $.ActiveGiftID}} aria-current="true"{{end}}>
 			{{template "flash-stack" (dict "Size" "sm")}}
 			<span class="deck-row-text">
 				<span class="deck-row-name">{{.DeckName}}</span>
@@ -223,7 +223,7 @@
 	{{range .Items}}
 	{{$d := .Deck}}
 	<li>
-		<a class="deck-row deck-c-{{$d.Color}}{{if eq $d.ID $.ActiveID}} deck-row-active{{end}}{{if .Snoozed}} deck-row-snoozed{{end}}" href="/flash/{{$d.ID}}" hx-get="/flash/{{$d.ID}}" hx-target="#deck-detail" hx-push-url="true"{{if eq $d.ID $.ActiveID}} aria-current="true"{{end}}>
+		<a class="deck-row swatch-c-{{$d.Color}}{{if eq $d.ID $.ActiveID}} deck-row-active{{end}}{{if .Snoozed}} deck-row-snoozed{{end}}" href="/flash/{{$d.ID}}" hx-get="/flash/{{$d.ID}}" hx-target="#deck-detail" hx-push-url="true"{{if eq $d.ID $.ActiveID}} aria-current="true"{{end}}>
 			{{template "flash-stack" (dict "Size" "sm")}}
 			<span class="deck-row-text">
 				<span class="deck-row-name">{{$d.Name}}</span>

@@ -2647,27 +2647,28 @@ kbd {
 }
 .flash-snoozed-marker { color: var(--c-text-dim); font-size: var(--fs-xs); }
 
-/* ---- ON Flash: home screen (UI overhaul U1) ------------------------------
- * Spec: docs/superpowers/specs/2026-09-23-on-flash-ui-overhaul-design.md.
- * The CSP forbids style="", so a deck's colour arrives as a deck-c-<name>
- * class that sets --deck/--deck-soft for everything inside it. */
+/* ---- Colour swatches (shared: ON Flash decks, ON Focus timers) ----------
+ * The CSP forbids style="", so a user-picked colour arrives as a
+ * swatch-c-<name> class that sets --swatch/--swatch-soft for everything
+ * inside it. Apps keep their own copy of the name list (they never import
+ * each other); these classes are the shared part. */
 
-.deck-c-teal   { --deck: #1D9E75; --deck-soft: #E1F5EE; }
-.deck-c-blue   { --deck: #378ADD; --deck-soft: #E6F1FB; }
-.deck-c-purple { --deck: #7F77DD; --deck-soft: #EEEDFE; }
-.deck-c-pink   { --deck: #D4537E; --deck-soft: #FBEAF0; }
-.deck-c-coral  { --deck: #D85A30; --deck-soft: #FAECE7; }
-.deck-c-amber  { --deck: #BA7517; --deck-soft: #FAEEDA; }
-.deck-c-green  { --deck: #639922; --deck-soft: #EAF3DE; }
-.deck-c-gray   { --deck: #888780; --deck-soft: #F1EFE8; }
-:root[data-theme="dark"] .deck-c-teal   { --deck-soft: #085041; }
-:root[data-theme="dark"] .deck-c-blue   { --deck-soft: #0C447C; }
-:root[data-theme="dark"] .deck-c-purple { --deck-soft: #3C3489; }
-:root[data-theme="dark"] .deck-c-pink   { --deck-soft: #72243E; }
-:root[data-theme="dark"] .deck-c-coral  { --deck-soft: #712B13; }
-:root[data-theme="dark"] .deck-c-amber  { --deck-soft: #633806; }
-:root[data-theme="dark"] .deck-c-green  { --deck-soft: #27500A; }
-:root[data-theme="dark"] .deck-c-gray   { --deck-soft: #444441; }
+.swatch-c-teal   { --swatch: #1D9E75; --swatch-soft: #E1F5EE; }
+.swatch-c-blue   { --swatch: #378ADD; --swatch-soft: #E6F1FB; }
+.swatch-c-purple { --swatch: #7F77DD; --swatch-soft: #EEEDFE; }
+.swatch-c-pink   { --swatch: #D4537E; --swatch-soft: #FBEAF0; }
+.swatch-c-coral  { --swatch: #D85A30; --swatch-soft: #FAECE7; }
+.swatch-c-amber  { --swatch: #BA7517; --swatch-soft: #FAEEDA; }
+.swatch-c-green  { --swatch: #639922; --swatch-soft: #EAF3DE; }
+.swatch-c-gray   { --swatch: #888780; --swatch-soft: #F1EFE8; }
+:root[data-theme="dark"] .swatch-c-teal   { --swatch-soft: #085041; }
+:root[data-theme="dark"] .swatch-c-blue   { --swatch-soft: #0C447C; }
+:root[data-theme="dark"] .swatch-c-purple { --swatch-soft: #3C3489; }
+:root[data-theme="dark"] .swatch-c-pink   { --swatch-soft: #72243E; }
+:root[data-theme="dark"] .swatch-c-coral  { --swatch-soft: #712B13; }
+:root[data-theme="dark"] .swatch-c-amber  { --swatch-soft: #633806; }
+:root[data-theme="dark"] .swatch-c-green  { --swatch-soft: #27500A; }
+:root[data-theme="dark"] .swatch-c-gray   { --swatch-soft: #444441; }
 
 /* A deck drawn as three stacked cards. */
 .flash-stack {
@@ -2681,18 +2682,18 @@ kbd {
 	position: absolute;
 	inset: 0;
 	border-radius: 5px;
-	border: 1px solid color-mix(in srgb, var(--deck, #888780) 60%, #000);
+	border: 1px solid color-mix(in srgb, var(--swatch, #888780) 60%, #000);
 }
 .flash-stack-lg > span { border-radius: 10px; }
 .flash-stack > span:nth-child(1) {
-	background: color-mix(in srgb, var(--deck, #888780) 45%, var(--c-bg));
+	background: color-mix(in srgb, var(--swatch, #888780) 45%, var(--c-bg));
 	transform: rotate(-8deg);
 }
 .flash-stack > span:nth-child(2) {
-	background: color-mix(in srgb, var(--deck, #888780) 70%, var(--c-bg));
+	background: color-mix(in srgb, var(--swatch, #888780) 70%, var(--c-bg));
 	transform: rotate(4deg);
 }
-.flash-stack > span:nth-child(3) { background: var(--deck, #888780); }
+.flash-stack > span:nth-child(3) { background: var(--swatch, #888780); }
 
 .flash-due-badge {
 	display: inline-block;
@@ -2797,7 +2798,7 @@ kbd {
 	margin-top: var(--s-4);
 	padding: var(--s-3) var(--s-4);
 	border-radius: 10px;
-	background: var(--deck-soft, var(--c-bg-subtle));
+	background: var(--swatch-soft, var(--c-bg-subtle));
 }
 
 /* Big, friendly buttons for the welcome and empty states. */
@@ -2858,7 +2859,7 @@ kbd {
 	height: 2.75rem;
 	margin: 0;
 	border-radius: 50%;
-	background: var(--deck);
+	background: var(--swatch);
 	border: 3px solid var(--c-bg);
 	box-shadow: 0 0 0 1px var(--c-border-firm);
 	cursor: pointer;
@@ -2961,7 +2962,7 @@ a.flash-pill:hover { color: var(--c-text); border-color: var(--c-border-firm); }
 	position: absolute;
 	top: 0; left: 0; right: 0;
 	height: 5px;
-	background: var(--deck, var(--c-border-firm));
+	background: var(--swatch, var(--c-border-firm));
 }
 /* Only the linked case (cards grid, tag page) is clickable — the gift
    preview's sample cards render as plain <span>s and must not look
@@ -3057,7 +3058,7 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	position: absolute;
 	top: 0; left: 0; right: 0;
 	height: 8px;
-	background: var(--deck, var(--c-border-firm));
+	background: var(--swatch, var(--c-border-firm));
 }
 .flash-card-back { transform: rotateY(180deg); }
 .flash-card-text { font-size: var(--fs-xl); font-weight: 500; white-space: pre-line; overflow-wrap: anywhere; }
@@ -3077,7 +3078,7 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 .flash-blank {
 	display: inline-block;
 	min-width: 4em;
-	border-bottom: 3px solid var(--deck, var(--c-accent));
+	border-bottom: 3px solid var(--swatch, var(--c-accent));
 	color: var(--c-text-faint);
 	font-size: 0.7em;
 	vertical-align: baseline;
@@ -3090,7 +3091,7 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 .flash-fill {
 	padding: 0 0.2em;
 	border-radius: 4px;
-	background: var(--deck-soft, var(--c-accent-bg));
+	background: var(--swatch-soft, var(--c-accent-bg));
 	color: inherit;
 }
 
@@ -3156,7 +3157,7 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	position: absolute;
 	top: 0; left: 0; right: 0;
 	height: 8px;
-	background: var(--deck, var(--c-border-firm));
+	background: var(--swatch, var(--c-border-firm));
 }
 .flash-editor-back { background: color-mix(in srgb, var(--flash-card-bg) 92%, var(--c-bg-subtle)); }
 .flash-editor-face label { margin: 0; font-size: var(--fs-xs); color: var(--c-text-faint); }
@@ -3287,7 +3288,7 @@ input.flash-tag-entry:focus { outline: none; }
 .flash-review-scope { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 12rem; }
 .flash-progress { flex: 1; height: 8px; min-width: 4rem; }
 .flash-progress .track { fill: var(--c-bg-inset); }
-.flash-progress .fill { fill: var(--deck, var(--c-accent)); }
+.flash-progress .fill { fill: var(--swatch, var(--c-accent)); }
 .flash-review-count { white-space: nowrap; }
 
 .flash-review-card .flash-card { max-width: 28rem; margin: 0 auto; }
@@ -3402,7 +3403,7 @@ input.flash-tag-entry:focus { outline: none; }
 	width: 14px;
 	height: 18px;
 	border-radius: 3px;
-	background: var(--deck);
+	background: var(--swatch);
 	opacity: 0;
 	animation: flash-burst 1s ease-out forwards;
 }
@@ -3436,15 +3437,15 @@ input.flash-tag-entry:focus { outline: none; }
 /* Gift decks: a dashed, see-through stack, like a present not yet opened. */
 .deck-row-gift { border: 1px dashed var(--c-border-firm); }
 .deck-row-gift .flash-stack > span {
-	background: color-mix(in srgb, var(--deck) 18%, var(--c-bg));
+	background: color-mix(in srgb, var(--swatch) 18%, var(--c-bg));
 	border-style: dashed;
-	border-color: var(--deck);
+	border-color: var(--swatch);
 }
-.flash-gift .flash-stack > span { border-style: dashed; border-color: var(--deck); }
+.flash-gift .flash-stack > span { border-style: dashed; border-color: var(--swatch); }
 .flash-gift-badge {
 	padding: 0 var(--s-2);
 	border-radius: 999px;
-	background: var(--deck-soft);
+	background: var(--swatch-soft);
 	color: var(--c-text);
 	font-size: var(--fs-xs);
 	font-weight: 600;
@@ -3494,7 +3495,7 @@ input.flash-tag-entry:focus { outline: none; }
 	margin-top: var(--s-4);
 	padding: var(--s-3) var(--s-4);
 	border-radius: 10px;
-	background: var(--deck-soft, var(--c-bg-subtle));
+	background: var(--swatch-soft, var(--c-bg-subtle));
 }
 .flash-break-banner form { margin: 0; }
 
@@ -3573,7 +3574,7 @@ input.flash-tag-entry:focus { outline: none; }
 .flash-load-mastery { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-xs); color: var(--c-text-dim); }
 .flash-mastery-bar { width: 5rem; height: 6px; flex: none; }
 .flash-mastery-bar .track { fill: var(--c-bg-inset); }
-.flash-mastery-bar .fill { fill: var(--deck, var(--c-accent)); }
+.flash-mastery-bar .fill { fill: var(--swatch, var(--c-accent)); }
 .flash-load-due { font-size: var(--fs-xs); color: var(--c-text-dim); white-space: nowrap; }
 .flash-load-due.flash-due-badge { color: var(--c-accent-attention); }
 

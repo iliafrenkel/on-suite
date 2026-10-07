@@ -58,7 +58,7 @@
 {{end}}
 
 {{define "deck-detail-cards"}}
-<div class="flash-cards-pane deck-c-{{.Deck.Color}}" id="deck-detail-cards">
+<div class="flash-cards-pane swatch-c-{{.Deck.Color}}" id="deck-detail-cards">
 	{{template "deck-toolbar" (dict "Deck" .Deck "Active" "cards" "CSRFToken" .CSRFToken "View" .)}}
 	<h1 class="flash-pane-title">{{.Deck.Name}}</h1>
 	{{/* Without JS this is a normal GET form to the grid itself. With JS,
@@ -93,7 +93,7 @@
 {{define "card-grid-fragment"}}{{template "card-grid" .}}{{template "card-tag-pills" .}}{{end}}
 
 {{define "deck-detail-card"}}
-<div class="flash-opened-card deck-c-{{.Deck.Color}}" id="deck-detail-card">
+<div class="flash-opened-card swatch-c-{{.Deck.Color}}" id="deck-detail-card">
 	<div class="notes-toolbar flash-deck-toolbar">
 		<a class="toolbar-btn flash-card-back-to-grid" href="{{.Opened.BackURL}}" hx-get="{{.Opened.BackURL}}" hx-target="#deck-detail" hx-push-url="true">{{ticon "arrow-left"}}All cards</a>
 		<div class="notes-toolbar-actions">

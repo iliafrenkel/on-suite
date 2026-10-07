@@ -17,7 +17,7 @@
      Only non-interactive content goes inside the <label>; links and audio
      go in .flash-card-extras, shown once the card is flipped. */}}
 {{define "flash-card"}}<input type="checkbox" class="visually-hidden flash-flip" id="{{.FlipID}}" aria-label="Show the answer">
-<label class="flash-card deck-c-{{.Face.Color}}" for="{{.FlipID}}">
+<label class="flash-card swatch-c-{{.Face.Color}}" for="{{.FlipID}}">
 	<span class="flash-card-inner">
 		<span class="flash-card-face flash-card-front">
 			{{with $.Corner}}<span class="flash-card-corner">{{.}}</span>{{end}}
@@ -41,7 +41,7 @@
      status corner label. Pass a cardGridItem. With an Href it is a link
      (InPane makes it an HTMX swap into the deck pane); without one it is
      a plain tile (a gift's sample cards). */}}
-{{define "flash-mini-card"}}{{if .Href}}<a class="flash-mini-card deck-c-{{.Face.Color}}" href="{{.Href}}"{{if .InPane}} hx-get="{{.Href}}" hx-target="#deck-detail" hx-push-url="true"{{end}}>{{template "flash-mini-card-body" .}}</a>{{else}}<span class="flash-mini-card deck-c-{{.Face.Color}}">{{template "flash-mini-card-body" .}}</span>{{end}}{{end}}
+{{define "flash-mini-card"}}{{if .Href}}<a class="flash-mini-card swatch-c-{{.Face.Color}}" href="{{.Href}}"{{if .InPane}} hx-get="{{.Href}}" hx-target="#deck-detail" hx-push-url="true"{{end}}>{{template "flash-mini-card-body" .}}</a>{{else}}<span class="flash-mini-card swatch-c-{{.Face.Color}}">{{template "flash-mini-card-body" .}}</span>{{end}}{{end}}
 
 {{define "flash-mini-card-body"}}
 	<span class="flash-mini-text">{{.Face.Question}}</span>
