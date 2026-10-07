@@ -33,6 +33,13 @@
 	var s = null; // the running session, once there is one
 	var ticker = 0;
 
+	// A page restored from the back/forward cache still holds the session
+	// as it was when the person left, and would write that stale copy over
+	// whatever is in localStorage now. Reload so it starts from storage.
+	window.addEventListener("pageshow", function (e) {
+		if (e.persisted) window.location.reload();
+	});
+
 	// ---- Drawing ----------------------------------------------------------
 
 	function render(now) {
@@ -226,7 +233,7 @@
 	});
 
 	document.addEventListener("keydown", function (e) {
-		if (e.metaKey || e.ctrlKey || e.altKey) return;
+		if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
 		if (document.querySelector("dialog[open]")) return; // the dialog's own keys
 		switch (e.key) {
 		case " ":
