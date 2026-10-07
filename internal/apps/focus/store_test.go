@@ -3,7 +3,9 @@ package focus_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -78,5 +80,157 @@ func TestSchemaRejectsIntervalsWithoutIntervalColumns(t *testing.T) {
 		VALUES (?, 'x', 'intervals', 50, 0, ?, ?)`, f.alice.ID, now, now)
 	if err == nil {
 		t.Fatal("inserted an intervals timer with no break/rounds, want a CHECK failure")
+	}
+}
+
+func (f *fixture) tick() { f.now = f.now.Add(time.Minute) }
+
+func (f *fixture) create(t *testing.T, userID int64, name string) focus.Timer {
+	t.Helper()
+	in := focus.DefaultInput()
+	in.Name = name
+	tm, err := f.store.CreateTimer(context.Background(), userID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tm
+}
+
+func names(ts []focus.Timer) []string {
+	var out []string
+	for _, t := range ts {
+		out = append(out, t.Name)
+	}
+	return out
+}
+
+func TestCreateTimerStoresEveryField(t *testing.T) {
+	f := newFixture(t)
+	in := validIntervals()
+	in.Name = "  Deep work "
+	got, err := f.store.CreateTimer(context.Background(), f.alice.ID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := f.store.Timer(context.Background(), f.alice.ID, got.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := in.Normalize()
+	if back.TimerInput != want {
+		t.Errorf("stored %+v, want %+v", back.TimerInput, want)
+	}
+	if !back.CreatedAt.Equal(f.now) || !back.UpdatedAt.Equal(f.now) || back.UserID != f.alice.ID {
+		t.Errorf("timestamps/user = %v %v %d", back.CreatedAt, back.UpdatedAt, back.UserID)
+	}
+}
+
+func TestCreateTimerSingleStoresNullIntervals(t *testing.T) {
+	f := newFixture(t)
+	tm := f.create(t, f.alice.ID, "Reading")
+	var rounds sql.NullInt64
+	if err := f.db.QueryRow(`SELECT rounds FROM focus_timers WHERE id = ?`, tm.ID).Scan(&rounds); err != nil {
+		t.Fatal(err)
+	}
+	if rounds.Valid {
+		t.Errorf("rounds = %d, want NULL for a single timer", rounds.Int64)
+	}
+}
+
+func TestCreateTimerAppendsInOrder(t *testing.T) {
+	f := newFixture(t)
+	f.create(t, f.alice.ID, "A")
+	f.create(t, f.alice.ID, "B")
+	f.create(t, f.bob.ID, "Bob's")
+	f.create(t, f.alice.ID, "C")
+	ts, err := f.store.Timers(context.Background(), f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := names(ts); !slices.Equal(got, []string{"A", "B", "C"}) {
+		t.Errorf("Timers = %v, want [A B C]", got)
+	}
+}
+
+func TestCreateTimerRejectsInvalidInput(t *testing.T) {
+	f := newFixture(t)
+	in := focus.DefaultInput() // no name
+	_, err := f.store.CreateTimer(context.Background(), f.alice.ID, in)
+	var ve *focus.ValidationError
+	if !errors.As(err, &ve) || ve.Fields["name"] == "" || !errors.Is(err, focus.ErrInvalid) {
+		t.Fatalf("CreateTimer(no name) = %v, want a ValidationError for name", err)
+	}
+}
+
+func TestTimerIsNotFoundForSomeoneElse(t *testing.T) {
+	f := newFixture(t)
+	tm := f.create(t, f.alice.ID, "Mine")
+	if _, err := f.store.Timer(context.Background(), f.bob.ID, tm.ID); !errors.Is(err, focus.ErrNotFound) {
+		t.Errorf("bob reading alice's timer = %v, want ErrNotFound", err)
+	}
+	if _, err := f.store.Timer(context.Background(), f.alice.ID, 9999); !errors.Is(err, focus.ErrNotFound) {
+		t.Errorf("missing timer = %v, want ErrNotFound", err)
+	}
+}
+
+func TestUpdateTimerChangesFieldsAndKeepsPosition(t *testing.T) {
+	f := newFixture(t)
+	f.create(t, f.alice.ID, "First")
+	tm := f.create(t, f.alice.ID, "Second")
+	f.tick()
+	in := validIntervals()
+	got, err := f.store.UpdateTimer(context.Background(), f.alice.ID, tm.ID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TimerInput != in.Normalize() || got.Position != tm.Position {
+		t.Errorf("updated = %+v (pos %d), want %+v (pos %d)", got.TimerInput, got.Position, in, tm.Position)
+	}
+	if !got.UpdatedAt.Equal(f.now) || !got.CreatedAt.Equal(tm.CreatedAt) {
+		t.Errorf("updated_at %v created_at %v", got.UpdatedAt, got.CreatedAt)
+	}
+}
+
+func TestUpdateTimerToSingleClearsIntervals(t *testing.T) {
+	f := newFixture(t)
+	tm, err := f.store.CreateTimer(context.Background(), f.alice.ID, validIntervals())
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := tm.TimerInput
+	in.Kind = focus.KindSingle
+	got, err := f.store.UpdateTimer(context.Background(), f.alice.ID, tm.ID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Rounds != 0 || got.BreakMinutes != 0 {
+		t.Errorf("single timer kept intervals: %+v", got.TimerInput)
+	}
+}
+
+func TestUpdateTimerRefusesSomeoneElsesAndInvalid(t *testing.T) {
+	f := newFixture(t)
+	tm := f.create(t, f.alice.ID, "Mine")
+	if _, err := f.store.UpdateTimer(context.Background(), f.bob.ID, tm.ID, validSingle()); !errors.Is(err, focus.ErrNotFound) {
+		t.Errorf("bob updating = %v, want ErrNotFound", err)
+	}
+	bad := validSingle()
+	bad.FocusMinutes = 0
+	if _, err := f.store.UpdateTimer(context.Background(), f.alice.ID, tm.ID, bad); !errors.Is(err, focus.ErrInvalid) {
+		t.Errorf("invalid update = %v, want ErrInvalid", err)
+	}
+}
+
+func TestDeleteTimer(t *testing.T) {
+	f := newFixture(t)
+	tm := f.create(t, f.alice.ID, "Gone")
+	if err := f.store.DeleteTimer(context.Background(), f.bob.ID, tm.ID); !errors.Is(err, focus.ErrNotFound) {
+		t.Errorf("bob deleting = %v, want ErrNotFound", err)
+	}
+	if err := f.store.DeleteTimer(context.Background(), f.alice.ID, tm.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Timer(context.Background(), f.alice.ID, tm.ID); !errors.Is(err, focus.ErrNotFound) {
+		t.Errorf("after delete = %v, want ErrNotFound", err)
 	}
 }
