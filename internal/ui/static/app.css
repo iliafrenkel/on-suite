@@ -3805,7 +3805,6 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 
 .focus-tiles {
 	list-style: none;
-	margin: 0;
 	padding: 0;
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
@@ -3861,10 +3860,28 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 	cursor: default;
 }
 .focus-menu-panel form { margin: 0; }
-.focus-menu-panel button, .focus-menu-panel a { display: block; width: 100%; text-align: left; }
+.focus-menu-panel button, .focus-menu-panel a {
+	display: block;
+	width: 100%;
+	padding: var(--s-1) var(--s-2);
+	border: none;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--c-text);
+	text-align: left;
+	text-decoration: none;
+	font-size: var(--fs-xs);
+	line-height: 1.5;
+	cursor: pointer;
+}
+.focus-menu-panel button:hover, .focus-menu-panel a:hover { background: var(--c-bg-inset); color: var(--c-text); text-decoration: none; }
+.focus-menu-panel button.danger, .focus-menu-panel button.danger:hover { color: var(--c-danger); }
+
+.focus-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1rem; border: var(--border); border-radius: var(--radius); color: var(--c-text); background: var(--c-bg); }
+.focus-dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 
 .focus-form { max-width: var(--measure); }
-.focus-form fieldset { border: 0; padding: 0; margin: 0; }
+.focus-form fieldset { border: 0; padding: 0; margin-inline: 0; min-inline-size: 0; }
 .focus-form legend { font-weight: 600; margin-bottom: var(--s-2); }
 .focus-choice { display: flex; align-items: center; gap: var(--s-2); font-weight: 400; }
 .focus-number input { max-width: 8rem; }

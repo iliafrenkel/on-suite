@@ -18,3 +18,5 @@ CREATE TABLE focus_sessions (
 ) STRICT;
 
 CREATE INDEX focus_sessions_started_idx ON focus_sessions (user_id, started_at);
+-- Deleting a timer nulls its sessions' timer_id; this keeps that off a full scan.
+CREATE INDEX focus_sessions_timer_idx ON focus_sessions (timer_id);

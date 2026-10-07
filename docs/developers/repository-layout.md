@@ -84,7 +84,7 @@ on-suite/
 
 ## Inside an app
 
-The five apps share a shape, so once you know one you can find your way
+The six apps share a shape, so once you know one you can find your way
 around the others. Using `internal/apps/paste` as the example:
 
 | File | Holds |

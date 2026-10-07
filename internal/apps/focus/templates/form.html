@@ -11,7 +11,7 @@
 		{{template "focus-error" (dict "Name" "name" "Error" (index $d.Errors "name"))}}
 	</div>
 
-	<fieldset class="field focus-swatch-field">
+	<fieldset class="field focus-swatch-field"{{if index $d.Errors "color"}} aria-describedby="focus-color-error"{{end}}>
 		<legend>Colour</legend>
 		<div class="focus-swatches">
 			{{range $d.Colors}}
@@ -22,7 +22,7 @@
 		{{template "focus-error" (dict "Name" "color" "Error" (index $d.Errors "color"))}}
 	</fieldset>
 
-	<fieldset class="field focus-kind">
+	<fieldset class="field focus-kind"{{if index $d.Errors "kind"}} aria-describedby="focus-kind-error"{{end}}>
 		<legend>Kind</legend>
 		<label class="focus-choice"><input type="radio" name="kind" value="single"{{if eq $d.Values.Kind "single"}} checked{{end}}> Single block</label>
 		<label class="focus-choice"><input type="radio" name="kind" value="intervals"{{if eq $d.Values.Kind "intervals"}} checked{{end}}> Intervals — focus and breaks, in rounds</label>
