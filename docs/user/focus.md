@@ -11,7 +11,7 @@ shows the timer's name, how it runs (for example **15 min**, or
 **50 / 10 × 4 · long 30** for four 50-minute rounds with 10-minute breaks
 and a 30-minute long break) and how long the whole thing takes.
 
-Click **▶** on a tile to start that timer.
+Click **▶** on a tile to start that timer — see [Running a timer](#running-a-timer).
 
 ## Making a timer
 
@@ -40,3 +40,35 @@ Click a timer's name, or **⋯** then **Edit**, to change it. **⋯** also has:
   there.
 
 To change the order of your timers, drag a tile to where you want it.
+
+## Running a timer
+
+**▶** starts the timer straight away in a calm, full-window view. The ring
+around the countdown fills as time passes — in the timer's colour while you
+focus, warm grey during breaks. Interval timers also show a dot per round:
+filled for rounds done, ringed for the one you're in.
+
+| Button | Key | What it does |
+|---|---|---|
+| **Pause** / **Resume** | Space | Paused time doesn't count. |
+| **Skip** | S | Ends this focus round or break and moves on. Interval timers only. |
+| **Restart** | R | Starts this focus round or break again. |
+| **Full screen** | F | Fills the whole screen. Esc leaves it. |
+| **← Exit** | Esc | Asks first, then ends the session. |
+
+When a focus round or break ends, the timer's chime plays and the next one
+starts by itself — unless you unticked **Start next phase automatically**,
+in which case the timer waits for you to click **Start break** or
+**Start round 2** (or press Space).
+
+The first time you click **▶**, your browser asks whether ON Focus may show
+notifications. Allow it to get a notification when a phase ends while
+you're in another tab. If the timer says **Sound is off**, click anywhere
+on it: browsers keep sound off until you've clicked on the page.
+
+### Leaving and coming back
+
+The running timer lives in your browser. Reloading the page, or closing it
+and coming back, carries on where it was; the ON Focus home page shows a
+**Resume** link. One timer runs at a time — starting another asks before it
+ends the first. A timer started in one browser doesn't show up in another.
