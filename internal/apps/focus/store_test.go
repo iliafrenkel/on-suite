@@ -6,8 +6,10 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/focus"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
@@ -232,5 +234,93 @@ func TestDeleteTimer(t *testing.T) {
 	}
 	if _, err := f.store.Timer(context.Background(), f.alice.ID, tm.ID); !errors.Is(err, focus.ErrNotFound) {
 		t.Errorf("after delete = %v, want ErrNotFound", err)
+	}
+}
+
+func timerIDs(ts []focus.Timer) []int64 {
+	var out []int64
+	for _, t := range ts {
+		out = append(out, t.ID)
+	}
+	return out
+}
+
+func TestDuplicateTimerPlacesTheCopyAfterTheOriginal(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.create(t, f.alice.ID, "A")
+	orig, err := f.store.CreateTimer(ctx, f.alice.ID, validIntervals())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := f.create(t, f.alice.ID, "C")
+	dup, err := f.store.DuplicateTimer(ctx, f.alice.ID, orig.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantIn := orig.TimerInput
+	wantIn.Name = "Deep work (copy)"
+	if dup.TimerInput != wantIn {
+		t.Errorf("copy = %+v, want %+v", dup.TimerInput, wantIn)
+	}
+	ts, err := f.store.Timers(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := timerIDs(ts), []int64{a.ID, orig.ID, dup.ID, c.ID}; !slices.Equal(got, want) {
+		t.Errorf("order = %v, want %v", got, want)
+	}
+}
+
+func TestDuplicateTimerKeepsLongNamesWithinTheLimit(t *testing.T) {
+	f := newFixture(t)
+	orig := f.create(t, f.alice.ID, strings.Repeat("é", 80))
+	dup, err := f.store.DuplicateTimer(context.Background(), f.alice.ID, orig.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := utf8.RuneCountInString(dup.Name); n != 80 || !strings.HasSuffix(dup.Name, " (copy)") {
+		t.Errorf("copy name %q has %d characters, want 80 ending in (copy)", dup.Name, n)
+	}
+}
+
+func TestDuplicateTimerIsNotFoundForSomeoneElse(t *testing.T) {
+	f := newFixture(t)
+	orig := f.create(t, f.alice.ID, "Mine")
+	if _, err := f.store.DuplicateTimer(context.Background(), f.bob.ID, orig.ID); !errors.Is(err, focus.ErrNotFound) {
+		t.Errorf("bob duplicating = %v, want ErrNotFound", err)
+	}
+}
+
+func TestReorderTimers(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a, b, c := f.create(t, f.alice.ID, "A"), f.create(t, f.alice.ID, "B"), f.create(t, f.alice.ID, "C")
+	if err := f.store.ReorderTimers(ctx, f.alice.ID, []int64{c.ID, a.ID, b.ID}); err != nil {
+		t.Fatal(err)
+	}
+	ts, err := f.store.Timers(ctx, f.alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := names(ts); !slices.Equal(got, []string{"C", "A", "B"}) {
+		t.Errorf("order = %v, want [C A B]", got)
+	}
+}
+
+func TestReorderTimersRefusesAnythingButTheExactSet(t *testing.T) {
+	f := newFixture(t)
+	a, b := f.create(t, f.alice.ID, "A"), f.create(t, f.alice.ID, "B")
+	other := f.create(t, f.bob.ID, "Bob's")
+	for name, ids := range map[string][]int64{
+		"missing one": {a.ID},
+		"duplicate":   {a.ID, a.ID},
+		"foreign":     {a.ID, b.ID, other.ID},
+		"swapped in":  {a.ID, other.ID},
+		"empty":       {},
+	} {
+		if err := f.store.ReorderTimers(context.Background(), f.alice.ID, ids); !errors.Is(err, focus.ErrInvalid) {
+			t.Errorf("%s: ReorderTimers = %v, want ErrInvalid", name, err)
+		}
 	}
 }

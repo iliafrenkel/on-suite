@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"time"
+	"unicode/utf8"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
@@ -202,6 +204,112 @@ func (st *Store) DeleteTimer(ctx context.Context, userID, id int64) error {
 		return fmt.Errorf("focus: delete timer: %w", err)
 	} else if n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+const copySuffix = " (copy)"
+
+// copyName is name with " (copy)" on the end, shortened first if needed so
+// the result still fits MaxNameRunes.
+func copyName(name string) string {
+	room := MaxNameRunes - utf8.RuneCountInString(copySuffix)
+	if r := []rune(name); len(r) > room {
+		name = string(r[:room])
+	}
+	return name + copySuffix
+}
+
+// DuplicateTimer copies one of the user's timers, placing the copy right
+// after the original.
+func (st *Store) DuplicateTimer(ctx context.Context, userID, id int64) (Timer, error) {
+	orig, err := st.Timer(ctx, userID, id)
+	if err != nil {
+		return Timer{}, err
+	}
+	in, err := checked(TimerInput{
+		Name: copyName(orig.Name), Color: orig.Color, Kind: orig.Kind,
+		FocusMinutes: orig.FocusMinutes, BreakMinutes: orig.BreakMinutes,
+		LongBreakMinutes: orig.LongBreakMinutes, Rounds: orig.Rounds,
+		LongBreakEvery: orig.LongBreakEvery, AutoAdvance: orig.AutoAdvance,
+		KeepHistory: orig.KeepHistory, Chime: orig.Chime,
+	})
+	if err != nil {
+		return Timer{}, err
+	}
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Timer{}, fmt.Errorf("focus: duplicate timer: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE focus_timers SET position = position + 1 WHERE user_id = ? AND position > ?`,
+		userID, orig.Position); err != nil {
+		return Timer{}, fmt.Errorf("focus: duplicate timer: %w", err)
+	}
+	now := db.FormatTime(st.now())
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO focus_timers (user_id, name, color, kind, focus_minutes, break_minutes,
+			long_break_minutes, rounds, long_break_every, auto_advance, chime, keep_history,
+			position, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		userID, in.Name, in.Color, in.Kind, in.FocusMinutes, nullable(in.BreakMinutes),
+		nullable(in.LongBreakMinutes), nullable(in.Rounds), nullable(in.LongBreakEvery),
+		flag(in.AutoAdvance), in.Chime, flag(in.KeepHistory), orig.Position+1, now, now)
+	if err != nil {
+		return Timer{}, fmt.Errorf("focus: duplicate timer: %w", err)
+	}
+	newID, err := res.LastInsertId()
+	if err != nil {
+		return Timer{}, fmt.Errorf("focus: duplicate timer: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Timer{}, fmt.Errorf("focus: duplicate timer: %w", err)
+	}
+	return st.Timer(ctx, userID, newID)
+}
+
+// ReorderTimers sets the tile order. ids must name every one of the user's
+// timers exactly once — anything else (a stale page, someone else's id) is
+// refused rather than half-applied.
+func (st *Store) ReorderTimers(ctx context.Context, userID int64, ids []int64) error {
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("focus: reorder timers: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM focus_timers WHERE user_id = ?`, userID)
+	if err != nil {
+		return fmt.Errorf("focus: reorder timers: %w", err)
+	}
+	var have []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("focus: reorder timers: %w", err)
+		}
+		have = append(have, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("focus: reorder timers: %w", err)
+	}
+	_ = rows.Close()
+	want := slices.Clone(ids)
+	slices.Sort(have)
+	slices.Sort(want)
+	if len(want) == 0 || !slices.Equal(have, want) {
+		return fmt.Errorf("%w: order must list each timer once", ErrInvalid)
+	}
+	for pos, id := range ids {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE focus_timers SET position = ? WHERE user_id = ? AND id = ?`, pos, userID, id); err != nil {
+			return fmt.Errorf("focus: reorder timers: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("focus: reorder timers: %w", err)
 	}
 	return nil
 }
