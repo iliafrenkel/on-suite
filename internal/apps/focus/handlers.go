@@ -231,3 +231,38 @@ func (a *App) order(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// phaseRow is one line of the placeholder running page.
+type phaseRow struct {
+	Label  string
+	Length string
+}
+
+type runView struct {
+	ID     int64
+	Name   string
+	Phases []phaseRow
+}
+
+// run is F1's placeholder running page: the timer's phases, in order. F2
+// replaces it with the real focus-mode view.
+func (a *App) run(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	t, err := a.store.Timer(r.Context(), userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	view := runView{ID: t.ID, Name: t.Name}
+	for _, p := range Phases(t.TimerInput) {
+		view.Phases = append(view.Phases, phaseRow{Label: p.Label(t.Rounds), Length: FormatLength(p.Seconds)})
+	}
+	a.render(w, r, http.StatusOK, "focus/run", t.Name, view)
+}

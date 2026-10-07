@@ -161,3 +161,43 @@ func TestReorderRejectsBadIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestRunPageListsThePhases(t *testing.T) {
+	s := newServer(t)
+	tm := seedTimer(t, s, s.Alice.User.ID, validIntervals()) // 50/10 × 4, long 30 every 2
+	doc := s.Get(t, s.Alice, "/focus/run/"+itoa(tm.ID))
+	if got := htmlassert.Text(doc.MustHave(".focus-run h1")); got != "Deep work" {
+		t.Errorf("heading = %q", got)
+	}
+	var got []string
+	for _, li := range doc.QueryAll(".focus-run-phases li") {
+		got = append(got, htmlassert.Text(li))
+	}
+	want := []string{
+		"Focus · round 1 of 4 — 50 min", "Short break — 10 min",
+		"Focus · round 2 of 4 — 50 min", "Long break — 30 min",
+		"Focus · round 3 of 4 — 50 min", "Short break — 10 min",
+		"Focus · round 4 of 4 — 50 min",
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("phases =\n%v\nwant\n%v", got, want)
+	}
+}
+
+func TestRunPageForASingleTimer(t *testing.T) {
+	s := newServer(t)
+	tm := seedTimer(t, s, s.Alice.User.ID, single("Daily Reflection", 15))
+	doc := s.Get(t, s.Alice, "/focus/run/"+itoa(tm.ID))
+	lis := doc.QueryAll(".focus-run-phases li")
+	if len(lis) != 1 || htmlassert.Text(lis[0]) != "Focus — 15 min" {
+		t.Errorf("phases = %d items", len(lis))
+	}
+}
+
+func TestRunPageIsNotFoundForSomeoneElse(t *testing.T) {
+	s := newServer(t)
+	tm := seedTimer(t, s, s.Alice.User.ID, single("Mine", 15))
+	if rec := s.Do(t, s.Bob, httptestGet("/focus/run/"+itoa(tm.ID))); rec.Code != http.StatusNotFound {
+		t.Errorf("bob run page = %d, want 404", rec.Code)
+	}
+}
