@@ -165,6 +165,7 @@ func TestReorderRejectsBadIDs(t *testing.T) {
 
 // runConfig is the JSON the running page embeds for focus.js.
 type runConfig struct {
+	UserID      int64  `json:"userId"`
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
 	Color       string `json:"color"`
@@ -208,6 +209,9 @@ func TestRunPageForAnIntervalsTimer(t *testing.T) {
 	}
 
 	cfg := runConfigOf(t, doc)
+	if cfg.UserID != s.Alice.User.ID {
+		t.Errorf("config userId = %d, want %d", cfg.UserID, s.Alice.User.ID)
+	}
 	if cfg.ID != tm.ID || cfg.Name != "Deep work" || cfg.Color != "blue" || cfg.Chime != "bowl" ||
 		!cfg.AutoAdvance || !cfg.KeepHistory || cfg.Rounds != 4 || len(cfg.Phases) != 7 {
 		t.Fatalf("config = %+v", cfg)
@@ -291,6 +295,9 @@ func TestIndexHasTheResumeBannerSlot(t *testing.T) {
 		banner := doc.MustHave("[data-focus-resume]")
 		if _, ok := htmlassert.Attr(banner, "hidden"); !ok {
 			t.Errorf("seed=%v: the banner should start hidden", seed)
+		}
+		if got, _ := htmlassert.Attr(banner, "data-user-id"); got != itoa(s.Alice.User.ID) {
+			t.Errorf("seed=%v: banner data-user-id = %q, want %q", seed, got, itoa(s.Alice.User.ID))
 		}
 	}
 }

@@ -11,7 +11,7 @@
 
 (function () {
 	var KEY = "onsuite.focus.session";
-	var VERSION = 1;
+	var VERSION = 2; // 2: sessions carry the owner's userId; v1 ones have none and are discarded
 
 	function current(s) { return s.phases[s.phaseIndex]; }
 	function upcoming(s) { return s.phases[s.phaseIndex + 1]; }
@@ -29,6 +29,7 @@
 	function create(config, now) {
 		return {
 			v: VERSION,
+			userId: config.userId,
 			clientId: newID(),
 			timerId: config.id,
 			timerName: config.name,
@@ -205,7 +206,7 @@
 	}
 
 	function valid(s) {
-		return !!s && s.v === VERSION &&
+		return !!s && s.v === VERSION && typeof s.userId === "number" &&
 			typeof s.timerId === "number" && typeof s.timerName === "string" &&
 			Array.isArray(s.phases) && s.phases.length > 0 &&
 			s.phases.every(function (p) {
@@ -216,9 +217,13 @@
 			(s.pausedAt === null || typeof s.pausedAt === "number");
 	}
 
-	// load returns the stored session, or null. Anything unreadable is
-	// discarded with a warning, as if nothing were running (spec: "Errors").
-	function load() {
+	// load returns this user's stored session, or null. Anything unreadable
+	// is discarded with a warning, as if nothing were running (spec:
+	// "Errors"). Another account's session is ignored but left in place:
+	// accounts sharing a browser mustn't see or record each other's
+	// sessions, and it is only replaced when this user starts a timer
+	// (#494).
+	function load(userId) {
 		var raw;
 		try {
 			raw = window.localStorage.getItem(KEY);
@@ -228,7 +233,7 @@
 		if (!raw) return null;
 		try {
 			var s = JSON.parse(raw);
-			if (valid(s)) return s;
+			if (valid(s)) return s.userId === userId ? s : null;
 		} catch (e) {
 			// fall through to discard it
 		}

@@ -63,7 +63,8 @@ type tileView struct {
 }
 
 type indexView struct {
-	Tiles []tileView
+	UserID int64 // the resume banner only shows this user's session
+	Tiles  []tileView
 }
 
 func newTile(t Timer) tileView {
@@ -84,7 +85,7 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	view := indexView{}
+	view := indexView{UserID: userID}
 	for _, t := range timers {
 		view.Tiles = append(view.Tiles, newTile(t))
 	}
@@ -242,6 +243,8 @@ type runPhase struct {
 // (spec: "The runner"). The browser copies it into its own state at Start,
 // so editing the timer mid-session doesn't change a running one.
 type runConfig struct {
+	// UserID: the browser ignores a stored session that isn't this user's.
+	UserID      int64      `json:"userId"`
 	ID          int64      `json:"id"`
 	Name        string     `json:"name"`
 	Color       string     `json:"color"`
@@ -264,9 +267,9 @@ type runView struct {
 	Dots   []int // round numbers, interval timers only
 }
 
-func newRunView(t Timer) runView {
+func newRunView(t Timer, userID int64) runView {
 	cfg := runConfig{
-		ID: t.ID, Name: t.Name, Color: t.Color, Chime: t.Chime,
+		UserID: userID, ID: t.ID, Name: t.Name, Color: t.Color, Chime: t.Chime,
 		AutoAdvance: t.AutoAdvance, KeepHistory: t.KeepHistory, Rounds: t.Rounds,
 	}
 	for _, p := range Phases(t.TimerInput) {
@@ -300,5 +303,5 @@ func (a *App) run(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.render(w, r, http.StatusOK, "focus/run", t.Name, newRunView(t))
+	a.render(w, r, http.StatusOK, "focus/run", t.Name, newRunView(t, userID))
 }

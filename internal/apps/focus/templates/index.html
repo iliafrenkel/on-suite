@@ -8,7 +8,7 @@
 	</div>
 	{{/* home.js fills this in when a session is running in this browser
 	     (spec: "Resume"). */}}
-	<p class="focus-resume" data-focus-resume hidden></p>
+	<p class="focus-resume" data-focus-resume data-user-id="{{.Data.UserID}}" hidden></p>
 	{{if .Data.Tiles}}
 	<ul class="focus-tiles" data-focus-tiles>
 		{{range .Data.Tiles}}

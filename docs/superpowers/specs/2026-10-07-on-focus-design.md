@@ -217,6 +217,11 @@ unsupported means chimes only; nothing else changes.
   stored session already ran to its end, the banner says "Deep work
   finished" and the session is recorded on the spot.
 
+The stored session carries the signed-in user's ID, and a page ignores a
+session that belongs to someone else, so accounts sharing a browser don't
+see or record each other's sessions. Starting a timer still replaces it:
+there is one session per browser.
+
 ### Recording a session
 
 On finish or Exit, if `keepHistory` and focus time ≥ 60 s, POST the summary

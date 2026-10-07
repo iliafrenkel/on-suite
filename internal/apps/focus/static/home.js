@@ -130,7 +130,7 @@
 	// browser, read from the state the running page keeps.
 	var S = window.OnFocus && window.OnFocus.session;
 	var banner = document.querySelector("[data-focus-resume]");
-	var stored = S && banner ? S.load() : null;
+	var stored = S && banner ? S.load(Number(banner.dataset.userId)) : null;
 	if (stored) {
 		var link = document.createElement("a");
 		link.href = "/focus/run/" + stored.timerId;

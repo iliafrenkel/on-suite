@@ -287,7 +287,7 @@
 
 	// ---- Start, resume or replace (spec: "Resume") -------------------------
 
-	var stored = S.load();
+	var stored = S.load(config.userId);
 	if (!stored) {
 		begin();
 	} else if (stored.timerId === config.id) {
