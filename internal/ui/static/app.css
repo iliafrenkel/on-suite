@@ -3793,3 +3793,72 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 	/* A wide table scrolls inside itself instead of widening the page. */
 	.help-body table { display: block; overflow-x: auto; }
 }
+
+/* ---- ON Focus ------------------------------------------------------------
+ * Spec: docs/superpowers/specs/2026-10-07-on-focus-design.md. A timer's
+ * colour arrives as a swatch-c-<name> class (see "Colour swatches"). */
+
+.focus-page { max-width: 64rem; }
+.focus-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.focus-toolbar h1 { margin: 0; }
+.focus-empty { padding: var(--s-5); background: var(--c-bg-subtle); border-radius: var(--radius); color: var(--c-text-dim); }
+
+.focus-tiles {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+	gap: var(--s-3);
+}
+.focus-tile {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-1);
+	padding: var(--s-3);
+	background: var(--c-bg);
+	border: var(--border);
+	border-top: 4px solid var(--swatch);
+	border-radius: var(--radius);
+	cursor: grab;
+}
+.focus-tile-dragging { opacity: .5; }
+.focus-tile-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-2); }
+.focus-tile-name { font-weight: 600; color: var(--c-text); text-decoration: none; overflow-wrap: anywhere; }
+.focus-tile-name:hover { text-decoration: underline; }
+.focus-tile-summary { color: var(--c-text-dim); font-size: var(--fs-sm); }
+.focus-tile-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: var(--s-2); }
+.focus-pill { font-size: var(--fs-xs); color: var(--c-text-faint); border: var(--border); border-radius: 999px; padding: 0 var(--s-2); }
+.focus-play {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	border-radius: 50%;
+	background: var(--swatch);
+	color: #fff;
+	text-decoration: none;
+	font-size: var(--fs-sm);
+}
+.focus-play:hover { filter: brightness(1.1); }
+
+.focus-menu { position: relative; }
+.focus-menu > summary { list-style: none; cursor: pointer; padding: 0 var(--s-2); color: var(--c-text-faint); border-radius: var(--radius); }
+.focus-menu > summary::-webkit-details-marker { display: none; }
+.focus-menu > summary:hover { background: var(--c-bg-inset); color: var(--c-text); }
+.focus-menu-panel {
+	position: absolute;
+	right: 0;
+	top: calc(100% + .25rem);
+	z-index: 2;
+	min-width: 10rem;
+	padding: var(--s-2);
+	background: var(--c-bg);
+	border: var(--border);
+	border-radius: var(--radius);
+	box-shadow: 0 6px 20px rgba(0,0,0,.12);
+	cursor: default;
+}
+.focus-menu-panel form { margin: 0; }
+.focus-menu-panel button, .focus-menu-panel a { display: block; width: 100%; text-align: left; }
