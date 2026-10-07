@@ -281,26 +281,29 @@
 	// ---- Start, resume or replace (spec: "Resume") -------------------------
 
 	var stored = S.load();
-	if (stored) S.advance(stored, Date.now());
 	if (!stored) {
 		begin();
 	} else if (stored.timerId === config.id) {
+		// tick() catches up, so phases that ended while away chime once.
 		s = stored;
 		run();
-	} else if (stored.finished) {
-		// Another timer's session already ran out. Recording it is F3
-		// (#495); until then it is simply replaced.
-		S.clear();
-		begin();
 	} else {
-		confirmThen(
-			"End " + stored.timerName + " and start " + config.name + "?",
-			"Start " + config.name, "Back to " + stored.timerName,
-			function () {
-				S.clear();
-				begin();
-			},
-			function () { window.location.assign("/focus/run/" + stored.timerId); }
-		);
+		S.advance(stored, Date.now());
+		if (stored.finished) {
+			// Another timer's session already ran out. Recording it is F3
+			// (#495); until then it is simply replaced.
+			S.clear();
+			begin();
+		} else {
+			confirmThen(
+				"End " + stored.timerName + " and start " + config.name + "?",
+				"Start " + config.name, "Back to " + stored.timerName,
+				function () {
+					S.clear();
+					begin();
+				},
+				function () { window.location.assign("/focus/run/" + stored.timerId); }
+			);
+		}
 	}
 })();
