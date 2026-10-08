@@ -34,10 +34,12 @@
 	{{if not $d.Chart.Empty}}
 	<details class="focus-daily">
 		<summary>Daily figures (text alternative to the chart above)</summary>
-		<table class="focus-table">
-			<thead><tr><th>Day</th><th>Focus</th></tr></thead>
-			<tbody>{{range $d.Days}}<tr><td>{{.Day}}</td><td>{{.Focus}}</td></tr>{{end}}</tbody>
-		</table>
+		<div class="focus-table-scroll">
+			<table class="focus-table">
+				<thead><tr><th>Day</th><th>Focus</th></tr></thead>
+				<tbody>{{range $d.Days}}<tr><td>{{.Day}}</td><td>{{.Focus}}</td></tr>{{end}}</tbody>
+			</table>
+		</div>
 	</details>
 	{{end}}
 
@@ -58,26 +60,28 @@
 
 	<h2>Recent sessions</h2>
 	{{if $d.Sessions}}
-	<table class="focus-table focus-sessions">
-		<thead><tr><th>When</th><th>Timer</th><th>Focus</th><th>Rounds</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
-		<tbody>
-			{{range $d.Sessions}}
-			<tr>
-				<td>{{.When}}</td>
-				<td><span class="focus-session-timer swatch-c-{{.Color}}">{{.Name}}</span>{{if not .Completed}} <span class="focus-early">stopped early</span>{{end}}</td>
-				<td>{{.Focus}}</td>
-				<td>{{.Rounds}}</td>
-				<td>
-					<form method="post" action="/focus/sessions/{{.ID}}/delete" data-focus-confirm="Delete this {{.Name}} session from your history?">
-						<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
-						<input type="hidden" name="page" value="{{$d.Page}}">
-						<button class="danger" type="submit" aria-label="Delete the {{.Name}} session of {{.When}}">Delete</button>
-					</form>
-				</td>
-			</tr>
-			{{end}}
-		</tbody>
-	</table>
+	<div class="focus-table-scroll">
+		<table class="focus-table focus-sessions">
+			<thead><tr><th>When</th><th>Timer</th><th>Focus</th><th>Rounds</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+			<tbody>
+				{{range $d.Sessions}}
+				<tr>
+					<td>{{.When}}</td>
+					<td><span class="focus-session-timer swatch-c-{{.Color}}">{{.Name}}</span>{{if not .Completed}} <span class="focus-early">stopped early</span>{{end}}</td>
+					<td>{{.Focus}}</td>
+					<td>{{.Rounds}}</td>
+					<td>
+						<form method="post" action="/focus/sessions/{{.ID}}/delete" data-focus-confirm="Delete this {{.Name}} session from your history?">
+							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+							<input type="hidden" name="page" value="{{$d.Page}}">
+							<button class="danger" type="submit" aria-label="Delete the {{.Name}} session of {{.When}}">Delete</button>
+						</form>
+					</td>
+				</tr>
+				{{end}}
+			</tbody>
+		</table>
+	</div>
 	{{else}}
 	<div class="focus-empty"><p>No sessions here yet. Finish a timer with <b>Keep history</b> on and it shows up here.</p></div>
 	{{end}}

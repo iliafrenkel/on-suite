@@ -3799,7 +3799,8 @@ main:has(.later-reader) { max-width: none; padding: 0; }
  * colour arrives as a swatch-c-<name> class (see "Colour swatches"). */
 
 .focus-page { max-width: 64rem; }
-.focus-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.focus-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; }
+.focus-toolbar .button { white-space: nowrap; }
 .focus-toolbar h1 { margin: 0; }
 .focus-empty { padding: var(--s-5); background: var(--c-bg-subtle); border-radius: var(--radius); color: var(--c-text-dim); }
 
@@ -4039,6 +4040,7 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 .focus-by-timer-bar rect { fill: var(--swatch); }
 .focus-by-timer-total { font-variant-numeric: tabular-nums; }
 
+.focus-table-scroll { overflow-x: auto; } /* narrow screens scroll the table, not the page; mirrors .flash-table-scroll */
 .focus-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .focus-table th, .focus-table td { text-align: left; padding: var(--s-2); border-bottom: var(--border); }
 .focus-table th { color: var(--c-text-dim); font-weight: 500; }
