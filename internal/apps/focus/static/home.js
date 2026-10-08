@@ -132,13 +132,19 @@
 	var banner = document.querySelector("[data-focus-resume]");
 	var stored = S && banner ? S.load(Number(banner.dataset.userId)) : null;
 	if (stored) {
-		var link = document.createElement("a");
-		link.href = "/focus/run/" + stored.timerId;
-		banner.classList.add("swatch-c-" + stored.color);
-		banner.appendChild(link);
-		banner.hidden = false;
-		var bannerTicker = window.setInterval(updateBanner, 1000);
-		updateBanner();
+		var timerId = Number(stored.timerId);
+		if (!Number.isFinite(timerId) || timerId <= 0 || Math.floor(timerId) !== timerId) {
+			S.clear();
+			stored = null;
+		} else {
+			var link = document.createElement("a");
+			link.href = "/focus/run/" + timerId;
+			banner.classList.add("swatch-c-" + stored.color);
+			banner.appendChild(link);
+			banner.hidden = false;
+			var bannerTicker = window.setInterval(updateBanner, 1000);
+			updateBanner();
+		}
 	}
 
 	function updateBanner() {
