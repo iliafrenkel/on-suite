@@ -81,6 +81,7 @@
 		if (paused) document.title = "Paused · " + s.timerName;
 		else if (s.waiting) document.title = "Ready · " + s.timerName;
 		else document.title = left + " · " + (isBreak ? "Break" : s.timerName);
+		syncWakeLock();
 	}
 
 	// finish shows the Done screen and records the session (spec:
@@ -88,6 +89,7 @@
 	// home. Exit on a session too short to keep goes home at once.
 	function finish(now, leaving) {
 		window.clearInterval(ticker);
+		syncWakeLock();
 		if (leaving && !R.eligible(s)) {
 			S.clear();
 			window.location.assign("/focus/");
@@ -141,6 +143,46 @@
 		} catch (e) {
 			// Some mobile browsers only notify from a service worker; chimes still play.
 		}
+	}
+
+	// ---- Screen Wake Lock (spec: "F4 addendum") ---------------------------
+
+	// The screen stays on while a phase counts down or waits for Start,
+	// not while paused or done. The browser drops the lock whenever the tab
+	// is hidden; it's asked for again when the tab comes back. Missing API
+	// or a refusal (power saving, plain http): nothing happens, and a
+	// refused request isn't repeated until the tab is shown again.
+	var wakeLock = null;
+	var wakeAsking = false;
+	var wakeRefused = false;
+
+	function wantsAwake() {
+		return !!s && !s.finished && s.pausedAt === null && !document.hidden;
+	}
+
+	function syncWakeLock() {
+		if (!("wakeLock" in navigator)) return;
+		if (!wantsAwake()) {
+			if (wakeLock) {
+				var lock = wakeLock;
+				wakeLock = null;
+				lock.release().catch(function () {});
+			}
+			return;
+		}
+		if (wakeLock || wakeAsking || wakeRefused) return;
+		wakeAsking = true;
+		navigator.wakeLock.request("screen").then(function (lock) {
+			wakeAsking = false;
+			wakeLock = lock;
+			lock.addEventListener("release", function () {
+				if (wakeLock === lock) wakeLock = null;
+			});
+			syncWakeLock(); // paused or ended while asking: let go again
+		}, function () {
+			wakeAsking = false;
+			wakeRefused = true;
+		});
 	}
 
 	// tick walks the session forward to now and redraws: one chime and at
@@ -326,9 +368,12 @@
 		}
 	});
 
-	// A tab coming back catches up at once rather than on the next tick.
+	// A tab coming back catches up at once rather than on the next tick,
+	// and asks for the wake lock again (the browser dropped it).
 	document.addEventListener("visibilitychange", function () {
-		if (s && !s.finished && !document.hidden) tick();
+		if (document.hidden) return;
+		wakeRefused = false;
+		if (s && !s.finished) tick();
 	});
 
 	// Browsers keep audio locked until the person clicks or presses a key
