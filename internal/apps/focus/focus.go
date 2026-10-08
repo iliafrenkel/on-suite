@@ -60,6 +60,9 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /timers/{id}/delete", a.delete)
 	r.HandleFunc("GET /run/{id}", a.run)
 	r.HandleFunc("GET /home.js", a.script("home.js"))
+	r.HandleFunc("GET /session.js", a.script("session.js"))
+	r.HandleFunc("GET /chimes.js", a.script("chimes.js"))
+	r.HandleFunc("GET /focus.js", a.script("focus.js"))
 }
 
 // script serves an embedded script behind the same sign-in requirement as

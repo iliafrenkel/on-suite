@@ -3905,3 +3905,106 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 }
 .focus-swatch-input:checked + .focus-swatch { box-shadow: 0 0 0 3px var(--c-text); }
 .focus-swatch-input:focus-visible + .focus-swatch { outline: var(--ring); outline-offset: 3px; }
+
+.focus-chime-row { display: flex; align-items: center; gap: var(--s-2); }
+.focus-chime-preview { padding: var(--s-1) var(--s-3); }
+.focus-chime-preview[hidden] { display: none; }
+
+/* Running page (spec: "Running page"). Focus mode hides the suite chrome,
+ * exactly as ON Later's reading view does. */
+body:has(.focus-runner) .shell-bar,
+body:has(.focus-runner) .app-sidebar,
+body:has(.focus-runner) .app-footer { display: none; }
+main:has(.focus-runner) { max-width: none; padding: 0; }
+
+.focus-runner {
+	--focus-break: #a89a88;          /* breaks are a warm grey, never the timer's colour */
+	--focus-ring: var(--swatch);
+	position: relative;
+	min-height: 100vh;
+	min-height: 100dvh;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: var(--s-6) var(--s-4);
+	background: var(--c-bg-subtle);
+	color: var(--c-text);
+}
+:root[data-theme="dark"] .focus-runner { --focus-break: #7a6c5d; }
+.focus-runner-break { --focus-ring: var(--focus-break); }
+.focus-runner [hidden] { display: none; }
+
+.focus-runner-top {
+	position: absolute;
+	top: var(--s-3);
+	left: var(--s-4);
+	right: var(--s-4);
+	display: flex;
+	align-items: center;
+}
+.focus-runner-quiet {
+	padding: var(--s-1) var(--s-2);
+	border: 0;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--c-text-faint);
+	font: inherit;
+	font-size: var(--fs-sm);
+	text-decoration: none;
+	cursor: pointer;
+}
+.focus-runner-quiet:hover { background: var(--c-bg-inset); color: var(--c-text); text-decoration: none; }
+.focus-runner-fullscreen { margin-left: auto; }
+
+.focus-runner-main { display: flex; flex-direction: column; align-items: center; gap: var(--s-5); }
+.focus-ring {
+	position: relative;
+	width: min(22rem, 80vw, 60vh);
+	aspect-ratio: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.focus-ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.focus-ring-track, .focus-ring-bar { fill: none; stroke-width: 6; }
+.focus-ring-track { stroke: var(--c-bg-inset); }
+/* stroke-dashoffset is an SVG attribute focus.js sets; CSS must not set it,
+ * or the stylesheet would win over the attribute. */
+.focus-ring-bar { stroke: var(--focus-ring); stroke-linecap: round; stroke-dasharray: 1000; transition: stroke-dashoffset .5s linear; }
+
+.focus-ring-inner { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s-2); max-width: 75%; text-align: center; }
+.focus-ring-inner p { margin: 0; }
+.focus-runner-name { color: var(--c-text-dim); font-size: var(--fs-sm); letter-spacing: .04em; text-transform: uppercase; overflow-wrap: anywhere; }
+.focus-digits { font-size: clamp(3rem, 12vmin, 4.5rem); font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1; }
+.focus-phase { color: var(--focus-ring); font-size: var(--fs-sm); font-weight: 600; }
+.focus-runner-break .focus-phase { color: var(--c-text-dim); }
+
+.focus-dots { display: flex; gap: .4rem; margin: 0; padding: 0; list-style: none; }
+.focus-dot { width: .5rem; height: .5rem; border: 1.5px solid var(--c-text-faint); border-radius: 50%; }
+.focus-dot-done { background: var(--focus-ring); border-color: var(--focus-ring); }
+.focus-dot-now { border-color: var(--swatch); box-shadow: 0 0 0 2px var(--swatch-soft); }
+
+.focus-runner-paused .focus-ring-bar,
+.focus-runner-paused .focus-digits { opacity: .45; }
+.focus-runner-paused .focus-phase { color: var(--c-text-dim); }
+
+.focus-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
+.focus-controls button { padding: var(--s-2) var(--s-4); border-radius: 999px; }
+.focus-controls .primary,
+.focus-controls .primary:hover { background: var(--focus-ring); border-color: var(--focus-ring); color: #fff; }
+
+.focus-sound-hint { margin: 0; color: var(--c-text-faint); font-size: var(--fs-sm); text-align: center; }
+.focus-done { display: flex; flex-direction: column; align-items: center; gap: var(--s-4); text-align: center; }
+.focus-done-title { margin: 0; font-size: var(--fs-xl); }
+
+.focus-resume {
+	margin: 0;
+	padding: var(--s-2) var(--s-3);
+	border: var(--border);
+	border-left: 4px solid var(--swatch, var(--c-accent));
+	border-radius: var(--radius);
+	color: var(--c-text-dim);
+	font-size: var(--fs-sm);
+}
+.focus-resume a { font-weight: 600; }

@@ -63,7 +63,8 @@ type tileView struct {
 }
 
 type indexView struct {
-	Tiles []tileView
+	UserID int64 // the resume banner only shows this user's session
+	Tiles  []tileView
 }
 
 func newTile(t Timer) tileView {
@@ -84,7 +85,7 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	view := indexView{}
+	view := indexView{UserID: userID}
 	for _, t := range timers {
 		view.Tiles = append(view.Tiles, newTile(t))
 	}
@@ -232,20 +233,62 @@ func (a *App) order(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// phaseRow is one line of the placeholder running page.
-type phaseRow struct {
-	Label  string
-	Length string
+// runPhase is one phase as focus.js reads it.
+type runPhase struct {
+	Phase
+	Label string `json:"label"`
 }
 
+// runConfig is the timer as focus.js runs it, embedded in the page as JSON
+// (spec: "The runner"). The browser copies it into its own state at Start,
+// so editing the timer mid-session doesn't change a running one.
+type runConfig struct {
+	// UserID: the browser ignores a stored session that isn't this user's.
+	UserID      int64      `json:"userId"`
+	ID          int64      `json:"id"`
+	Name        string     `json:"name"`
+	Color       string     `json:"color"`
+	Chime       string     `json:"chime"`
+	AutoAdvance bool       `json:"autoAdvance"`
+	KeepHistory bool       `json:"keepHistory"`
+	Rounds      int        `json:"rounds"` // 0 for a single timer
+	Phases      []runPhase `json:"phases"`
+}
+
+// runView is the running page. Clock and Label are the first phase's, so
+// the page looks right before focus.js takes over.
 type runView struct {
-	ID     int64
+	Config runConfig
 	Name   string
-	Phases []phaseRow
+	Color  string
+	Single bool
+	Clock  string
+	Label  string
+	Dots   []int // round numbers, interval timers only
 }
 
-// run is F1's placeholder running page: the timer's phases, in order. F2
-// replaces it with the real focus-mode view.
+func newRunView(t Timer, userID int64) runView {
+	cfg := runConfig{
+		UserID: userID, ID: t.ID, Name: t.Name, Color: t.Color, Chime: t.Chime,
+		AutoAdvance: t.AutoAdvance, KeepHistory: t.KeepHistory, Rounds: t.Rounds,
+	}
+	for _, p := range Phases(t.TimerInput) {
+		cfg.Phases = append(cfg.Phases, runPhase{Phase: p, Label: p.Label(t.Rounds)})
+	}
+	v := runView{
+		Config: cfg, Name: t.Name, Color: t.Color, Single: t.Kind != KindIntervals,
+		Clock: Clock(cfg.Phases[0].Seconds), Label: cfg.Phases[0].Label,
+	}
+	if !v.Single {
+		for round := 1; round <= t.Rounds; round++ {
+			v.Dots = append(v.Dots, round)
+		}
+	}
+	return v
+}
+
+// run is the running page (spec: "Running page"). The server only draws
+// it; focus.js runs the timer in the browser.
 func (a *App) run(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -260,9 +303,5 @@ func (a *App) run(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	view := runView{ID: t.ID, Name: t.Name}
-	for _, p := range Phases(t.TimerInput) {
-		view.Phases = append(view.Phases, phaseRow{Label: p.Label(t.Rounds), Length: FormatLength(p.Seconds)})
-	}
-	a.render(w, r, http.StatusOK, "focus/run", t.Name, view)
+	a.render(w, r, http.StatusOK, "focus/run", t.Name, newRunView(t, userID))
 }

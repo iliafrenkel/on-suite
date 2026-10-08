@@ -1,10 +1,53 @@
+{{define "head"}}<script src="/focus/session.js" defer></script><script src="/focus/chimes.js" defer></script><script src="/focus/focus.js" defer></script>{{end}}
+
 {{define "content"}}
-<div class="focus-run stack">
-	<h1>{{.Data.Name}}</h1>
-	<p class="focus-hint">The full-screen running view is coming next. Here's how this timer runs:</p>
-	<ol class="focus-run-phases">
-		{{range .Data.Phases}}<li>{{.Label}} — {{.Length}}</li>{{end}}
-	</ol>
-	<p><a href="/focus/timers/{{.Data.ID}}/edit">Edit this timer</a> · <a href="/focus/">Back to timers</a></p>
+{{$d := .Data}}
+{{/* Focus mode: app.css hides the suite chrome around .focus-runner, as it
+     does for ON Later's reading view. */}}
+<div id="focus-runner" class="focus-runner swatch-c-{{$d.Color}}{{if $d.Single}} focus-runner-single{{end}}">
+	<script type="application/json" id="focus-run-config">{{$d.Config}}</script>
+	<div class="focus-runner-top">
+		<a class="focus-runner-quiet" href="/focus/" data-focus-exit aria-keyshortcuts="Escape">← Exit</a>
+		<button type="button" class="focus-runner-quiet focus-runner-fullscreen" data-focus-fullscreen aria-keyshortcuts="F" hidden>⛶ Full screen</button>
+	</div>
+	<div class="focus-runner-main" data-focus-main>
+		<div class="focus-ring">
+			<svg class="focus-ring-svg" viewBox="0 0 220 220" aria-hidden="true">
+				<circle class="focus-ring-track" cx="110" cy="110" r="100"></circle>
+				<circle class="focus-ring-bar" cx="110" cy="110" r="100" pathLength="1000" stroke-dashoffset="1000" data-focus-bar></circle>
+			</svg>
+			<div class="focus-ring-inner">
+				<p class="focus-runner-name">{{$d.Name}}</p>
+				<p class="focus-digits" role="timer" data-focus-digits>{{$d.Clock}}</p>
+				{{if not $d.Single}}
+				<p class="focus-phase" data-focus-phase>{{$d.Label}}</p>
+				<ol class="focus-dots" aria-hidden="true">{{range $d.Dots}}<li class="focus-dot"></li>{{end}}</ol>
+				{{end}}
+			</div>
+		</div>
+		<div class="focus-controls" data-focus-controls>
+			<button type="button" class="primary" data-focus-pause aria-keyshortcuts="Space">Pause</button>
+			{{if not $d.Single}}<button type="button" data-focus-skip aria-keyshortcuts="S">Skip</button>{{end}}
+			<button type="button" data-focus-restart aria-keyshortcuts="R">Restart</button>
+		</div>
+		<div class="focus-controls" data-focus-waiting hidden>
+			<button type="button" class="primary" data-focus-next aria-keyshortcuts="Space">Start</button>
+		</div>
+		<p class="focus-sound-hint" data-focus-sound-hint hidden>Sound is off — click anywhere to turn it on.</p>
+		<noscript><p class="focus-sound-hint">The timer needs JavaScript. <a href="/focus/">Back to timers</a></p></noscript>
+	</div>
+	<div class="focus-done" data-focus-done hidden>
+		<p class="focus-done-title" data-focus-done-text>Done</p>
+		<a class="button primary" href="/focus/">Back to timers</a>
+	</div>
 </div>
+{{/* The running page's one confirmation dialog: "End this session?" and
+     "End Deep work and start Reading?". focus.js sets its texts. */}}
+<dialog id="focus-run-dialog" class="focus-dialog">
+	<p id="focus-run-dialog-message"></p>
+	<div class="dialog-actions">
+		<button type="button" id="focus-run-dialog-ok" class="primary">OK</button>
+		<button type="button" id="focus-run-dialog-cancel">Cancel</button>
+	</div>
+</dialog>
 {{end}}

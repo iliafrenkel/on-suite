@@ -108,3 +108,17 @@ func TestPhaseLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestClock(t *testing.T) {
+	for _, c := range []struct {
+		seconds int
+		want    string
+	}{
+		{0, "00:00"}, {59, "00:59"}, {300, "05:00"}, {3000, "50:00"},
+		{3600, "1:00:00"}, {5400, "1:30:00"}, {10800, "3:00:00"},
+	} {
+		if got := focus.Clock(c.seconds); got != c.want {
+			t.Errorf("Clock(%d) = %q, want %q", c.seconds, got, c.want)
+		}
+	}
+}

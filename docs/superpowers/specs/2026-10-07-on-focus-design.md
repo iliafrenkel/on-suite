@@ -189,6 +189,11 @@ Synthesised with the Web Audio API — no audio files. `bell` (default),
 `bowl`, `soft`, `silent`. The form has a ▶ button to preview each one, which
 also gets the browser's audio context unlocked by a user gesture.
 
+Browsers keep audio locked until the person interacts with the page, and
+▶ is a click on the home page, not the running page. If audio is still
+locked when the timer starts, the running page says "Sound is off — click
+anywhere to turn it on" and the first click or key unlocks it.
+
 ### Tab title
 
 `31:12 · Deep work` during focus, `07:40 · Break` during a break,
@@ -196,7 +201,9 @@ also gets the browser's audio context unlocked by a user gesture.
 
 ### Notification permission
 
-Requested on the first Start click, never on page load. Denied or
+Requested in the ▶ click on the home page (the page waits for the answer
+before opening the running page), or on the first control click on the
+running page if it was opened another way; never on page load. Denied or
 unsupported means chimes only; nothing else changes.
 
 ### Resume
@@ -209,6 +216,11 @@ unsupported means chimes only; nothing else changes.
   boundary (auto-advance off) shows "Deep work — ready for round 3". If the
   stored session already ran to its end, the banner says "Deep work
   finished" and the session is recorded on the spot.
+
+The stored session carries the signed-in user's ID, and a page ignores a
+session that belongs to someone else, so accounts sharing a browser don't
+see or record each other's sessions. Starting a timer still replaces it:
+there is one session per browser.
 
 ### Recording a session
 
@@ -263,14 +275,15 @@ fields.
 
 ### Running page
 
-Focus mode: the suite nav and toolbar are hidden. How the page opts out of
-the shell chrome (a body class from the template, or a layout option) is
-settled in the F2 plan; the requirement is that the page still gets CSRF,
-theme and the logged-in user from `Deps.Page`.
+Focus mode: the suite nav and toolbar are hidden. The page opts out of the
+shell chrome the way ON Later's reading view does: app.css hides `.shell-bar`,
+`.app-sidebar` and `.app-footer` with `body:has(.focus-runner)`, so the page
+still gets CSRF, theme and the logged-in user from `Deps.Page`.
 
 Layout, centred: Exit (top left) and Full screen (top right) as quiet text
 buttons; the ring with the timer name above the countdown, the phase label
-below it, and round dots below that; Pause / Skip / Restart under the ring.
+below it ("Focus · round 2 of 4", "Short break"), and round dots below that;
+Pause / Skip / Restart under the ring.
 
 - **Focus:** ring and filled dots in the timer's colour (`--swatch`),
   background the page's subtle cream.
@@ -370,7 +383,7 @@ One PR each, in order.
 | Phase | Issue | Scope |
 |---|---|---|
 | F1 | #493 Saved timers | Swatch rename; app skeleton and registration; both migrations; `Phases`; home with tiles; create, edit, duplicate, delete, reorder (home.js); short user guide. ▶ opens a placeholder running page |
-| F2 | #494 Running a timer | Focus mode page, ring and dots, controls and keys, auto-advance and waiting, chimes, notifications, tab title, `localStorage` resume, home resume banner |
+| F2 | #494 Running a timer | Focus mode page, ring and dots, controls and keys, auto-advance and waiting, chimes, notifications, tab title, `localStorage` resume, home resume banner. Until F3, finishing or exiting a session clears it without recording |
 | F3 | #495 History and stats | Recording endpoint with beacon and Retry; today strip; History page; session delete; `Exporter`; admin card |
 | F4 | #496 Polish | Screen Wake Lock while running; home shortcuts (N new timer, 1–9 start the *n*th timer); dark-mode pass; user guide and screenshots |
 
