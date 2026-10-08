@@ -12,6 +12,7 @@ import (
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 // ON Flash owns background work (the daily media purge). Checked at compile
@@ -47,7 +48,7 @@ const cardFormMaxBytes = MaxImageFetchBytes + MaxAudioFetchBytes + 1<<20
 type App struct {
 	store       *Store
 	deps        app.Deps
-	mediaClient *MediaClient
+	mediaClient *webfetch.Client
 	mediaSem    chan struct{}
 }
 

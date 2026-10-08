@@ -7,9 +7,9 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 // mediaCacheControl is private because the response is only meaningful to a
@@ -27,16 +27,6 @@ const mediaCacheControl = "private, max-age=86400"
 // platform's own CSRF/body-cap layer (internal/platform/web/csrf.go) or
 // this app's own readCardUploads below.
 const tooLargeMessage = web.TooLargeMessage
-
-// maxMediaFetchAttempts and mediaRetryBackoff mirror
-// internal/apps/reader's own maxImageFetchAttempts/imageRetryBackoff: give up
-// permanently after 3 consecutive failures, otherwise wait an hour between
-// attempts, since this app has no external signal to know sooner when a
-// transient failure has cleared.
-const (
-	maxMediaFetchAttempts = 3
-	mediaRetryBackoff     = 1 * time.Hour
-)
 
 // media serves a card's image or audio clip, fetching and caching it on
 // first request if it hasn't been fetched yet. The route takes a hash, never
@@ -82,8 +72,7 @@ func (a *App) media(w http.ResponseWriter, r *http.Request) {
 	// Give up permanently past the attempt cap, and otherwise still refuse
 	// immediately inside the backoff window — a failure older than the
 	// backoff window, under the cap, falls through to a real retry.
-	if m.ErrorCount >= maxMediaFetchAttempts ||
-		(m.ErrorCount > 0 && a.store.now().Sub(m.FetchedAt) < mediaRetryBackoff) {
+	if webfetch.GivenUp(m.ErrorCount, m.FetchedAt, a.store.now()) {
 		a.deps.Errors.Status(w, r, http.StatusNotFound)
 		return
 	}

@@ -3,6 +3,8 @@ package flash
 import (
 	"context"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 // AllowPrivateFetchesForTest lets this app's HTTP client reach loopback, so
@@ -21,13 +23,13 @@ func (a *App) AllowPrivateFetchesForTest() {
 	a.mediaClient.DenyAddr = func(string) error { return nil }
 }
 
-// MaxMediaFetchAttemptsForTest and MediaRetryBackoffForTest mirror
-// handlers_media.go's unexported maxMediaFetchAttempts/mediaRetryBackoff, so
-// a test can assert against the real thresholds rather than a hardcoded copy
-// that could silently drift out of sync with them.
+// MaxMediaFetchAttemptsForTest and MediaRetryBackoffForTest are the
+// thresholds the media handler applies via webfetch.GivenUp, so a test can
+// assert against the real values rather than a hardcoded copy that could
+// silently drift out of sync with them.
 const (
-	MaxMediaFetchAttemptsForTest = maxMediaFetchAttempts
-	MediaRetryBackoffForTest     = mediaRetryBackoff
+	MaxMediaFetchAttemptsForTest = webfetch.MaxImageAttempts
+	MediaRetryBackoffForTest     = webfetch.ImageRetryBackoff
 )
 
 // DeckSummariesPerDeckForTest is the reference DeckSummaries is checked

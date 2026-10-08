@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 // testMediaClient is a client that may talk to httptest, which listens on
@@ -17,7 +18,7 @@ import (
 // the guard is what makes both this and
 // TestDefaultMediaClientRefusesPrivateAddresses possible; a package-level
 // guard would allow only one of them.
-func testMediaClient() *flash.MediaClient {
+func testMediaClient() *webfetch.Client {
 	c := flash.NewMediaClient("test")
 	c.DenyAddr = func(string) error { return nil }
 	return c
@@ -29,12 +30,12 @@ func TestMediaClientGetReturnsBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	body, err := testMediaClient().Get(context.Background(), srv.URL, 1<<20)
+	res, err := testMediaClient().Get(context.Background(), srv.URL, webfetch.GetOptions{MaxBytes: 1 << 20})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if string(body) != "fake-image-bytes" {
-		t.Errorf("body = %q", body)
+	if string(res.Body) != "fake-image-bytes" {
+		t.Errorf("body = %q", res.Body)
 	}
 }
 
@@ -52,7 +53,7 @@ func TestMediaClientGetRejectsAnOversizedBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := testMediaClient().Get(context.Background(), srv.URL, 1024)
+	_, err := testMediaClient().Get(context.Background(), srv.URL, webfetch.GetOptions{MaxBytes: 1024})
 	if err == nil {
 		t.Fatal("Get: want an error for a body over the cap, got nil")
 	}
@@ -65,13 +66,13 @@ func TestMediaClientGetRefusesTooManyRedirects(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, err := testMediaClient().Get(context.Background(), srv.URL, 1<<20); err == nil {
+	if _, err := testMediaClient().Get(context.Background(), srv.URL, webfetch.GetOptions{MaxBytes: 1 << 20}); err == nil {
 		t.Fatal("a redirect loop returned no error")
 	}
 }
 
 func TestMediaClientGetRefusesANonHTTPScheme(t *testing.T) {
-	if _, err := testMediaClient().Get(context.Background(), "file:///etc/passwd", 1<<20); err == nil {
+	if _, err := testMediaClient().Get(context.Background(), "file:///etc/passwd", webfetch.GetOptions{MaxBytes: 1 << 20}); err == nil {
 		t.Fatal("file:// was accepted")
 	}
 }
@@ -89,11 +90,11 @@ func TestDefaultMediaClientRefusesPrivateAddresses(t *testing.T) {
 		"http://[::1]:8080/",
 	} {
 		t.Run(target, func(t *testing.T) {
-			_, err := c.Get(context.Background(), target, 1<<20)
+			_, err := c.Get(context.Background(), target, webfetch.GetOptions{MaxBytes: 1 << 20})
 			if err == nil {
 				t.Fatalf("%s was fetched; the SSRF guard must refuse it", target)
 			}
-			if !errors.Is(err, flash.ErrBlockedAddress) {
+			if !errors.Is(err, webfetch.ErrBlockedAddress) {
 				t.Errorf("error = %v, want ErrBlockedAddress", err)
 			}
 		})
