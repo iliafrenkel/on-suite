@@ -61,6 +61,7 @@ type tileView struct {
 	Summary     string // "15 min" or "50 / 10 × 4 · long 30"
 	Total       string // the pill: "15 min", "3h 20m"
 	First, Last bool   // no Move earlier / Move later at the ends
+	Key         string // "1"–"9": the home shortcut that starts it; "" after the ninth
 }
 
 type indexView struct {
@@ -114,6 +115,9 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 	for i, t := range timers {
 		tile := newTile(t)
 		tile.First, tile.Last = i == 0, i == len(timers)-1
+		if i < 9 {
+			tile.Key = strconv.Itoa(i + 1)
+		}
 		view.Tiles = append(view.Tiles, tile)
 	}
 	a.render(w, r, http.StatusOK, "focus/index", "Timers", view)

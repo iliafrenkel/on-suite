@@ -133,6 +133,30 @@
 		Promise.resolve(Notification.requestPermission()).then(go, go);
 	});
 
+	// Home shortcuts (spec: "F4 addendum"): N opens the New timer form,
+	// 1–9 start the nth tile exactly as clicking its ▶ would (so the
+	// first-time notification question still comes first). Home page only:
+	// History loads this script too.
+	var home = document.querySelector("[data-focus-home]");
+	if (home) {
+		document.addEventListener("keydown", function (e) {
+			if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+			if (document.querySelector("dialog[open]")) return;
+			var t = e.target;
+			if (t && t.closest && t.closest("input, textarea, select, [contenteditable]")) return;
+			if (e.key === "n" || e.key === "N") {
+				e.preventDefault();
+				window.location.assign("/focus/new");
+				return;
+			}
+			if (!/^[1-9]$/.test(e.key)) return;
+			var play = home.querySelectorAll(".focus-tile .focus-play")[Number(e.key) - 1];
+			if (!play) return;
+			e.preventDefault();
+			play.click();
+		});
+	}
+
 	// A page restored from the back/forward cache still holds the session
 	// the banner was built from, and would resume or clear that stale copy
 	// over whatever is in localStorage now. Reload so it starts from storage.

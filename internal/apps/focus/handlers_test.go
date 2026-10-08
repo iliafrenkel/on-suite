@@ -514,3 +514,37 @@ func TestTileMenusOfferMovesExceptAtTheEnds(t *testing.T) {
 		t.Errorf("a lone timer offers %v, want no moves", got)
 	}
 }
+
+func TestHomeAdvertisesItsShortcuts(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	for i := 1; i <= 10; i++ {
+		seedTimer(t, s, uid, single("T"+strconv.Itoa(i), 5))
+	}
+	doc := s.Get(t, s.Alice, "/focus/")
+
+	// Check for the home page indicator - use findEl since htmlassert doesn't support
+	// combined class+attribute selectors
+	findEl(t, doc, ".focus-page", map[string]string{"data-focus-home": ""})
+	findEl(t, doc, `.focus-toolbar a[href="/focus/new"]`, map[string]string{"aria-keyshortcuts": "N"})
+
+	plays := doc.QueryAll(".focus-play")
+	if len(plays) != 10 {
+		t.Fatalf("%d ▶ buttons, want 10", len(plays))
+	}
+	for i, p := range plays[:9] {
+		key := strconv.Itoa(i + 1)
+		if got, _ := htmlassert.Attr(p, "aria-keyshortcuts"); got != key {
+			t.Errorf("▶ %d aria-keyshortcuts = %q, want %q", i+1, got, key)
+		}
+		if got, _ := htmlassert.Attr(p, "title"); got != "Start ("+key+")" {
+			t.Errorf("▶ %d title = %q, want %q", i+1, got, "Start ("+key+")")
+		}
+	}
+	if _, ok := htmlassert.Attr(plays[9], "aria-keyshortcuts"); ok {
+		t.Error("the 10th ▶ has a shortcut; only 1–9 exist")
+	}
+
+	// History loads home.js too, but has no shortcuts.
+	s.Get(t, s.Alice, "/focus/history").MustNotHave("[data-focus-home]")
+}
