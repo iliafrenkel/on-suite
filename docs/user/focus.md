@@ -11,6 +11,10 @@ shows the timer's name, how it runs (for example **15 min**, or
 **50 / 10 × 4 · long 30** for four 50-minute rounds with 10-minute breaks
 and a 30-minute long break) and how long the whole thing takes.
 
+Once you have finished a session or two, a strip above the tiles shows how
+long you've focused today, how many sessions that was, and your total for
+this week. **History** opens the full picture — see [History](#history).
+
 Click **▶** on a tile to start that timer — see [Running a timer](#running-a-timer).
 
 ## Making a timer
@@ -70,5 +74,28 @@ on it: browsers keep sound off until you've clicked on the page.
 
 The running timer lives in your browser. Reloading the page, or closing it
 and coming back, carries on where it was; the ON Focus home page shows a
-**Resume** link. One timer runs at a time — starting another asks before it
+**Resume** link, and an **End** button to finish the session from there. One timer runs at a time — starting another asks before it
 ends the first. A timer started in one browser doesn't show up in another.
+
+## History
+
+When a session ends — it runs to the end, or you click **← Exit** or
+**End** — ON Focus adds it to your history, as long as the timer has
+**Keep history** ticked and you focused for at least a minute. Paused
+time and breaks don't count.
+
+Click **History** on the ON Focus home page to see:
+
+- how long you've focused today, this week (from Monday), this month and
+  this year;
+- a bar chart of the last 30 days;
+- this month's time for each timer, biggest first;
+- your sessions, newest first, 50 to a page. A session you ended early is
+  marked **stopped early**. Click **Delete** to remove one.
+
+If ON Focus can't save a session — you're offline, say — the timer says
+**Couldn't save this session** and offers **Retry**. The session waits in
+your browser, and the home page offers **Retry** too, until it's saved.
+
+Deleting a timer keeps its sessions in your history, under the name and
+colour they had.
