@@ -1,21 +1,24 @@
-// ON Focus's home-page script. Forms marked data-focus-confirm ask first,
+// ON Focus's home and History page script. Forms marked data-focus-confirm ask first,
 // in the app's own dialog (later.js's pattern); without JavaScript the form
 // simply submits. Tiles can also be dragged to reorder. It also shows the
 // resume banner and asks for notification permission on ▶.
 "use strict";
 
 (function () {
-	// confirmThen asks message in the app's dialog and calls onOK on OK.
-	function confirmThen(message, onOK) {
+	// confirmThen asks message in the app's dialog, with okLabel on the OK
+	// button, and calls onOK on OK.
+	function confirmThen(message, okLabel, onOK) {
 		var dialog = document.getElementById("focus-confirm-dialog");
 		document.getElementById("focus-confirm-message").textContent = message;
+		var ok = document.getElementById("focus-confirm-ok");
+		ok.textContent = okLabel;
 
 		// Listeners are tied to this one opening of the dialog, so a
 		// cancelled confirmation can never fire later (the bug reader.js
 		// documents).
 		var controller = new AbortController();
 		dialog.addEventListener("close", function () { controller.abort(); }, { once: true });
-		document.getElementById("focus-confirm-ok").addEventListener("click", function () {
+		ok.addEventListener("click", function () {
 			dialog.close();
 			onOK();
 		}, { signal: controller.signal });
@@ -34,7 +37,7 @@
 		if (!dialog || typeof dialog.showModal !== "function") return;
 
 		e.preventDefault();
-		confirmThen(form.dataset.focusConfirm, function () {
+		confirmThen(form.dataset.focusConfirm, form.dataset.focusConfirmOk || "Delete", function () {
 			form.dataset.focusConfirmed = "1";
 			form.requestSubmit();
 		});
