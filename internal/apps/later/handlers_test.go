@@ -497,8 +497,8 @@ func TestArticleRendersTheReaderChrome(t *testing.T) {
 
 	doc.MustHave("details.later-aa")
 	forms := doc.QueryAll(`details.later-aa form[action="/later/prefs"]`)
-	if len(forms) != 7 { // 2 fonts, A-, A+, 3 widths
-		t.Fatalf("Aa menu has %d forms, want 7", len(forms))
+	if len(forms) != 9 { // 2 fonts, A-, A+, 3 widths, 2 aligns
+		t.Fatalf("Aa menu has %d forms, want 9", len(forms))
 	}
 	for _, f := range forms {
 		if got := htmlassert.Text(f); got == "" {
@@ -518,12 +518,12 @@ func TestArticleRendersTheReaderChrome(t *testing.T) {
 func TestArticleUsesTheReadersPrefs(t *testing.T) {
 	s := newServer(t)
 	a := seedReadable(t, s)
-	if err := s.Store.SetPrefs(context.Background(), s.Alice.User.ID, later.Prefs{Font: "sans", Size: 5, Width: "wide"}); err != nil {
+	if err := s.Store.SetPrefs(context.Background(), s.Alice.User.ID, later.Prefs{Font: "sans", Size: 5, Width: "wide", Align: "justify"}); err != nil {
 		t.Fatal(err)
 	}
 	doc := s.Get(t, s.Alice, articlePath(a, ""))
 	class, _ := htmlassert.Attr(doc.MustHave(".later-reader"), "class")
-	for _, want := range []string{"later-font-sans", "later-size-5", "later-width-wide"} {
+	for _, want := range []string{"later-font-sans", "later-size-5", "later-width-wide", "later-align-justify"} {
 		if !strings.Contains(class, want) {
 			t.Errorf("reader class %q lacks %q", class, want)
 		}
@@ -534,6 +534,32 @@ func TestArticleUsesTheReadersPrefs(t *testing.T) {
 	}
 	if n := len(doc.QueryAll(`details.later-aa button[disabled]`)); n != 1 {
 		t.Errorf("%d disabled Aa buttons, want 1", n)
+	}
+	pressed := map[string]string{}
+	for _, in := range doc.QueryAll(`details.later-aa input[name=align]`) {
+		v, _ := htmlassert.Attr(in, "value")
+		for n := in.Parent.FirstChild; n != nil; n = n.NextSibling {
+			if n.Data == "button" {
+				pressed[v], _ = htmlassert.Attr(n, "aria-pressed")
+			}
+		}
+	}
+	if pressed["justify"] != "true" || pressed["left"] != "false" {
+		t.Errorf("align buttons aria-pressed = %v, want justify pressed, left not", pressed)
+	}
+}
+
+func TestPrefsFormSavesAlign(t *testing.T) {
+	s := newServer(t)
+	s.Submit(t, s.Alice, "/later/prefs", url.Values{"align": {"justify"}, "back": {"/later/a/1"}}, "/later/a/1")
+	got, err := s.Store.Prefs(context.Background(), s.Alice.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := later.DefaultPrefs
+	want.Align = "justify"
+	if got != want {
+		t.Errorf("prefs = %+v, want %+v", got, want)
 	}
 }
 
@@ -570,7 +596,7 @@ func TestPrefsAsyncAnswers204(t *testing.T) {
 
 func TestPrefsRejectsInvalidValues(t *testing.T) {
 	s := newServer(t)
-	for _, form := range []url.Values{{"size": {"9"}}, {"size": {"x"}}, {"font": {"mono"}}, {"width": {"huge"}}} {
+	for _, form := range []url.Values{{"size": {"9"}}, {"size": {"x"}}, {"font": {"mono"}}, {"width": {"huge"}}, {"align": {"center"}}} {
 		if rec := s.Post(t, s.Alice, "/later/prefs", form); rec.Code != http.StatusBadRequest {
 			t.Errorf("POST %v = %d, want 400", form, rec.Code)
 		}

@@ -3708,6 +3708,12 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-article-title { font-size: 2rem; line-height: 1.2; margin: 0; }
 .later-article-meta { color: var(--c-text-faint); font-size: var(--fs-sm); margin: 0; }
 .later-article-body { line-height: 1.65; overflow-wrap: anywhere; }
+/* A calmer right edge (#559): hyphenate long words and let the browser
+   balance the line breaks. Prose only — headings, code and tables keep
+   their words whole. Hyphenation follows the page's lang. */
+.later-article-body :is(p, li) { hyphens: auto; hyphenate-limit-chars: 6 3 3; text-wrap: pretty; }
+.later-article-body code { hyphens: manual; }
+.later-align-justify .later-article-body :is(p, li) { text-align: justify; }
 .later-article-body img { max-width: 100%; height: auto; }
 .later-article-body pre { overflow-x: auto; }
 /* A code block's fill is close to the highlight tint, so a highlight in

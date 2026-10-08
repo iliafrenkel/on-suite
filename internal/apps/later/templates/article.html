@@ -3,7 +3,7 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$csrf := .Shell.CSRFToken}}
-<div class="later-reader later-font-{{$d.Prefs.Font}} later-size-{{$d.Prefs.Size}} later-width-{{$d.Prefs.Width}}"
+<div class="later-reader later-font-{{$d.Prefs.Font}} later-size-{{$d.Prefs.Size}} later-width-{{$d.Prefs.Width}} later-align-{{$d.Prefs.Align}}"
      id="later-reader" data-article-id="{{$d.ID}}" data-minutes="{{$d.Minutes}}"
      {{if not $d.LinkOnly}}data-progress="{{$d.Progress}}"{{end}}>
 	<input type="checkbox" id="later-notes-open" class="visually-hidden later-notes-open" aria-controls="later-notes" aria-labelledby="later-notes-toggle">
@@ -46,6 +46,16 @@
 						<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
 						<input type="hidden" name="back" value="{{$d.Back}}">
 						<input type="hidden" name="width" value="{{.Value}}">
+						<button type="submit" aria-pressed="{{.Current}}">{{.Label}}</button>
+					</form>
+					{{end}}
+				</div>
+				<div class="later-pref-row"><span>Align</span>
+					{{range $d.AlignOptions}}
+					<form method="post" action="/later/prefs" data-later-pref>
+						<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
+						<input type="hidden" name="back" value="{{$d.Back}}">
+						<input type="hidden" name="align" value="{{.Value}}">
 						<button type="submit" aria-pressed="{{.Current}}">{{.Label}}</button>
 					</form>
 					{{end}}
