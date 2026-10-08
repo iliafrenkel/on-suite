@@ -55,11 +55,12 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, status int, name, t
 
 // tileView is one timer tile on the home page.
 type tileView struct {
-	ID      int64
-	Name    string
-	Color   string
-	Summary string // "15 min" or "50 / 10 × 4 · long 30"
-	Total   string // the pill: "15 min", "3h 20m"
+	ID          int64
+	Name        string
+	Color       string
+	Summary     string // "15 min" or "50 / 10 × 4 · long 30"
+	Total       string // the pill: "15 min", "3h 20m"
+	First, Last bool   // no Move earlier / Move later at the ends
 }
 
 type indexView struct {
@@ -110,8 +111,10 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := indexView{UserID: userID, Today: newToday(totals)}
-	for _, t := range timers {
-		view.Tiles = append(view.Tiles, newTile(t))
+	for i, t := range timers {
+		tile := newTile(t)
+		tile.First, tile.Last = i == 0, i == len(timers)-1
+		view.Tiles = append(view.Tiles, tile)
 	}
 	a.render(w, r, http.StatusOK, "focus/index", "Timers", view)
 }
@@ -142,6 +145,34 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.store.DeleteTimer(r.Context(), userID, id); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/focus/", http.StatusSeeOther)
+}
+
+// move is a tile's ⋯ menu Move earlier / Move later (#539): a plain form,
+// so it works by touch, by keyboard and without JavaScript.
+func (a *App) move(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	var by int
+	switch r.PostFormValue("direction") {
+	case "earlier":
+		by = -1
+	case "later":
+		by = 1
+	default:
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	if err := a.store.MoveTimer(r.Context(), userID, id, by); err != nil {
 		a.fail(w, r, err)
 		return
 	}

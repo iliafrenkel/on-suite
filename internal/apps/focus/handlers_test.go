@@ -446,3 +446,71 @@ func TestScriptOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestMoveTimerFromTheMenu(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	seedTimer(t, s, uid, single("A", 5))
+	b := seedTimer(t, s, uid, single("B", 5))
+	c := seedTimer(t, s, uid, single("C", 5))
+	order := func() string {
+		t.Helper()
+		ts, err := s.Store.Timers(context.Background(), uid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.Join(names(ts), "")
+	}
+
+	s.Submit(t, s.Alice, "/focus/timers/"+itoa(b.ID)+"/move", url.Values{"direction": {"earlier"}}, "/focus/")
+	if got := order(); got != "BAC" {
+		t.Errorf("B earlier: %s, want BAC", got)
+	}
+	s.Submit(t, s.Alice, "/focus/timers/"+itoa(c.ID)+"/move", url.Values{"direction": {"later"}}, "/focus/")
+	if got := order(); got != "BAC" {
+		t.Errorf("last moved later: %s, want BAC unchanged", got)
+	}
+
+	if rec := s.Post(t, s.Alice, "/focus/timers/"+itoa(b.ID)+"/move", url.Values{"direction": {"sideways"}}); rec.Code != http.StatusBadRequest {
+		t.Errorf("unknown direction = %d, want 400", rec.Code)
+	}
+	if rec := s.Post(t, s.Bob, "/focus/timers/"+itoa(b.ID)+"/move", url.Values{"direction": {"later"}}); rec.Code != http.StatusNotFound {
+		t.Errorf("bob = %d, want 404", rec.Code)
+	}
+	if rec := s.Post(t, s.Alice, "/focus/timers/abc/move", url.Values{"direction": {"later"}}); rec.Code != http.StatusNotFound {
+		t.Errorf("non-numeric id = %d, want 404", rec.Code)
+	}
+}
+
+// moveDirections is the Move items a tile's ⋯ menu offers, in order.
+func moveDirections(doc *htmlassert.Doc, id int64) []string {
+	var out []string
+	for _, n := range doc.QueryAll(`.focus-menu form[action="/focus/timers/` + itoa(id) + `/move"] input[name="direction"]`) {
+		v, _ := htmlassert.Attr(n, "value")
+		out = append(out, v)
+	}
+	return out
+}
+
+func TestTileMenusOfferMovesExceptAtTheEnds(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	a, b, c := seedTimer(t, s, uid, single("A", 5)), seedTimer(t, s, uid, single("B", 5)), seedTimer(t, s, uid, single("C", 5))
+	doc := s.Get(t, s.Alice, "/focus/")
+	for _, tc := range []struct {
+		id   int64
+		want string
+	}{{a.ID, "later"}, {b.ID, "earlier later"}, {c.ID, "earlier"}} {
+		if got := strings.Join(moveDirections(doc, tc.id), " "); got != tc.want {
+			t.Errorf("timer %d moves = %q, want %q", tc.id, got, tc.want)
+		}
+	}
+	doc.MustHave(`.focus-menu form[action="/focus/timers/` + itoa(b.ID) + `/move"] input[name="csrf_token"]`)
+
+	// A lone timer has nowhere to move.
+	s2 := newServer(t)
+	only := seedTimer(t, s2, s2.Alice.User.ID, single("Only", 5))
+	if got := moveDirections(s2.Get(t, s2.Alice, "/focus/"), only.ID); len(got) != 0 {
+		t.Errorf("a lone timer offers %v, want no moves", got)
+	}
+}
