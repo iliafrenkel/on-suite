@@ -20,9 +20,17 @@
 		return !!c && c.state !== "running";
 	}
 
+	// unlock asks the audio context to start, from a click or key. It
+	// returns a promise that settles once it has tried; locked() then says
+	// whether it worked (a touch pointerdown may not count as a gesture).
 	function unlock() {
 		var c = context();
-		if (c && c.state === "suspended") c.resume();
+		if (!c || c.state === "running") return Promise.resolve(); // "suspended", or iOS's "interrupted"
+		try {
+			return Promise.resolve(c.resume()).catch(function () {});
+		} catch (e) {
+			return Promise.resolve();
+		}
 	}
 
 	// tone plays one sine partial: a quick rise, then an exponential fade.

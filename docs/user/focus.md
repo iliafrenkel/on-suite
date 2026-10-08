@@ -17,6 +17,11 @@ this week. **History** opens the full picture — see [History](#history).
 
 Click **▶** on a tile to start that timer — see [Running a timer](#running-a-timer).
 
+![The ON Focus home page: today's focus time above four coloured timer tiles](images/focus-home.png)
+
+On the home page you can also press **N** to make a new timer, and **1** to
+**9** to start the first nine timers.
+
 ## Making a timer
 
 1. Click **+ New timer**.
@@ -35,15 +40,21 @@ Click **▶** on a tile to start that timer — see [Running a timer](#running-a
    Untick it for quick everyday timers you don't want in your history.
 6. Click **Create timer**.
 
+![The New timer form for an intervals timer](images/focus-form.png)
+
 ## Changing your timers
 
 Click a timer's name, or **⋯** then **Edit**, to change it. **⋯** also has:
 
 - **Duplicate** — makes a copy right after it, handy for a variation.
+- **Move earlier** / **Move later** — moves the tile one place. This works
+  on a phone and with the keyboard.
 - **Delete** — removes the timer. Sessions already in your history stay
   there.
 
-To change the order of your timers, drag a tile to where you want it.
+![A timer's ⋯ menu with Edit, Duplicate, Move earlier, Move later and Delete](images/focus-menu.png)
+
+With a mouse, you can also drag a tile to where you want it.
 
 ## Running a timer
 
@@ -52,18 +63,27 @@ around the countdown fills as time passes — in the timer's colour while you
 focus, warm grey during breaks. Interval timers also show a dot per round:
 filled for rounds done, ringed for the one you're in.
 
+![Deep work running: a teal ring a third of the way round, 32 minutes left in round 1 of 4](images/focus-running.png)
+
+While a timer runs, ON Focus keeps your screen from going to sleep, in
+browsers that allow it. Pause, and the screen can sleep again.
+
 | Button | Key | What it does |
 |---|---|---|
 | **Pause** / **Resume** | Space | Paused time doesn't count. |
-| **Skip** | S | Ends this focus round or break and moves on. Interval timers only. |
+| **Skip** | S | Ends this focus round or break and moves on. Skipping the last one ends the session. Interval timers only. |
 | **Restart** | R | Starts this focus round or break again. |
 | **Full screen** | F | Fills the whole screen. Esc leaves it. |
 | **← Exit** | Esc | Asks first, then ends the session. |
 
 When a focus round or break ends, the timer's chime plays and the next one
-starts by itself — unless you unticked **Start next phase automatically**,
-in which case the timer waits for you to click **Start break** or
-**Start round 2** (or press Space).
+starts by itself — unless you unticked **Start next phase automatically**.
+Then the timer waits, with a button for what comes next — for example
+**Start break**, **Start long break** or **Start round 3** (or press Space).
+
+When the last phase ends, or you end the session, the timer shows how long
+you focused — for example **Done — 3h 20m focused** — and whether it was
+added to your history. Click **Back to timers** to go back.
 
 The first time you click **▶**, your browser asks whether ON Focus may show
 notifications. Allow it to get a notification when a phase ends while
@@ -93,6 +113,8 @@ Click **History** on the ON Focus home page to see:
 - this month's time for each timer, biggest first;
 - your sessions, newest first, 50 to a page. A session you ended early is
   marked **stopped early**. Click **Delete** to remove one.
+
+![History: totals for today, this week, this month and this year, a 30-day chart, time per timer and recent sessions](images/focus-history.png)
 
 If ON Focus can't save a session — you're offline, say — the timer says
 **Couldn't save this session** and offers **Retry**. The session waits in

@@ -1,12 +1,12 @@
 {{define "head"}}<script src="/focus/session.js" defer></script><script src="/focus/record.js" defer></script><script src="/focus/home.js" defer></script>{{end}}
 
 {{define "content"}}
-<div class="focus-page stack">
+<div class="focus-page stack" data-focus-home>
 	<div class="focus-toolbar">
 		<h1>Timers</h1>
 		<div class="focus-toolbar-actions">
 			<a class="button" href="/focus/history">History</a>
-			<a class="button primary" href="/focus/new">+ New timer</a>
+			<a class="button primary" href="/focus/new" aria-keyshortcuts="N">+ New timer</a>
 		</div>
 	</div>
 	{{/* home.js refreshes this from GET /focus/today after the banner
@@ -34,6 +34,20 @@
 							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
 							<button type="submit">Duplicate</button>
 						</form>
+						{{if not .First}}
+						<form method="post" action="/focus/timers/{{.ID}}/move">
+							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+							<input type="hidden" name="direction" value="earlier">
+							<button type="submit">Move earlier</button>
+						</form>
+						{{end}}
+						{{if not .Last}}
+						<form method="post" action="/focus/timers/{{.ID}}/move">
+							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+							<input type="hidden" name="direction" value="later">
+							<button type="submit">Move later</button>
+						</form>
+						{{end}}
 						<form method="post" action="/focus/timers/{{.ID}}/delete" data-focus-confirm="Delete “{{.Name}}”? Sessions already in your history are kept.">
 							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
 							<button class="danger" type="submit">Delete</button>
@@ -44,7 +58,7 @@
 			<span class="focus-tile-summary">{{.Summary}}</span>
 			<div class="focus-tile-foot">
 				<span class="focus-pill">{{.Total}}</span>
-				<a class="focus-play" href="/focus/run/{{.ID}}" draggable="false" aria-label="Start {{.Name}}">▶</a>
+				<a class="focus-play" href="/focus/run/{{.ID}}" draggable="false" aria-label="Start {{.Name}}"{{with .Key}} title="Start ({{.}})" aria-keyshortcuts="{{.}}"{{end}}>▶</a>
 			</div>
 		</li>
 		{{end}}
