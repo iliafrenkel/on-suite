@@ -97,7 +97,10 @@
 		}
 		el.main.hidden = true;
 		el.done.hidden = false;
-		el.doneText.textContent = "Done — " + S.focused(S.focusSeconds(s, now)) + " focused";
+		// Under a minute, "Done — less than a minute focused" read oddly
+		// next to "not added to your history" (#547): just "Done".
+		var seconds = S.focusSeconds(s, now);
+		el.doneText.textContent = seconds < 60 ? "Done" : "Done — " + S.focused(seconds) + " focused";
 		document.title = "Done · " + s.timerName;
 		record(leaving);
 	}
@@ -378,18 +381,21 @@
 
 	// Browsers keep audio locked until the person clicks or presses a key
 	// on this page, and ▶ was a click on the home page. Say so, and unlock
-	// on the first gesture (F2 plan: "Sound unlock").
+	// on the first gesture (F2 plan: "Sound unlock"). Phones may not count
+	// a touch pointerdown, so click is tried too, and the hint only goes
+	// once sound has really started (#544).
 	function showSoundHint() {
 		if (s.chime === "silent" || !chimes.locked()) return;
 		el.soundHint.hidden = false;
+		var events = ["pointerdown", "keydown", "click"];
 		function unlock() {
-			chimes.unlock();
-			el.soundHint.hidden = true;
-			document.removeEventListener("pointerdown", unlock, true);
-			document.removeEventListener("keydown", unlock, true);
+			chimes.unlock().then(function () {
+				if (chimes.locked()) return; // not a gesture here; the next one may be
+				el.soundHint.hidden = true;
+				events.forEach(function (name) { document.removeEventListener(name, unlock, true); });
+			});
 		}
-		document.addEventListener("pointerdown", unlock, true);
-		document.addEventListener("keydown", unlock, true);
+		events.forEach(function (name) { document.addEventListener(name, unlock, true); });
 	}
 
 	// recordThenBegin records a session being replaced before this timer's

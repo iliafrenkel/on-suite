@@ -3850,7 +3850,7 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 	height: 2.25rem;
 	border-radius: 50%;
 	background: var(--swatch);
-	color: #fff;
+	color: #10141a;            /* 4.7–5.5:1 on every swatch; white is under 4.5 (F4 addendum) */
 	text-decoration: none;
 	font-size: var(--fs-sm);
 }
@@ -3945,7 +3945,8 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 	background: var(--c-bg-subtle);
 	color: var(--c-text);
 }
-:root[data-theme="dark"] .focus-runner { --focus-break: #7a6c5d; }
+/* 4.8:1 under the pills' dark text; the old #7a6c5d was 3.6. */
+:root[data-theme="dark"] .focus-runner { --focus-break: #8f806e; }
 .focus-runner-break { --focus-ring: var(--focus-break); }
 .focus-runner [hidden] { display: none; }
 
@@ -3986,6 +3987,9 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 /* stroke-dashoffset is an SVG attribute focus.js sets; CSS must not set it,
  * or the stylesheet would win over the attribute. */
 .focus-ring-bar { stroke: var(--focus-ring); stroke-linecap: round; stroke-dasharray: 1000; transition: stroke-dashoffset .5s linear; }
+/* Nothing elapsed: a round cap would still draw a dot at 12 o'clock.
+ * focus.js sets this attribute, so CSS can match it without a class. */
+.focus-ring-bar[stroke-dashoffset="1000"] { stroke-linecap: butt; }
 
 .focus-ring-inner { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s-2); max-width: 75%; text-align: center; }
 .focus-ring-inner p { margin: 0; }
@@ -4003,15 +4007,31 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 .focus-runner-paused .focus-digits { opacity: .45; }
 .focus-runner-paused .focus-phase { color: var(--c-text-dim); }
 
+/* Waiting for Start (auto-advance off): dimmed like paused, and Start
+ * pulses gently so it's clear the timer needs you. */
+.focus-runner-waiting .focus-ring-bar,
+.focus-runner-waiting .focus-digits { opacity: .45; }
+.focus-runner-waiting [data-focus-next] { animation: focus-pulse 2s ease-in-out infinite; }
+@keyframes focus-pulse { 50% { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) {
+	.focus-runner-waiting [data-focus-next] { animation: none; }
+}
+
 .focus-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
-.focus-controls button { padding: var(--s-2) var(--s-4); border-radius: 999px; }
+.focus-controls button,
+.focus-controls .button { padding: var(--s-2) var(--s-4); border-radius: 999px; }
+/* Dark text on the timer's colour in both themes: white is under 4.5:1 on
+ * every swatch (F4 addendum). Same colour as the suite's dark .primary. */
 .focus-controls .primary,
-.focus-controls .primary:hover { background: var(--focus-ring); border-color: var(--focus-ring); color: #fff; }
+.focus-controls .primary:hover { background: var(--focus-ring); border-color: var(--focus-ring); color: #10141a; }
 
 .focus-sound-hint { margin: 0; color: var(--c-text-faint); font-size: var(--fs-sm); text-align: center; }
 .focus-done { display: flex; flex-direction: column; align-items: center; gap: var(--s-4); text-align: center; }
 .focus-done-title { margin: 0; font-size: var(--fs-xl); }
 .focus-done-status { margin: 0; color: var(--c-text-dim); min-height: 1.5em; }
+/* Back to timers wears the timer's colour, even when the last phase was a
+ * break (which turns --focus-ring grey on .focus-runner-break). */
+.focus-done { --focus-ring: var(--swatch); }
 
 .focus-resume {
 	margin: 0;
