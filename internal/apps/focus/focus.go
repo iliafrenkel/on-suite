@@ -8,7 +8,11 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
 
-var _ app.App = (*App)(nil)
+var (
+	_ app.App      = (*App)(nil)
+	_ app.Exporter = (*App)(nil)
+	_ app.Stater   = (*App)(nil)
+)
 
 //go:embed templates/*.html
 var templateFiles embed.FS
