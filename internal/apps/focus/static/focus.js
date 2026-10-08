@@ -236,18 +236,25 @@
 		document.getElementById("focus-run-dialog-message").textContent = message;
 		ok.textContent = okLabel;
 		cancel.textContent = cancelLabel;
-		var chosen = false;
+		// OK and Cancel let go of every listener at once rather than waiting
+		// for "close", which can be held back (in a hidden tab, say) and
+		// would otherwise reach the next opening's listeners. "close" itself
+		// only covers Esc.
 		var controller = new AbortController();
 		dialog.addEventListener("close", function () {
 			controller.abort();
-			if (!chosen && onCancel) onCancel();
-		}, { once: true });
+			if (onCancel) onCancel();
+		}, { signal: controller.signal });
 		ok.addEventListener("click", function () {
-			chosen = true;
+			controller.abort();
 			dialog.close();
 			onOK();
 		}, { signal: controller.signal });
-		cancel.addEventListener("click", function () { dialog.close(); }, { signal: controller.signal });
+		cancel.addEventListener("click", function () {
+			controller.abort();
+			dialog.close();
+			if (onCancel) onCancel();
+		}, { signal: controller.signal });
 		dialog.showModal();
 	}
 

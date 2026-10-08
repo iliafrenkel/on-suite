@@ -15,14 +15,19 @@
 
 		// Listeners are tied to this one opening of the dialog, so a
 		// cancelled confirmation can never fire later (the bug reader.js
-		// documents).
+		// documents). OK and Cancel let go of every listener at once rather
+		// than waiting for "close", which can be held back (in a hidden tab,
+		// say) and would otherwise reach the next opening's listeners.
+		// "close" itself only covers Esc.
 		var controller = new AbortController();
-		dialog.addEventListener("close", function () { controller.abort(); }, { once: true });
+		dialog.addEventListener("close", function () { controller.abort(); }, { signal: controller.signal });
 		ok.addEventListener("click", function () {
+			controller.abort();
 			dialog.close();
 			onOK();
 		}, { signal: controller.signal });
 		document.getElementById("focus-confirm-cancel").addEventListener("click", function () {
+			controller.abort();
 			dialog.close();
 		}, { signal: controller.signal });
 		dialog.showModal();
