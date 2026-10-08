@@ -7,6 +7,7 @@
 (function () {
 	// confirmThen asks message in the app's dialog, with okLabel on the OK
 	// button, and calls onOK on OK.
+	var confirmController = null;
 	function confirmThen(message, okLabel, onOK) {
 		var dialog = document.getElementById("focus-confirm-dialog");
 		document.getElementById("focus-confirm-message").textContent = message;
@@ -19,8 +20,11 @@
 		// than waiting for "close", which can be held back (in a hidden tab,
 		// say) and would otherwise reach the next opening's listeners.
 		// "close" itself only covers Esc, and ignores one that arrives while
-		// the dialog is open again (it belongs to an earlier opening).
-		var controller = new AbortController();
+		// the dialog is open again (it belongs to an earlier opening). A new
+		// opening also retires the previous one's listeners outright, in case
+		// its "close" never came (#551).
+		if (confirmController) confirmController.abort();
+		var controller = confirmController = new AbortController();
 		dialog.addEventListener("close", function () {
 			if (dialog.open) return;
 			controller.abort();

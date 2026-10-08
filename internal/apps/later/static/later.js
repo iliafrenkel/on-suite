@@ -40,19 +40,31 @@
 	}
 
 	// confirmThen asks message in the app's dialog and calls onOK on OK.
+	var confirmController = null;
 	function confirmThen(message, onOK) {
 		var dialog = document.getElementById("later-confirm-dialog");
 		document.getElementById("later-confirm-message").textContent = message;
 
 		// Listeners are tied to this one opening of the dialog, so a cancelled
 		// confirmation can never fire later (the bug reader.js documents).
-		var controller = new AbortController();
-		dialog.addEventListener("close", function () { controller.abort(); }, { once: true });
+		// OK and Cancel let go of them at once rather than waiting for
+		// "close", which Chrome can hold back (in a hidden tab, say); "close"
+		// only covers Esc, and ignores one that arrives while the dialog is
+		// open again. A new opening also retires the previous one's
+		// listeners outright, in case its "close" never came (#551).
+		if (confirmController) confirmController.abort();
+		var controller = confirmController = new AbortController();
+		dialog.addEventListener("close", function () {
+			if (dialog.open) return;
+			controller.abort();
+		}, { signal: controller.signal });
 		document.getElementById("later-confirm-ok").addEventListener("click", function () {
+			controller.abort();
 			dialog.close();
 			onOK();
 		}, { signal: controller.signal });
 		document.getElementById("later-confirm-cancel").addEventListener("click", function () {
+			controller.abort();
 			dialog.close();
 		}, { signal: controller.signal });
 		dialog.showModal();
