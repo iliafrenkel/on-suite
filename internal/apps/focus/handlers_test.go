@@ -199,7 +199,7 @@ func TestRunPageForAnIntervalsTimer(t *testing.T) {
 	tm := seedTimer(t, s, s.Alice.User.ID, validIntervals()) // Deep work, blue, bowl, 50/10 × 4, long 30 every 2
 	doc := s.Get(t, s.Alice, "/focus/run/"+itoa(tm.ID))
 
-	for _, src := range []string{"/focus/session.js", "/focus/chimes.js", "/focus/focus.js"} {
+	for _, src := range []string{"/focus/session.js", "/focus/chimes.js", "/focus/record.js", "/focus/focus.js"} {
 		doc.MustHave(`script[src="` + src + `"]`)
 	}
 	root := doc.MustHave("#focus-runner")
@@ -292,6 +292,7 @@ func TestIndexHasTheResumeBannerSlot(t *testing.T) {
 		}
 		doc := s.Get(t, s.Alice, "/focus/")
 		doc.MustHave(`script[src="/focus/session.js"]`)
+		doc.MustHave(`script[src="/focus/record.js"]`)
 		banner := doc.MustHave("[data-focus-resume]")
 		if _, ok := htmlassert.Attr(banner, "hidden"); !ok {
 			t.Errorf("seed=%v: the banner should start hidden", seed)
@@ -308,6 +309,7 @@ func TestScriptsAreServed(t *testing.T) {
 		"home.js",
 		"session.js",
 		"chimes.js",
+		"record.js",
 		"focus.js",
 	} {
 		rec := s.Do(t, s.Alice, httptestGet("/focus/"+name))
@@ -368,5 +370,40 @@ func TestTodayFragment(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "<html") {
 		t.Error("the fragment must not be a whole page")
+	}
+}
+
+func TestRunPageDoneScreenCanRetry(t *testing.T) {
+	s := newServer(t)
+	tm := seedTimer(t, s, s.Alice.User.ID, single("Reading", 30))
+	doc := s.Get(t, s.Alice, "/focus/run/"+itoa(tm.ID))
+	status := doc.MustHave("[data-focus-done] [data-focus-done-status]")
+	if role, _ := htmlassert.Attr(status, "role"); role != "status" {
+		t.Errorf("done status role = %q, want status", role)
+	}
+	retry := doc.MustHave("[data-focus-done] button[data-focus-retry]")
+	if _, ok := htmlassert.Attr(retry, "hidden"); !ok {
+		t.Error("Retry should start hidden")
+	}
+}
+
+// The scripts must load in dependency order: each uses what the one
+// before it defines.
+func TestScriptOrder(t *testing.T) {
+	s := newServer(t)
+	tm := seedTimer(t, s, s.Alice.User.ID, single("Reading", 30))
+	for path, want := range map[string]string{
+		"/focus/run/" + itoa(tm.ID): "/focus/session.js /focus/chimes.js /focus/record.js /focus/focus.js",
+		"/focus/":                   "/focus/session.js /focus/record.js /focus/home.js",
+	} {
+		var got []string
+		for _, n := range s.Get(t, s.Alice, path).QueryAll("script[src]") {
+			if src, _ := htmlassert.Attr(n, "src"); strings.HasPrefix(src, "/focus/") {
+				got = append(got, src)
+			}
+		}
+		if strings.Join(got, " ") != want {
+			t.Errorf("%s scripts = %v, want %s", path, got, want)
+		}
 	}
 }

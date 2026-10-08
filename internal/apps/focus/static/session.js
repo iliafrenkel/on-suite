@@ -158,6 +158,18 @@
 		startPhase(s, s.phaseIndex, now);
 	}
 
+	// end stops the session now, as Exit and the home banner's End do:
+	// focus time done so far counts, and it didn't run to its end. Callers
+	// advance(s, now) first, so a phase that ran out still counts as done.
+	function end(s, now) {
+		if (s.finished) return;
+		bankCurrent(s, now);
+		s.finished = true;
+		s.completed = false;
+		s.waiting = false;
+		s.endedAt = now;
+	}
+
 	// focusSeconds is the focus time done so far, pauses and breaks
 	// excluded.
 	function focusSeconds(s, now) {
@@ -207,14 +219,19 @@
 
 	function valid(s) {
 		return !!s && s.v === VERSION && typeof s.userId === "number" &&
+			typeof s.clientId === "string" && s.clientId !== "" &&
 			typeof s.timerId === "number" && typeof s.timerName === "string" &&
+			typeof s.color === "string" && /^[a-z]+$/.test(s.color) &&
 			Array.isArray(s.phases) && s.phases.length > 0 &&
 			s.phases.every(function (p) {
 				return p && typeof p.kind === "string" && typeof p.seconds === "number" && p.seconds > 0;
 			}) &&
 			typeof s.phaseIndex === "number" && s.phaseIndex >= 0 && s.phaseIndex < s.phases.length &&
+			typeof s.startedAt === "number" && (s.endedAt === null || typeof s.endedAt === "number") &&
 			typeof s.phaseStartedAt === "number" && typeof s.pausedTotalInPhase === "number" &&
-			(s.pausedAt === null || typeof s.pausedAt === "number");
+			(s.pausedAt === null || typeof s.pausedAt === "number") &&
+			typeof s.focusSecondsBanked === "number" && typeof s.roundsDone === "number" &&
+			typeof s.waiting === "boolean" && typeof s.finished === "boolean";
 	}
 
 	// load returns this user's stored session, or null. Anything unreadable
@@ -261,7 +278,7 @@
 	window.OnFocus = window.OnFocus || {};
 	window.OnFocus.session = {
 		create: create, advance: advance,
-		pause: pause, resume: resume, skip: skip, restart: restart, next: next,
+		pause: pause, resume: resume, skip: skip, restart: restart, next: next, end: end,
 		current: current, upcoming: upcoming,
 		elapsed: elapsed, remaining: remaining, progress: progress, focusSeconds: focusSeconds,
 		startLabel: startLabel, notice: notice, clock: clock, focused: focused,

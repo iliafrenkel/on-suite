@@ -1,7 +1,8 @@
 // ON Focus's running page (spec: "The runner (focus.js)", "Running page").
 // The server embeds the timer and its phase list as JSON; this script runs
 // it with session.js's state and time maths, keeps the state in
-// localStorage on every change, and draws the ring, dots and controls.
+// localStorage on every change, draws the ring, dots and controls, and records
+// the session when it ends (record.js).
 "use strict";
 
 (function () {
@@ -9,6 +10,7 @@
 	if (!root) return;
 	var S = window.OnFocus.session;
 	var chimes = window.OnFocus.chimes;
+	var R = window.OnFocus.record;
 	var config = JSON.parse(document.getElementById("focus-run-config").textContent);
 
 	var el = {
@@ -26,6 +28,8 @@
 		soundHint: root.querySelector("[data-focus-sound-hint]"),
 		done: root.querySelector("[data-focus-done]"),
 		doneText: root.querySelector("[data-focus-done-text]"),
+		doneStatus: root.querySelector("[data-focus-done-status]"),
+		retry: root.querySelector("[data-focus-retry]"),
 		exit: root.querySelector("[data-focus-exit]"),
 		fullscreen: root.querySelector("[data-focus-fullscreen]")
 	};
@@ -79,16 +83,49 @@
 		else document.title = left + " · " + (isBreak ? "Break" : s.timerName);
 	}
 
-	// finish shows the Done screen. Recording the session is F3 (#495);
-	// until then a finished session is simply cleared.
-	function finish(now) {
+	// finish shows the Done screen and records the session (spec:
+	// "Recording a session"). leaving is Exit: once the server has it, go
+	// home. Exit on a session too short to keep goes home at once.
+	function finish(now, leaving) {
 		window.clearInterval(ticker);
-		S.clear();
+		if (leaving && !R.eligible(s)) {
+			S.clear();
+			window.location.assign("/focus/");
+			return;
+		}
 		el.main.hidden = true;
 		el.done.hidden = false;
 		el.doneText.textContent = "Done — " + S.focused(S.focusSeconds(s, now)) + " focused";
 		document.title = "Done · " + s.timerName;
+		record(leaving);
 	}
+
+	// record sends the ended session. It stays in localStorage until the
+	// server has it, so Retry here — or the home page's banner later — can
+	// try again.
+	function record(leaving) {
+		el.retry.hidden = true;
+		if (!R.eligible(s)) {
+			S.clear();
+			el.doneStatus.textContent = s.keepHistory ? "Under a minute of focus — not added to your history." : "";
+			return;
+		}
+		el.doneStatus.textContent = "Saving…";
+		R.send(s).then(function (result) {
+			if (result === "failed") {
+				el.doneStatus.textContent = "Couldn't save this session.";
+				el.retry.hidden = false;
+				return;
+			}
+			S.clear();
+			if (leaving) {
+				window.location.assign("/focus/");
+				return;
+			}
+			el.doneStatus.textContent = result === "saved" ? "Saved to your history." : "Couldn't add this session to your history.";
+		});
+	}
+	el.retry.addEventListener("click", function () { record(false); });
 
 	// ---- Time passing -----------------------------------------------------
 
@@ -214,17 +251,19 @@
 		dialog.showModal();
 	}
 
-	// exit asks first while a session is running. Recording on Exit is F3
-	// (#495); until then the session is simply cleared.
+	// exit asks first while a session is running, then ends and records it
+	// (spec: "Controls": Exit).
 	function exit() {
 		if (!s || s.finished) {
 			window.location.assign("/focus/");
 			return;
 		}
 		confirmThen("End this session?", "End session", "Keep going", function () {
-			window.clearInterval(ticker);
-			S.clear();
-			window.location.assign("/focus/");
+			var now = Date.now();
+			S.advance(s, now); // a phase that ran out while the dialog was open still counts
+			S.end(s, now);
+			S.save(s);
+			finish(now, true);
 		});
 	}
 	el.exit.addEventListener("click", function (e) {
@@ -285,6 +324,21 @@
 		document.addEventListener("keydown", unlock, true);
 	}
 
+	// recordThenBegin records a session being replaced before this timer's
+	// takes its place: there is one session per browser. If it can't be
+	// saved it is dropped with a warning (F3 plan: being offline at exactly
+	// this moment is rare).
+	function recordThenBegin(old) {
+		if (!R.eligible(old)) {
+			begin();
+			return;
+		}
+		R.send(old).then(function (result) {
+			if (result === "failed") console.warn("ON Focus: couldn't save " + old.timerName + " before replacing it");
+			begin();
+		});
+	}
+
 	// ---- Start, resume or replace (spec: "Resume") -------------------------
 
 	var stored = S.load(config.userId);
@@ -297,17 +351,16 @@
 	} else {
 		S.advance(stored, Date.now());
 		if (stored.finished) {
-			// Another timer's session already ran out. Recording it is F3
-			// (#495); until then it is simply replaced.
-			S.clear();
-			begin();
+			// Another timer's session already ran out: record it, then
+			// start this one.
+			recordThenBegin(stored);
 		} else {
 			confirmThen(
 				"End " + stored.timerName + " and start " + config.name + "?",
 				"Start " + config.name, "Back to " + stored.timerName,
 				function () {
-					S.clear();
-					begin();
+					S.end(stored, Date.now());
+					recordThenBegin(stored);
 				},
 				function () {
 					var timerId = Number(stored.timerId);
