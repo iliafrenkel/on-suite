@@ -20,7 +20,7 @@ const MinFocusSeconds = 60
 const (
 	// maxClientIDLen bounds the browser's random session id: a UUID is 36.
 	maxClientIDLen = 64
-	// clockSkew is how far in the future started_at may be before it is
+	// clockSkew is how far in the future started_at and ended_at may be before it is
 	// refused: the browser's clock and the server's can disagree a little
 	// (F3 plan).
 	clockSkew = 5 * time.Minute
@@ -111,6 +111,8 @@ func checkSession(in SessionInput, now time.Time) (SessionInput, error) {
 		why = "ended_at is before started_at"
 	case in.StartedAt.After(now.Add(clockSkew)):
 		why = "started_at is in the future"
+	case in.EndedAt.After(now.Add(clockSkew)):
+		why = "ended_at is in the future"
 	case time.Duration(in.FocusSeconds)*time.Second > in.EndedAt.Sub(in.StartedAt):
 		why = "more focus than the session lasted"
 	}

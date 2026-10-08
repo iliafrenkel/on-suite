@@ -307,7 +307,8 @@ Pause / Skip / Restart under the ring.
 
 - Four totals: today, this week, this month, this year.
 - Bar chart of focus minutes per day for the last 30 days, oldest first,
-  including empty days. Server-rendered HTML/CSS bars, like Flash's stats.
+  including empty days. Server-rendered SVG bars, like Flash's stats
+  (sizes in SVG attributes, so the CSP holds).
 - Time per timer this month, largest first, grouped by `timer_name`.
 - Recent sessions, newest first, 50 per page with an "Older" link: date and
   time, timer name with its colour, focus time, rounds, a "stopped early"
@@ -332,8 +333,9 @@ Server rules:
 - `focus_seconds` < 60 → 422, nothing stored (the client shouldn't send
   these; the server enforces it anyway).
 - `focus_seconds` > `ended_at` − `started_at`, `ended_at` before
-  `started_at`, or `started_at` more than 5 minutes in the future → 422
-  (the browser's clock and the server's can disagree a little).
+  `started_at`, or `started_at` or `ended_at` more than 5 minutes in the
+  future → 422 (the browser's clock and the server's can disagree a
+  little).
 - `timer_id` not found or not the user's → stored as NULL (the timer may
   have been deleted mid-session); never an error.
 - `color` not in the palette → stored as `gray`; `timer_name` trimmed and

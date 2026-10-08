@@ -18,9 +18,13 @@
 		// documents). OK and Cancel let go of every listener at once rather
 		// than waiting for "close", which can be held back (in a hidden tab,
 		// say) and would otherwise reach the next opening's listeners.
-		// "close" itself only covers Esc.
+		// "close" itself only covers Esc, and ignores one that arrives while
+		// the dialog is open again (it belongs to an earlier opening).
 		var controller = new AbortController();
-		dialog.addEventListener("close", function () { controller.abort(); }, { signal: controller.signal });
+		dialog.addEventListener("close", function () {
+			if (dialog.open) return;
+			controller.abort();
+		}, { signal: controller.signal });
 		ok.addEventListener("click", function () {
 			controller.abort();
 			dialog.close();

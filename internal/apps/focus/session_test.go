@@ -92,6 +92,7 @@ func TestRecordSessionRefusesImpossibleSessions(t *testing.T) {
 		"more focus than time": func(in *focus.SessionInput) { in.FocusSeconds = 30*60 + 1 },
 		"negative rounds":      func(in *focus.SessionInput) { in.RoundsDone = -1 },
 		"too many rounds":      func(in *focus.SessionInput) { in.RoundsDone = 13 },
+		"ends in the future":   func(in *focus.SessionInput) { in.EndedAt = f.now.Add(6 * time.Minute) },
 		"starts in the future": func(in *focus.SessionInput) {
 			in.StartedAt = f.now.Add(6 * time.Minute)
 			in.EndedAt = in.StartedAt.Add(30 * time.Minute)
@@ -111,7 +112,7 @@ func TestRecordSessionRefusesImpossibleSessions(t *testing.T) {
 
 func TestRecordSessionAllowsALittleClockSkew(t *testing.T) {
 	f := newFixture(t)
-	in := sessionInput("fast-clock", "Reading", f.now.Add(4*time.Minute), 30)
+	in := sessionInput("fast-clock", "Reading", f.now.Add(-26*time.Minute), 30) // ends 4 minutes ahead
 	if _, _, err := f.store.RecordSession(context.Background(), f.alice.ID, in); err != nil {
 		t.Errorf("a browser clock 4 minutes fast: %v", err)
 	}
