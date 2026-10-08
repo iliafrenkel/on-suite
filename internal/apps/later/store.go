@@ -78,6 +78,7 @@ const (
 // NewArticle is what saving a URL produced; ContentHTML "" means link-only.
 type NewArticle struct {
 	URL, Title, SiteName, Byline string
+	Lang                         string            // BCP 47 tag; "" when unknown
 	ContentHTML                  string            // sanitised; "" means link-only
 	Images                       map[string]string // hash -> source URL
 	ExtractError                 string
@@ -89,6 +90,7 @@ type NewArticle struct {
 type Article struct {
 	ID, UserID                   int64
 	URL, Title, SiteName, Byline string
+	Lang                         string // BCP 47 tag; "" when unknown
 	SiteHost                     string
 	Content                      Content
 	ContentHTML, ContentText     string
@@ -119,7 +121,7 @@ type ListItem struct {
 }
 
 // articleColumns is every column scanArticle reads, in order.
-const articleColumns = `id, user_id, url, title, site_name, byline, site_host, content,
+const articleColumns = `id, user_id, url, title, site_name, byline, lang, site_host, content,
 	content_html, content_text, extract_error, word_count, state, note, progress,
 	saved_at, opened_at, archived_at, updated_at`
 
@@ -129,7 +131,7 @@ func scanArticle(row rowScanner) (Article, error) {
 	var a Article
 	var saved, updated string
 	var opened, archived sql.NullString
-	err := row.Scan(&a.ID, &a.UserID, &a.URL, &a.Title, &a.SiteName, &a.Byline, &a.SiteHost,
+	err := row.Scan(&a.ID, &a.UserID, &a.URL, &a.Title, &a.SiteName, &a.Byline, &a.Lang, &a.SiteHost,
 		&a.Content, &a.ContentHTML, &a.ContentText, &a.ExtractError, &a.WordCount, &a.State,
 		&a.Note, &a.Progress, &saved, &opened, &archived, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -188,11 +190,11 @@ func (st *Store) Save(ctx context.Context, userID int64, n NewArticle) (Article,
 	defer func() { _ = tx.Rollback() }()
 
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO later_articles (user_id, url, title, site_name, byline, site_host, content,
+		INSERT INTO later_articles (user_id, url, title, site_name, byline, lang, site_host, content,
 			content_html, content_text, extract_error, word_count, saved_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (user_id, url) DO NOTHING`,
-		userID, n.URL, title, n.SiteName, n.Byline, host, content,
+		userID, n.URL, title, n.SiteName, n.Byline, n.Lang, host, content,
 		n.ContentHTML, text, n.ExtractError, words, now, now)
 	if err != nil {
 		return Article{}, false, fmt.Errorf("later: save article: %w", err)
