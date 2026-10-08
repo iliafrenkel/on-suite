@@ -215,7 +215,10 @@ unsupported means chimes only; nothing else changes.
   — 31:12 left", linking to its running page. A session waiting at a phase
   boundary (auto-advance off) shows "Deep work — ready for round 3". If the
   stored session already ran to its end, the banner says "Deep work
-  finished" and the session is recorded on the spot. While a session runs, the banner also has an **End** button: it asks, then ends and records the session like Exit (#546 — this also clears a session whose timer was deleted).
+  finished" and the session is recorded on the spot. While a session runs,
+  the banner also has an **End** button: it asks, then ends and records the
+  session like Exit (#546 — this also clears a session whose timer was
+  deleted).
 
 The stored session carries the signed-in user's ID, and a page ignores a
 session that belongs to someone else, so accounts sharing a browser don't
@@ -226,9 +229,10 @@ there is one session per browser.
 
 On finish or Exit, if `keepHistory` and focus time ≥ 60 s, POST the summary
 to `/focus/sessions`. On `pagehide` with a session in progress nothing is
-sent — the session is still running and will be resumed. The POST is a `fetch` with `keepalive: true`, so it still completes if the
-page unloads first (Exit confirmed, then the tab closed); unlike
-`sendBeacon` it can carry the CSRF header.
+sent — the session is still running and will be resumed. The POST is a
+`fetch` with `keepalive: true`, so it still completes if the page unloads
+first (Exit confirmed, then the tab closed); unlike `sendBeacon` it can
+carry the CSRF header.
 
 The stored state is cleared only once the server confirms (2xx, including
 "already recorded"), or refuses it for good (400/422 — retrying can't
@@ -259,8 +263,10 @@ Everything requires a signed-in user. Missing or foreign IDs are 404.
 
 ### Home
 
-Toolbar: "Timers", "History" and "+ New timer". Under it the **today strip**: today's
-focus time, today's session count, this week's focus time. It appears once the user has recorded any session, and then stays, showing 0m on quiet days. Then the resume
+Toolbar: "Timers", "History" and "+ New timer". Under it the **today
+strip**: today's focus time, today's session count, this week's focus time.
+It appears once the user has recorded any session, and then stays, showing
+0m on quiet days. Then the resume
 banner (if any) and the **tiles**: a coloured top edge, name, a summary line
 (`15 min` or `50 / 10 × 4 · long 30`), a pill with total length, a ▶ button
 in the timer's colour that opens the running page and starts at once, and a
@@ -317,14 +323,17 @@ send it. Body:
  focus_seconds, rounds_done, completed}
 ```
 
-`started_at` and `ended_at` are milliseconds since the epoch, as the browser keeps them. A new session answers 201, a repeat 200, both with `{"id": …}`.
+`started_at` and `ended_at` are milliseconds since the epoch, as the
+browser keeps them. A new session answers 201, a repeat 200, both with
+`{"id": …}`.
 
 Server rules:
 
 - `focus_seconds` < 60 → 422, nothing stored (the client shouldn't send
   these; the server enforces it anyway).
 - `focus_seconds` > `ended_at` − `started_at`, `ended_at` before
-  `started_at`, or `started_at` more than 5 minutes in the future → 422 (the browser's clock and the server's can disagree a little).
+  `started_at`, or `started_at` more than 5 minutes in the future → 422
+  (the browser's clock and the server's can disagree a little).
 - `timer_id` not found or not the user's → stored as NULL (the timer may
   have been deleted mid-session); never an error.
 - `color` not in the palette → stored as `gray`; `timer_name` trimmed and
@@ -390,7 +399,7 @@ One PR each, in order.
 |---|---|---|
 | F1 | #493 Saved timers | Swatch rename; app skeleton and registration; both migrations; `Phases`; home with tiles; create, edit, duplicate, delete, reorder (home.js); short user guide. ▶ opens a placeholder running page |
 | F2 | #494 Running a timer | Focus mode page, ring and dots, controls and keys, auto-advance and waiting, chimes, notifications, tab title, `localStorage` resume, home resume banner. Until F3, finishing or exiting a session clears it without recording |
-| F3 | #495 History and stats | Recording endpoint with beacon and Retry; today strip; History page; session delete; `Exporter`; admin card; banner End (#546) |
+| F3 | #495 History and stats | Recording endpoint (keepalive `fetch`) with Retry; today strip; History page; session delete; `Exporter`; admin card; banner End (#546) |
 | F4 | #496 Polish | Screen Wake Lock while running; home shortcuts (N new timer, 1–9 start the *n*th timer); dark-mode pass; user guide and screenshots |
 
 ## Out of scope

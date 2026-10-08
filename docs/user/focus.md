@@ -74,8 +74,9 @@ on it: browsers keep sound off until you've clicked on the page.
 
 The running timer lives in your browser. Reloading the page, or closing it
 and coming back, carries on where it was; the ON Focus home page shows a
-**Resume** link, and an **End** button to finish the session from there. One timer runs at a time — starting another asks before it
-ends the first. A timer started in one browser doesn't show up in another.
+**Resume** link, and an **End** button to finish the session from there.
+One timer runs at a time — starting another asks before it ends the first.
+A timer started in one browser doesn't show up in another.
 
 ## History
 
