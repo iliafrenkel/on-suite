@@ -300,6 +300,12 @@ func TestIndexHasTheResumeBannerSlot(t *testing.T) {
 		if got, _ := htmlassert.Attr(banner, "data-user-id"); got != itoa(s.Alice.User.ID) {
 			t.Errorf("seed=%v: banner data-user-id = %q, want %q", seed, got, itoa(s.Alice.User.ID))
 		}
+		doc.MustHave("[data-focus-resume] [data-focus-resume-text]")
+		for _, sel := range []string{"[data-focus-resume] button[data-focus-resume-end]", "[data-focus-resume] button[data-focus-resume-retry]"} {
+			if _, ok := htmlassert.Attr(doc.MustHave(sel), "hidden"); !ok {
+				t.Errorf("seed=%v: %s should start hidden", seed, sel)
+			}
+		}
 	}
 }
 

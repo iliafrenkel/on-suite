@@ -1,7 +1,7 @@
 // ON Focus's home and History page script. Forms marked data-focus-confirm ask first,
 // in the app's own dialog (later.js's pattern); without JavaScript the form
 // simply submits. Tiles can also be dragged to reorder. It also shows the
-// resume banner and asks for notification permission on ▶.
+// resume banner (and records a session that has ended) and asks for notification permission on ▶.
 "use strict";
 
 (function () {
@@ -129,23 +129,44 @@
 		if (e.persisted) window.location.reload();
 	});
 
-	// The resume banner (spec: "Resume"): a session running in this
-	// browser, read from the state the running page keeps.
+	// The resume banner (spec: "Resume"): a session stored in this browser,
+	// read from the state the running page keeps. While it runs: a link
+	// back to it, and End (#546 — it also clears a session whose timer was
+	// deleted). Once it has ended: recorded on the spot, with Retry if that
+	// fails.
 	var S = window.OnFocus && window.OnFocus.session;
+	var R = window.OnFocus && window.OnFocus.record;
 	var banner = document.querySelector("[data-focus-resume]");
-	var stored = S && banner ? S.load(Number(banner.dataset.userId)) : null;
+	var stored = S && R && banner ? S.load(Number(banner.dataset.userId)) : null;
+	var bannerTicker = 0;
+	var text, link, endButton, retryButton;
 	if (stored) {
 		var timerId = Number(stored.timerId);
 		if (!Number.isFinite(timerId) || timerId <= 0 || Math.floor(timerId) !== timerId) {
 			S.clear();
 			stored = null;
 		} else {
-			var link = document.createElement("a");
+			text = banner.querySelector("[data-focus-resume-text]");
+			endButton = banner.querySelector("[data-focus-resume-end]");
+			retryButton = banner.querySelector("[data-focus-resume-retry]");
+			link = document.createElement("a");
 			link.href = "/focus/run/" + timerId;
 			banner.classList.add("swatch-c-" + stored.color);
-			banner.appendChild(link);
 			banner.hidden = false;
-			var bannerTicker = window.setInterval(updateBanner, 1000);
+			endButton.addEventListener("click", function () {
+				confirmThen("End " + stored.timerName + "?", "End session", function () {
+					// The session ran out while the dialog was open and the
+					// ticker has already recorded it: the banner shows that.
+					if (stored.finished) return;
+					var now = Date.now();
+					S.advance(stored, now); // a phase that ran out still counts
+					S.end(stored, now);
+					S.save(stored);
+					updateBanner();
+				});
+			});
+			retryButton.addEventListener("click", recordStored);
+			bannerTicker = window.setInterval(updateBanner, 1000);
 			updateBanner();
 		}
 	}
@@ -154,12 +175,15 @@
 		var now = Date.now();
 		S.advance(stored, now);
 		if (stored.finished) {
-			// Recording it is F3 (#495); until then a finished session is
-			// simply cleared.
 			window.clearInterval(bannerTicker);
-			S.clear();
-			banner.textContent = stored.timerName + " finished — " + S.focused(S.focusSeconds(stored, now)) + " focused.";
+			endButton.hidden = true;
+			recordStored();
 			return;
+		}
+		endButton.hidden = false;
+		if (link.parentNode !== text) {
+			text.textContent = "";
+			text.appendChild(link);
 		}
 		if (stored.waiting) {
 			var up = S.upcoming(stored);
@@ -168,5 +192,31 @@
 		}
 		var left = S.clock(S.remaining(stored, now)) + " left";
 		link.textContent = "Resume " + stored.timerName + " — " + (stored.pausedAt !== null ? "paused, " + left : left);
+	}
+
+	// recordStored records the ended session (spec: "Resume": "recorded on
+	// the spot"), then refreshes the today strip so it includes it.
+	function recordStored() {
+		retryButton.hidden = true;
+		var summary = stored.timerName + (stored.completed ? " finished" : " ended") + " — " +
+			S.focused(S.focusSeconds(stored, stored.endedAt)) + " focused.";
+		if (!R.eligible(stored)) {
+			S.clear();
+			text.textContent = summary;
+			return;
+		}
+		text.textContent = summary + " Saving…";
+		R.send(stored).then(function (result) {
+			if (result === "failed") {
+				text.textContent = summary + " Couldn't save this session.";
+				retryButton.hidden = false;
+				return;
+			}
+			S.clear();
+			text.textContent = result === "saved" ? summary + " Saved to your history." : summary;
+			if (result === "saved" && window.htmx) {
+				htmx.ajax("GET", "/focus/today", { target: "[data-focus-today]", swap: "innerHTML" });
+			}
+		});
 	}
 })();

@@ -4021,8 +4021,15 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 	border-radius: var(--radius);
 	color: var(--c-text-dim);
 	font-size: var(--fs-sm);
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--s-2) var(--s-3);
 }
+.focus-resume[hidden], .focus-resume [hidden] { display: none; }
 .focus-resume a { font-weight: 600; }
+.focus-resume-text { flex: 1 1 16rem; }
+.focus-resume-action { font-size: var(--fs-sm); padding: var(--s-1) var(--s-3); }
 
 /* ON Focus: History (spec: "History"). Totals and chart mirror ON Flash's
    stats tiles and chart. */
