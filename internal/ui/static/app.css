@@ -17,10 +17,10 @@
 	--c-border-firm: #c9b49a;
 	--c-text:        #3a2f26;
 	--c-text-dim:    #6b5d4f;
-	--c-text-faint:  #948573;
+	--c-text-faint:  #756758; /* 4.5:1+ on --c-bg and --c-bg-subtle (#556) */
 	--c-accent:      #2f6f6a;
 	--c-accent-bg:   #d9e8e6;
-	--c-accent-attention:    #b8551f;
+	--c-accent-attention:    #a84c1b; /* 4.5:1+ as text on --c-accent-attention-bg (#556) */
 	--c-accent-attention-bg: #f7e4d5;
 	--c-danger:      #a51d2d;
 	--c-danger-bg:   #fbeaec;
@@ -133,10 +133,10 @@
 	--c-border-firm: #52443a;
 	--c-text:        #efe6da;
 	--c-text-dim:    #b8a996;
-	--c-text-faint:  #8f8071;
-	--c-accent:      #3d8983;
+	--c-text-faint:  #998a7a; /* 4.5:1+ on --c-bg and --c-bg-subtle (#556) */
+	--c-accent:      #64a5a0; /* 4.5:1+ for links on every dark background and on --c-accent-bg (#556) */
 	--c-accent-bg:   #1e3532;
-	--c-accent-attention:    #b05a29;
+	--c-accent-attention:    #cf8357; /* 4.5:1+ as text on --c-accent-attention-bg; fills take dark text (#556) */
 	--c-accent-attention-bg: #3d2a1c;
 	--c-danger:      #f08c95;
 	--c-danger-bg:   #3a1e22;
@@ -840,6 +840,8 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	background: var(--c-accent-bg);
 }
 .snippet-row-active .snippet-title { color: var(--c-accent); }
+/* Faint is under 4.5:1 on --c-accent-bg (#556). */
+.snippet-row-active .snippet-date { color: var(--c-text-dim); }
 
 /* Doubled with .toolbar-btn so it beats that rule's display: inline-flex,
  * which comes later in this file (#412); the max-width:640px rule below
@@ -2409,6 +2411,8 @@ kbd {
 	color: var(--c-text-faint);
 	font-size: var(--fs-xs);
 }
+/* Faint is under 4.5:1 on --c-accent-bg (#556). */
+.reader-row.is-active .meta { color: var(--c-text-dim); }
 
 /* Read rows dim. That contrast *is* the unread indicator — do not also add a
  * dot, or every row grows a second thing to read. */
@@ -2791,6 +2795,9 @@ kbd {
 	text-decoration: none;
 }
 .flash-review-cta:hover { filter: brightness(1.08); }
+/* Dark mode's lighter orange takes dark text, as .primary does (#556). */
+:root[data-theme="dark"] .toolbar-due-badge,
+:root[data-theme="dark"] .flash-review-cta { color: #10141a; }
 .flash-review-cta:focus-visible { outline: var(--ring); outline-offset: 2px; }
 
 .flash-all-done {
@@ -2984,7 +2991,7 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	position: absolute;
 	bottom: var(--s-1);
 	font-size: var(--fs-2xs);
-	color: var(--c-text-faint);
+	color: var(--c-text-dim); /* faint is under 4.5:1 on the card's inset background (#556) */
 }
 .flash-mini-status { right: var(--s-2); }
 .flash-mini-deck { left: var(--s-2); }
@@ -3841,7 +3848,7 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .focus-tile-name:hover { text-decoration: underline; }
 .focus-tile-summary { color: var(--c-text-dim); font-size: var(--fs-sm); }
 .focus-tile-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: var(--s-2); }
-/* Dim, not faint: faint text is under 4.5:1 in both themes (F4 dark-mode pass). */
+/* Dim, not faint: chosen in the F4 dark-mode pass, before #556 brought faint to 4.5:1. */
 .focus-pill { font-size: var(--fs-xs); color: var(--c-text-dim); border: var(--border); border-radius: 999px; padding: 0 var(--s-2); }
 .focus-play {
 	display: inline-flex;
