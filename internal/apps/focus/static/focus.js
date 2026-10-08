@@ -102,8 +102,11 @@
 
 	// record sends the ended session. It stays in localStorage until the
 	// server has it, so Retry here — or the home page's banner later — can
-	// try again.
+	// try again. Retry repeats the attempt it follows: after a failed Exit,
+	// a successful Retry goes home too (#553).
+	var leavingOnSave = false;
 	function record(leaving) {
+		leavingOnSave = leaving;
 		el.retry.hidden = true;
 		if (!R.eligible(s)) {
 			S.clear();
@@ -125,7 +128,7 @@
 			el.doneStatus.textContent = result === "saved" ? "Saved to your history." : "Couldn't add this session to your history.";
 		});
 	}
-	el.retry.addEventListener("click", function () { record(false); });
+	el.retry.addEventListener("click", function () { record(leavingOnSave); });
 
 	// ---- Time passing -----------------------------------------------------
 
@@ -290,22 +293,28 @@
 		if (document.querySelector("dialog[open]")) return; // the dialog's own keys
 		switch (e.key) {
 		case " ":
-			// Space on a focused control presses that control, natively.
-			if (e.target.closest && e.target.closest("button, a")) return;
+			// Space on a focused button presses that button, natively.
+			// Links don't activate on Space, so on "← Exit" it pauses.
+			if (e.target.closest && e.target.closest("button")) return;
 			e.preventDefault();
 			askToNotify();
 			togglePause();
 			break;
 		case "s":
 		case "S":
-			if (el.skip) skip();
+			if (el.skip) {
+				askToNotify();
+				skip();
+			}
 			break;
 		case "r":
 		case "R":
+			askToNotify();
 			restart();
 			break;
 		case "f":
 		case "F":
+			askToNotify();
 			toggleFullscreen();
 			break;
 		case "Escape":

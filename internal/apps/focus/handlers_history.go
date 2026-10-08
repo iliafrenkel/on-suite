@@ -129,6 +129,17 @@ func (a *App) history(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	// Past the end — a typed ?page=99, or the last session on this page
+	// just deleted (#552): go to the last page that has sessions.
+	if len(sessions) == 0 && page > 1 {
+		n, err := a.store.SessionCount(ctx, userID)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		http.Redirect(w, r, historyURL((n+sessionsPerPage-1)/sessionsPerPage), http.StatusSeeOther)
+		return
+	}
 
 	view := historyView{
 		Totals: []totalTile{

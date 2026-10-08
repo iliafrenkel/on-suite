@@ -128,7 +128,9 @@
 		if (!play || !("Notification" in window) || Notification.permission !== "default") return;
 		e.preventDefault();
 		function go() { window.location.assign(play.href); }
-		Notification.requestPermission().then(go, go);
+		// Old Safari's requestPermission takes a callback and returns
+		// nothing; Promise.resolve keeps ▶ working there too.
+		Promise.resolve(Notification.requestPermission()).then(go, go);
 	});
 
 	// A page restored from the back/forward cache still holds the session

@@ -299,6 +299,7 @@ func newRunView(t Timer, userID int64) runView {
 	for _, p := range Phases(t.TimerInput) {
 		cfg.Phases = append(cfg.Phases, runPhase{Phase: p, Label: p.Label(t.Rounds)})
 	}
+	// Phases is never empty: Validate requires at least one focus minute.
 	v := runView{
 		Config: cfg, Name: t.Name, Color: t.Color, Single: t.Kind != KindIntervals,
 		Clock: Clock(cfg.Phases[0].Seconds), Label: cfg.Phases[0].Label,

@@ -89,6 +89,14 @@ func TestIndexShowsTilesInOrder(t *testing.T) {
 		t.Errorf("intervals pill = %q, want 4h 10m", got)
 	}
 	doc.MustHave(`a[href="/focus/run/` + itoa(deepTimer.ID) + `"]`)
+
+	// Each tile's ⋯ menu: Duplicate and Delete are forms with the CSRF field.
+	for _, tile := range tiles {
+		id, _ := htmlassert.Attr(tile, "data-id")
+		for _, action := range []string{"duplicate", "delete"} {
+			doc.MustHave(`.focus-menu form[action="/focus/timers/` + id + `/` + action + `"] input[name="csrf_token"]`)
+		}
+	}
 }
 
 func TestDuplicateFromTheHomePage(t *testing.T) {
@@ -126,8 +134,10 @@ func TestDuplicateAndDeleteAreNotFoundForSomeoneElse(t *testing.T) {
 			t.Errorf("bob %s = %d, want 404", action, rec.Code)
 		}
 	}
-	if rec := s.Post(t, s.Alice, "/focus/timers/abc/delete", url.Values{}); rec.Code != http.StatusNotFound {
-		t.Errorf("non-numeric id = %d, want 404", rec.Code)
+	for _, action := range []string{"duplicate", "delete"} {
+		if rec := s.Post(t, s.Alice, "/focus/timers/abc/"+action, url.Values{}); rec.Code != http.StatusNotFound {
+			t.Errorf("non-numeric id on %s = %d, want 404", action, rec.Code)
+		}
 	}
 }
 
@@ -160,6 +170,13 @@ func TestReorderRejectsBadIDs(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("ids %q = %d, want 400", ids, rec.Code)
 		}
+	}
+	ts, err := s.Store.Timers(context.Background(), uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(names(ts), ""); got != "AB" {
+		t.Errorf("order after rejected requests = %s, want AB", got)
 	}
 }
 
@@ -390,6 +407,22 @@ func TestRunPageDoneScreenCanRetry(t *testing.T) {
 	retry := doc.MustHave("[data-focus-done] button[data-focus-retry]")
 	if _, ok := htmlassert.Attr(retry, "hidden"); !ok {
 		t.Error("Retry should start hidden")
+	}
+}
+
+// The running page embeds the timer as JSON inside <script>; a name that
+// looks like markup must not end the script early or break the JSON.
+func TestRunPageConfigEscapesTheName(t *testing.T) {
+	s := newServer(t)
+	name := `</script>"&<b>`
+	tm := seedTimer(t, s, s.Alice.User.ID, single(name, 15))
+	rec := s.Do(t, s.Alice, httptestGet("/focus/run/"+itoa(tm.ID)))
+	if strings.Contains(rec.Body.String(), `</script>"&<b>`) {
+		t.Error("the raw name appears unescaped in the page")
+	}
+	cfg := runConfigOf(t, htmlassert.Parse(t, rec.Body.String()))
+	if cfg.Name != name {
+		t.Errorf("config name = %q, want %q", cfg.Name, name)
 	}
 }
 

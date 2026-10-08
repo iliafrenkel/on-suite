@@ -206,3 +206,14 @@ func (st *Store) RecentSessions(ctx context.Context, userID int64, page, perPage
 	}
 	return out, false, nil
 }
+
+// SessionCount is how many sessions the user has recorded: the History
+// page uses it to find its last page.
+func (st *Store) SessionCount(ctx context.Context, userID int64) (int, error) {
+	var n int
+	if err := st.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM focus_sessions WHERE user_id = ?`, userID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("focus: count sessions: %w", err)
+	}
+	return n, nil
+}
