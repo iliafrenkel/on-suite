@@ -8,7 +8,11 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
 
-var _ app.App = (*App)(nil)
+var (
+	_ app.App      = (*App)(nil)
+	_ app.Exporter = (*App)(nil)
+	_ app.Stater   = (*App)(nil)
+)
 
 //go:embed templates/*.html
 var templateFiles embed.FS
@@ -59,8 +63,13 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /timers/{id}/duplicate", a.duplicate)
 	r.HandleFunc("POST /timers/{id}/delete", a.delete)
 	r.HandleFunc("GET /run/{id}", a.run)
+	r.HandleFunc("GET /history", a.history)
+	r.HandleFunc("GET /today", a.today)
+	r.HandleFunc("POST /sessions", a.recordSession)
+	r.HandleFunc("POST /sessions/{id}/delete", a.deleteSession)
 	r.HandleFunc("GET /home.js", a.script("home.js"))
 	r.HandleFunc("GET /session.js", a.script("session.js"))
+	r.HandleFunc("GET /record.js", a.script("record.js"))
 	r.HandleFunc("GET /chimes.js", a.script("chimes.js"))
 	r.HandleFunc("GET /focus.js", a.script("focus.js"))
 }

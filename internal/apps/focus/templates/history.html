@@ -1,0 +1,96 @@
+{{/* home.js gives the session delete forms their confirmation dialog. */}}
+{{define "head"}}<script src="/focus/home.js" defer></script>{{end}}
+
+{{define "content"}}
+{{$d := .Data}}
+<div class="focus-page stack">
+	<div class="focus-toolbar">
+		<h1>History</h1>
+		<a class="button" href="/focus/">← Timers</a>
+	</div>
+
+	<div class="focus-totals">
+		{{range $d.Totals}}
+		<div class="focus-total">
+			<div class="value">{{.Value}}</div>
+			<div class="label">{{.Label}}</div>
+		</div>
+		{{end}}
+	</div>
+
+	<figure class="focus-chart">
+		<figcaption>Focus per day, last 30 days</figcaption>
+		{{if $d.Chart.Empty}}
+		<p class="empty">Nothing in the last 30 days.</p>
+		{{else}}
+		<svg viewBox="0 0 {{$d.Chart.Width}} {{$d.Chart.Height}}" role="img"
+		     aria-label="Focus per day, last 30 days, peak {{$d.Chart.Peak}}" preserveAspectRatio="none">
+			{{range $d.Chart.Bars}}
+			<rect x="{{.X}}" y="{{.Y}}" width="{{.Width}}" height="{{.Height}}" rx="1"><title>{{.Label}}</title></rect>
+			{{end}}
+		</svg>
+		{{end}}
+	</figure>
+	{{if not $d.Chart.Empty}}
+	<details class="focus-daily">
+		<summary>Daily figures (text alternative to the chart above)</summary>
+		<div class="focus-table-scroll">
+			<table class="focus-table">
+				<thead><tr><th>Day</th><th>Focus</th></tr></thead>
+				<tbody>{{range $d.Days}}<tr><td>{{.Day}}</td><td>{{.Focus}}</td></tr>{{end}}</tbody>
+			</table>
+		</div>
+	</details>
+	{{end}}
+
+	<h2>This month by timer</h2>
+	{{if $d.Timers}}
+	<ul class="focus-by-timer">
+		{{range $d.Timers}}
+		<li class="swatch-c-{{.Color}}">
+			<span class="focus-by-timer-name">{{.Name}}</span>
+			<svg class="focus-by-timer-bar" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect width="{{.Pct}}" height="4" rx="1"></rect></svg>
+			<span class="focus-by-timer-total">{{.Total}}</span>
+		</li>
+		{{end}}
+	</ul>
+	{{else}}
+	<p class="focus-muted">Nothing this month yet.</p>
+	{{end}}
+
+	<h2>Recent sessions</h2>
+	{{if $d.Sessions}}
+	<div class="focus-table-scroll">
+		<table class="focus-table focus-sessions">
+			<thead><tr><th>When</th><th>Timer</th><th>Focus</th><th>Rounds</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+			<tbody>
+				{{range $d.Sessions}}
+				<tr>
+					<td>{{.When}}</td>
+					<td><span class="focus-session-timer swatch-c-{{.Color}}">{{.Name}}</span>{{if not .Completed}} <span class="focus-early">stopped early</span>{{end}}</td>
+					<td>{{.Focus}}</td>
+					<td>{{.Rounds}}</td>
+					<td>
+						<form method="post" action="/focus/sessions/{{.ID}}/delete" data-focus-confirm="Delete this {{.Name}} session from your history?">
+							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+							<input type="hidden" name="page" value="{{$d.Page}}">
+							<button class="danger" type="submit" aria-label="Delete the {{.Name}} session of {{.When}}">Delete</button>
+						</form>
+					</td>
+				</tr>
+				{{end}}
+			</tbody>
+		</table>
+	</div>
+	{{else}}
+	<div class="focus-empty"><p>No sessions here yet. Finish a timer with <b>Keep history</b> on and it shows up here.</p></div>
+	{{end}}
+	{{if or $d.NewerURL $d.OlderURL}}
+	<nav class="focus-pager" aria-label="Session pages">
+		{{with $d.NewerURL}}<a href="{{.}}">← Newer</a>{{end}}
+		{{with $d.OlderURL}}<a href="{{.}}">Older →</a>{{end}}
+	</nav>
+	{{end}}
+</div>
+{{template "focus-confirm"}}
+{{end}}

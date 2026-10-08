@@ -199,7 +199,7 @@ func TestRunPageForAnIntervalsTimer(t *testing.T) {
 	tm := seedTimer(t, s, s.Alice.User.ID, validIntervals()) // Deep work, blue, bowl, 50/10 × 4, long 30 every 2
 	doc := s.Get(t, s.Alice, "/focus/run/"+itoa(tm.ID))
 
-	for _, src := range []string{"/focus/session.js", "/focus/chimes.js", "/focus/focus.js"} {
+	for _, src := range []string{"/focus/session.js", "/focus/chimes.js", "/focus/record.js", "/focus/focus.js"} {
 		doc.MustHave(`script[src="` + src + `"]`)
 	}
 	root := doc.MustHave("#focus-runner")
@@ -292,12 +292,19 @@ func TestIndexHasTheResumeBannerSlot(t *testing.T) {
 		}
 		doc := s.Get(t, s.Alice, "/focus/")
 		doc.MustHave(`script[src="/focus/session.js"]`)
+		doc.MustHave(`script[src="/focus/record.js"]`)
 		banner := doc.MustHave("[data-focus-resume]")
 		if _, ok := htmlassert.Attr(banner, "hidden"); !ok {
 			t.Errorf("seed=%v: the banner should start hidden", seed)
 		}
 		if got, _ := htmlassert.Attr(banner, "data-user-id"); got != itoa(s.Alice.User.ID) {
 			t.Errorf("seed=%v: banner data-user-id = %q, want %q", seed, got, itoa(s.Alice.User.ID))
+		}
+		doc.MustHave("[data-focus-resume] [data-focus-resume-text]")
+		for _, sel := range []string{"[data-focus-resume] button[data-focus-resume-end]", "[data-focus-resume] button[data-focus-resume-retry]"} {
+			if _, ok := htmlassert.Attr(doc.MustHave(sel), "hidden"); !ok {
+				t.Errorf("seed=%v: %s should start hidden", seed, sel)
+			}
 		}
 	}
 }
@@ -308,6 +315,7 @@ func TestScriptsAreServed(t *testing.T) {
 		"home.js",
 		"session.js",
 		"chimes.js",
+		"record.js",
 		"focus.js",
 	} {
 		rec := s.Do(t, s.Alice, httptestGet("/focus/"+name))
@@ -317,6 +325,91 @@ func TestScriptsAreServed(t *testing.T) {
 		}
 		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/javascript") {
 			t.Errorf("GET /focus/%s Content-Type = %q", name, ct)
+		}
+	}
+}
+
+func TestIndexLinksToHistory(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/focus/")
+	doc.MustHave(`.focus-toolbar a[href="/focus/history"]`)
+}
+
+func TestTodayStripOnlyOnceThereIsHistory(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(localAt(10, 7, 12, 0))
+	uid := s.Alice.User.ID
+	seedTimer(t, s, uid, single("Reading", 30))
+
+	doc := s.Get(t, s.Alice, "/focus/")
+	doc.MustHave("[data-focus-today]")
+	doc.MustNotHave(".focus-today")
+
+	// Only an old session: the strip shows, with nothing today.
+	seedSession(t, s, uid, sessionInput("old", "Reading", localAt(9, 1, 9, 0), 30))
+	doc = s.Get(t, s.Alice, "/focus/")
+	if got := htmlassert.Text(doc.MustHave(".focus-today")); got != "Today 0m focused 0 sessions This week 0m" {
+		t.Errorf("strip = %q", got)
+	}
+
+	seedSession(t, s, uid, sessionInput("a", "Reading", localAt(10, 7, 8, 0), 30))
+	seedSession(t, s, uid, sessionInput("b", "Reading", localAt(10, 6, 8, 0), 45))
+	seedSession(t, s, s.Bob.User.ID, sessionInput("z", "Bob's", localAt(10, 7, 9, 0), 60))
+	doc = s.Get(t, s.Alice, "/focus/")
+	if got := htmlassert.Text(doc.MustHave(".focus-today")); got != "Today 30m focused 1 session This week 1h 15m" {
+		t.Errorf("strip = %q", got)
+	}
+}
+
+func TestTodayFragment(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(localAt(10, 7, 12, 0))
+	rec := s.Do(t, s.Alice, httptestGet("/focus/today"))
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "" {
+		t.Errorf("no history: %d %q, want 200 and an empty body", rec.Code, rec.Body.String())
+	}
+	seedSession(t, s, s.Alice.User.ID, sessionInput("a", "Reading", localAt(10, 7, 8, 0), 30))
+	rec = s.Do(t, s.Alice, httptestGet("/focus/today"))
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(doc.MustHave(".focus-today")); got != "Today 30m focused 1 session This week 30m" {
+		t.Errorf("fragment = %q", got)
+	}
+	if strings.Contains(rec.Body.String(), "<html") {
+		t.Error("the fragment must not be a whole page")
+	}
+}
+
+func TestRunPageDoneScreenCanRetry(t *testing.T) {
+	s := newServer(t)
+	tm := seedTimer(t, s, s.Alice.User.ID, single("Reading", 30))
+	doc := s.Get(t, s.Alice, "/focus/run/"+itoa(tm.ID))
+	status := doc.MustHave("[data-focus-done] [data-focus-done-status]")
+	if role, _ := htmlassert.Attr(status, "role"); role != "status" {
+		t.Errorf("done status role = %q, want status", role)
+	}
+	retry := doc.MustHave("[data-focus-done] button[data-focus-retry]")
+	if _, ok := htmlassert.Attr(retry, "hidden"); !ok {
+		t.Error("Retry should start hidden")
+	}
+}
+
+// The scripts must load in dependency order: each uses what the one
+// before it defines.
+func TestScriptOrder(t *testing.T) {
+	s := newServer(t)
+	tm := seedTimer(t, s, s.Alice.User.ID, single("Reading", 30))
+	for path, want := range map[string]string{
+		"/focus/run/" + itoa(tm.ID): "/focus/session.js /focus/chimes.js /focus/record.js /focus/focus.js",
+		"/focus/":                   "/focus/session.js /focus/record.js /focus/home.js",
+	} {
+		var got []string
+		for _, n := range s.Get(t, s.Alice, path).QueryAll("script[src]") {
+			if src, _ := htmlassert.Attr(n, "src"); strings.HasPrefix(src, "/focus/") {
+				got = append(got, src)
+			}
+		}
+		if strings.Join(got, " ") != want {
+			t.Errorf("%s scripts = %v, want %s", path, got, want)
 		}
 	}
 }

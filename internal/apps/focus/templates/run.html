@@ -1,4 +1,4 @@
-{{define "head"}}<script src="/focus/session.js" defer></script><script src="/focus/chimes.js" defer></script><script src="/focus/focus.js" defer></script>{{end}}
+{{define "head"}}<script src="/focus/session.js" defer></script><script src="/focus/chimes.js" defer></script><script src="/focus/record.js" defer></script><script src="/focus/focus.js" defer></script>{{end}}
 
 {{define "content"}}
 {{$d := .Data}}
@@ -38,7 +38,11 @@
 	</div>
 	<div class="focus-done" data-focus-done hidden>
 		<p class="focus-done-title" data-focus-done-text>Done</p>
-		<a class="button primary" href="/focus/">Back to timers</a>
+		<p class="focus-done-status" data-focus-done-status role="status"></p>
+		<div class="focus-controls">
+			<button type="button" data-focus-retry hidden>Retry</button>
+			<a class="button primary" href="/focus/">Back to timers</a>
+		</div>
 	</div>
 </div>
 {{/* The running page's one confirmation dialog: "End this session?" and

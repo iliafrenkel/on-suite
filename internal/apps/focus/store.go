@@ -1,5 +1,5 @@
 // Package focus implements ON Focus: saved, reusable focus timers (single
-// blocks or Pomodoro-style intervals) and, from F3, a history of sessions.
+// blocks or Pomodoro-style intervals) and a history of the sessions run with them.
 package focus
 
 import (
