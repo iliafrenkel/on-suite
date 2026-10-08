@@ -402,7 +402,89 @@ One PR each, in order.
 | F1 | #493 Saved timers | Swatch rename; app skeleton and registration; both migrations; `Phases`; home with tiles; create, edit, duplicate, delete, reorder (home.js); short user guide. ▶ opens a placeholder running page |
 | F2 | #494 Running a timer | Focus mode page, ring and dots, controls and keys, auto-advance and waiting, chimes, notifications, tab title, `localStorage` resume, home resume banner. Until F3, finishing or exiting a session clears it without recording |
 | F3 | #495 History and stats | Recording endpoint (keepalive `fetch`) with Retry; today strip; History page; session delete; `Exporter`; admin card; banner End (#546) |
-| F4 | #496 Polish | Screen Wake Lock while running; home shortcuts (N new timer, 1–9 start the *n*th timer); dark-mode pass; user guide and screenshots |
+| F4a | #496 Fixes | Open follow-ups #545, #541, #552, #553 (see "F4 addendum") |
+| F4b | #496 Polish | Screen Wake Lock while running; home shortcuts (N new timer, 1–9 start the *n*th timer); Move earlier / later (#539); dark-mode pass and running-page polish (#544); user guide, README and screenshots (#547, #540) |
+
+## F4 addendum (2026-10-08)
+
+F4 (#496) also takes in every open ON Focus follow-up and lands as two
+PRs: **F4a** fixes and robustness first, then **F4b** polish, which ends
+with the guide and screenshots so they show the finished UI.
+
+### F4a — fixes and robustness
+
+- **#545 (what F3 left open):** `chimes.js` `play()` catches Web Audio
+  errors, so a broken audio context never stops the timer. `home.js` wraps
+  `Notification.requestPermission()` in `Promise.resolve(...)` for old,
+  callback-only Safari. On the running page, Space is left alone only on a
+  focused `button` (links don't activate on Space, so on "← Exit" it now
+  pauses), and S / R / F also ask for notification permission, as clicks
+  and Space do. `session.js` `startLabel()` and `handlers.go` `newRunView`
+  each get a one-line comment saying why they're safe. A handler test seeds
+  a timer named `</script>"&` and checks the embedded config decodes back to
+  that name.
+- **#541:** the F1 test gaps: limits at the maximum (focus 180, breaks 60,
+  rounds 12, long break every = rounds) are accepted; each tile's ⋯ menu
+  has Duplicate and Delete forms with the CSRF field; a non-numeric id on
+  duplicate is a 404; `TestRunPageForASingleTimer` prints what it found; a
+  rejected reorder leaves the order as it was.
+- **#552 History past the end:** a History page after page 1 that comes
+  back empty redirects (303) to the last page that has sessions, or to the
+  first page when there are none. It covers a hand-typed `?page=99` and
+  deleting the only session on the last page (the delete still redirects
+  to the page it came from; that page then redirects). The store gets
+  `SessionCount(ctx, userID)`.
+- **#553 Retry after a failed Exit:** Retry keeps what the first attempt
+  was for. After a failed Exit, a successful Retry goes home, as Exit does.
+
+### F4b — polish
+
+- **Screen Wake Lock:** while the running page shows a phase counting down
+  or waiting at a boundary, it holds `navigator.wakeLock.request("screen")`.
+  It releases it on Pause and on the Done screen. The browser drops the
+  lock when the tab is hidden, so it is requested again when the tab comes
+  back and the session still wants it. Where the API is missing or the
+  request is refused (a power-saving mode, an insecure context), nothing
+  happens and nothing is shown.
+- **Home shortcuts:** on the home page, **N** opens the New timer form and
+  **1**–**9** start the *n*th tile, exactly like clicking its ▶ (including
+  the first-time notification prompt). Keys are ignored with a modifier,
+  on repeat, while typing in a field and while a dialog is open. Each ▶
+  says its key in its `title` and `aria-keyshortcuts`, the first nine
+  only; "+ New timer" gets `aria-keyshortcuts="N"`.
+- **Move earlier / later (#539):** each tile's ⋯ menu gets **Move
+  earlier** and **Move later**, plain forms that POST
+  `/focus/timers/{id}/move` with `direction=earlier|later` and redirect home.
+  The first tile has no Move earlier, the last no Move later. Moving swaps
+  the timer with its neighbour; a timer that is already at that end is
+  left where it is. Works without JavaScript, by touch and by keyboard.
+- **Pill colours and contrast (#544):** white text on any swatch colour is
+  under 4.5:1 (3.4 to 3.9), dark text `#10141a` is 4.7 to 5.5. Every
+  surface filled with a timer's colour (the running page's Pause / Start,
+  the Done screen's Back to timers, the tiles' ▶) uses `#10141a` text in
+  both themes. Dark mode's break grey becomes `#8f806e` (4.8:1 with that
+  text; the old `#7a6c5d` was 3.6).
+- **Done screen:** Back to timers is a pill in the timer's colour
+  (`--swatch`, not the break grey, even when the last phase was a break).
+  Under a minute of focus the title is just "Done" (not "Done — less than
+  a minute focused"); the status line already says it wasn't kept.
+- **Ring at zero:** the ring's bar isn't drawn while nothing has elapsed
+  (a round cap used to show a dot at 12 o'clock).
+- **Waiting at a boundary:** ring and digits dim as when paused, and the
+  Start button pulses gently; no pulse with `prefers-reduced-motion`.
+- **Sound unlock on phones:** the hint also listens for `click` (a touch
+  `pointerdown` may not count as a gesture), and hides only once the audio
+  context is actually running.
+- **Dark-mode pass:** every ON Focus page (home, form, running, Done,
+  History, dialogs) is checked in dark mode in the browser and fixed where
+  needed.
+- **Docs:** the user guide's running section is corrected (#547: "for
+  example" for the Start labels, the Done screen, Skip on the last phase
+  ends the session, and the plain "Done" under a minute), and gains the
+  shortcuts, Move earlier / later and screenshots. README says six apps,
+  gets an ON Focus section with light and dark thumbnails, and its hero
+  alt text lists six apps (#540). The demo seed records a few weeks of
+  sessions so History has something to show.
 
 ## Out of scope
 
