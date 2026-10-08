@@ -4,8 +4,14 @@
 <div class="focus-page stack">
 	<div class="focus-toolbar">
 		<h1>Timers</h1>
-		<a class="button primary" href="/focus/new">+ New timer</a>
+		<div class="focus-toolbar-actions">
+			<a class="button" href="/focus/history">History</a>
+			<a class="button primary" href="/focus/new">+ New timer</a>
+		</div>
 	</div>
+	{{/* home.js refreshes this from GET /focus/today after the banner
+	     records a session. */}}
+	<div data-focus-today>{{template "focus-today" .Data.Today}}</div>
 	{{/* home.js fills this in when a session is running in this browser
 	     (spec: "Resume"). */}}
 	<p class="focus-resume" data-focus-resume data-user-id="{{.Data.UserID}}" hidden></p>
@@ -47,3 +53,13 @@
 </div>
 {{template "focus-confirm"}}
 {{end}}
+
+{{/* focus-today is the today strip (spec: "Home"); nothing for someone
+     with no history yet. */}}
+{{define "focus-today"}}{{with .}}
+<p class="focus-today">
+	<span>Today <b>{{.Focus}}</b> focused</span>
+	<span><b>{{.Sessions}}</b></span>
+	<span>This week <b>{{.Week}}</b></span>
+</p>
+{{end}}{{end}}

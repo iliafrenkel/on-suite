@@ -320,3 +320,53 @@ func TestScriptsAreServed(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexLinksToHistory(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/focus/")
+	doc.MustHave(`.focus-toolbar a[href="/focus/history"]`)
+}
+
+func TestTodayStripOnlyOnceThereIsHistory(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(localAt(10, 7, 12, 0))
+	uid := s.Alice.User.ID
+	seedTimer(t, s, uid, single("Reading", 30))
+
+	doc := s.Get(t, s.Alice, "/focus/")
+	doc.MustHave("[data-focus-today]")
+	doc.MustNotHave(".focus-today")
+
+	// Only an old session: the strip shows, with nothing today.
+	seedSession(t, s, uid, sessionInput("old", "Reading", localAt(9, 1, 9, 0), 30))
+	doc = s.Get(t, s.Alice, "/focus/")
+	if got := htmlassert.Text(doc.MustHave(".focus-today")); got != "Today 0m focused 0 sessions This week 0m" {
+		t.Errorf("strip = %q", got)
+	}
+
+	seedSession(t, s, uid, sessionInput("a", "Reading", localAt(10, 7, 8, 0), 30))
+	seedSession(t, s, uid, sessionInput("b", "Reading", localAt(10, 6, 8, 0), 45))
+	seedSession(t, s, s.Bob.User.ID, sessionInput("z", "Bob's", localAt(10, 7, 9, 0), 60))
+	doc = s.Get(t, s.Alice, "/focus/")
+	if got := htmlassert.Text(doc.MustHave(".focus-today")); got != "Today 30m focused 1 session This week 1h 15m" {
+		t.Errorf("strip = %q", got)
+	}
+}
+
+func TestTodayFragment(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(localAt(10, 7, 12, 0))
+	rec := s.Do(t, s.Alice, httptestGet("/focus/today"))
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "" {
+		t.Errorf("no history: %d %q, want 200 and an empty body", rec.Code, rec.Body.String())
+	}
+	seedSession(t, s, s.Alice.User.ID, sessionInput("a", "Reading", localAt(10, 7, 8, 0), 30))
+	rec = s.Do(t, s.Alice, httptestGet("/focus/today"))
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := htmlassert.Text(doc.MustHave(".focus-today")); got != "Today 30m focused 1 session This week 30m" {
+		t.Errorf("fragment = %q", got)
+	}
+	if strings.Contains(rec.Body.String(), "<html") {
+		t.Error("the fragment must not be a whole page")
+	}
+}

@@ -64,7 +64,26 @@ type tileView struct {
 
 type indexView struct {
 	UserID int64 // the resume banner only shows this user's session
+	Today  *todayView
 	Tiles  []tileView
+}
+
+// todayView is the home page's today strip (spec: "Home").
+type todayView struct {
+	Focus, Sessions, Week string
+}
+
+// newToday is the strip for t, or nil for someone who has never recorded
+// a session: the strip only appears once there is history (F3 plan).
+func newToday(t Totals) *todayView {
+	if !t.Any {
+		return nil
+	}
+	sessions := strconv.Itoa(t.TodaySessions) + " sessions"
+	if t.TodaySessions == 1 {
+		sessions = "1 session"
+	}
+	return &todayView{Focus: FormatFocus(t.Today), Sessions: sessions, Week: FormatFocus(t.Week)}
 }
 
 func newTile(t Timer) tileView {
@@ -85,7 +104,12 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	view := indexView{UserID: userID}
+	totals, err := a.store.Totals(r.Context(), userID, a.store.now())
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	view := indexView{UserID: userID, Today: newToday(totals)}
 	for _, t := range timers {
 		view.Tiles = append(view.Tiles, newTile(t))
 	}
@@ -304,4 +328,21 @@ func (a *App) run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, http.StatusOK, "focus/run", t.Name, newRunView(t, userID))
+}
+
+// today is the today strip alone, for home.js to refresh it after the
+// banner records a session.
+func (a *App) today(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	totals, err := a.store.Totals(r.Context(), userID, a.store.now())
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "focus/index", "focus-today", newToday(totals)); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
 }
