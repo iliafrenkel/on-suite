@@ -259,6 +259,11 @@
 			return;
 		}
 		confirmThen("End this session?", "End session", "Keep going", function () {
+			// It may have run out, and been recorded, while the dialog was open.
+			if (s.finished) {
+				window.location.assign("/focus/");
+				return;
+			}
 			var now = Date.now();
 			S.advance(s, now); // a phase that ran out while the dialog was open still counts
 			S.end(s, now);
@@ -359,7 +364,9 @@
 				"End " + stored.timerName + " and start " + config.name + "?",
 				"Start " + config.name, "Back to " + stored.timerName,
 				function () {
-					S.end(stored, Date.now());
+					var now = Date.now();
+					S.advance(stored, now); // a phase that ran out while the dialog was open still counts
+					S.end(stored, now);
 					recordThenBegin(stored);
 				},
 				function () {
