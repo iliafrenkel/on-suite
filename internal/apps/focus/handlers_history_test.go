@@ -3,6 +3,8 @@ package focus_test
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -120,5 +122,59 @@ func TestHistoryEmptyState(t *testing.T) {
 	doc.MustHave(".focus-chart .empty")
 	if got := strings.Join(texts(doc, ".focus-total .value"), "|"); got != "0m|0m|0m|0m" {
 		t.Errorf("totals = %s", got)
+	}
+}
+
+// redirectOf GETs path as Alice and returns where a 303 sends her.
+func redirectOf(t *testing.T, s *server, path string) string {
+	t.Helper()
+	rec := s.Do(t, s.Alice, httptestGet(path))
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("GET %s = %d, want 303", path, rec.Code)
+	}
+	return rec.Header().Get("Location")
+}
+
+func TestHistoryPastTheLastPageGoesToTheLastPage(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(localAt(10, 7, 12, 0))
+	if got := redirectOf(t, s, "/focus/history?page=3"); got != "/focus/history" {
+		t.Errorf("no sessions, page 3 → %q, want /focus/history", got)
+	}
+	for i := 0; i < 51; i++ {
+		start := localAt(10, 7, 11, 0).Add(-time.Duration(i) * time.Hour)
+		seedSession(t, s, s.Alice.User.ID, sessionInput(fmt.Sprintf("s%02d", i), "Reading", start, 30))
+	}
+	if got := redirectOf(t, s, "/focus/history?page=9"); got != "/focus/history?page=2" {
+		t.Errorf("51 sessions, page 9 → %q, want /focus/history?page=2", got)
+	}
+	// Page 2 itself still renders.
+	s.Get(t, s.Alice, "/focus/history?page=2").MustHave(".focus-sessions")
+}
+
+func TestDeletingTheLastSessionOnAPageLandsOnTheOneBefore(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(localAt(10, 7, 12, 0))
+	var oldest focus.Session
+	for i := 0; i < 51; i++ {
+		start := localAt(10, 7, 11, 0).Add(-time.Duration(i) * time.Hour)
+		oldest = seedSession(t, s, s.Alice.User.ID, sessionInput(fmt.Sprintf("s%02d", i), "Reading", start, 30))
+	}
+	// The 51st (oldest) session is alone on page 2.
+	s.Submit(t, s.Alice, "/focus/sessions/"+itoa(oldest.ID)+"/delete", url.Values{"page": {"2"}}, "/focus/history?page=2")
+	if got := redirectOf(t, s, "/focus/history?page=2"); got != "/focus/history" {
+		t.Errorf("emptied page 2 → %q, want /focus/history", got)
+	}
+}
+
+func TestSessionCount(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(localAt(10, 7, 12, 0))
+	ctx := context.Background()
+	seedSession(t, s, s.Alice.User.ID, sessionInput("a", "Reading", localAt(10, 7, 8, 0), 30))
+	seedSession(t, s, s.Alice.User.ID, sessionInput("b", "Reading", localAt(10, 6, 8, 0), 30))
+	seedSession(t, s, s.Bob.User.ID, sessionInput("z", "Bob's", localAt(10, 7, 9, 0), 30))
+	if n, err := s.Store.SessionCount(ctx, s.Alice.User.ID); err != nil || n != 2 {
+		t.Errorf("Alice SessionCount = %d, %v; want 2", n, err)
 	}
 }
