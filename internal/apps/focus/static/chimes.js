@@ -66,11 +66,17 @@
 		var make = sounds[name];
 		var c = context();
 		if (!make || !c) return; // "silent", or no Web Audio
-		if (c.state === "suspended") c.resume();
-		var out = c.createGain();
-		out.gain.value = 0.6;
-		out.connect(c.destination);
-		make(c, out, c.currentTime + 0.02);
+		// A chime is a nicety: a closed or broken audio context must never
+		// throw into the timer that called it.
+		try {
+			if (c.state === "suspended") c.resume();
+			var out = c.createGain();
+			out.gain.value = 0.6;
+			out.connect(c.destination);
+			make(c, out, c.currentTime + 0.02);
+		} catch (e) {
+			console.warn("ON Focus: couldn't play the chime", e);
+		}
 	}
 
 	window.OnFocus = window.OnFocus || {};

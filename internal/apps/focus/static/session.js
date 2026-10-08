@@ -180,7 +180,8 @@
 		return n;
 	}
 
-	// startLabel names the button at a boundary.
+	// startLabel names the button at a boundary. Only called while waiting,
+	// and advance() never waits after the last phase, so upcoming(s) exists.
 	function startLabel(s) {
 		var p = upcoming(s);
 		if (p.kind === "break") return "Start break";
