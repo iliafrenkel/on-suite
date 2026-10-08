@@ -324,3 +324,42 @@ func TestReorderTimersRefusesAnythingButTheExactSet(t *testing.T) {
 		}
 	}
 }
+
+func TestMoveTimer(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a, _, c := f.create(t, f.alice.ID, "A"), f.create(t, f.alice.ID, "B"), f.create(t, f.alice.ID, "C")
+	order := func() string {
+		t.Helper()
+		ts, err := f.store.Timers(ctx, f.alice.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.Join(names(ts), "")
+	}
+
+	if err := f.store.MoveTimer(ctx, f.alice.ID, c.ID, -1); err != nil {
+		t.Fatal(err)
+	}
+	if got := order(); got != "ACB" {
+		t.Errorf("C earlier: %s, want ACB", got)
+	}
+	if err := f.store.MoveTimer(ctx, f.alice.ID, a.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := order(); got != "CAB" {
+		t.Errorf("A later: %s, want CAB", got)
+	}
+	// Already at an end: nothing changes, no error.
+	if err := f.store.MoveTimer(ctx, f.alice.ID, c.ID, -1); err != nil {
+		t.Errorf("first moved earlier: %v, want nil", err)
+	}
+	if got := order(); got != "CAB" {
+		t.Errorf("after a no-op: %s, want CAB", got)
+	}
+
+	other := f.create(t, f.bob.ID, "Bob's")
+	if err := f.store.MoveTimer(ctx, f.alice.ID, other.ID, 1); !errors.Is(err, focus.ErrNotFound) {
+		t.Errorf("someone else's timer: %v, want ErrNotFound", err)
+	}
+}

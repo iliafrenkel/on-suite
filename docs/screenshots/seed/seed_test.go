@@ -156,10 +156,14 @@ func TestSeedFillsEveryApp(t *testing.T) {
 		t.Errorf("later images to fetch = %d, %v; want none", len(imgs), err)
 	}
 
-	// Focus: a few timers of both kinds.
-	timers, err := focus.NewStore(handle).Timers(ctx, demo.ID)
+	// Focus: a few timers of both kinds, and a few weeks of sessions.
+	fst := focus.NewStore(handle)
+	timers, err := fst.Timers(ctx, demo.ID)
 	if err != nil || len(timers) < 4 {
 		t.Errorf("focus timers = %d, %v; want >= 4", len(timers), err)
+	}
+	if n, err := fst.SessionCount(ctx, demo.ID); err != nil || n < 30 {
+		t.Errorf("focus sessions = %d, %v; want >= 30", n, err)
 	}
 
 	// Flash: decks with cards, a review history and a streak.
@@ -189,11 +193,12 @@ var shotIDs = map[string]map[int64]string{
 	"reader": {10: "The Orionids peak this month: how to watch"},
 	"flash":  {1: "Japanese travel phrases", 2: "F1 circuits"},
 	"later":  {1: "The case for reading slowly"},
+	"focus":  {1: "Deep work"},
 }
 
 // shotIDRe finds the seeded IDs in shots.go URLs: /paste/3, /notes/25,
-// /reader/item/10, /flash/2/cards/, /flash/review/2, /later/a/1.
-var shotIDRe = regexp.MustCompile(`URL: "/(paste|notes|reader/item|flash(?:/review)?|later/a)/(\d+)`)
+// /reader/item/10, /flash/2/cards/, /flash/review/2, /later/a/1, /focus/run/1.
+var shotIDRe = regexp.MustCompile(`URL: "/(paste|notes|reader/item|flash(?:/review)?|later/a|focus/run)/(\d+)`)
 
 func TestShotIDsPointAtTheIntendedItems(t *testing.T) {
 	src, err := os.ReadFile("../capture/shots.go")
@@ -243,6 +248,10 @@ func TestShotIDsPointAtTheIntendedItems(t *testing.T) {
 		"later": func(id int64) (string, error) {
 			a, err := later.NewStore(handle).Article(ctx, demo.ID, id)
 			return a.Title, err
+		},
+		"focus": func(id int64) (string, error) {
+			tm, err := focus.NewStore(handle).Timer(ctx, demo.ID, id)
+			return tm.Name, err
 		},
 		"flash": func(id int64) (string, error) {
 			d, err := flash.NewStore(handle).DeckByID(ctx, demo.ID, id)

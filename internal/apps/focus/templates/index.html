@@ -1,10 +1,24 @@
-{{define "head"}}<script src="/focus/home.js" defer></script>{{end}}
+{{define "head"}}<script src="/focus/session.js" defer></script><script src="/focus/record.js" defer></script><script src="/focus/home.js" defer></script>{{end}}
 
 {{define "content"}}
-<div class="focus-page stack">
+<div class="focus-page stack" data-focus-home>
 	<div class="focus-toolbar">
 		<h1>Timers</h1>
-		<a class="button primary" href="/focus/new">+ New timer</a>
+		<div class="focus-toolbar-actions">
+			<a class="button" href="/focus/history">History</a>
+			<a class="button primary" href="/focus/new" aria-keyshortcuts="N">+ New timer</a>
+		</div>
+	</div>
+	{{/* home.js refreshes this from GET /focus/today after the banner
+	     records a session. */}}
+	<div data-focus-today>{{template "focus-today" .Data.Today}}</div>
+	{{/* home.js fills this in when a session is stored in this browser
+	     (spec: "Resume"): a link back to it and End, or — once it has
+	     ended — whether it was saved, with Retry. */}}
+	<div class="focus-resume" data-focus-resume data-user-id="{{.Data.UserID}}" hidden>
+		<span class="focus-resume-text" data-focus-resume-text></span>
+		<button type="button" class="focus-resume-action" data-focus-resume-end hidden>End</button>
+		<button type="button" class="focus-resume-action" data-focus-resume-retry hidden>Retry</button>
 	</div>
 	{{if .Data.Tiles}}
 	<ul class="focus-tiles" data-focus-tiles>
@@ -20,6 +34,20 @@
 							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
 							<button type="submit">Duplicate</button>
 						</form>
+						{{if not .First}}
+						<form method="post" action="/focus/timers/{{.ID}}/move">
+							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+							<input type="hidden" name="direction" value="earlier">
+							<button type="submit">Move earlier</button>
+						</form>
+						{{end}}
+						{{if not .Last}}
+						<form method="post" action="/focus/timers/{{.ID}}/move">
+							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+							<input type="hidden" name="direction" value="later">
+							<button type="submit">Move later</button>
+						</form>
+						{{end}}
 						<form method="post" action="/focus/timers/{{.ID}}/delete" data-focus-confirm="Delete “{{.Name}}”? Sessions already in your history are kept.">
 							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
 							<button class="danger" type="submit">Delete</button>
@@ -30,7 +58,7 @@
 			<span class="focus-tile-summary">{{.Summary}}</span>
 			<div class="focus-tile-foot">
 				<span class="focus-pill">{{.Total}}</span>
-				<a class="focus-play" href="/focus/run/{{.ID}}" draggable="false" aria-label="Start {{.Name}}">▶</a>
+				<a class="focus-play" href="/focus/run/{{.ID}}" draggable="false" aria-label="Start {{.Name}}"{{with .Key}} title="Start ({{.}})" aria-keyshortcuts="{{.}}"{{end}}>▶</a>
 			</div>
 		</li>
 		{{end}}
@@ -44,3 +72,13 @@
 </div>
 {{template "focus-confirm"}}
 {{end}}
+
+{{/* focus-today is the today strip (spec: "Home"); nothing for someone
+     with no history yet. */}}
+{{define "focus-today"}}{{with .}}
+<p class="focus-today">
+	<span>Today <b>{{.Focus}}</b> focused</span>
+	<span><b>{{.Sessions}}</b></span>
+	<span>This week <b>{{.Week}}</b></span>
+</p>
+{{end}}{{end}}

@@ -111,3 +111,14 @@ func TestValidationErrorIsErrInvalid(t *testing.T) {
 		t.Error("ValidationError does not unwrap to ErrInvalid")
 	}
 }
+
+// The limits themselves are allowed: one past them is tested in
+// TestValidateRejectsBadInput.
+func TestValidateAcceptsLimitsAtTheMaximum(t *testing.T) {
+	in := validIntervals()
+	in.FocusMinutes, in.BreakMinutes, in.LongBreakMinutes = 180, 60, 60
+	in.Rounds, in.LongBreakEvery = 12, 12 // a long break every 12 rounds of 12: none
+	if errs := in.Normalize().Validate(); errs != nil {
+		t.Errorf("Validate() at the limits = %v, want nil", errs)
+	}
+}

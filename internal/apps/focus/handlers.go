@@ -55,15 +55,37 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, status int, name, t
 
 // tileView is one timer tile on the home page.
 type tileView struct {
-	ID      int64
-	Name    string
-	Color   string
-	Summary string // "15 min" or "50 / 10 × 4 · long 30"
-	Total   string // the pill: "15 min", "3h 20m"
+	ID          int64
+	Name        string
+	Color       string
+	Summary     string // "15 min" or "50 / 10 × 4 · long 30"
+	Total       string // the pill: "15 min", "3h 20m"
+	First, Last bool   // no Move earlier / Move later at the ends
+	Key         string // "1"–"9": the home shortcut that starts it; "" after the ninth
 }
 
 type indexView struct {
-	Tiles []tileView
+	UserID int64 // the resume banner only shows this user's session
+	Today  *todayView
+	Tiles  []tileView
+}
+
+// todayView is the home page's today strip (spec: "Home").
+type todayView struct {
+	Focus, Sessions, Week string
+}
+
+// newToday is the strip for t, or nil for someone who has never recorded
+// a session: the strip only appears once there is history (F3 plan).
+func newToday(t Totals) *todayView {
+	if !t.Any {
+		return nil
+	}
+	sessions := strconv.Itoa(t.TodaySessions) + " sessions"
+	if t.TodaySessions == 1 {
+		sessions = "1 session"
+	}
+	return &todayView{Focus: FormatFocus(t.Today), Sessions: sessions, Week: FormatFocus(t.Week)}
 }
 
 func newTile(t Timer) tileView {
@@ -84,9 +106,19 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	view := indexView{}
-	for _, t := range timers {
-		view.Tiles = append(view.Tiles, newTile(t))
+	totals, err := a.store.Totals(r.Context(), userID, a.store.now())
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	view := indexView{UserID: userID, Today: newToday(totals)}
+	for i, t := range timers {
+		tile := newTile(t)
+		tile.First, tile.Last = i == 0, i == len(timers)-1
+		if i < 9 {
+			tile.Key = strconv.Itoa(i + 1)
+		}
+		view.Tiles = append(view.Tiles, tile)
 	}
 	a.render(w, r, http.StatusOK, "focus/index", "Timers", view)
 }
@@ -117,6 +149,34 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.store.DeleteTimer(r.Context(), userID, id); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/focus/", http.StatusSeeOther)
+}
+
+// move is a tile's ⋯ menu Move earlier / Move later (#539): a plain form,
+// so it works by touch, by keyboard and without JavaScript.
+func (a *App) move(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	var by int
+	switch r.PostFormValue("direction") {
+	case "earlier":
+		by = -1
+	case "later":
+		by = 1
+	default:
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+		return
+	}
+	if err := a.store.MoveTimer(r.Context(), userID, id, by); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -232,20 +292,63 @@ func (a *App) order(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// phaseRow is one line of the placeholder running page.
-type phaseRow struct {
-	Label  string
-	Length string
+// runPhase is one phase as focus.js reads it.
+type runPhase struct {
+	Phase
+	Label string `json:"label"`
 }
 
+// runConfig is the timer as focus.js runs it, embedded in the page as JSON
+// (spec: "The runner"). The browser copies it into its own state at Start,
+// so editing the timer mid-session doesn't change a running one.
+type runConfig struct {
+	// UserID: the browser ignores a stored session that isn't this user's.
+	UserID      int64      `json:"userId"`
+	ID          int64      `json:"id"`
+	Name        string     `json:"name"`
+	Color       string     `json:"color"`
+	Chime       string     `json:"chime"`
+	AutoAdvance bool       `json:"autoAdvance"`
+	KeepHistory bool       `json:"keepHistory"`
+	Rounds      int        `json:"rounds"` // 0 for a single timer
+	Phases      []runPhase `json:"phases"`
+}
+
+// runView is the running page. Clock and Label are the first phase's, so
+// the page looks right before focus.js takes over.
 type runView struct {
-	ID     int64
+	Config runConfig
 	Name   string
-	Phases []phaseRow
+	Color  string
+	Single bool
+	Clock  string
+	Label  string
+	Dots   []int // round numbers, interval timers only
 }
 
-// run is F1's placeholder running page: the timer's phases, in order. F2
-// replaces it with the real focus-mode view.
+func newRunView(t Timer, userID int64) runView {
+	cfg := runConfig{
+		UserID: userID, ID: t.ID, Name: t.Name, Color: t.Color, Chime: t.Chime,
+		AutoAdvance: t.AutoAdvance, KeepHistory: t.KeepHistory, Rounds: t.Rounds,
+	}
+	for _, p := range Phases(t.TimerInput) {
+		cfg.Phases = append(cfg.Phases, runPhase{Phase: p, Label: p.Label(t.Rounds)})
+	}
+	// Phases is never empty: Validate requires at least one focus minute.
+	v := runView{
+		Config: cfg, Name: t.Name, Color: t.Color, Single: t.Kind != KindIntervals,
+		Clock: Clock(cfg.Phases[0].Seconds), Label: cfg.Phases[0].Label,
+	}
+	if !v.Single {
+		for round := 1; round <= t.Rounds; round++ {
+			v.Dots = append(v.Dots, round)
+		}
+	}
+	return v
+}
+
+// run is the running page (spec: "Running page"). The server only draws
+// it; focus.js runs the timer in the browser.
 func (a *App) run(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -260,9 +363,22 @@ func (a *App) run(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	view := runView{ID: t.ID, Name: t.Name}
-	for _, p := range Phases(t.TimerInput) {
-		view.Phases = append(view.Phases, phaseRow{Label: p.Label(t.Rounds), Length: FormatLength(p.Seconds)})
+	a.render(w, r, http.StatusOK, "focus/run", t.Name, newRunView(t, userID))
+}
+
+// today is the today strip alone, for home.js to refresh it after the
+// banner records a session.
+func (a *App) today(w http.ResponseWriter, r *http.Request) {
+	userID, ok := a.userID(w, r)
+	if !ok {
+		return
 	}
-	a.render(w, r, http.StatusOK, "focus/run", t.Name, view)
+	totals, err := a.store.Totals(r.Context(), userID, a.store.now())
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.deps.Render.Fragment(w, http.StatusOK, "focus/index", "focus-today", newToday(totals)); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
 }

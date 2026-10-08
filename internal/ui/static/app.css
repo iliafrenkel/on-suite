@@ -17,10 +17,10 @@
 	--c-border-firm: #c9b49a;
 	--c-text:        #3a2f26;
 	--c-text-dim:    #6b5d4f;
-	--c-text-faint:  #948573;
+	--c-text-faint:  #756758; /* 4.5:1+ on --c-bg and --c-bg-subtle (#556) */
 	--c-accent:      #2f6f6a;
 	--c-accent-bg:   #d9e8e6;
-	--c-accent-attention:    #b8551f;
+	--c-accent-attention:    #a84c1b; /* 4.5:1+ as text on --c-accent-attention-bg (#556) */
 	--c-accent-attention-bg: #f7e4d5;
 	--c-danger:      #a51d2d;
 	--c-danger-bg:   #fbeaec;
@@ -133,10 +133,10 @@
 	--c-border-firm: #52443a;
 	--c-text:        #efe6da;
 	--c-text-dim:    #b8a996;
-	--c-text-faint:  #8f8071;
-	--c-accent:      #3d8983;
+	--c-text-faint:  #998a7a; /* 4.5:1+ on --c-bg and --c-bg-subtle (#556) */
+	--c-accent:      #64a5a0; /* 4.5:1+ for links on every dark background and on --c-accent-bg (#556) */
 	--c-accent-bg:   #1e3532;
-	--c-accent-attention:    #b05a29;
+	--c-accent-attention:    #cf8357; /* 4.5:1+ as text on --c-accent-attention-bg; fills take dark text (#556) */
 	--c-accent-attention-bg: #3d2a1c;
 	--c-danger:      #f08c95;
 	--c-danger-bg:   #3a1e22;
@@ -494,7 +494,7 @@ main:has(.reader-panes) { max-width: none; padding: 0;}
 
 label { display: block; margin-bottom: var(--s-1); font-size: var(--fs-sm); color: var(--c-text-dim); }
 
-input[type="text"], input[type="password"], input[type="url"], textarea, select {
+input[type="text"], input[type="password"], input[type="url"], input[type="number"], textarea, select {
 	width: 100%;
 	padding: var(--s-2);
 	background: var(--c-bg);
@@ -840,6 +840,8 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	background: var(--c-accent-bg);
 }
 .snippet-row-active .snippet-title { color: var(--c-accent); }
+/* Faint is under 4.5:1 on --c-accent-bg (#556). */
+.snippet-row-active .snippet-date { color: var(--c-text-dim); }
 
 /* Doubled with .toolbar-btn so it beats that rule's display: inline-flex,
  * which comes later in this file (#412); the max-width:640px rule below
@@ -2409,6 +2411,8 @@ kbd {
 	color: var(--c-text-faint);
 	font-size: var(--fs-xs);
 }
+/* Faint is under 4.5:1 on --c-accent-bg (#556). */
+.reader-row.is-active .meta { color: var(--c-text-dim); }
 
 /* Read rows dim. That contrast *is* the unread indicator — do not also add a
  * dot, or every row grows a second thing to read. */
@@ -2791,6 +2795,9 @@ kbd {
 	text-decoration: none;
 }
 .flash-review-cta:hover { filter: brightness(1.08); }
+/* Dark mode's lighter orange takes dark text, as .primary does (#556). */
+:root[data-theme="dark"] .toolbar-due-badge,
+:root[data-theme="dark"] .flash-review-cta { color: #10141a; }
 .flash-review-cta:focus-visible { outline: var(--ring); outline-offset: 2px; }
 
 .flash-all-done {
@@ -2984,7 +2991,7 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	position: absolute;
 	bottom: var(--s-1);
 	font-size: var(--fs-2xs);
-	color: var(--c-text-faint);
+	color: var(--c-text-dim); /* faint is under 4.5:1 on the card's inset background (#556) */
 }
 .flash-mini-status { right: var(--s-2); }
 .flash-mini-deck { left: var(--s-2); }
@@ -3799,8 +3806,22 @@ main:has(.later-reader) { max-width: none; padding: 0; }
  * colour arrives as a swatch-c-<name> class (see "Colour swatches"). */
 
 .focus-page { max-width: 64rem; }
-.focus-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.focus-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; }
+.focus-toolbar .button { white-space: nowrap; }
 .focus-toolbar h1 { margin: 0; }
+.focus-toolbar-actions { display: flex; gap: var(--s-2); flex-wrap: wrap; }
+.focus-today {
+	margin: 0;
+	padding: var(--s-2) var(--s-3);
+	background: var(--c-bg-subtle);
+	border-radius: var(--radius);
+	color: var(--c-text-dim);
+	font-size: var(--fs-sm);
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--s-2) var(--s-5);
+}
+.focus-today b { color: var(--c-text); }
 .focus-empty { padding: var(--s-5); background: var(--c-bg-subtle); border-radius: var(--radius); color: var(--c-text-dim); }
 
 .focus-tiles {
@@ -3827,7 +3848,8 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .focus-tile-name:hover { text-decoration: underline; }
 .focus-tile-summary { color: var(--c-text-dim); font-size: var(--fs-sm); }
 .focus-tile-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: var(--s-2); }
-.focus-pill { font-size: var(--fs-xs); color: var(--c-text-faint); border: var(--border); border-radius: 999px; padding: 0 var(--s-2); }
+/* Dim, not faint: chosen in the F4 dark-mode pass, before #556 brought faint to 4.5:1. */
+.focus-pill { font-size: var(--fs-xs); color: var(--c-text-dim); border: var(--border); border-radius: 999px; padding: 0 var(--s-2); }
 .focus-play {
 	display: inline-flex;
 	align-items: center;
@@ -3836,7 +3858,7 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 	height: 2.25rem;
 	border-radius: 50%;
 	background: var(--swatch);
-	color: #fff;
+	color: #10141a;            /* 4.7–5.5:1 on every swatch; white is under 4.5 (F4 addendum) */
 	text-decoration: none;
 	font-size: var(--fs-sm);
 }
@@ -3884,9 +3906,9 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .focus-form fieldset { border: 0; padding: 0; margin-inline: 0; min-inline-size: 0; }
 .focus-form legend { font-weight: 600; margin-bottom: var(--s-2); }
 .focus-choice { display: flex; align-items: center; gap: var(--s-2); font-weight: 400; }
-.focus-number input { max-width: 8rem; }
+.focus-number input { width: 8rem; max-width: 100%; }
 .focus-number-row { display: flex; flex-wrap: wrap; gap: var(--s-4); }
-.focus-hint { margin: var(--s-1) 0 0; color: var(--c-text-faint); font-size: var(--fs-sm); }
+.focus-hint { margin: var(--s-1) 0 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
 .focus-field-error { margin: var(--s-1) 0 0; color: var(--c-danger); font-size: var(--fs-sm); }
 .focus-form-actions { display: flex; align-items: center; gap: var(--s-3); }
 /* Interval fields only matter for interval timers; no script needed. */
@@ -3905,3 +3927,195 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 }
 .focus-swatch-input:checked + .focus-swatch { box-shadow: 0 0 0 3px var(--c-text); }
 .focus-swatch-input:focus-visible + .focus-swatch { outline: var(--ring); outline-offset: 3px; }
+
+.focus-chime-row { display: flex; align-items: center; gap: var(--s-2); }
+.focus-chime-preview { padding: var(--s-1) var(--s-3); }
+.focus-chime-preview[hidden] { display: none; }
+
+/* Running page (spec: "Running page"). Focus mode hides the suite chrome,
+ * exactly as ON Later's reading view does. */
+body:has(.focus-runner) .shell-bar,
+body:has(.focus-runner) .app-sidebar,
+body:has(.focus-runner) .app-footer { display: none; }
+main:has(.focus-runner) { max-width: none; padding: 0; }
+
+.focus-runner {
+	--focus-break: #a89a88;          /* breaks are a warm grey, never the timer's colour */
+	--focus-ring: var(--swatch);
+	position: relative;
+	min-height: 100vh;
+	min-height: 100dvh;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: var(--s-6) var(--s-4);
+	background: var(--c-bg-subtle);
+	color: var(--c-text);
+}
+/* 4.8:1 under the pills' dark text; the old #7a6c5d was 3.6. */
+:root[data-theme="dark"] .focus-runner { --focus-break: #8f806e; }
+.focus-runner-break { --focus-ring: var(--focus-break); }
+.focus-runner [hidden] { display: none; }
+
+.focus-runner-top {
+	position: absolute;
+	top: var(--s-3);
+	left: var(--s-4);
+	right: var(--s-4);
+	display: flex;
+	align-items: center;
+}
+.focus-runner-quiet {
+	padding: var(--s-1) var(--s-2);
+	border: 0;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--c-text-dim);
+	font: inherit;
+	font-size: var(--fs-sm);
+	text-decoration: none;
+	cursor: pointer;
+}
+.focus-runner-quiet:hover { background: var(--c-bg-inset); color: var(--c-text); text-decoration: none; }
+.focus-runner-fullscreen { margin-left: auto; }
+
+.focus-runner-main { display: flex; flex-direction: column; align-items: center; gap: var(--s-5); }
+.focus-ring {
+	position: relative;
+	width: min(22rem, 80vw, 60vh);
+	aspect-ratio: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.focus-ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.focus-ring-track, .focus-ring-bar { fill: none; stroke-width: 6; }
+.focus-ring-track { stroke: var(--c-bg-inset); }
+/* stroke-dashoffset is an SVG attribute focus.js sets; CSS must not set it,
+ * or the stylesheet would win over the attribute. */
+.focus-ring-bar { stroke: var(--focus-ring); stroke-linecap: round; stroke-dasharray: 1000; transition: stroke-dashoffset .5s linear; }
+/* Nothing elapsed: a round cap would still draw a dot at 12 o'clock.
+ * focus.js sets this attribute, so CSS can match it without a class. */
+.focus-ring-bar[stroke-dashoffset="1000"] { stroke-linecap: butt; }
+
+.focus-ring-inner { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s-2); max-width: 75%; text-align: center; }
+.focus-ring-inner p { margin: 0; }
+.focus-runner-name { color: var(--c-text-dim); font-size: var(--fs-sm); letter-spacing: .04em; text-transform: uppercase; overflow-wrap: anywhere; }
+.focus-digits { font-size: clamp(3rem, 12vmin, 4.5rem); font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1; }
+/* Dim text, not the timer's colour: every swatch is under 4.5:1 on the
+ * runner's background. The ring and dots carry the colour (F4 dark-mode pass). */
+.focus-phase { color: var(--c-text-dim); font-size: var(--fs-sm); font-weight: 600; }
+
+.focus-dots { display: flex; gap: .4rem; margin: 0; padding: 0; list-style: none; }
+.focus-dot { width: .5rem; height: .5rem; border: 1.5px solid var(--c-text-faint); border-radius: 50%; }
+.focus-dot-done { background: var(--focus-ring); border-color: var(--focus-ring); }
+.focus-dot-now { border-color: var(--swatch); box-shadow: 0 0 0 2px var(--swatch-soft); }
+
+.focus-runner-paused .focus-ring-bar,
+.focus-runner-paused .focus-digits { opacity: .45; }
+
+/* Waiting for Start (auto-advance off): dimmed like paused, and Start
+ * pulses gently so it's clear the timer needs you. */
+.focus-runner-waiting .focus-ring-bar,
+.focus-runner-waiting .focus-digits { opacity: .45; }
+.focus-runner-waiting [data-focus-next] { animation: focus-pulse 2s ease-in-out infinite; }
+@keyframes focus-pulse { 50% { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) {
+	.focus-runner-waiting [data-focus-next] { animation: none; }
+}
+
+.focus-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
+.focus-controls button,
+.focus-controls .button { padding: var(--s-2) var(--s-4); border-radius: 999px; }
+/* Dark text on the timer's colour in both themes: white is under 4.5:1 on
+ * every swatch (F4 addendum). Same colour as the suite's dark .primary. */
+.focus-controls .primary,
+.focus-controls .primary:hover { background: var(--focus-ring); border-color: var(--focus-ring); color: #10141a; }
+
+.focus-sound-hint { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); text-align: center; }
+.focus-done { display: flex; flex-direction: column; align-items: center; gap: var(--s-4); text-align: center; }
+.focus-done-title { margin: 0; font-size: var(--fs-xl); }
+.focus-done-status { margin: 0; color: var(--c-text-dim); min-height: 1.5em; }
+/* Back to timers wears the timer's colour, even when the last phase was a
+ * break (which turns --focus-ring grey on .focus-runner-break). */
+.focus-done { --focus-ring: var(--swatch); }
+
+.focus-resume {
+	margin: 0;
+	padding: var(--s-2) var(--s-3);
+	border: var(--border);
+	border-left: 4px solid var(--swatch, var(--c-accent));
+	border-radius: var(--radius);
+	color: var(--c-text-dim);
+	font-size: var(--fs-sm);
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--s-2) var(--s-3);
+}
+.focus-resume[hidden], .focus-resume [hidden] { display: none; }
+.focus-resume a { font-weight: 600; }
+.focus-resume-text { flex: 1 1 16rem; }
+.focus-resume-action { font-size: var(--fs-sm); padding: var(--s-1) var(--s-3); }
+
+/* ON Focus: History (spec: "History"). Totals and chart mirror ON Flash's
+   stats tiles and chart. */
+.focus-totals {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+	gap: var(--s-3);
+}
+.focus-total { background: var(--c-bg-subtle); border-radius: var(--radius); padding: var(--s-3); }
+.focus-total .value { font-size: var(--fs-xl); }
+.focus-total .label { color: var(--c-text-dim); font-size: var(--fs-xs); }
+
+.focus-chart { margin: 0; }
+.focus-chart figcaption { font-size: var(--fs-sm); color: var(--c-text-dim); margin-bottom: var(--s-2); }
+.focus-chart svg { width: 100%; height: 120px; display: block; overflow: visible; }
+.focus-chart rect { fill: var(--c-accent); }
+.focus-chart rect:hover { fill: var(--c-text); }
+.focus-chart .empty, .focus-muted { color: var(--c-text-dim); }
+
+.focus-by-timer { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--s-2); }
+.focus-by-timer li {
+	display: grid;
+	grid-template-columns: minmax(6rem, 14rem) 1fr auto;
+	align-items: center;
+	gap: var(--s-3);
+}
+.focus-by-timer-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus-by-timer-bar { width: 100%; height: 0.5rem; display: block; }
+.focus-by-timer-bar rect { fill: var(--swatch); }
+.focus-by-timer-total { font-variant-numeric: tabular-nums; }
+
+.focus-table-scroll { overflow-x: auto; } /* narrow screens scroll the table, not the page; mirrors .flash-table-scroll */
+.focus-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.focus-table th, .focus-table td { text-align: left; padding: var(--s-2); border-bottom: var(--border); }
+.focus-table th { color: var(--c-text-dim); font-weight: 500; }
+.focus-sessions td:last-child { text-align: right; }
+.focus-session-timer::before {
+	content: "";
+	display: inline-block;
+	width: 0.6em;
+	height: 0.6em;
+	margin-right: 0.4em;
+	border-radius: 50%;
+	background: var(--swatch);
+}
+.focus-early {
+	font-size: var(--fs-xs);
+	color: var(--c-text-dim);
+	border: var(--border);
+	border-radius: 999px;
+	padding: 0 var(--s-2);
+	white-space: nowrap;
+}
+.focus-pager { display: flex; justify-content: space-between; }
+.focus-pager a:only-child:last-child { margin-left: auto; }
+
+@media (max-width: 640px) {
+	.focus-by-timer li { grid-template-columns: 1fr auto; }
+	.focus-by-timer-bar { grid-column: 1 / -1; grid-row: 2; }
+	.focus-sessions th:nth-child(4), .focus-sessions td:nth-child(4) { display: none; }
+}

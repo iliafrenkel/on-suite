@@ -15,7 +15,7 @@ pages, read them in a calm view, highlight, comment and tag them, export as
 Markdown), **ON Flash** (flash cards with FSRS review, import from
 AI-written Markdown/JSON, media, household sharing and stats), and **ON
 Focus** (saved, reusable focus timers — single blocks or Pomodoro-style
-intervals; the running view and history are still being built out) are all
+intervals — with a calm running view and a history of focused time) are all
 registered today.
 
 Full rationale for every design choice below lives in

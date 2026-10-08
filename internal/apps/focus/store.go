@@ -1,5 +1,5 @@
 // Package focus implements ON Focus: saved, reusable focus timers (single
-// blocks or Pomodoro-style intervals) and, from F3, a history of sessions.
+// blocks or Pomodoro-style intervals) and a history of the sessions run with them.
 package focus
 
 import (
@@ -269,6 +269,36 @@ func (st *Store) DuplicateTimer(ctx context.Context, userID, id int64) (Timer, e
 	return st.Timer(ctx, userID, newID)
 }
 
+// timerOrder is the user's timer ids in tile order, read inside tx.
+func timerOrder(ctx context.Context, tx *sql.Tx, userID int64) ([]int64, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id FROM focus_timers WHERE user_id = ? ORDER BY position, id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// setOrder stores ids, in order, as the user's tile positions.
+func setOrder(ctx context.Context, tx *sql.Tx, userID int64, ids []int64) error {
+	for pos, id := range ids {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE focus_timers SET position = ? WHERE user_id = ? AND id = ?`, pos, userID, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ReorderTimers sets the tile order. ids must name every one of the user's
 // timers exactly once — anything else (a stale page, someone else's id) is
 // refused rather than half-applied.
@@ -278,38 +308,52 @@ func (st *Store) ReorderTimers(ctx context.Context, userID int64, ids []int64) e
 		return fmt.Errorf("focus: reorder timers: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM focus_timers WHERE user_id = ?`, userID)
+	have, err := timerOrder(ctx, tx, userID)
 	if err != nil {
 		return fmt.Errorf("focus: reorder timers: %w", err)
 	}
-	var have []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
-			return fmt.Errorf("focus: reorder timers: %w", err)
-		}
-		have = append(have, id)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return fmt.Errorf("focus: reorder timers: %w", err)
-	}
-	_ = rows.Close()
 	want := slices.Clone(ids)
 	slices.Sort(have)
 	slices.Sort(want)
 	if len(want) == 0 || !slices.Equal(have, want) {
 		return fmt.Errorf("%w: order must list each timer once", ErrInvalid)
 	}
-	for pos, id := range ids {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE focus_timers SET position = ? WHERE user_id = ? AND id = ?`, pos, userID, id); err != nil {
-			return fmt.Errorf("focus: reorder timers: %w", err)
-		}
+	if err := setOrder(ctx, tx, userID, ids); err != nil {
+		return fmt.Errorf("focus: reorder timers: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("focus: reorder timers: %w", err)
+	}
+	return nil
+}
+
+// MoveTimer swaps one of the user's timers with its neighbour: by is -1
+// for earlier, +1 for later (#539). A timer already at that end stays put
+// — a stale page can ask for that, and it isn't worth an error.
+func (st *Store) MoveTimer(ctx context.Context, userID, id int64, by int) error {
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("focus: move timer: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	ids, err := timerOrder(ctx, tx, userID)
+	if err != nil {
+		return fmt.Errorf("focus: move timer: %w", err)
+	}
+	i := slices.Index(ids, id)
+	if i < 0 {
+		return ErrNotFound
+	}
+	j := i + by
+	if j < 0 || j >= len(ids) {
+		return nil
+	}
+	ids[i], ids[j] = ids[j], ids[i]
+	if err := setOrder(ctx, tx, userID, ids); err != nil {
+		return fmt.Errorf("focus: move timer: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("focus: move timer: %w", err)
 	}
 	return nil
 }

@@ -511,6 +511,7 @@
 	// Scoped to #reader-panes so this never intercepts confirm() elsewhere in
 	// the suite - theme.js's own data-confirm gate (internal/ui/static/theme.js)
 	// is untouched and keeps handling every other app.
+	var confirmController = null;
 	document.addEventListener("htmx:confirm", function (e) {
 		var panes = document.getElementById("reader-panes");
 		if (!panes || !e.target || !panes.contains(e.target)) return;
@@ -525,21 +526,33 @@
 		var ok = document.getElementById("reader-confirm-ok");
 		if (messageEl) messageEl.textContent = msg;
 
-		// Bind onOk through an AbortController tied to the dialog's own `close`
-		// event, which fires no matter how the dialog closes (Confirm, Cancel,
-		// or Escape). Without this, cancelling or pressing Escape left onOk
-		// attached forever, so confirming a *later*, unrelated action would
-		// also re-fire the earlier, declined one.
-		var controller = new AbortController();
+		// Bind onOk to this one opening through an AbortController. Without
+		// it, cancelling or pressing Escape left onOk attached forever, so
+		// confirming a *later*, unrelated action would also re-fire the
+		// earlier, declined one. Confirm and Cancel abort at once rather than
+		// waiting for the dialog's `close` event, which Chrome can hold back
+		// (in a hidden tab, say); `close` only covers Escape, and ignores one
+		// that arrives while the dialog is open again. A new opening also
+		// retires the previous one's listeners outright, in case its `close`
+		// never came (#551).
+		if (confirmController) confirmController.abort();
+		var controller = confirmController = new AbortController();
 		dialog.addEventListener(
 			"close",
 			function () {
+				if (dialog.open) return;
 				controller.abort();
 			},
-			{ once: true }
+			{ signal: controller.signal }
 		);
+		var cancel = dialog.querySelector(".reader-dialog-cancel");
+		if (cancel) {
+			// The shared .reader-dialog-cancel click handler closes the dialog.
+			cancel.addEventListener("click", function () { controller.abort(); }, { signal: controller.signal });
+		}
 
 		function onOk() {
+			controller.abort();
 			dialog.close();
 			// The `true` here is htmx's "skip the confirm gate" flag: without it
 			// issueRequest() re-enters the same htmx:confirm check and htmx falls

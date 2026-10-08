@@ -184,3 +184,13 @@ func TestEditAndUpdateAreNotFoundForSomeoneElse(t *testing.T) {
 		t.Errorf("bob update = %d, want 404", rec.Code)
 	}
 }
+
+func TestFormHasAChimePreview(t *testing.T) {
+	s := newServer(t)
+	for _, path := range []string{"/focus/new", "/focus/timers/" + itoa(seedTimer(t, s, s.Alice.User.ID, single("Reading", 30)).ID) + "/edit"} {
+		doc := s.Get(t, s.Alice, path)
+		doc.MustHave(`script[src="/focus/chimes.js"]`)
+		// Hidden until chimes.js shows it: it does nothing without JavaScript.
+		findEl(t, doc, "button", map[string]string{"data-focus-chime-preview": "focus-chime", "type": "button", "hidden": ""})
+	}
+}

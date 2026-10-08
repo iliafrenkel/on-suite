@@ -189,6 +189,11 @@ Synthesised with the Web Audio API — no audio files. `bell` (default),
 `bowl`, `soft`, `silent`. The form has a ▶ button to preview each one, which
 also gets the browser's audio context unlocked by a user gesture.
 
+Browsers keep audio locked until the person interacts with the page, and
+▶ is a click on the home page, not the running page. If audio is still
+locked when the timer starts, the running page says "Sound is off — click
+anywhere to turn it on" and the first click or key unlocks it.
+
 ### Tab title
 
 `31:12 · Deep work` during focus, `07:40 · Break` during a break,
@@ -196,7 +201,9 @@ also gets the browser's audio context unlocked by a user gesture.
 
 ### Notification permission
 
-Requested on the first Start click, never on page load. Denied or
+Requested in the ▶ click on the home page (the page waits for the answer
+before opening the running page), or on the first control click on the
+running page if it was opened another way; never on page load. Denied or
 unsupported means chimes only; nothing else changes.
 
 ### Resume
@@ -208,19 +215,31 @@ unsupported means chimes only; nothing else changes.
   — 31:12 left", linking to its running page. A session waiting at a phase
   boundary (auto-advance off) shows "Deep work — ready for round 3". If the
   stored session already ran to its end, the banner says "Deep work
-  finished" and the session is recorded on the spot.
+  finished" and the session is recorded on the spot. While a session runs,
+  the banner also has an **End** button: it asks, then ends and records the
+  session like Exit (#546 — this also clears a session whose timer was
+  deleted).
+
+The stored session carries the signed-in user's ID, and a page ignores a
+session that belongs to someone else, so accounts sharing a browser don't
+see or record each other's sessions. Starting a timer still replaces it:
+there is one session per browser.
 
 ### Recording a session
 
 On finish or Exit, if `keepHistory` and focus time ≥ 60 s, POST the summary
 to `/focus/sessions`. On `pagehide` with a session in progress nothing is
-sent — the session is still running and will be resumed. `sendBeacon` is
-used for Exit-and-close races (Exit confirmed, then the page unloads before
-`fetch` resolves).
+sent — the session is still running and will be resumed. The POST is a
+`fetch` with `keepalive: true`, so it still completes if the page unloads
+first (Exit confirmed, then the tab closed); unlike `sendBeacon` it can
+carry the CSRF header.
 
 The stored state is cleared only once the server confirms (2xx, including
-"already recorded"). If the POST fails, the Done screen says "Couldn't save
-this session" with a Retry button, and the home banner offers the same.
+"already recorded"), or refuses it for good (400/422 — retrying can't
+help). Anything else — offline, signed out, a server error — keeps it: the
+Done screen says "Couldn't save this session" with a Retry button, and the
+home banner offers the same. A session being replaced by another timer's is
+recorded first; if that fails it is dropped with a console warning.
 
 ## Pages and routes
 
@@ -239,12 +258,15 @@ Everything requires a signed-in user. Missing or foreign IDs are 404.
 | `GET /focus/run/{id}` | Running page |
 | `POST /focus/sessions` | Record one session (JSON) |
 | `GET /focus/history` | History and stats |
+| `GET /focus/today` | The today strip alone, for the home page to refresh after recording |
 | `POST /focus/sessions/{id}/delete` | Delete one session |
 
 ### Home
 
-Toolbar: "Timers" and "+ New timer". Under it the **today strip**: today's
-focus time, today's session count, this week's focus time. Then the resume
+Toolbar: "Timers", "History" and "+ New timer". Under it the **today
+strip**: today's focus time, today's session count, this week's focus time.
+It appears once the user has recorded any session, and then stays, showing
+0m on quiet days. Then the resume
 banner (if any) and the **tiles**: a coloured top edge, name, a summary line
 (`15 min` or `50 / 10 × 4 · long 30`), a pill with total length, a ▶ button
 in the timer's colour that opens the running page and starts at once, and a
@@ -263,14 +285,15 @@ fields.
 
 ### Running page
 
-Focus mode: the suite nav and toolbar are hidden. How the page opts out of
-the shell chrome (a body class from the template, or a layout option) is
-settled in the F2 plan; the requirement is that the page still gets CSRF,
-theme and the logged-in user from `Deps.Page`.
+Focus mode: the suite nav and toolbar are hidden. The page opts out of the
+shell chrome the way ON Later's reading view does: app.css hides `.shell-bar`,
+`.app-sidebar` and `.app-footer` with `body:has(.focus-runner)`, so the page
+still gets CSRF, theme and the logged-in user from `Deps.Page`.
 
 Layout, centred: Exit (top left) and Full screen (top right) as quiet text
 buttons; the ring with the timer name above the countdown, the phase label
-below it, and round dots below that; Pause / Skip / Restart under the ring.
+below it ("Focus · round 2 of 4", "Short break"), and round dots below that;
+Pause / Skip / Restart under the ring.
 
 - **Focus:** ring and filled dots in the timer's colour (`--swatch`),
   background the page's subtle cream.
@@ -284,7 +307,8 @@ below it, and round dots below that; Pause / Skip / Restart under the ring.
 
 - Four totals: today, this week, this month, this year.
 - Bar chart of focus minutes per day for the last 30 days, oldest first,
-  including empty days. Server-rendered HTML/CSS bars, like Flash's stats.
+  including empty days. Server-rendered SVG bars, like Flash's stats
+  (sizes in SVG attributes, so the CSP holds).
 - Time per timer this month, largest first, grouped by `timer_name`.
 - Recent sessions, newest first, 50 per page with an "Older" link: date and
   time, timer name with its colour, focus time, rounds, a "stopped early"
@@ -300,12 +324,18 @@ send it. Body:
  focus_seconds, rounds_done, completed}
 ```
 
+`started_at` and `ended_at` are milliseconds since the epoch, as the
+browser keeps them. A new session answers 201, a repeat 200, both with
+`{"id": …}`.
+
 Server rules:
 
 - `focus_seconds` < 60 → 422, nothing stored (the client shouldn't send
   these; the server enforces it anyway).
 - `focus_seconds` > `ended_at` − `started_at`, `ended_at` before
-  `started_at`, or `started_at` in the future → 422.
+  `started_at`, or `started_at` or `ended_at` more than 5 minutes in the
+  future → 422 (the browser's clock and the server's can disagree a
+  little).
 - `timer_id` not found or not the user's → stored as NULL (the timer may
   have been deleted mid-session); never an error.
 - `color` not in the palette → stored as `gray`; `timer_name` trimmed and
@@ -370,9 +400,91 @@ One PR each, in order.
 | Phase | Issue | Scope |
 |---|---|---|
 | F1 | #493 Saved timers | Swatch rename; app skeleton and registration; both migrations; `Phases`; home with tiles; create, edit, duplicate, delete, reorder (home.js); short user guide. ▶ opens a placeholder running page |
-| F2 | #494 Running a timer | Focus mode page, ring and dots, controls and keys, auto-advance and waiting, chimes, notifications, tab title, `localStorage` resume, home resume banner |
-| F3 | #495 History and stats | Recording endpoint with beacon and Retry; today strip; History page; session delete; `Exporter`; admin card |
-| F4 | #496 Polish | Screen Wake Lock while running; home shortcuts (N new timer, 1–9 start the *n*th timer); dark-mode pass; user guide and screenshots |
+| F2 | #494 Running a timer | Focus mode page, ring and dots, controls and keys, auto-advance and waiting, chimes, notifications, tab title, `localStorage` resume, home resume banner. Until F3, finishing or exiting a session clears it without recording |
+| F3 | #495 History and stats | Recording endpoint (keepalive `fetch`) with Retry; today strip; History page; session delete; `Exporter`; admin card; banner End (#546) |
+| F4a | #496 Fixes | Open follow-ups #545, #541, #552, #553 (see "F4 addendum") |
+| F4b | #496 Polish | Screen Wake Lock while running; home shortcuts (N new timer, 1–9 start the *n*th timer); Move earlier / later (#539); dark-mode pass and running-page polish (#544); user guide, README and screenshots (#547, #540) |
+
+## F4 addendum (2026-10-08)
+
+F4 (#496) also takes in every open ON Focus follow-up and lands as two
+PRs: **F4a** fixes and robustness first, then **F4b** polish, which ends
+with the guide and screenshots so they show the finished UI.
+
+### F4a — fixes and robustness
+
+- **#545 (what F3 left open):** `chimes.js` `play()` catches Web Audio
+  errors, so a broken audio context never stops the timer. `home.js` wraps
+  `Notification.requestPermission()` in `Promise.resolve(...)` for old,
+  callback-only Safari. On the running page, Space is left alone only on a
+  focused `button` (links don't activate on Space, so on "← Exit" it now
+  pauses), and S / R / F also ask for notification permission, as clicks
+  and Space do. `session.js` `startLabel()` and `handlers.go` `newRunView`
+  each get a one-line comment saying why they're safe. A handler test seeds
+  a timer named `</script>"&` and checks the embedded config decodes back to
+  that name.
+- **#541:** the F1 test gaps: limits at the maximum (focus 180, breaks 60,
+  rounds 12, long break every = rounds) are accepted; each tile's ⋯ menu
+  has Duplicate and Delete forms with the CSRF field; a non-numeric id on
+  duplicate is a 404; `TestRunPageForASingleTimer` prints what it found; a
+  rejected reorder leaves the order as it was.
+- **#552 History past the end:** a History page after page 1 that comes
+  back empty redirects (303) to the last page that has sessions, or to the
+  first page when there are none. It covers a hand-typed `?page=99` and
+  deleting the only session on the last page (the delete still redirects
+  to the page it came from; that page then redirects). The store gets
+  `SessionCount(ctx, userID)`.
+- **#553 Retry after a failed Exit:** Retry keeps what the first attempt
+  was for. After a failed Exit, a successful Retry goes home, as Exit does.
+
+### F4b — polish
+
+- **Screen Wake Lock:** while the running page shows a phase counting down
+  or waiting at a boundary, it holds `navigator.wakeLock.request("screen")`.
+  It releases it on Pause and on the Done screen. The browser drops the
+  lock when the tab is hidden, so it is requested again when the tab comes
+  back and the session still wants it. Where the API is missing or the
+  request is refused (a power-saving mode, an insecure context), nothing
+  happens and nothing is shown.
+- **Home shortcuts:** on the home page, **N** opens the New timer form and
+  **1**–**9** start the *n*th tile, exactly like clicking its ▶ (including
+  the first-time notification prompt). Keys are ignored with a modifier,
+  on repeat, while typing in a field and while a dialog is open. Each ▶
+  says its key in its `title` and `aria-keyshortcuts`, the first nine
+  only; "+ New timer" gets `aria-keyshortcuts="N"`.
+- **Move earlier / later (#539):** each tile's ⋯ menu gets **Move
+  earlier** and **Move later**, plain forms that POST
+  `/focus/timers/{id}/move` with `direction=earlier|later` and redirect home.
+  The first tile has no Move earlier, the last no Move later. Moving swaps
+  the timer with its neighbour; a timer that is already at that end is
+  left where it is. Works without JavaScript, by touch and by keyboard.
+- **Pill colours and contrast (#544):** white text on any swatch colour is
+  under 4.5:1 (3.4 to 3.9), dark text `#10141a` is 4.7 to 5.5. Every
+  surface filled with a timer's colour (the running page's Pause / Start,
+  the Done screen's Back to timers, the tiles' ▶) uses `#10141a` text in
+  both themes. Dark mode's break grey becomes `#8f806e` (4.8:1 with that
+  text; the old `#7a6c5d` was 3.6).
+- **Done screen:** Back to timers is a pill in the timer's colour
+  (`--swatch`, not the break grey, even when the last phase was a break).
+  Under a minute of focus the title is just "Done" (not "Done — less than
+  a minute focused"); the status line already says it wasn't kept.
+- **Ring at zero:** the ring's bar isn't drawn while nothing has elapsed
+  (a round cap used to show a dot at 12 o'clock).
+- **Waiting at a boundary:** ring and digits dim as when paused, and the
+  Start button pulses gently; no pulse with `prefers-reduced-motion`.
+- **Sound unlock on phones:** the hint also listens for `click` (a touch
+  `pointerdown` may not count as a gesture), and hides only once the audio
+  context is actually running.
+- **Dark-mode pass:** every ON Focus page (home, form, running, Done,
+  History, dialogs) is checked in dark mode in the browser and fixed where
+  needed.
+- **Docs:** the user guide's running section is corrected (#547: "for
+  example" for the Start labels, the Done screen, Skip on the last phase
+  ends the session, and the plain "Done" under a minute), and gains the
+  shortcuts, Move earlier / later and screenshots. README says six apps,
+  gets an ON Focus section with light and dark thumbnails, and its hero
+  alt text lists six apps (#540). The demo seed records a few weeks of
+  sessions so History has something to show.
 
 ## Out of scope
 

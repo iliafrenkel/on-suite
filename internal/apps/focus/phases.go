@@ -97,3 +97,13 @@ func (p Phase) Label(rounds int) string {
 	}
 	return fmt.Sprintf("Focus · round %d of %d", p.Round, rounds)
 }
+
+// Clock renders a length as the running page's countdown shows it:
+// "05:00", "50:00", "1:30:00". focus.js's clock must agree.
+func Clock(seconds int) string {
+	h, m, s := seconds/3600, seconds%3600/60, seconds%60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%02d:%02d", m, s)
+}
