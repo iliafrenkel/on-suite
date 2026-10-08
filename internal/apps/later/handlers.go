@@ -139,6 +139,7 @@ type articleView struct {
 	URL     string
 	Site    string
 	Byline  string
+	Lang    string // the article's own language; "" inherits the page's
 	Minutes int
 	SavedAt time.Time
 	// Body is RenderHighlights over ContentHTML. This is the only
@@ -216,6 +217,7 @@ func (a *App) buildArticleView(r *http.Request, userID int64, art Article, textE
 		URL:          art.URL,
 		Site:         art.SiteName,
 		Byline:       art.Byline,
+		Lang:         art.Lang,
 		Minutes:      ReadingMinutes(art.WordCount),
 		SavedAt:      art.SavedAt,
 		LinkOnly:     art.Content == ContentLinkOnly,

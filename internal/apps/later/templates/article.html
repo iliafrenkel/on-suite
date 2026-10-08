@@ -10,7 +10,7 @@
 	<div class="later-sticky">
 	<div class="later-topbar">
 		<a class="later-back" href="/later/?tab={{$d.Tab}}">← Later</a>
-		<span class="later-topbar-title">{{$d.Title}}</span>
+		<span class="later-topbar-title" dir="auto">{{$d.Title}}</span>
 		{{if not $d.LinkOnly}}<span class="later-left" data-later-left>{{$d.Minutes}} min left</span>{{end}}
 		<label class="later-notes-toggle" id="later-notes-toggle" for="later-notes-open">Notes · {{template "later-notes-count" $d}}</label>
 		<details class="later-menu later-aa">
@@ -96,11 +96,11 @@
 	</div>
 	{{if not $d.LinkOnly}}<progress class="later-progress" max="1" value="{{$d.Progress}}" data-later-progress aria-label="Reading progress"></progress>{{end}}
 	</div>
-	<article class="later-article stack">
+	<article class="later-article stack"{{with $d.Lang}} lang="{{.}}"{{end}}>
 		<header class="later-article-header stack">
-			<h1 class="later-article-title">{{$d.Title}}</h1>
+			<h1 class="later-article-title" dir="auto">{{$d.Title}}</h1>
 			<p class="later-article-meta">
-				{{$d.Site}}{{with $d.Byline}} · {{.}}{{end}}
+				{{with $d.Site}}<bdi>{{.}}</bdi>{{end}}{{with $d.Byline}} · <bdi>{{.}}</bdi>{{end}}
 				{{if not $d.LinkOnly}} · {{$d.Minutes}} min read{{end}}
 			</p>
 			{{if $d.Tags}}<p class="later-article-tags">{{range $d.Tags}}<a class="later-pill later-pill-tag" href="{{.URL}}">{{.Name}}</a>
@@ -177,7 +177,7 @@
 {{template "later-confirm"}}
 {{end}}
 
-{{define "later-body"}}<div class="later-article-body" id="later-body">{{.Body}}</div>{{end}}
+{{define "later-body"}}<div class="later-article-body" id="later-body" dir="auto">{{.Body}}</div>{{end}}
 
 {{define "later-margin"}}
 <div class="later-margin" id="later-margin" aria-hidden="true"{{if .OOB}} hx-swap-oob="true"{{end}}>

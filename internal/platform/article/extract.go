@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	readability "github.com/go-shiori/go-readability"
@@ -39,6 +40,11 @@ type Extracted struct {
 	// them (ON Later does; ON Reader doesn't).
 	Byline   string
 	SiteName string
+	// Language is the page's <html lang>, cleaned by languageTag: a BCP 47
+	// tag such as "ru" or "he-IL", or "" when the page didn't say or said
+	// something that isn't one. It's publisher-controlled, so callers can
+	// put it in a lang attribute but shouldn't trust it further than that.
+	Language string
 	// TextLength is the extracted plain-text length, kept for the log line
 	// that explains why a given page did or did not extract well.
 	TextLength int
@@ -87,6 +93,23 @@ func Extract(body []byte, pageURL string, src ImageSrc) (Extracted, error) {
 		Images:     images,
 		Byline:     strings.TrimSpace(page.Byline),
 		SiteName:   strings.TrimSpace(page.SiteName),
+		Language:   languageTag(page.Language),
 		TextLength: page.Length,
 	}, nil
+}
+
+// langTagPattern is the shape of a BCP 47 language tag, loosely: a 2-3
+// letter primary subtag and up to a few more subtags of letters and digits.
+// It doesn't check the subtags against the registry; a browser ignores a
+// well-formed tag it doesn't know.
+var langTagPattern = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,4}$`)
+
+// languageTag cleans a page's lang attribute into a tag, or "" if it isn't
+// one. "en_US" is a common mistake for "en-US" and is read as that.
+func languageTag(raw string) string {
+	tag := strings.ReplaceAll(strings.TrimSpace(raw), "_", "-")
+	if len(tag) > 35 || !langTagPattern.MatchString(tag) {
+		return ""
+	}
+	return tag
 }

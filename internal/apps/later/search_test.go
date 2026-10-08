@@ -274,14 +274,24 @@ func TestSearchMigrationIndexesExistingArticles(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := later.NewStore(handle)
-	a, _, err := st.Save(ctx, u.ID, later.NewArticle{URL: "https://a.example/1", Title: "Tapir", ContentHTML: "<p>zebra crossing</p>"})
+	// A raw insert, not st.Save: Save writes today's columns, and later
+	// migrations add some the 0005 schema doesn't have yet.
+	res, err := handle.ExecContext(ctx, `
+		INSERT INTO later_articles (user_id, url, title, site_host, content, content_html,
+			content_text, word_count, saved_at, updated_at)
+		VALUES (?, 'https://a.example/1', 'Tapir', 'a.example', 'extracted', '<p>zebra crossing</p>',
+			'zebra crossing', 2, '2026-10-05T09:00:00Z', '2026-10-05T09:00:00Z')`, u.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.AddHighlight(ctx, a.ID, a.ContentText, 0, 5, "zebra", "giraffe"); err != nil {
+	id, err := res.LastInsertId()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.SetNote(ctx, u.ID, a.ID, "okapi"); err != nil {
+	if _, err := st.AddHighlight(ctx, id, "zebra crossing", 0, 5, "zebra", "giraffe"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetNote(ctx, u.ID, id, "okapi"); err != nil {
 		t.Fatal(err)
 	}
 

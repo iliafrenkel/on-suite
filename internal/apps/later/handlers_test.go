@@ -938,3 +938,34 @@ func TestMidPageLoadMoreOffersTheNextPage(t *testing.T) {
 		t.Errorf("next hx-get = %q, want offset=100", got)
 	}
 }
+
+// The page is lang="en"; an article in another language says so, so the
+// browser hyphenates it by the right rules, and dir="auto" lets a Hebrew or
+// Arabic title and body run right to left.
+func TestArticleCarriesItsLanguageAndDirection(t *testing.T) {
+	s := newServer(t)
+	a := seed(t, s, s.Alice.User.ID, later.NewArticle{
+		URL: "https://blog.example/ru", Title: "Статья", SiteName: "Блог", Lang: "ru", ContentHTML: "<p>Привет</p>",
+	})
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	if v, _ := htmlassert.Attr(doc.MustHave("article.later-article"), "lang"); v != "ru" {
+		t.Errorf("article lang = %q, want ru", v)
+	}
+	// The site and byline may run right to left inside a left-to-right
+	// meta line; <bdi> keeps them from reordering "N min read" around them.
+	if n := len(doc.QueryAll(".later-article-meta bdi")); n != 1 { // no byline here
+		t.Errorf("%d <bdi> in the meta line, want 1 (the site)", n)
+	}
+	for _, sel := range []string{".later-article-title", "#later-body", ".later-topbar-title"} {
+		if v, _ := htmlassert.Attr(doc.MustHave(sel), "dir"); v != "auto" {
+			t.Errorf("%s dir = %q, want auto", sel, v)
+		}
+	}
+
+	// Unknown language: no lang of its own, so it inherits the page's.
+	b := seedReadable(t, s)
+	doc = s.Get(t, s.Alice, articlePath(b, ""))
+	if v, ok := htmlassert.Attr(doc.MustHave("article.later-article"), "lang"); ok {
+		t.Errorf("article without a language has lang=%q", v)
+	}
+}

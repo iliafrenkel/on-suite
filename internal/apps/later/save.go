@@ -63,7 +63,7 @@ func (a *App) fetchArticle(ctx context.Context, pageURL string) NewArticle {
 	if ex.Title != "" {
 		n.Title = ex.Title
 	}
-	n.Byline, n.SiteName = ex.Byline, ex.SiteName
+	n.Byline, n.SiteName, n.Lang = ex.Byline, ex.SiteName, ex.Language
 	n.ContentHTML, n.Images = ex.HTML, ex.Images
 	return n
 }

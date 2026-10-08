@@ -298,3 +298,18 @@ func TestSaveOverHTMXRejectsABadURL(t *testing.T) {
 		t.Errorf("chip = %q", got)
 	}
 }
+
+func TestSaveKeepsThePageLanguage(t *testing.T) {
+	s, a := newSaveServer(t)
+	a.AllowPrivateFetchesForTest()
+	origin := pageOrigin(t, "text/html; charset=utf-8", strings.Replace(articlePage, "<html>", `<html lang="ru">`, 1))
+
+	id := idFrom(t, save(t, s, s.Alice, origin.URL+"/essay"))
+	got, err := s.Store.Article(context.Background(), s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Lang != "ru" {
+		t.Errorf("Lang = %q, want ru", got.Lang)
+	}
+}

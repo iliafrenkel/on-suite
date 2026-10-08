@@ -122,3 +122,26 @@ the extractor interested in this particular subtree of the page.</p>
 		t.Errorf("Byline = %q", got.Byline)
 	}
 }
+
+func TestExtractReportsTheDocumentLanguage(t *testing.T) {
+	for _, tc := range []struct{ attr, want string }{
+		{`lang="ru"`, "ru"},
+		{`lang=" he-IL "`, "he-IL"},
+		{`lang="en_US"`, "en-US"}, // a common mistake; the tag means en-US
+		{`lang="zh-Hant-TW"`, "zh-Hant-TW"},
+		{``, ""},
+		{`lang=""`, ""},
+		{`lang="en&quot; onmouseover=&quot;x"`, ""},
+		{`lang="english"`, ""}, // primary subtags are 2-3 letters
+		{`lang="` + strings.Repeat("a", 40) + `"`, ""},
+	} {
+		page := strings.Replace(articlePage, "<html>", "<html "+tc.attr+">", 1)
+		got, err := article.Extract([]byte(page), "https://example.com/post", testSrc)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.attr, err)
+		}
+		if got.Language != tc.want {
+			t.Errorf("<html %s>: Language = %q, want %q", tc.attr, got.Language, tc.want)
+		}
+	}
+}

@@ -26,6 +26,7 @@ type exportedArticle struct {
 	Title        string              `json:"title"`
 	SiteName     string              `json:"site_name,omitempty"`
 	Byline       string              `json:"byline,omitempty"`
+	Lang         string              `json:"lang,omitempty"`
 	State        State               `json:"state"`
 	Content      Content             `json:"content"`
 	ExtractError string              `json:"extract_error,omitempty"`
@@ -72,7 +73,7 @@ func (st *Store) Export(ctx context.Context, userID int64) (exportPayload, error
 			return exportPayload{}, err
 		}
 		e := exportedArticle{
-			URL: art.URL, Title: art.Title, SiteName: art.SiteName, Byline: art.Byline,
+			URL: art.URL, Title: art.Title, SiteName: art.SiteName, Byline: art.Byline, Lang: art.Lang,
 			State: art.State, Content: art.Content, ExtractError: art.ExtractError,
 			ContentHTML: exportHTML(art.ContentHTML, sources), Note: art.Note,
 			Tags: append([]string{}, tags...), Highlights: []exportedHighlight{},

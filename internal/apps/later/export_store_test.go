@@ -15,6 +15,7 @@ type exported struct {
 	Articles []struct {
 		URL          string     `json:"url"`
 		Title        string     `json:"title"`
+		Lang         string     `json:"lang"`
 		State        string     `json:"state"`
 		Content      string     `json:"content"`
 		ExtractError string     `json:"extract_error"`
@@ -56,7 +57,7 @@ func TestExportCarriesArticlesHighlightsNotesAndTags(t *testing.T) {
 	ctx := context.Background()
 
 	chart, _, err := f.store.Save(ctx, f.alice.ID, later.NewArticle{
-		URL: "https://a.example/chart", Title: "Chart",
+		URL: "https://a.example/chart", Title: "Chart", Lang: "en-GB",
 		ContentHTML: `<p>See the chart.</p><p><img src="/later/img/h1" alt="Chart"></p>`,
 		Images:      map[string]string{"h1": "https://a.example/chart.png?w=1&h=2"},
 		Tags:        []string{"data", "work"},
@@ -96,6 +97,9 @@ func TestExportCarriesArticlesHighlightsNotesAndTags(t *testing.T) {
 	if a.URL != "https://a.example/chart" || a.Title != "Chart" || a.State != "reading" || a.Content != "extracted" {
 		t.Errorf("first article = %+v", a)
 	}
+	if a.Lang != "en-GB" {
+		t.Errorf("lang = %q, want en-GB", a.Lang)
+	}
 	if a.Note != "A note." {
 		t.Errorf("note = %q", a.Note)
 	}
@@ -114,7 +118,7 @@ func TestExportCarriesArticlesHighlightsNotesAndTags(t *testing.T) {
 	}
 
 	b := out.Articles[1]
-	if b.Content != "link_only" || b.ExtractError == "" || b.ContentHTML != "" {
+	if b.Content != "link_only" || b.ExtractError == "" || b.ContentHTML != "" || b.Lang != "" {
 		t.Errorf("link-only article = %+v", b)
 	}
 	if b.Tags == nil || b.Highlights == nil {
