@@ -25,7 +25,7 @@
 	// whether it worked (a touch pointerdown may not count as a gesture).
 	function unlock() {
 		var c = context();
-		if (!c || c.state !== "suspended") return Promise.resolve();
+		if (!c || c.state === "running") return Promise.resolve(); // "suspended", or iOS's "interrupted"
 		try {
 			return Promise.resolve(c.resume()).catch(function () {});
 		} catch (e) {

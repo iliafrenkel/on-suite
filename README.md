@@ -23,9 +23,9 @@ that is _all in one place_.
 
 ON Suite is a handful of small apps — notes, snippets, news feeds, flash
 cards and focus timers — all on one private website. It is built for a small
-group of people: a family, a group of friends, a small team. It can probably support a
-few hundred people, maybe even several thousand. But it is not an alternative
-to SaaS products like Gmail. Accounts are created by an admin, there is no
+group of people: a family, a group of friends, a small team. It can probably
+support a few hundred people, maybe even several thousand. But it is not an
+alternative to SaaS products like Gmail. Accounts are created by an admin, there is no
 public sign-up, and nobody else can see what you make in ON Suite unless you
 choose to share it.
 

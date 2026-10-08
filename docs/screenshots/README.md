@@ -8,9 +8,9 @@ in a minute after a UI change. Two small Go programs do the work:
 
 - **[`seed`](seed/)** creates a fresh data directory with demo accounts and
   realistic content — notes, pastes, feeds, flash card decks and focus
-  timers. It also writes a signed-in session for the `demo` account (`demo-session`) and the
-  paths of two public share pages (`share-paste`, `share-notes`) next to the
-  database.
+  timers, with a few weeks of focus history. It also writes a signed-in
+  session for the `demo` account (`demo-session`) and the paths of two public
+  share pages (`share-paste`, `share-notes`) next to the database.
 - **[`capture`](capture/)** drives headless Google Chrome over the DevTools
   protocol. For every shot in [`capture/shots.go`](capture/shots.go) it sets
   the session and theme cookies, opens the page at a fixed viewport, runs

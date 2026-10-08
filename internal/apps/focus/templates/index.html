@@ -48,7 +48,6 @@
 							<button type="submit">Move later</button>
 						</form>
 						{{end}}
-
 						<form method="post" action="/focus/timers/{{.ID}}/delete" data-focus-confirm="Delete “{{.Name}}”? Sessions already in your history are kept.">
 							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
 							<button class="danger" type="submit">Delete</button>
