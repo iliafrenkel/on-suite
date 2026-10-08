@@ -494,7 +494,7 @@ main:has(.reader-panes) { max-width: none; padding: 0;}
 
 label { display: block; margin-bottom: var(--s-1); font-size: var(--fs-sm); color: var(--c-text-dim); }
 
-input[type="text"], input[type="password"], input[type="url"], textarea, select {
+input[type="text"], input[type="password"], input[type="url"], input[type="number"], textarea, select {
 	width: 100%;
 	padding: var(--s-2);
 	background: var(--c-bg);
@@ -3841,7 +3841,8 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .focus-tile-name:hover { text-decoration: underline; }
 .focus-tile-summary { color: var(--c-text-dim); font-size: var(--fs-sm); }
 .focus-tile-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: var(--s-2); }
-.focus-pill { font-size: var(--fs-xs); color: var(--c-text-faint); border: var(--border); border-radius: 999px; padding: 0 var(--s-2); }
+/* Dim, not faint: faint text is under 4.5:1 in both themes (F4 dark-mode pass). */
+.focus-pill { font-size: var(--fs-xs); color: var(--c-text-dim); border: var(--border); border-radius: 999px; padding: 0 var(--s-2); }
 .focus-play {
 	display: inline-flex;
 	align-items: center;
@@ -3898,9 +3899,9 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .focus-form fieldset { border: 0; padding: 0; margin-inline: 0; min-inline-size: 0; }
 .focus-form legend { font-weight: 600; margin-bottom: var(--s-2); }
 .focus-choice { display: flex; align-items: center; gap: var(--s-2); font-weight: 400; }
-.focus-number input { max-width: 8rem; }
+.focus-number input { width: 8rem; max-width: 100%; }
 .focus-number-row { display: flex; flex-wrap: wrap; gap: var(--s-4); }
-.focus-hint { margin: var(--s-1) 0 0; color: var(--c-text-faint); font-size: var(--fs-sm); }
+.focus-hint { margin: var(--s-1) 0 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
 .focus-field-error { margin: var(--s-1) 0 0; color: var(--c-danger); font-size: var(--fs-sm); }
 .focus-form-actions { display: flex; align-items: center; gap: var(--s-3); }
 /* Interval fields only matter for interval timers; no script needed. */
@@ -3963,7 +3964,7 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 	border: 0;
 	border-radius: var(--radius);
 	background: none;
-	color: var(--c-text-faint);
+	color: var(--c-text-dim);
 	font: inherit;
 	font-size: var(--fs-sm);
 	text-decoration: none;
@@ -3995,8 +3996,9 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 .focus-ring-inner p { margin: 0; }
 .focus-runner-name { color: var(--c-text-dim); font-size: var(--fs-sm); letter-spacing: .04em; text-transform: uppercase; overflow-wrap: anywhere; }
 .focus-digits { font-size: clamp(3rem, 12vmin, 4.5rem); font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1; }
-.focus-phase { color: var(--focus-ring); font-size: var(--fs-sm); font-weight: 600; }
-.focus-runner-break .focus-phase { color: var(--c-text-dim); }
+/* Dim text, not the timer's colour: every swatch is under 4.5:1 on the
+ * runner's background. The ring and dots carry the colour (F4 dark-mode pass). */
+.focus-phase { color: var(--c-text-dim); font-size: var(--fs-sm); font-weight: 600; }
 
 .focus-dots { display: flex; gap: .4rem; margin: 0; padding: 0; list-style: none; }
 .focus-dot { width: .5rem; height: .5rem; border: 1.5px solid var(--c-text-faint); border-radius: 50%; }
@@ -4005,7 +4007,6 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 
 .focus-runner-paused .focus-ring-bar,
 .focus-runner-paused .focus-digits { opacity: .45; }
-.focus-runner-paused .focus-phase { color: var(--c-text-dim); }
 
 /* Waiting for Start (auto-advance off): dimmed like paused, and Start
  * pulses gently so it's clear the timer needs you. */
@@ -4025,7 +4026,7 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 .focus-controls .primary,
 .focus-controls .primary:hover { background: var(--focus-ring); border-color: var(--focus-ring); color: #10141a; }
 
-.focus-sound-hint { margin: 0; color: var(--c-text-faint); font-size: var(--fs-sm); text-align: center; }
+.focus-sound-hint { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); text-align: center; }
 .focus-done { display: flex; flex-direction: column; align-items: center; gap: var(--s-4); text-align: center; }
 .focus-done-title { margin: 0; font-size: var(--fs-xl); }
 .focus-done-status { margin: 0; color: var(--c-text-dim); min-height: 1.5em; }
