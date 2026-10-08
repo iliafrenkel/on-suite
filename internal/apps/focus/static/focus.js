@@ -309,7 +309,11 @@
 					S.clear();
 					begin();
 				},
-				function () { window.location.assign("/focus/run/" + stored.timerId); }
+				function () {
+					var timerId = Number(stored.timerId);
+					if (!Number.isFinite(timerId) || Math.floor(timerId) !== timerId) return;
+					window.location.assign("/focus/run/" + encodeURIComponent(String(timerId)));
+				}
 			);
 		}
 	}
