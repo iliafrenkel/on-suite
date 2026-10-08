@@ -302,8 +302,10 @@
 			break;
 		case "s":
 		case "S":
-			askToNotify();
-			if (el.skip) skip();
+			if (el.skip) {
+				askToNotify();
+				skip();
+			}
 			break;
 		case "r":
 		case "R":

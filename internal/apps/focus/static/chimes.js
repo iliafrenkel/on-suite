@@ -69,7 +69,10 @@
 		// A chime is a nicety: a closed or broken audio context must never
 		// throw into the timer that called it.
 		try {
-			if (c.state === "suspended") c.resume();
+			if (c.state === "suspended") {
+				var resumed = c.resume();
+				if (resumed && resumed.catch) resumed.catch(function () {});
+			}
 			var out = c.createGain();
 			out.gain.value = 0.6;
 			out.connect(c.destination);
