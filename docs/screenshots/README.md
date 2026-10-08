@@ -7,8 +7,8 @@ Every screenshot is generated, not taken by hand, so they can all be redone
 in a minute after a UI change. Two small Go programs do the work:
 
 - **[`seed`](seed/)** creates a fresh data directory with demo accounts and
-  realistic content — notes, pastes, feeds and flash card decks. It also
-  writes a signed-in session for the `demo` account (`demo-session`) and the
+  realistic content — notes, pastes, feeds, flash card decks and focus
+  timers. It also writes a signed-in session for the `demo` account (`demo-session`) and the
   paths of two public share pages (`share-paste`, `share-notes`) next to the
   database.
 - **[`capture`](capture/)** drives headless Google Chrome over the DevTools

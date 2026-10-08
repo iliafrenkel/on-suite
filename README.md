@@ -7,7 +7,7 @@ own computer.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
-    <img src="docs/images/hero-light.png" alt="The ON Suite dashboard, with a card for each app: ON Notes, ON Paste, ON Reader, ON Later and ON Flash" width="100%">
+    <img src="docs/images/hero-light.png" alt="The ON Suite dashboard, with a card for each app: ON Notes, ON Paste, ON Reader, ON Later, ON Flash and ON Focus" width="100%">
   </picture>
 </p>
 
@@ -21,9 +21,9 @@ clones to share text between computers and people. They are all excellent!
 But I wanted something simple, something I can host myself, and something
 that is _all in one place_.
 
-ON Suite is a handful of small apps — notes, snippets, news feeds and flash
-cards — all on one private website. It is built for a small group of
-people: a family, a group of friends, a small team. It can probably support a
+ON Suite is a handful of small apps — notes, snippets, news feeds, flash
+cards and focus timers — all on one private website. It is built for a small
+group of people: a family, a group of friends, a small team. It can probably support a
 few hundred people, maybe even several thousand. But it is not an alternative
 to SaaS products like Gmail. Accounts are created by an admin, there is no
 public sign-up, and nobody else can see what you make in ON Suite unless you
@@ -42,7 +42,7 @@ multi-tenant hardening, this isn't it. It's the opposite bet, optimised for
 
 ## The apps
 
-Sign in once and move freely between five apps.
+Sign in once and move freely between six apps.
 
 ### ON Notes
 
@@ -115,6 +115,20 @@ race circuits. ON Flash shows you a few cards each day: the hard ones come
 back often, the easy ones less and less. You can give a copy of a deck to
 someone else in your ON Suite instance.
 [Read the ON Flash guide →](docs/user/flash.md)
+
+### ON Focus
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-focus-dark.png">
+    <img src="docs/images/app-focus-light.png" alt="ON Focus: a Deep work timer running, with a teal ring a third of the way round and four round dots">
+  </picture>
+</p>
+
+A calm focus timer you set up once and reuse — a 15-minute reflection, a
+50-minute deep-work block with breaks. It chimes between rounds, keeps your
+screen awake and shows how much you've focused this week, month and year.
+[Read the ON Focus guide →](docs/user/focus.md)
 
 ## Run it
 

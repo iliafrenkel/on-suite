@@ -1,5 +1,17 @@
 package main
 
+// focusRunning shows the running page 18 minutes into Deep work's first
+// round: it moves the page's clock forward rather than planting a session,
+// so the shot stands alone (capture -only works). It then clears the stored
+// session so later home-page shots show no resume banner, and hides the
+// "Sound is off" hint, which headless Chrome always shows.
+const focusRunning = `
+		const real = Date.now.bind(Date);
+		Date.now = () => real() + 18 * 60 * 1000;
+		await new Promise(r => setTimeout(r, 1200));
+		document.querySelector('[data-focus-sound-hint]').hidden = true;
+		OnFocus.session.clear();`
+
 // readerScrollToActive scrolls the article list so the open article sits
 // near the top, two rows down, instead of cut off at the bottom.
 const readerScrollToActive = `
@@ -85,6 +97,17 @@ var shots = []shot{
 	{Name: "docs/user/images/flash-import.png", URL: "/flash/import", Height: 590},
 	{Name: "docs/user/images/flash-stats.png", URL: "/flash/stats", Height: 760},
 
+	// docs/user/focus.md
+	{Name: "docs/user/images/focus-home.png", URL: "/focus/", Height: 440},
+	{Name: "docs/user/images/focus-menu.png", URL: "/focus/", Height: 440, Setup: `
+		document.querySelectorAll('.focus-tile details.focus-menu')[1].open = true;`},
+	{Name: "docs/user/images/focus-form.png", URL: "/focus/new", Height: 1010, Setup: `
+		document.querySelector('input[name="name"]').value = 'Deep work';
+		document.querySelector('input[name="kind"][value="intervals"]').checked = true;
+		document.querySelector('input[name="name"]').blur();`},
+	{Name: "docs/user/images/focus-running.png", URL: "/focus/run/1", Height: 660, Setup: focusRunning},
+	{Name: "docs/user/images/focus-history.png", URL: "/focus/history", Height: 1000},
+
 	// docs/user/admin.md
 	// Look only: nothing here adds a user, resets a password or presses
 	// Run now, so the seeded accounts and job history stay as they are.
@@ -95,7 +118,7 @@ var shots = []shot{
 
 	// README.md — the hero and one thumbnail per app, light and dark, at the
 	// default 1280×800 (thumbnails show at about half width).
-	// The hero is the dashboard, cropped: it shows all five apps at a glance.
+	// The hero is the dashboard, cropped: it shows all six apps at a glance.
 	{Name: "docs/images/hero-light.png", URL: "/", Height: 490},
 	{Name: "docs/images/hero-dark.png", URL: "/", Height: 490, Theme: "dark"},
 	{Name: "docs/images/app-paste-light.png", URL: "/paste/7"},
@@ -108,4 +131,6 @@ var shots = []shot{
 	{Name: "docs/images/app-later-dark.png", URL: "/later/a/1", Theme: "dark"},
 	{Name: "docs/images/app-flash-light.png", URL: "/flash/2/cards/"},
 	{Name: "docs/images/app-flash-dark.png", URL: "/flash/2/cards/", Theme: "dark"},
+	{Name: "docs/images/app-focus-light.png", URL: "/focus/run/1", Setup: focusRunning},
+	{Name: "docs/images/app-focus-dark.png", URL: "/focus/run/1", Theme: "dark", Setup: focusRunning},
 }
