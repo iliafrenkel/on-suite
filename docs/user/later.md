@@ -83,8 +83,9 @@ box, to go back to the list you were on.
 An article opens full screen. The top bar has:
 
 - **← Later** — back to the list the article is in.
-- **Aa** — choose the font (serif or sans), the text size and the width of
-  the column. Changes apply at once and are remembered on every device.
+- **Aa** — choose the font (serif or sans), the text size, the width of
+  the column and whether lines align left or are justified to both edges.
+  Changes apply at once and are remembered on every device.
 - **Notes** — opens the Notes panel (see below).
 - **Archive** — move the article to Archived (or **Move to unread** if it
   is already archived).

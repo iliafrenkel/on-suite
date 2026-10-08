@@ -161,6 +161,7 @@ type articleView struct {
 	SizeDown, SizeUp int
 	FontOptions      []prefOption
 	WidthOptions     []prefOption
+	AlignOptions     []prefOption
 	Tab              State   // the list ← Later returns to
 	Progress         float64 // 0-1, as stored
 	Back             string  // this page, for the Aa forms
@@ -206,6 +207,7 @@ func (a *App) buildArticleView(r *http.Request, userID int64, art Article, textE
 		Prefs:        prefs,
 		FontOptions:  options(prefs.Font, "serif", "Serif", "sans", "Sans"),
 		WidthOptions: options(prefs.Width, "narrow", "Narrow", "medium", "Medium", "wide", "Wide"),
+		AlignOptions: options(prefs.Align, "left", "Left", "justify", "Justify"),
 		Tab:          art.State,
 		Progress:     art.Progress,
 		Back:         fmt.Sprintf("/later/a/%d", art.ID),

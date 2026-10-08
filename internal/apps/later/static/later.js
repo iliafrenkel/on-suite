@@ -106,7 +106,7 @@
 		}
 		reader.querySelectorAll("form[data-later-pref]").forEach(function (f) {
 			var button = f.querySelector("button");
-			["font", "width"].forEach(function (field) {
+			["font", "width", "align"].forEach(function (field) {
 				var input = f.querySelector('input[name="' + field + '"]');
 				if (input && button) button.setAttribute("aria-pressed", String(input.value === current(field)));
 			});
@@ -133,7 +133,7 @@
 		fetch(form.action, { method: "POST", body: body, headers: { "X-Later-Async": "1" }, credentials: "same-origin" })
 			.then(function (res) { if (!res.ok) throw new Error(String(res.status)); })
 			.catch(function () { form.submit(); }); // fall back to the plain post
-		["font", "size", "width"].forEach(function (field) {
+		["font", "size", "width", "align"].forEach(function (field) {
 			var v = data.get(field);
 			if (v === null) return;
 			Array.from(reader.classList).forEach(function (c) {

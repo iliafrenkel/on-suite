@@ -16,24 +16,26 @@ type Prefs struct {
 	Font  string
 	Size  int
 	Width string
+	Align string // "left" (ragged right) or "justify"
 }
 
 // DefaultPrefs apply until the reader changes something.
-var DefaultPrefs = Prefs{Font: "serif", Size: 3, Width: "medium"}
+var DefaultPrefs = Prefs{Font: "serif", Size: 3, Width: "medium", Align: "left"}
 
 // Valid reports whether every field is one the reading view has a class for.
 func (p Prefs) Valid() bool {
 	return (p.Font == "serif" || p.Font == "sans") &&
 		p.Size >= 1 && p.Size <= 5 &&
-		(p.Width == "narrow" || p.Width == "medium" || p.Width == "wide")
+		(p.Width == "narrow" || p.Width == "medium" || p.Width == "wide") &&
+		(p.Align == "left" || p.Align == "justify")
 }
 
 // Prefs returns userID's Aa settings, or DefaultPrefs if they never changed any.
 func (st *Store) Prefs(ctx context.Context, userID int64) (Prefs, error) {
 	var p Prefs
 	err := st.db.QueryRowContext(ctx,
-		`SELECT font, size, width FROM later_prefs WHERE user_id = ?`, userID).
-		Scan(&p.Font, &p.Size, &p.Width)
+		`SELECT font, size, width, align FROM later_prefs WHERE user_id = ?`, userID).
+		Scan(&p.Font, &p.Size, &p.Width, &p.Align)
 	if errors.Is(err, sql.ErrNoRows) {
 		return DefaultPrefs, nil
 	}
@@ -50,17 +52,17 @@ func (st *Store) SetPrefs(ctx context.Context, userID int64, p Prefs) error {
 		return ErrInvalid
 	}
 	_, err := st.db.ExecContext(ctx, `
-		INSERT INTO later_prefs (user_id, font, size, width, updated_at) VALUES (?, ?, ?, ?, ?)
+		INSERT INTO later_prefs (user_id, font, size, width, align, updated_at) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (user_id) DO UPDATE SET font = excluded.font, size = excluded.size,
-			width = excluded.width, updated_at = excluded.updated_at`,
-		userID, p.Font, p.Size, p.Width, db.FormatTime(st.now()))
+			width = excluded.width, align = excluded.align, updated_at = excluded.updated_at`,
+		userID, p.Font, p.Size, p.Width, p.Align, db.FormatTime(st.now()))
 	if err != nil {
 		return fmt.Errorf("later: save prefs: %w", err)
 	}
 	return nil
 }
 
-// setPrefs saves whichever of font, size and width the form carries.
+// setPrefs saves whichever of font, size, width and align the form carries.
 func (a *App) setPrefs(w http.ResponseWriter, r *http.Request) {
 	userID, ok := a.userID(w, r)
 	if !ok {
@@ -76,6 +78,9 @@ func (a *App) setPrefs(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.PostFormValue("width"); v != "" {
 		p.Width = v
+	}
+	if v := r.PostFormValue("align"); v != "" {
+		p.Align = v
 	}
 	if v := r.PostFormValue("size"); v != "" {
 		n, err := strconv.Atoi(v)

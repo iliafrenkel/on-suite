@@ -263,8 +263,8 @@ func TestSearchMigrationIndexesExistingArticles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(laterMs) != 6 {
-		t.Fatalf("got %d later migrations; this test assumes 0006 is the last", len(laterMs))
+	if len(laterMs) < 6 {
+		t.Fatalf("got %d later migrations; this test needs 0006", len(laterMs))
 	}
 	if _, err := db.Apply(ctx, handle, append(append([]db.Migration{}, authMs...), laterMs[:5]...)); err != nil {
 		t.Fatal(err)

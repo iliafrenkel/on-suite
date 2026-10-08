@@ -26,7 +26,7 @@ func TestSetPrefsRoundTripsPerUser(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	alicePrefs := later.Prefs{Font: "sans", Size: 5, Width: "wide"}
+	alicePrefs := later.Prefs{Font: "sans", Size: 5, Width: "wide", Align: "justify"}
 	if err := f.store.SetPrefs(ctx, f.alice.ID, alicePrefs); err != nil {
 		t.Fatalf("SetPrefs(alice) = %v", err)
 	}
@@ -54,16 +54,18 @@ func TestSetPrefsRejectsInvalid(t *testing.T) {
 	ctx := context.Background()
 
 	// Store a valid prefs first for alice
-	valid := later.Prefs{Font: "serif", Size: 3, Width: "medium"}
+	valid := later.Prefs{Font: "serif", Size: 3, Width: "medium", Align: "left"}
 	if err := f.store.SetPrefs(ctx, f.alice.ID, valid); err != nil {
 		t.Fatalf("initial SetPrefs = %v", err)
 	}
 
 	invalidCases := []later.Prefs{
-		{Font: "mono", Size: 3, Width: "medium"},  // bad font
-		{Font: "serif", Size: 0, Width: "medium"}, // size too low
-		{Font: "serif", Size: 6, Width: "medium"}, // size too high
-		{Font: "serif", Size: 3, Width: "huge"},   // bad width
+		{Font: "mono", Size: 3, Width: "medium", Align: "left"},    // bad font
+		{Font: "serif", Size: 0, Width: "medium", Align: "left"},   // size too low
+		{Font: "serif", Size: 6, Width: "medium", Align: "left"},   // size too high
+		{Font: "serif", Size: 3, Width: "huge", Align: "left"},     // bad width
+		{Font: "serif", Size: 3, Width: "medium", Align: "center"}, // bad align
+		{Font: "serif", Size: 3, Width: "medium"},                  // missing align
 	}
 
 	for _, p := range invalidCases {
