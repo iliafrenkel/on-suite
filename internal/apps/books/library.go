@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -64,6 +65,7 @@ type Book struct {
 	Tags               []string
 	Shelf              Shelf
 	Latest             Reading // zero ID before the first reading
+	CoverVersion       string  // "" when the book has no cover
 	AddedAt, UpdatedAt time.Time
 }
 
@@ -76,6 +78,9 @@ type NewBook struct {
 	// FinishedOn is the ShelfRead finish date, YYYY-MM-DD; "" means today.
 	FinishedOn string
 	Tags       []string // raw names; Create cleans them
+	// OLWorkID and OLEditionID come from an Open Library pick; Create keeps
+	// them only if they look like Open Library keys.
+	OLWorkID, OLEditionID string
 }
 
 // latestJoin attaches each book's latest reading as r — the one that
@@ -103,6 +108,19 @@ func nullText(s string) any {
 		return nil
 	}
 	return s
+}
+
+// olIDPattern is an Open Library key: "OL", a number, and W (work) or M
+// (edition).
+var olIDPattern = regexp.MustCompile(`^OL[1-9][0-9]{0,11}[WM]$`)
+
+// olID returns s if it is an Open Library key of the given kind ('W' or
+// 'M'), otherwise "".
+func olID(s string, kind byte) string {
+	if olIDPattern.MatchString(s) && s[len(s)-1] == kind {
+		return s
+	}
+	return ""
 }
 
 // Create adds a book, its first reading if it goes on Reading or Read, and
@@ -138,9 +156,10 @@ func (st *Store) Create(ctx context.Context, userID int64, nb NewBook) (int64, e
 
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO books_books (user_id, title, subtitle, authors, year, pages, isbn13,
-			series_name, series_number, description, added_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			ol_work_id, ol_edition_id, series_name, series_number, description, added_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		userID, in.Title, in.Subtitle, in.Authors, nullInt(in.Year), nullInt(in.Pages), nullText(in.ISBN),
+		olID(nb.OLWorkID, 'W'), olID(nb.OLEditionID, 'M'),
 		in.SeriesName, in.SeriesNumber, in.Description, now, now)
 	if err != nil {
 		return 0, fmt.Errorf("books: create: %w", err)
@@ -175,17 +194,18 @@ func (st *Store) Create(ctx context.Context, userID int64, nb NewBook) (int64, e
 func (st *Store) Get(ctx context.Context, userID, id int64) (Book, error) {
 	var b Book
 	var year, pages, rating, rid sql.NullInt64
-	var isbn, status, format, started, finished sql.NullString
+	var isbn, status, format, started, finished, cover sql.NullString
 	var added, updated, shelf string
 	err := st.db.QueryRowContext(ctx, `
 		SELECT b.id, b.title, b.subtitle, b.authors, b.year, b.pages, b.isbn13, b.series_name,
 		       b.series_number, b.description, b.rating, b.review, b.added_at, b.updated_at,
-		       r.id, r.status, r.format, r.started_on, r.finished_on, `+shelfExpr+`
+		       r.id, r.status, r.format, r.started_on, r.finished_on, `+shelfExpr+`, c.fetched_at
 		  FROM books_books b `+latestJoin+`
+		  LEFT JOIN books_covers c ON c.book_id = b.id
 		 WHERE b.id = ? AND b.user_id = ?`, id, userID).Scan(
 		&b.ID, &b.Title, &b.Subtitle, &b.Authors, &year, &pages, &isbn, &b.SeriesName,
 		&b.SeriesNumber, &b.Description, &rating, &b.Review, &added, &updated,
-		&rid, &status, &format, &started, &finished, &shelf)
+		&rid, &status, &format, &started, &finished, &shelf, &cover)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Book{}, ErrNotFound
 	}
@@ -197,6 +217,7 @@ func (st *Store) Get(ctx context.Context, userID, id int64) (Book, error) {
 	b.Latest = Reading{ID: rid.Int64, Status: Status(status.String), Format: format.String,
 		StartedOn: started.String, FinishedOn: finished.String}
 	b.Shelf = Shelf(shelf)
+	b.CoverVersion = coverVersion(cover.String)
 	if b.AddedAt, err = parseTime(added); err != nil {
 		return Book{}, fmt.Errorf("books: added_at: %w", err)
 	}
@@ -259,6 +280,7 @@ type ListItem struct {
 	Shelf                                    Shelf
 	StartedOn, FinishedOn                    string // the latest reading's
 	AddedAt                                  time.Time
+	CoverVersion                             string // "" when the book has no cover
 }
 
 // ListQuery picks the books a list shows. Shelf "" or ShelfAll is every
@@ -312,8 +334,9 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 	}
 	rows, err := st.db.QueryContext(ctx, `
 		SELECT b.id, b.title, b.authors, b.series_name, b.series_number, b.added_at,
-		       r.started_on, r.finished_on, `+shelfExpr+`
+		       r.started_on, r.finished_on, `+shelfExpr+`, c.fetched_at
 		  FROM books_books b `+latestJoin+`
+		  LEFT JOIN books_covers c ON c.book_id = b.id
 		 WHERE `+strings.Join(where, " AND ")+`
 		 ORDER BY `+listOrder(q.Shelf), args...)
 	if err != nil {
@@ -324,15 +347,16 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 	for rows.Next() {
 		var it ListItem
 		var added, shelf string
-		var started, finished sql.NullString
+		var started, finished, cover sql.NullString
 		if err := rows.Scan(&it.ID, &it.Title, &it.Authors, &it.SeriesName, &it.SeriesNumber, &added,
-			&started, &finished, &shelf); err != nil {
+			&started, &finished, &shelf, &cover); err != nil {
 			return nil, fmt.Errorf("books: scan list: %w", err)
 		}
 		if it.AddedAt, err = parseTime(added); err != nil {
 			return nil, fmt.Errorf("books: added_at: %w", err)
 		}
 		it.StartedOn, it.FinishedOn, it.Shelf = started.String, finished.String, Shelf(shelf)
+		it.CoverVersion = coverVersion(cover.String)
 		out = append(out, it)
 	}
 	if err := rows.Err(); err != nil {
