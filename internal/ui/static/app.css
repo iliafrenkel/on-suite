@@ -4125,3 +4125,98 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 	.focus-by-timer-bar { grid-column: 1 / -1; grid-row: 2; }
 	.focus-sessions th:nth-child(4), .focus-sessions td:nth-child(4) { display: none; }
 }
+
+/* ---- ON Books ----------------------------------------------------------
+ * Three panes — shelves, list, book — on ON Reader's layout: the same
+ * height arithmetic, .pane-gutter dividers whose widths live in custom
+ * properties on <html> (books.js), and two drill-down checkboxes for narrow
+ * screens. Spec: docs/superpowers/specs/2026-10-09-on-books-design.md. */
+main:has(.books-panes) { max-width: none; padding: 0; }
+
+.books-panes {
+	--books-chrome: calc(4rem + var(--s-6) * 2);
+	display: flex;
+	flex-direction: column;
+	height: calc(100vh - var(--books-chrome));
+	height: calc(100dvh - var(--books-chrome));
+	min-height: 0;
+	overflow: hidden;
+}
+.books-banner { margin: var(--s-2) var(--s-3) 0; }
+.books-panes-row { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.books-side { flex: 0 0 var(--books-side-w, 14rem); }
+.books-listpane { flex: 0 0 var(--books-list-w, 22rem); display: flex; flex-direction: column; }
+.books-book { flex: 1 1 auto; }
+.books-side,
+.books-listpane,
+.books-book { min-width: 0; min-height: 0; overflow-y: auto; padding: var(--s-3); background: var(--c-bg); }
+.books-side,
+.books-listpane { border-right: 1px solid var(--c-border); }
+
+/* Sidebar */
+.books-add { display: flex; align-items: center; justify-content: center; gap: var(--s-1); margin-bottom: var(--s-3); }
+.books-shelves,
+.books-rows { list-style: none; margin: 0; padding: 0; }
+.books-shelf { display: flex; justify-content: space-between; gap: var(--s-2); padding: var(--s-1) var(--s-2); border-radius: var(--radius); color: var(--c-text); text-decoration: none; }
+.books-shelf:hover { background: var(--c-bg-subtle); }
+.books-shelf[aria-current="page"] { background: var(--c-accent-bg); color: var(--c-accent); font-weight: 600; }
+.books-count { color: var(--c-text-dim); font-size: var(--fs-sm); }
+.books-side-head { margin: var(--s-4) 0 var(--s-1); padding: 0 var(--s-2); font-size: var(--fs-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--c-text-dim); }
+
+/* List */
+.books-filter { margin-bottom: var(--s-3); }
+.books-filter input[type="search"] { width: 100%; }
+.books-list { flex: 1 1 auto; }
+.books-list-head { margin: 0 0 var(--s-2); font-size: var(--fs-base); }
+.books-row-link { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2); border-radius: var(--radius); color: var(--c-text); text-decoration: none; }
+.books-row-link:hover { background: var(--c-bg-subtle); }
+.books-row.is-active .books-row-link { background: var(--c-accent-bg); }
+.books-mini-spine { flex: 0 0 auto; display: grid; place-items: center; width: 2rem; height: 3rem; border-left: 4px solid var(--swatch); border-radius: 2px; background: var(--swatch-soft); color: var(--swatch); font-weight: 700; }
+.books-row-text { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.books-row-title { font-weight: 600; }
+.books-row-title,
+.books-row-byline,
+.books-row-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.books-row-byline,
+.books-row-note { color: var(--c-text-dim); font-size: var(--fs-sm); }
+
+/* Book */
+.books-book-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4); margin-bottom: var(--s-4); }
+.books-spine { flex: 0 0 auto; display: flex; align-items: flex-end; width: 6rem; height: 9rem; padding: var(--s-2); overflow: hidden; border-left: 8px solid var(--swatch); border-radius: 3px; background: var(--swatch-soft); color: var(--c-text); font-size: var(--fs-xs); font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
+.books-book-titles { flex: 1 1 12rem; min-width: 0; }
+.books-book-titles h1 { margin: 0; font-size: var(--fs-xl); }
+.books-subtitle { margin: var(--s-1) 0 0; color: var(--c-text-dim); }
+.books-authors { margin: var(--s-2) 0 0; font-weight: 600; }
+.books-series,
+.books-facts { margin: var(--s-1) 0 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
+.books-pills { display: flex; flex-wrap: wrap; gap: var(--s-1); margin: var(--s-2) 0 0; }
+.books-pill { padding: 0 var(--s-2); border-radius: 999px; background: var(--c-bg-subtle); color: var(--c-text-dim); font-size: var(--fs-xs); }
+.books-pill-shelf { background: var(--c-accent-bg); color: var(--c-accent); }
+.books-description { max-width: 38rem; margin-bottom: var(--s-4); color: var(--c-text-dim); white-space: pre-line; }
+
+/* Narrow screens: Reader's drill-down, with Books' ids. The back control
+ * is a <label> for the checkbox, so it works with no script. */
+.books-back-btn { display: none; margin-bottom: var(--s-2); }
+@media (min-width: 901px) {
+	.books-pane-toggle { display: none; }
+}
+#books-list-open:focus-visible ~ .books-listpane .books-back-btn,
+#books-book-open:focus-visible ~ .books-book .books-back-btn { outline: var(--ring); }
+@media (max-width: 900px) {
+	.books-panes-row > .pane-gutter { display: none; }
+	.books-side { flex: 0 0 12rem; }
+	.books-listpane { flex: 1 1 auto; }
+	.books-book { display: none; }
+	#books-book-open:checked ~ .books-listpane { display: none; }
+	#books-book-open:checked ~ .books-book { display: block; }
+	#books-book-open:checked ~ .books-book .books-back-btn { display: inline-flex; }
+}
+@media (max-width: 640px) {
+	.books-panes { --books-chrome: calc(8rem + var(--s-4) * 2); }
+	.books-side { flex: 1 1 100%; }
+	.books-listpane { display: none; }
+	#books-list-open:checked ~ .books-side { display: none; }
+	#books-list-open:checked ~ .books-listpane { display: flex; }
+	#books-list-open:checked ~ .books-listpane .books-back-btn { display: inline-flex; }
+	#books-book-open:checked ~ .books-listpane { display: none; }
+}
