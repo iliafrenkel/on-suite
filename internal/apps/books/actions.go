@@ -128,18 +128,19 @@ func (a *App) setReview(r *http.Request, userID, id int64) error {
 	return a.store.SetReview(r.Context(), userID, id, r.PostFormValue("review"))
 }
 
-// readingID is the {rid} path segment. Anything but a positive integer is
-// ErrNotFound, so act answers 404, as for a reading that isn't there.
-func readingID(r *http.Request) (int64, error) {
-	rid, err := strconv.ParseInt(r.PathValue("rid"), 10, 64)
-	if err != nil || rid <= 0 {
+// childID is the path segment name — {rid}, {nid}, {qid}: a reading, note
+// or quote of the book. Anything but a positive integer is ErrNotFound, so
+// it answers 404, as for one that isn't there.
+func childID(r *http.Request, name string) (int64, error) {
+	cid, err := strconv.ParseInt(r.PathValue(name), 10, 64)
+	if err != nil || cid <= 0 {
 		return 0, ErrNotFound
 	}
-	return rid, nil
+	return cid, nil
 }
 
 func (a *App) editReading(r *http.Request, userID, id int64) error {
-	rid, err := readingID(r)
+	rid, err := childID(r, "rid")
 	if err != nil {
 		return err
 	}
@@ -151,11 +152,93 @@ func (a *App) editReading(r *http.Request, userID, id int64) error {
 }
 
 func (a *App) deleteReading(r *http.Request, userID, id int64) error {
-	rid, err := readingID(r)
+	rid, err := childID(r, "rid")
 	if err != nil {
 		return err
 	}
 	return a.store.DeleteReading(r.Context(), userID, id, rid)
+}
+
+// pageField reads a note's or quote's optional page: 0 when empty, -1
+// when it isn't a whole number of 1 or more, which the store refuses with
+// its own message (decided 2026-10-09).
+func pageField(r *http.Request) int {
+	s := strings.TrimSpace(r.PostFormValue("page"))
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 {
+		return -1
+	}
+	return n
+}
+
+// entrySave is a note or quote form's save: what was typed, kept to show
+// again if the store refuses it, and the store's answer.
+type entrySave func(r *http.Request, userID, id int64) (entryDraft, error)
+
+// saveEntry answers a note or quote form. htmx aims it at the section, so
+// the answer is the section with the list out of band (renderPanes);
+// without JavaScript it is a redirect back to the book. A refusal comes
+// back inside the form, opened, with what was typed — a 200 fragment for
+// htmx, a 422 page without.
+func (a *App) saveEntry(save entrySave) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		uid, ok := a.userID(w, r)
+		if !ok {
+			return
+		}
+		id, ok := a.pathID(w, r)
+		if !ok {
+			return
+		}
+		c := ctxFrom(r.PostFormValue)
+		d, err := save(r, uid, id)
+		var ref *Refusal
+		switch {
+		case errors.As(err, &ref):
+			d.Error = ref.Msg
+			a.renderPanes(w, r, uid, c, paneOpts{BookID: id, Draft: d})
+			return
+		case err != nil:
+			a.fail(w, r, err)
+			return
+		}
+		if web.IsHTMX(r) {
+			a.renderPanes(w, r, uid, c, paneOpts{BookID: id})
+			return
+		}
+		http.Redirect(w, r, c.BookURL(id), http.StatusSeeOther)
+	}
+}
+
+// noteDraft is a posted note form, named form.
+func noteDraft(r *http.Request, form string) entryDraft {
+	return entryDraft{Form: form, Page: strings.TrimSpace(r.PostFormValue("page")), Body: r.PostFormValue("body")}
+}
+
+func (a *App) addNote(r *http.Request, userID, id int64) (entryDraft, error) {
+	d := noteDraft(r, "note-new")
+	_, err := a.store.AddNote(r.Context(), userID, id, NoteInput{Page: pageField(r), Body: d.Body})
+	return d, err
+}
+
+func (a *App) editNote(r *http.Request, userID, id int64) (entryDraft, error) {
+	nid, err := childID(r, "nid")
+	if err != nil {
+		return entryDraft{}, err
+	}
+	d := noteDraft(r, "note-"+strconv.FormatInt(nid, 10))
+	return d, a.store.UpdateNote(r.Context(), userID, id, nid, NoteInput{Page: pageField(r), Body: d.Body})
+}
+
+func (a *App) deleteNote(r *http.Request, userID, id int64) error {
+	nid, err := childID(r, "nid")
+	if err != nil {
+		return err
+	}
+	return a.store.DeleteNote(r.Context(), userID, id, nid)
 }
 
 func (a *App) setTags(r *http.Request, userID, id int64) error {

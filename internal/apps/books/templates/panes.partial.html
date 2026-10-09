@@ -22,6 +22,12 @@
      shelf's order follow (spec "Progress and finishing"). */}}
 {{define "progress-swap"}}{{template "progress" .Book}}{{template "list" .List}}{{end}}
 
+{{/* notes-swap answers a note being added, edited or deleted (target
+     #books-notes): the section, and the list out of band — the row's
+     snippet and its place on a shelf sorted by the latest change can both
+     move. */}}
+{{define "notes-swap"}}{{template "notes" .Book}}{{template "list" .List}}{{end}}
+
 {{/* book-swap answers opening a book (target #books-book). The checkbox
      out of band is what makes a phone drill into the book. */}}
 {{define "book-swap"}}{{template "shell-oob" .}}{{template "book" .Book}}{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" true "OOB" true)}}{{end}}
@@ -139,6 +145,7 @@
 	{{template "review" .}}
 	{{with .Description}}<div class="books-description">{{.}}</div>{{end}}
 	{{template "tags-form" .}}
+	{{template "notes" .}}
 	{{template "history" .}}
 {{else}}
 	<p class="empty">Pick a book, or add one.</p>
@@ -308,6 +315,61 @@
 		<input id="books-tags-input" name="tags" type="text" value="{{.TagsValue}}" placeholder="sf, favourites" autocomplete="off">
 		<button type="submit">Save tags</button>
 	</div>
+</form>
+{{end}}
+
+{{/* notes is the book's notes, newest first (spec "Book pane"): a
+     "+ Add note" disclosure, then each note with its date and page, an
+     Edit disclosure and Delete (decided 2026-10-09). Every form works
+     without JavaScript; htmx swaps just this section (notes-swap). Takes a
+     bookView. */}}
+{{define "notes"}}
+<section class="books-notes" id="books-notes" aria-labelledby="books-notes-head">
+	<h2 class="books-section-head" id="books-notes-head">Notes</h2>
+	<details class="books-entry-add" id="books-note-new"{{if .NewNote.Open}} open{{end}}>
+		<summary class="button">+ Add note</summary>
+		{{template "note-form" (dict "Book" . "Key" "new" "Action" (printf "/books/notes/%d" .ID) "Form" .NewNote "Submit" "Add note")}}
+	</details>
+	{{with .Notes}}
+	<ul class="books-entries">
+		{{range .}}
+		<li class="books-note">
+			<p class="books-entry-meta">{{.Date}}{{with .Page}} · {{.}}{{end}}</p>
+			<div class="books-entry-text">{{.HTML}}</div>
+			<div class="books-entry-actions">
+				<details class="books-entry-edit"{{if .Form.Open}} open{{end}}>
+					<summary class="button quiet">Edit</summary>
+					{{template "note-form" (dict "Book" $ "Key" .ID "Action" (printf "/books/notes/%d/%d" $.ID .ID) "Form" .Form "Submit" "Save note")}}
+				</details>
+				<form method="post" action="/books/notes/{{$.ID}}/{{.ID}}/delete">
+					{{template "post-ctx" $}}
+					<button type="submit" class="quiet"
+					        hx-post="/books/notes/{{$.ID}}/{{.ID}}/delete" hx-target="#books-notes" hx-swap="outerHTML"
+					        hx-confirm="Delete this note?">Delete</button>
+				</form>
+			</div>
+		</li>
+		{{end}}
+	</ul>
+	{{end}}
+</section>
+{{end}}
+
+{{/* note-form adds or edits a note. Pass a dict with Book (a bookView),
+     Key ("new" or the note's id, for element ids), Action, Form (an
+     entryForm) and Submit. novalidate, so the store's message shows rather
+     than the browser's. */}}
+{{define "note-form"}}
+<form class="books-entry-form" novalidate method="post" action="{{.Action}}"
+      hx-post="{{.Action}}" hx-target="#books-notes" hx-swap="outerHTML">
+	{{template "post-ctx" .Book}}
+	<label for="books-note-{{.Key}}-body">Note</label>
+	<textarea id="books-note-{{.Key}}-body" name="body" rows="4"{{if .Form.Error}} aria-describedby="books-note-{{.Key}}-error"{{end}}>{{.Form.Body}}</textarea>
+	<p class="books-hint">Markdown works: **bold**, *italic*, [a link](https://…).</p>
+	<label for="books-note-{{.Key}}-page">Page (optional)</label>
+	<input id="books-note-{{.Key}}-page" name="page" type="number" inputmode="numeric" min="1"{{with .Book.Pages}} max="{{.}}"{{end}} value="{{.Form.Page}}"{{if .Form.Error}} aria-describedby="books-note-{{.Key}}-error"{{end}}>
+	{{with .Form.Error}}<p class="books-field-error" id="books-note-{{$.Key}}-error" role="alert">{{.}}</p>{{end}}
+	<button type="submit" class="primary">{{.Submit}}</button>
 </form>
 {{end}}
 

@@ -301,6 +301,9 @@ type bookView struct {
 	Review        string       // Markdown, for the edit box
 	ReviewHTML    template.HTML
 	History       []historyView // every reading, newest first
+	Pages         int           // the book's page count (0: unknown), the page boxes' max
+	Notes         []noteView    // newest first
+	NewNote       entryForm     // the "+ Add note" form
 	Ctx           listCtx
 	Shell         render.Shell
 }
@@ -358,7 +361,7 @@ func ratingChoices(current int) []choice {
 func viewBook(b Book, c listCtx, today string) bookView {
 	v := bookView{Selected: true, ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
 		Description: b.Description, Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion),
-		ShelfLabel: b.Shelf.Label(), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today,
+		ShelfLabel: b.Shelf.Label(), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Pages: b.Pages,
 		Rating: b.Rating, Stars: starButtons(b.Rating), Review: b.Review, ReviewHTML: RenderReview(b.Review), Ctx: c}
 	if b.SeriesName != "" {
 		v.Series = seriesText(b.SeriesName, b.SeriesNumber)
@@ -444,6 +447,67 @@ func readingDates(rd Reading) string {
 		return "Until " + ShowDay(rd.FinishedOn)
 	}
 	return "No dates"
+}
+
+// entryDraft is a note or quote form the store refused, to show again
+// with its message and what was typed (spec "Errors": an inline message,
+// as for progress). Form names the form: "note-new" or "note-12".
+type entryDraft struct {
+	Form, Error string
+	Page, Body  string
+}
+
+// entryForm is a note or quote form's state: what its boxes hold, and
+// whether it opens with a message.
+type entryForm struct {
+	Open       bool
+	Error      string
+	Page, Body string
+}
+
+// formFor is the form named key: what was typed into it when it is the
+// one refused (opened, with the message), its stored values otherwise.
+func formFor(key string, d entryDraft, stored entryForm) entryForm {
+	if d.Form != key {
+		return stored
+	}
+	return entryForm{Open: true, Error: d.Error, Page: d.Page, Body: d.Body}
+}
+
+// noteView is one note in the book pane: dated, with its page, its
+// Markdown drawn as a review is (decided 2026-10-09), and its Edit form.
+type noteView struct {
+	ID   int64
+	Date string // "9 Oct 2026"
+	Page string // "p. 112"; "" for none
+	HTML template.HTML
+	Form entryForm
+}
+
+func viewNotes(ns []Note, d entryDraft) []noteView {
+	var out []noteView
+	for _, n := range ns {
+		out = append(out, noteView{ID: n.ID, Date: n.CreatedAt.Local().Format("2 Jan 2006"), Page: pageText(n.Page),
+			HTML: RenderReview(n.Body),
+			Form: formFor("note-"+strconv.FormatInt(n.ID, 10), d, entryForm{Page: pageValue(n.Page), Body: n.Body})})
+	}
+	return out
+}
+
+// pageText is a page for people: "p. 112", "" for none.
+func pageText(page int) string {
+	if page == 0 {
+		return ""
+	}
+	return "p. " + strconv.Itoa(page)
+}
+
+// pageValue is a page for a form box, "" for none.
+func pageValue(page int) string {
+	if page == 0 {
+		return ""
+	}
+	return strconv.Itoa(page)
 }
 
 // progressView is the progress box: an input in the reading's unit, a
