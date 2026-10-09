@@ -173,12 +173,12 @@ For the year you get:
   the furthest point you've reached in this reading count, so fixing a
   mistake doesn't count anything twice: if you typed 250 instead of 150,
   then put it right and went on to 180, the stats count 250 pages, not
-  280, and nothing more until you pass page 250. When you finish
-  a book, the rest of it, from the furthest point you reached, counts on
-  the day you finished, so a book you finished without ever updating its
-  progress counts in full. Reading a book again starts from page 1. Progress kept in percent — an
-  audiobook's, say — turns into pages through the book's page count; a
-  book with no page count adds no pages.
+  280, and nothing more until you pass page 250. When you finish a book,
+  the rest of it, from the furthest point you reached, counts on the day
+  you finished, so a book you finished without ever updating its progress
+  counts in full. Reading a book again starts from page 1. Progress kept
+  in percent — an audiobook's, say — turns into pages through the book's
+  page count; a book with no page count adds no pages.
 - **Average rating** of the books you finished that year.
 - How many you read on paper, as ebooks and as audiobooks, and the
   longest and shortest book you finished.
