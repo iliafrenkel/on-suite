@@ -120,6 +120,14 @@ func (a *App) setFormat(r *http.Request, userID, id int64) error {
 	return a.store.SetFormat(r.Context(), userID, id, r.PostFormValue("format"))
 }
 
+func (a *App) setRating(r *http.Request, userID, id int64) error {
+	return a.store.SetRating(r.Context(), userID, id, formInt(r, "rating"))
+}
+
+func (a *App) setReview(r *http.Request, userID, id int64) error {
+	return a.store.SetReview(r.Context(), userID, id, r.PostFormValue("review"))
+}
+
 func (a *App) setTags(r *http.Request, userID, id int64) error {
 	return a.store.SetTags(r.Context(), userID, id, ParseTags(r.PostFormValue("tags")))
 }

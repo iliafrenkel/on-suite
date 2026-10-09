@@ -1,6 +1,7 @@
 package books
 
 import (
+	"html/template"
 	"net/url"
 	"strconv"
 	"strings"
@@ -294,6 +295,9 @@ type bookView struct {
 	StartLabel    string       // "Start reading", "Read again" or "Start again"
 	Rating        int          // 1–5, 0 for none
 	RatingChoices []choice     // the Finish step's rating select
+	Stars         []starButton // the rating buttons
+	Review        string       // Markdown, for the edit box
+	ReviewHTML    template.HTML
 	Ctx           listCtx
 	Shell         render.Shell
 }
@@ -315,6 +319,28 @@ func formatChoices(current string) []choice {
 	return append(out, choice{Value: "", Label: formatLabels[""], Current: current == ""})
 }
 
+// starButton is one of the book pane's five rating buttons.
+type starButton struct {
+	Value int // what clicking it sets: its number, or 0 to clear
+	Label string
+	On    bool // drawn filled
+}
+
+// starButtons are the book pane's rating (spec "Book pane": click to set,
+// click again to clear): star n sets the rating to n, except the current
+// rating's own star, which clears it.
+func starButtons(rating int) []starButton {
+	var out []starButton
+	for n := 1; n <= 5; n++ {
+		b := starButton{Value: n, Label: "Rate it " + strconv.Itoa(n) + " of 5", On: n <= rating}
+		if n == rating {
+			b.Value, b.Label = 0, "Clear the rating ("+strconv.Itoa(n)+" of 5)"
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
 // ratingChoices is the Finish step's rating select, best first; the book's
 // rating is picked already, so finishing a re-read keeps it unless changed.
 func ratingChoices(current int) []choice {
@@ -330,7 +356,7 @@ func viewBook(b Book, c listCtx, today string) bookView {
 	v := bookView{Selected: true, ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
 		Description: b.Description, Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion),
 		ShelfLabel: b.Shelf.Label(), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today,
-		Rating: b.Rating, Ctx: c}
+		Rating: b.Rating, Stars: starButtons(b.Rating), Review: b.Review, ReviewHTML: RenderReview(b.Review), Ctx: c}
 	if b.SeriesName != "" {
 		v.Series = seriesText(b.SeriesName, b.SeriesNumber)
 		if b.SeriesBooks > 1 { // the count only says something once there are two

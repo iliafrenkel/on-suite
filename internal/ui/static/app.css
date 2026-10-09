@@ -4280,6 +4280,22 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-row-bar::-moz-progress-bar { background: var(--c-accent); }
 .books-progress-note { margin: var(--s-1) 0 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
 .books-stars { color: var(--c-accent); letter-spacing: 0.05em; }
+
+/* Rating and review */
+.books-rating { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); margin-bottom: var(--s-3); }
+.books-rating-label { margin-right: var(--s-1); color: var(--c-text-dim); font-size: var(--fs-sm); }
+.books-star { display: inline-flex; padding: var(--s-1); border: 0; background: none; color: var(--c-text-faint); cursor: pointer; }
+.books-star:hover,
+.books-star.is-on { color: var(--c-accent); }
+.books-review { max-width: 38rem; margin-bottom: var(--s-4); }
+.books-review-text p { margin: 0 0 var(--s-2); }
+.books-review-edit > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.books-review-edit > summary::-webkit-details-marker { display: none; }
+.books-review-form { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-2); }
+.books-review-form label { margin: 0; }
+.books-review-form textarea { width: 100%; }
+.books-review-form button { align-self: flex-start; }
+.books-hint { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
 .books-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1rem; border: var(--border); border-radius: var(--radius); color: var(--c-text); background: var(--c-bg); }
 .books-dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 

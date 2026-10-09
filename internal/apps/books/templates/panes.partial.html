@@ -134,6 +134,8 @@
 		{{template "book-menu" .}}
 	</header>
 	{{template "reading-box" .}}
+	{{template "rating" .}}
+	{{template "review" .}}
 	{{with .Description}}<div class="books-description">{{.}}</div>{{end}}
 	{{template "tags-form" .}}
 {{else}}
@@ -260,6 +262,38 @@
 		<button type="submit"{{if .Primary}} class="primary"{{end}}>{{.Submit}}</button>
 	</form>
 </details>
+{{end}}
+
+{{/* rating is the book's stars (spec "Book pane"): five submit buttons,
+     so it works without JavaScript; the current rating's own star clears
+     it. Takes a bookView. */}}
+{{define "rating"}}
+<form class="books-rating" method="post" action="/books/rating/{{.ID}}"
+      hx-post="/books/rating/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+	{{template "post-ctx" .}}
+	<span class="books-rating-label">{{if .Rating}}Your rating{{else}}Rate it{{end}}</span>
+	{{range .Stars}}<button type="submit" class="books-star{{if .On}} is-on{{end}}" name="rating" value="{{.Value}}" aria-label="{{.Label}}" title="{{.Label}}">{{if .On}}{{ticon "star-filled"}}{{else}}{{ticon "star-outline"}}{{end}}</button>{{end}}
+</form>
+{{end}}
+
+{{/* review is the book's review, rendered, and a no-JS <details> with a
+     textarea to write or edit it (decided 2026-10-09); htmx swaps the panes
+     on save. Takes a bookView. */}}
+{{define "review"}}
+<section class="books-review" aria-label="Review">
+	{{with .ReviewHTML}}<div class="books-review-text">{{.}}</div>{{end}}
+	<details class="books-review-edit">
+		<summary class="button">{{if .Review}}Edit review{{else}}Write a review{{end}}</summary>
+		<form class="books-review-form" method="post" action="/books/review/{{.ID}}"
+		      hx-post="/books/review/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+			{{template "post-ctx" .}}
+			<label for="books-review-input">Review</label>
+			<textarea id="books-review-input" name="review" rows="8">{{.Review}}</textarea>
+			<p class="books-hint">Markdown works: **bold**, *italic*, [a link](https://…). A blank line starts a new paragraph.</p>
+			<button type="submit" class="primary">Save review</button>
+		</form>
+	</details>
+</section>
 {{end}}
 
 {{/* tags-form edits a book's tags in place. Takes a bookView. */}}
