@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/books"
@@ -180,5 +181,29 @@ func TestSomeoneElsesBookIsNotFetchedFor(t *testing.T) {
 	}
 	if coverSource(t, s, id) != "" {
 		t.Error("Bob's request stored a cover on Alice's book")
+	}
+}
+
+func TestAFailingEditDoesNotFetchTheCover(t *testing.T) {
+	s, _ := newServerWithOL(t)
+	var hits atomic.Int32
+	img := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write(onePNG)
+	}))
+	defer img.Close()
+	id := add(t, s, s.Alice.User.ID, titled("Piranesi", "", books.ShelfWant))
+
+	form := details("") // no title: the text fields fail
+	form.Set("cover_url", img.URL+"/cover.png")
+	rec := postMultipart(t, s, s.Alice, fmt.Sprintf("/books/edit/%d", id), form, "", nil)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("= %d, want 422", rec.Code)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("the pasted address was fetched %d times, want 0", n)
+	}
+	if got := attr(t, htmlassert.Parse(t, rec.Body.String()), `input[name="cover_url"]`, "value"); got != img.URL+"/cover.png" {
+		t.Errorf("cover_url echoed as %q", got)
 	}
 }

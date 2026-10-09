@@ -294,9 +294,13 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 	c := ctxFrom(r.PostFormValue)
 	in, vals, errs := parseForm(r.PostFormValue)
 	errs = merge(errs, in.Normalize().Validate())
-	change, msg := a.readCoverChange(r)
-	if msg != "" {
-		errs["cover"] = msg
+	var change coverChange
+	if len(errs) == 0 { // don't fetch a pasted address for a form that is bouncing anyway
+		var msg string
+		change, msg = a.readCoverChange(r)
+		if msg != "" {
+			errs["cover"] = msg
+		}
 	}
 	if len(errs) > 0 {
 		a.renderForm(w, r, http.StatusUnprocessableEntity, editBookForm(id, vals, errs, c, coverURL(b.ID, b.CoverVersion)))

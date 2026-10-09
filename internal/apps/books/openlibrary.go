@@ -211,11 +211,12 @@ func descriptionText(raw json.RawMessage) string {
 // Cover fetches one Open Library cover by its id: size "S" for a search
 // thumbnail, "M" for a book's stored cover. The content type is sniffed
 // from the bytes (webfetch.GetImage), never taken from the server.
+// default=false makes a missing cover a 404 instead of a blank placeholder.
 func (o *OpenLibrary) Cover(ctx context.Context, coverID int64, size string) (string, []byte, error) {
 	if coverID <= 0 || (size != "S" && size != "M") {
 		return "", nil, ErrInvalid
 	}
 	ctx, cancel := context.WithTimeout(ctx, coverTimeout)
 	defer cancel()
-	return o.Web.GetImage(ctx, fmt.Sprintf("%s/b/id/%d-%s.jpg", o.Covers, coverID, size), MaxCoverBytes)
+	return o.Web.GetImage(ctx, fmt.Sprintf("%s/b/id/%d-%s.jpg?default=false", o.Covers, coverID, size), MaxCoverBytes)
 }

@@ -190,3 +190,21 @@ func TestTheRealGuardStillApplies(t *testing.T) {
 		t.Errorf("Search against loopback with the real guard = %v, want ErrBlockedAddress", err)
 	}
 }
+
+// Without default=false Open Library answers a missing cover with a blank
+// placeholder and a 200, which would be stored as a blank cover.
+func TestCoverAsksForNoPlaceholder(t *testing.T) {
+	var query string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.RawQuery
+		_, _ = w.Write(onePNG)
+	}))
+	defer srv.Close()
+	ol := &books.OpenLibrary{Web: testWebClient(), Base: srv.URL, Covers: srv.URL, Timeout: 5 * time.Second}
+	if _, _, err := ol.Cover(context.Background(), 10226290, "M"); err != nil {
+		t.Fatal(err)
+	}
+	if query != "default=false" {
+		t.Errorf("query = %q, want default=false", query)
+	}
+}

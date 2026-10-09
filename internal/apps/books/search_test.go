@@ -30,6 +30,9 @@ func TestAddPageSearchesOpenLibrary(t *testing.T) {
 	if got := attr(t, doc, "img.books-result-cover", "src"); got != "/books/olcover/10226290" {
 		t.Errorf("thumbnail src = %q", got)
 	}
+	if got := attr(t, doc, "a.books-result-use", "aria-label"); got != "Use Piranesi" {
+		t.Errorf("Use this aria-label = %q", got)
+	}
 	use, err := url.Parse(attr(t, doc, "a.books-result-use", "href"))
 	if err != nil {
 		t.Fatal(err)

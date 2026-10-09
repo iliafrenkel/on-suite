@@ -102,7 +102,7 @@
 		<li class="books-result">
 			{{if .Thumb}}<img class="books-result-cover" src="{{.Thumb}}" alt="" width="40" height="60" loading="lazy">{{else}}<span class="books-result-cover" aria-hidden="true"></span>{{end}}
 			<span class="books-result-text"><span class="books-result-title">{{.Title}}</span>{{with .Byline}}<span class="books-result-byline">{{.}}</span>{{end}}</span>
-			<a class="button books-result-use" href="{{.PickURL}}">Use this</a>
+			<a class="button books-result-use" href="{{.PickURL}}" aria-label="Use {{.Title}}">Use this</a>
 		</li>
 		{{end}}
 	</ul>
