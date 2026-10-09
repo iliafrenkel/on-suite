@@ -182,22 +182,24 @@
 		syncBookContext(e.target, book);
 	});
 
-	// A list swap leaves the book pane alone, so its hidden shelf/tag/q
-	// fields and Edit link would keep POSTing and returning to the previous
-	// list while the address bar shows the new one. Copy the new list's
-	// context (data-* on #books-list) into them, as reader.js does for its
-	// own panes. tag and q are only rendered when non-empty, so they are
-	// created and removed here too.
+	// A list swap leaves the book pane alone, so its hidden shelf/tag/q/
+	// series fields and Edit link would keep POSTing and returning to the
+	// previous list while the address bar shows the new one. Copy the new
+	// list's context (data-* on #books-list) into them, as reader.js does
+	// for its own panes. tag, q and series are only rendered when
+	// non-empty, so they are created and removed here too.
+	var OPTIONAL_CTX = ["tag", "q", "series"];
 	function syncBookContext(list, book) {
 		if (!book) return;
 		var ctx = {
 			shelf: list.getAttribute("data-shelf") || "",
 			tag: list.getAttribute("data-tag") || "",
 			q: list.getAttribute("data-q") || "",
+			series: list.getAttribute("data-series") || "",
 		};
 		book.querySelectorAll("input[name=shelf]").forEach(function (shelf) {
 			shelf.value = ctx.shelf;
-			["tag", "q"].forEach(function (name) {
+			OPTIONAL_CTX.forEach(function (name) {
 				var field = shelf.parentNode.querySelector("input[name=" + name + "]");
 				if (!ctx[name]) {
 					if (field) field.remove();
@@ -218,8 +220,9 @@
 			var safeId = encodeURIComponent(id);
 			var qs = new URLSearchParams();
 			qs.set("shelf", ctx.shelf);
-			if (ctx.tag) qs.set("tag", ctx.tag);
-			if (ctx.q) qs.set("q", ctx.q);
+			OPTIONAL_CTX.forEach(function (name) {
+				if (ctx[name]) qs.set(name, ctx[name]);
+			});
 			edit.setAttribute("href", "/books/edit/" + safeId + "?" + qs.toString());
 		}
 	}

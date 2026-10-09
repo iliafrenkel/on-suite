@@ -67,6 +67,7 @@ type Book struct {
 	Latest             Reading  // zero ID before the first reading
 	Progress           Progress // the latest reading's latest progress
 	CoverVersion       string   // "" when the book has no cover
+	SeriesBooks        int      // how many of the user's books are in its series (0: none)
 	AddedAt, UpdatedAt time.Time
 }
 
@@ -201,7 +202,9 @@ func (st *Store) Get(ctx context.Context, userID, id int64) (Book, error) {
 		SELECT b.id, b.title, b.subtitle, b.authors, b.year, b.pages, b.isbn13, b.series_name,
 		       b.series_number, b.description, b.rating, b.review, b.added_at, b.updated_at,
 		       r.id, r.status, r.format, r.started_on, r.finished_on, `+shelfExpr+`, c.fetched_at,
-		       p.page, p.percent, p.recorded_at
+		       p.page, p.percent, p.recorded_at,
+		       (SELECT count(*) FROM books_books s WHERE s.user_id = b.user_id AND b.series_name <> ''
+		           AND s.series_name = b.series_name COLLATE NOCASE)
 		  FROM books_books b `+latestJoin+`
 		  `+progressJoin+`
 		  LEFT JOIN books_covers c ON c.book_id = b.id
@@ -209,7 +212,7 @@ func (st *Store) Get(ctx context.Context, userID, id int64) (Book, error) {
 		&b.ID, &b.Title, &b.Subtitle, &b.Authors, &year, &pages, &isbn, &b.SeriesName,
 		&b.SeriesNumber, &b.Description, &rating, &b.Review, &added, &updated,
 		&rid, &status, &format, &started, &finished, &shelf, &cover,
-		&atPage, &atPercent, &recorded)
+		&atPage, &atPercent, &recorded, &b.SeriesBooks)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Book{}, ErrNotFound
 	}
@@ -294,19 +297,25 @@ type ListItem struct {
 
 // ListQuery picks the books a list shows. Shelf "" or ShelfAll is every
 // shelf; Tag is one tag name; Q matches title, subtitle, authors or series
-// name (SQLite LIKE: case-insensitive for ASCII).
+// name (SQLite LIKE: case-insensitive for ASCII); Series is one series'
+// name, matched whole and ignoring case.
 type ListQuery struct {
-	Shelf Shelf
-	Tag   string
-	Q     string
+	Shelf  Shelf
+	Tag    string
+	Q      string
+	Series string
 }
 
-// listOrder is each shelf's sort (spec "Layout"): Reading by the latest
-// progress (a reading with none yet by when it started), Read by finish,
-// Want to read by date added, DNF and All by the latest change. NULL dates
-// sort last.
-func listOrder(s Shelf) string {
-	switch s {
+// listOrder is each list's sort (spec "Layout"): a series in reading order
+// (by number, as a number where it is one: "2.5" sits between 2 and 3);
+// otherwise by shelf — Reading by the latest progress (a reading with none
+// yet by when it started), Read by finish, Want to read by date added, DNF
+// and All by the latest change. NULL dates sort last.
+func listOrder(q ListQuery) string {
+	if q.Series != "" {
+		return `CAST(b.series_number AS REAL), b.series_number, b.title, b.id`
+	}
+	switch q.Shelf {
 	case ShelfReading:
 		return `COALESCE(p.recorded_at, r.created_at) DESC, r.id DESC`
 	case ShelfRead:
@@ -336,6 +345,10 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 			WHERE x.book_id = b.id AND t.name = ?)`)
 		args = append(args, tag)
 	}
+	if series := strings.TrimSpace(q.Series); series != "" {
+		where = append(where, `b.series_name = ? COLLATE NOCASE`)
+		args = append(args, series)
+	}
 	if text := strings.TrimSpace(q.Q); text != "" {
 		pat := "%" + likeEscape(text) + "%"
 		where = append(where, `(b.title LIKE ? ESCAPE '\' OR b.subtitle LIKE ? ESCAPE '\'
@@ -350,7 +363,7 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 		  `+progressJoin+`
 		  LEFT JOIN books_covers c ON c.book_id = b.id
 		 WHERE `+strings.Join(where, " AND ")+`
-		 ORDER BY `+listOrder(q.Shelf), args...)
+		 ORDER BY `+listOrder(q), args...)
 	if err != nil {
 		return nil, fmt.Errorf("books: list: %w", err)
 	}

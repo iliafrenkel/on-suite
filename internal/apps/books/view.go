@@ -21,13 +21,15 @@ var shelfLabels = map[Shelf]string{
 func (s Shelf) Label() string { return shelfLabels[s] }
 
 // listCtx is the list the panes show: a shelf, optionally narrowed to one
-// tag and a title/author filter. GETs carry it in the query string and
-// POSTs in hidden fields (ctx-fields), so whatever a change re-renders
-// comes back to the same list — the lesson of Reader's reader-ctx.
+// tag, one series and a title/author filter. GETs carry it in the query
+// string and POSTs in hidden fields (ctx-fields), so whatever a change
+// re-renders comes back to the same list — the lesson of Reader's
+// reader-ctx. Its fields are ListQuery's, in the same order.
 type listCtx struct {
-	Shelf Shelf
-	Tag   string
-	Q     string
+	Shelf  Shelf
+	Tag    string
+	Q      string
+	Series string
 }
 
 // ctxFrom reads a list context; a missing or unknown shelf is Reading, the
@@ -37,7 +39,8 @@ func ctxFrom(get func(string) string) listCtx {
 	if !ok {
 		sh = ShelfReading
 	}
-	return listCtx{Shelf: sh, Tag: strings.ToLower(strings.TrimSpace(get("tag"))), Q: strings.TrimSpace(get("q"))}
+	return listCtx{Shelf: sh, Tag: strings.ToLower(strings.TrimSpace(get("tag"))), Q: strings.TrimSpace(get("q")),
+		Series: strings.TrimSpace(get("series"))}
 }
 
 // Query is the context as a query string. Templates use the URL methods
@@ -51,6 +54,9 @@ func (c listCtx) Query() string {
 	}
 	if c.Q != "" {
 		v.Set("q", c.Q)
+	}
+	if c.Series != "" {
+		v.Set("series", c.Series)
 	}
 	return v.Encode()
 }
@@ -95,13 +101,13 @@ type sidebarView struct {
 
 // viewSidebar keeps the filter text on every link: the filter box sits
 // outside the list and keeps showing what was typed, so the lists it leads
-// to keep applying it.
+// to keep applying it. A tag or series list highlights no shelf.
 func viewSidebar(c listCtx, counts map[Shelf]int, tags []string) sidebarView {
 	var v sidebarView
 	for _, s := range Shelves {
 		to := listCtx{Shelf: s, Q: c.Q}
 		v.Shelves = append(v.Shelves, shelfLink{Label: s.Label(), URL: to.ListURL(), Count: counts[s],
-			Current: c.Tag == "" && c.Shelf == s})
+			Current: c.Tag == "" && c.Series == "" && c.Shelf == s})
 	}
 	for _, name := range tags {
 		to := listCtx{Shelf: ShelfAll, Tag: name, Q: c.Q}
@@ -130,7 +136,10 @@ type listView struct {
 }
 
 func listHeading(c listCtx) string {
-	if c.Tag != "" {
+	switch {
+	case c.Series != "":
+		return "Series “" + c.Series + "”"
+	case c.Tag != "":
 		return "Tagged “" + c.Tag + "”"
 	}
 	return c.Shelf.Label()
@@ -198,6 +207,14 @@ func rowNote(it ListItem) string {
 	return "Added " + it.AddedAt.Local().Format("2 Jan 2006")
 }
 
+// countText is "1 book" or "9 books".
+func countText(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return strconv.Itoa(n) + " " + many
+}
+
 // initial is the first letter or digit of a title, for the mini spine.
 func initial(title string) string {
 	for _, r := range title {
@@ -212,6 +229,8 @@ func emptyText(c listCtx) string {
 	switch {
 	case c.Q != "":
 		return "No books match “" + c.Q + "”."
+	case c.Series != "":
+		return "No books in the series “" + c.Series + "”."
 	case c.Tag != "":
 		return "No books tagged “" + c.Tag + "”."
 	}
@@ -232,7 +251,8 @@ func emptyText(c listCtx) string {
 type bookView struct {
 	Selected                         bool
 	ID                               int64
-	Title, Subtitle, Authors, Series string
+	Title, Subtitle, Authors, Series string   // Series: "The Expanse #3 · 9 books"
+	SeriesURL                        string   // the list of the book's series
 	Facts                            []string // "2011", "592 pages", "ISBN 978…"
 	Description                      string
 	Spine                            string
@@ -253,9 +273,15 @@ type bookView struct {
 // viewBook draws a book; today bounds the reading box's date fields.
 func viewBook(b Book, c listCtx, today string) bookView {
 	v := bookView{Selected: true, ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
-		Series: seriesText(b.SeriesName, b.SeriesNumber), Description: b.Description,
-		Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion), ShelfLabel: b.Shelf.Label(),
-		Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Ctx: c}
+		Description: b.Description, Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion),
+		ShelfLabel: b.Shelf.Label(), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Ctx: c}
+	if b.SeriesName != "" {
+		v.Series = seriesText(b.SeriesName, b.SeriesNumber)
+		if b.SeriesBooks > 1 { // the count only says something once there are two
+			v.Series += " · " + countText(b.SeriesBooks, "book", "books")
+		}
+		v.SeriesURL = listCtx{Shelf: ShelfAll, Series: b.SeriesName}.ListURL()
+	}
 	if b.Year > 0 {
 		v.Facts = append(v.Facts, strconv.Itoa(b.Year))
 	}

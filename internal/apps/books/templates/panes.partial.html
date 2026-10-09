@@ -60,11 +60,12 @@
 
 {{define "back"}}<label class="toolbar-btn books-back-btn" for="{{.For}}">{{ticon "arrow-left"}}{{.Label}}</label>{{end}}
 
-{{/* filter-ctx is the shelf and tag the filter box searches within. */}}
-{{define "filter-ctx"}}<span id="books-filter-ctx"{{if .OOB}} hx-swap-oob="true"{{end}}><input type="hidden" name="shelf" value="{{.Ctx.Shelf}}">{{with .Ctx.Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}</span>{{end}}
+{{/* filter-ctx is the shelf, tag and series the filter box searches
+     within. */}}
+{{define "filter-ctx"}}<span id="books-filter-ctx"{{if .OOB}} hx-swap-oob="true"{{end}}><input type="hidden" name="shelf" value="{{.Ctx.Shelf}}">{{with .Ctx.Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Ctx.Series}}<input type="hidden" name="series" value="{{.}}">{{end}}</span>{{end}}
 
 {{/* ctx-fields is a listCtx as hidden fields, for POSTs. */}}
-{{define "ctx-fields"}}<input type="hidden" name="shelf" value="{{.Shelf}}">{{with .Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Q}}<input type="hidden" name="q" value="{{.}}">{{end}}{{end}}
+{{define "ctx-fields"}}<input type="hidden" name="shelf" value="{{.Shelf}}">{{with .Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Q}}<input type="hidden" name="q" value="{{.}}">{{end}}{{with .Series}}<input type="hidden" name="series" value="{{.}}">{{end}}{{end}}
 
 {{define "sidebar"}}
 <nav class="books-side" id="books-side" aria-label="Shelves"{{if .OOB}} hx-swap-oob="true"{{end}}>
@@ -87,7 +88,7 @@
 
 {{/* list takes a listView. */}}
 {{define "list"}}
-<div class="books-list" id="books-list" data-shelf="{{.Ctx.Shelf}}" data-tag="{{.Ctx.Tag}}" data-q="{{.Ctx.Q}}">
+<div class="books-list" id="books-list" data-shelf="{{.Ctx.Shelf}}" data-tag="{{.Ctx.Tag}}" data-q="{{.Ctx.Q}}" data-series="{{.Ctx.Series}}">
 	<h2 class="books-list-head">{{.Heading}}</h2>
 	{{if .Rows}}
 	<ul class="books-rows">
@@ -121,7 +122,7 @@
 			<h1>{{.Title}}</h1>
 			{{with .Subtitle}}<p class="books-subtitle">{{.}}</p>{{end}}
 			{{with .Authors}}<p class="books-authors">{{.}}</p>{{end}}
-			{{with .Series}}<p class="books-series">{{.}}</p>{{end}}
+			{{with .Series}}<p class="books-series"><a href="{{$.SeriesURL}}" hx-get="{{$.SeriesURL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true">{{.}}</a></p>{{end}}
 			{{with .Facts}}<p class="books-facts">{{range $i, $f := .}}{{if $i}} · {{end}}{{$f}}{{end}}</p>{{end}}
 			<p class="books-pills"><span class="books-pill books-pill-shelf">{{.ShelfLabel}}</span>{{range .Tags}} <span class="books-pill">{{.}}</span>{{end}}</p>
 		</div>
