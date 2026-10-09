@@ -4254,6 +4254,9 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-format-pill { box-shadow: inset 0 0 0 1px var(--c-border-firm); }
 .books-format-pill:hover { color: var(--c-text); }
 .books-format button[aria-current="true"] { font-weight: 600; }
+/* The pill sits at the start of the reading box, so its menu opens to the
+ * right of it: right-anchored, it ran past the pane's left edge and was cut. */
+.books-format .outline-menu-list-end { left: 0; right: auto; }
 .books-reading-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); }
 .books-close > summary { display: inline-flex; list-style: none; cursor: pointer; }
 .books-close > summary::-webkit-details-marker { display: none; }
