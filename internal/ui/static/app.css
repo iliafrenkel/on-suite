@@ -4247,6 +4247,16 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 /* Reading box, tags, confirm dialog */
 .books-reading { margin-bottom: var(--s-4); padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); }
 .books-reading-status { margin: 0 0 var(--s-2); font-weight: 600; }
+.books-reading-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2); }
+.books-format > summary { list-style: none; cursor: pointer; }
+.books-format > summary::-webkit-details-marker { display: none; }
+/* An outlined pill: the reading box is the same colour as a plain one. */
+.books-format-pill { box-shadow: inset 0 0 0 1px var(--c-border-firm); }
+.books-format-pill:hover { color: var(--c-text); }
+.books-format button[aria-current="true"] { font-weight: 600; }
+/* The pill sits at the start of the reading box, so its menu opens to the
+ * right of it: right-anchored, it ran past the pane's left edge and was cut. */
+.books-format .outline-menu-list-end { left: 0; right: auto; }
 .books-reading-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); }
 .books-close > summary { display: inline-flex; list-style: none; cursor: pointer; }
 .books-close > summary::-webkit-details-marker { display: none; }
@@ -4256,6 +4266,51 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-tags-row { display: flex; gap: var(--s-2); }
 .books-tags-row input { flex: 1 1 auto; min-width: 0; }
 .books-tags-row button { white-space: nowrap; }
+/* Progress: the box in the reading box, and the bar on a Reading row */
+.books-progress { margin-bottom: var(--s-3); }
+.books-progress-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.books-progress-row input { width: 6rem; }
+.books-progress-of { color: var(--c-text-dim); font-size: var(--fs-sm); }
+.books-progress-bar,
+.books-row-bar { appearance: none; border: 0; border-radius: 999px; overflow: hidden; background: var(--c-bg-inset); }
+.books-progress-bar { display: block; width: 100%; max-width: 24rem; height: 6px; margin-top: var(--s-2); }
+.books-row-bar { display: inline-block; width: 3rem; height: 4px; vertical-align: middle; }
+.books-progress-bar::-webkit-progress-bar,
+.books-row-bar::-webkit-progress-bar { background: var(--c-bg-inset); }
+.books-progress-bar::-webkit-progress-value,
+.books-row-bar::-webkit-progress-value { background: var(--c-accent); }
+.books-progress-bar::-moz-progress-bar,
+.books-row-bar::-moz-progress-bar { background: var(--c-accent); }
+.books-progress-note { margin: var(--s-1) 0 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
+.books-stars { color: var(--c-accent); letter-spacing: 0.05em; }
+
+/* Rating and review */
+.books-rating { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); margin-bottom: var(--s-3); }
+.books-rating-label { margin-right: var(--s-1); color: var(--c-text-dim); font-size: var(--fs-sm); }
+.books-star { display: inline-flex; padding: var(--s-1); border: 0; background: none; color: var(--c-text-faint); cursor: pointer; }
+.books-star:hover,
+.books-star.is-on { color: var(--c-accent); }
+.books-review { max-width: 38rem; margin-bottom: var(--s-4); }
+.books-review-text p { margin: 0 0 var(--s-2); }
+.books-review-edit > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.books-review-edit > summary::-webkit-details-marker { display: none; }
+.books-review-form { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-2); }
+.books-review-form label { margin: 0; }
+.books-review-form textarea { width: 100%; }
+.books-review-form button { align-self: flex-start; }
+.books-hint { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
+
+/* Reading history */
+.books-history { max-width: 38rem; margin-top: var(--s-4); }
+.books-section-head { margin: 0 0 var(--s-2); font-size: var(--fs-base); }
+.books-history-list { list-style: none; margin: 0; padding: 0; }
+.books-history-item { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); padding: var(--s-2) 0; border-bottom: 1px solid var(--c-border); }
+.books-history-line { flex: 1 1 14rem; margin: 0; }
+.books-history-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); }
+.books-reading-edit > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.books-reading-edit > summary::-webkit-details-marker { display: none; }
+.books-reading-edit-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-2); margin-top: var(--s-2); }
+.books-reading-edit-form label { margin: 0; flex-basis: 100%; }
 .books-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1rem; border: var(--border); border-radius: var(--radius); color: var(--c-text); background: var(--c-bg); }
 .books-dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 

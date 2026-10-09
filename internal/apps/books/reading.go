@@ -2,8 +2,6 @@ package books
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 )
@@ -41,19 +39,27 @@ func (st *Store) StartReading(ctx context.Context, userID, id int64) error {
 }
 
 // FinishReading closes the reading in progress as finished on day
-// (YYYY-MM-DD; "" is today).
-func (st *Store) FinishReading(ctx context.Context, userID, id int64, day string) error {
-	return st.closeReading(ctx, userID, id, day, StatusFinished)
+// (YYYY-MM-DD; "" is today) and, when rating is 1–5, rates the book (spec
+// "Progress and finishing"). Rating 0 leaves the book's rating as it is, so
+// a re-read needn't rate it again.
+func (st *Store) FinishReading(ctx context.Context, userID, id int64, day string, rating int) error {
+	return st.closeReading(ctx, userID, id, day, StatusFinished, rating, 0)
 }
 
-// MarkDNF closes the reading in progress as not finished on day.
-func (st *Store) MarkDNF(ctx context.Context, userID, id int64, day string) error {
-	return st.closeReading(ctx, userID, id, day, StatusDNF)
+// MarkDNF closes the reading in progress as not finished on day. at, when
+// not 0, is where it stopped, in the reading's unit (UnitFor); it is kept
+// as the reading's last progress.
+func (st *Store) MarkDNF(ctx context.Context, userID, id int64, day string, at int) error {
+	return st.closeReading(ctx, userID, id, day, StatusDNF, 0, at)
 }
 
-// closeReading ends the reading in progress. The day must be a real date,
-// not in the future and not before the reading started.
-func (st *Store) closeReading(ctx context.Context, userID, id int64, day string, to Status) error {
+// closeReading ends the reading in progress, rating the book and recording
+// a last progress row on the way when asked to. The day must be a real
+// date, not in the future and not before the reading started.
+func (st *Store) closeReading(ctx context.Context, userID, id int64, day string, to Status, rating, at int) error {
+	if err := checkRating(rating); err != nil {
+		return err
+	}
 	if day == "" {
 		day = st.Today()
 	}
@@ -68,21 +74,29 @@ func (st *Store) closeReading(ctx context.Context, userID, id int64, day string,
 	if err := st.touch(ctx, tx, userID, id); err != nil {
 		return err
 	}
-	var rid int64
-	var started sql.NullString
-	err = tx.QueryRowContext(ctx,
-		`SELECT id, started_on FROM books_readings WHERE book_id = ? AND status = 'reading'`, id).Scan(&rid, &started)
-	if errors.Is(err, sql.ErrNoRows) {
-		return &Refusal{Msg: "This book isn't being read right now."}
-	}
+	a, err := activeReading(ctx, tx, id)
 	if err != nil {
-		return fmt.Errorf("books: close reading: %w", err)
+		return err
 	}
-	if started.Valid && day < started.String {
-		return &Refusal{Msg: "That's before you started reading it (" + ShowDay(started.String) + ")."}
+	if a.startedOn != "" && day < a.startedOn {
+		return &Refusal{Msg: "That's before you started reading it (" + ShowDay(a.startedOn) + ")."}
+	}
+	if at != 0 {
+		u := UnitFor(a.format, a.pages)
+		if err := checkProgress(u, a.pages, at); err != nil {
+			return err
+		}
+		if err := insertProgress(ctx, tx, a.id, u, at, formatTime(st.now())); err != nil {
+			return err
+		}
+	}
+	if rating != 0 {
+		if _, err := tx.ExecContext(ctx, `UPDATE books_books SET rating = ? WHERE id = ?`, rating, id); err != nil {
+			return fmt.Errorf("books: rate on finish: %w", err)
+		}
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE books_readings SET status = ?, finished_on = ? WHERE id = ?`, string(to), day, rid); err != nil {
+		`UPDATE books_readings SET status = ?, finished_on = ? WHERE id = ?`, string(to), day, a.id); err != nil {
 		return fmt.Errorf("books: close reading: %w", err)
 	}
 	return tx.Commit()

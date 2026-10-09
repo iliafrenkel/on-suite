@@ -182,22 +182,38 @@
 		syncBookContext(e.target, book);
 	});
 
-	// A list swap leaves the book pane alone, so its hidden shelf/tag/q
-	// fields and Edit link would keep POSTing and returning to the previous
-	// list while the address bar shows the new one. Copy the new list's
-	// context (data-* on #books-list) into them, as reader.js does for its
-	// own panes. tag and q are only rendered when non-empty, so they are
-	// created and removed here too.
+	// The progress form swaps its whole box (input included), so focus would
+	// drop to <body> after Enter. Put it back on the new input, selected, so
+	// the next number replaces the old one — on success and on the inline
+	// error alike. Only for swaps the progress form itself made: opening a
+	// book swaps the pane and should leave focus alone.
+	document.addEventListener("htmx:afterSwap", function (e) {
+		var src = (e.detail && (e.detail.requestConfig && e.detail.requestConfig.elt || e.detail.elt)) || e.target;
+		if (!src || !src.classList || !src.classList.contains("books-progress-form")) return;
+		var input = document.getElementById("books-progress-input");
+		if (!input) return;
+		input.focus();
+		input.select();
+	});
+
+	// A list swap leaves the book pane alone, so its hidden shelf/tag/q/
+	// series fields and Edit link would keep POSTing and returning to the
+	// previous list while the address bar shows the new one. Copy the new
+	// list's context (data-* on #books-list) into them, as reader.js does
+	// for its own panes. tag, q and series are only rendered when
+	// non-empty, so they are created and removed here too.
+	var OPTIONAL_CTX = ["tag", "q", "series"];
 	function syncBookContext(list, book) {
 		if (!book) return;
 		var ctx = {
 			shelf: list.getAttribute("data-shelf") || "",
 			tag: list.getAttribute("data-tag") || "",
 			q: list.getAttribute("data-q") || "",
+			series: list.getAttribute("data-series") || "",
 		};
 		book.querySelectorAll("input[name=shelf]").forEach(function (shelf) {
 			shelf.value = ctx.shelf;
-			["tag", "q"].forEach(function (name) {
+			OPTIONAL_CTX.forEach(function (name) {
 				var field = shelf.parentNode.querySelector("input[name=" + name + "]");
 				if (!ctx[name]) {
 					if (field) field.remove();
@@ -218,8 +234,9 @@
 			var safeId = encodeURIComponent(id);
 			var qs = new URLSearchParams();
 			qs.set("shelf", ctx.shelf);
-			if (ctx.tag) qs.set("tag", ctx.tag);
-			if (ctx.q) qs.set("q", ctx.q);
+			OPTIONAL_CTX.forEach(function (name) {
+				if (ctx[name]) qs.set(name, ctx[name]);
+			});
 			edit.setAttribute("href", "/books/edit/" + safeId + "?" + qs.toString());
 		}
 	}
@@ -251,12 +268,13 @@
 		if (!document.getElementById("books-panes")) return;
 		if (isTyping(e.target)) {
 			if (e.key === "Escape") {
-				if (e.target.id === "books-q") {
+				if (e.target.id === "books-q" || e.target.id === "books-progress-input") {
 					e.target.blur();
 				} else {
-					// Esc from the date field of an open Finish/DNF disclosure (or
-					// the menu) closes it and returns focus to its summary.
-					var open = e.target.closest("details.books-close[open], details.books-menu[open]");
+					// Esc from a field in an open disclosure of the book pane
+					// (Finish, Did not finish, the menus) closes it and returns
+					// focus to its summary.
+					var open = e.target.closest("#books-book details[open]");
 					if (open) {
 						open.open = false;
 						var summary = open.querySelector("summary");
@@ -282,8 +300,14 @@
 		case "a":
 			window.location.href = "/books/new";
 			break;
+		case "p":
+			var progress = document.getElementById("books-progress-input");
+			if (!progress) return;
+			progress.focus();
+			progress.select();
+			break;
 		case "Escape":
-			document.querySelectorAll("details.books-close[open], details.books-menu[open]").forEach(function (d) {
+			document.querySelectorAll("#books-book details[open]").forEach(function (d) {
 				d.open = false;
 			});
 			return;

@@ -3,6 +3,7 @@ package books
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -30,7 +31,7 @@ func (a *App) act(do change, gone bool) http.HandlerFunc {
 		var ref *Refusal
 		switch {
 		case errors.As(err, &ref):
-			a.renderPanes(w, r, uid, c, id, ref.Msg)
+			a.renderPanes(w, r, uid, c, paneOpts{BookID: id, Banner: ref.Msg})
 			return
 		case err != nil:
 			a.fail(w, r, err)
@@ -44,23 +45,117 @@ func (a *App) act(do change, gone bool) http.HandlerFunc {
 			// The form posted from the address bar's book; say where the panes
 			// now stand (the list, once the book is gone).
 			w.Header().Set("HX-Replace-Url", target)
-			a.renderPanes(w, r, uid, c, open, "")
+			a.renderPanes(w, r, uid, c, paneOpts{BookID: open})
 			return
 		}
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	}
 }
 
+// progress records where the reading in progress stands. htmx aims it at
+// the progress box, so the answer is the box with the list out of band;
+// a value the store refuses comes back inside the box with what was typed
+// (spec "Errors"). Nothing typed is refused like any other bad value.
+func (a *App) progress(w http.ResponseWriter, r *http.Request) {
+	uid, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	c := ctxFrom(r.PostFormValue)
+	typed := strings.TrimSpace(r.PostFormValue("at"))
+	at := formInt(r, "at")
+	if typed == "" {
+		at = -1
+	}
+	err := a.store.RecordProgress(r.Context(), uid, id, at)
+	var ref *Refusal
+	switch {
+	case errors.As(err, &ref):
+		a.renderPanes(w, r, uid, c, paneOpts{BookID: id, ProgressError: ref.Msg, ProgressInput: typed})
+		return
+	case err != nil:
+		a.fail(w, r, err)
+		return
+	}
+	if web.IsHTMX(r) {
+		a.renderPanes(w, r, uid, c, paneOpts{BookID: id})
+		return
+	}
+	http.Redirect(w, r, c.BookURL(id), http.StatusSeeOther)
+}
+
 func (a *App) start(r *http.Request, userID, id int64) error {
 	return a.store.StartReading(r.Context(), userID, id)
 }
 
+// formInt reads an optional whole-number field: 0 when it is empty, -1
+// when it isn't a number — outside every range the store accepts, so a
+// typo comes back as the store's own message (or a 400 for a field no
+// person types into).
+func formInt(r *http.Request, name string) int {
+	s := strings.TrimSpace(r.PostFormValue(name))
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
 func (a *App) finish(r *http.Request, userID, id int64) error {
-	return a.store.FinishReading(r.Context(), userID, id, strings.TrimSpace(r.PostFormValue("day")))
+	return a.store.FinishReading(r.Context(), userID, id, strings.TrimSpace(r.PostFormValue("day")), formInt(r, "rating"))
 }
 
 func (a *App) dnf(r *http.Request, userID, id int64) error {
-	return a.store.MarkDNF(r.Context(), userID, id, strings.TrimSpace(r.PostFormValue("day")))
+	return a.store.MarkDNF(r.Context(), userID, id, strings.TrimSpace(r.PostFormValue("day")), formInt(r, "at"))
+}
+
+func (a *App) setFormat(r *http.Request, userID, id int64) error {
+	return a.store.SetFormat(r.Context(), userID, id, r.PostFormValue("format"))
+}
+
+func (a *App) setRating(r *http.Request, userID, id int64) error {
+	return a.store.SetRating(r.Context(), userID, id, formInt(r, "rating"))
+}
+
+func (a *App) setReview(r *http.Request, userID, id int64) error {
+	return a.store.SetReview(r.Context(), userID, id, r.PostFormValue("review"))
+}
+
+// readingID is the {rid} path segment. Anything but a positive integer is
+// ErrNotFound, so act answers 404, as for a reading that isn't there.
+func readingID(r *http.Request) (int64, error) {
+	rid, err := strconv.ParseInt(r.PathValue("rid"), 10, 64)
+	if err != nil || rid <= 0 {
+		return 0, ErrNotFound
+	}
+	return rid, nil
+}
+
+func (a *App) editReading(r *http.Request, userID, id int64) error {
+	rid, err := readingID(r)
+	if err != nil {
+		return err
+	}
+	return a.store.UpdateReading(r.Context(), userID, id, rid, ReadingEdit{
+		StartedOn:  strings.TrimSpace(r.PostFormValue("started_on")),
+		FinishedOn: strings.TrimSpace(r.PostFormValue("finished_on")),
+		Format:     r.PostFormValue("format"),
+	})
+}
+
+func (a *App) deleteReading(r *http.Request, userID, id int64) error {
+	rid, err := readingID(r)
+	if err != nil {
+		return err
+	}
+	return a.store.DeleteReading(r.Context(), userID, id, rid)
 }
 
 func (a *App) setTags(r *http.Request, userID, id int64) error {

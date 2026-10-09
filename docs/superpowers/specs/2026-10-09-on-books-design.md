@@ -150,11 +150,11 @@ A three-pane list+detail view, like ON Reader (sidebar, list, book), with its re
     active reading it shows **Start reading** instead (or **Read again**
     once it has been read).
   - Rating stars (click to set, click again to clear) and the review
-    (Markdown, edit in place).
+    (Markdown, edited in a "Write a review" / "Edit review" disclosure).
   - Notes — dated entries, newest first, with an add box.
   - Quotes — cards with text, page and comment.
   - Reading history — every reading with dates, format and status; each
-    editable and deletable.
+    one's dates and format editable, and each deletable.
   - A ⋯ menu: Edit details (which also changes the cover), Find cover (B5), Delete.
 
 ### Add book
@@ -186,6 +186,21 @@ dialog, and proxied thumbnails rather than a wider CSP.)
   **Did not finish** is the same with an optional page instead of a rating.
 - **Start reading** creates a reading dated today with the format of the
   book's previous reading, if any.
+- The format pill in the reading box changes the current reading's format.
+  Finishing without a rating keeps the book's rating, so a re-read needn't
+  rate it again; the Did not finish page is kept as the reading's last
+  progress. Percentages are whole numbers.
+
+(Decided 2026-10-09 while planning B2: B2 is one PR. The book pane shows
+only the current progress — the input, the bar and when it was last
+updated; every update is still kept in `books_progress` for B4, but there
+is no progress history list. A reading's dates and format can be edited,
+its status can't: deleting a reading is how a wrong status is put right.
+The review is edited in a `<details>` disclosure in the book pane, which
+works without JavaScript, and rendered by an inline Markdown renderer that
+mirrors ON Notes' (apps don't share code; goldmark stays contained to the
+help pages), with blank-line paragraphs on top. The series link opens the
+list filtered to the series (`?series=`), in series order.)
 
 ### Keyboard
 

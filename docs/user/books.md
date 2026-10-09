@@ -61,13 +61,60 @@ Pick a book in the list to open it on the right.
 
 - **Start reading** starts it today and moves it to Reading.
 - **Finish** asks for the day you finished — today, unless you change it —
-  and moves the book to Read.
-- **Did not finish** works the same way and moves it to Did not finish.
+  and, if you like, a rating; then it moves the book to Read.
+- **Did not finish** asks for the day you stopped and, if you like, the
+  page you got to, and moves the book to Did not finish.
 
 A finished book offers **Read again**, and a book you put down offers
 **Start again**: either starts a new reading, and the earlier one is kept.
 You read a book one time at a time: while you're reading it there's no start
 button; finish it or put it down first.
+
+### Progress
+
+While you're reading a book, type the page you're on into the **Page** box
+and press Enter. The bar under it, and the book's row in the list, show how
+far through you are. Books on the Reading shelf are listed with the one you
+read most recently at the top.
+
+For an audiobook — or a book with no page count — the box asks for a
+percentage instead. Reaching the last page doesn't finish the book: click
+**Finish** when you're done.
+
+ON Books keeps every update you make. You only see the latest, but they're
+what the reading stats will be counted from.
+
+### Format
+
+The pill next to "Reading since…" says how you're reading the book: on
+paper, as an ebook, or as an audiobook. Click it to change it. A new
+reading starts with the format of the one before.
+
+## Rating and review
+
+Click a star under the reading box to rate a book from one to five; click
+the same star again to clear it. You can also rate a book as you finish it.
+The Read shelf shows each book's stars and the day you finished it.
+
+**Write a review** opens a box for what you thought. You can use a little
+Markdown: `**bold**`, `*italic*`, `[a link](https://example.com)`, and a
+blank line to start a new paragraph. **Save review** keeps it; **Edit
+review** changes it later. A book has one rating and one review, however
+many times you read it.
+
+## Reading history
+
+At the bottom of a book is every time you've read it, newest first: when
+you started and finished, the format, and how it ended. **Edit** changes a
+reading's dates and format. To fix a reading that ended the wrong way —
+marked as read when you gave up, say — **Delete** it; the book's shelf
+follows whichever reading is left.
+
+## Series
+
+If a book is part of a series, its series and number show under the
+author — "The Expanse #1 · 2 books". Click it to list the series in
+order. Add a series name and number with **⋯ → Edit details**.
 
 ## Tags
 
@@ -93,7 +140,9 @@ readings and tags.
 - **j** / **k** — open the next / previous book in the list
 - **/** — jump to the filter box
 - **a** — add a book
-- **Esc** — close the Finish or Did not finish box, or leave the filter
+- **p** — jump to the progress box of the book you're reading
+- **Esc** — close an open box in the book (Finish, Did not finish, a
+  menu, the review), or leave the filter or the progress box
 
 ## On a phone
 

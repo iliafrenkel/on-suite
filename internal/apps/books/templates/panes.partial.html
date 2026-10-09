@@ -17,6 +17,11 @@
      pane is left as it is; books.js moves the row highlight. */}}
 {{define "list-swap"}}{{template "shell-oob" .}}{{template "list" .List}}{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" true)}}{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" true)}}{{template "pane-toggle" (dict "ID" "books-list-open" "Label" "Shelves" "Checked" true "OOB" true)}}{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" false "OOB" true)}}{{end}}
 
+{{/* progress-swap answers a progress update (target #books-progress):
+     the box, and the list out of band so the row's bar and the Reading
+     shelf's order follow (spec "Progress and finishing"). */}}
+{{define "progress-swap"}}{{template "progress" .Book}}{{template "list" .List}}{{end}}
+
 {{/* book-swap answers opening a book (target #books-book). The checkbox
      out of band is what makes a phone drill into the book. */}}
 {{define "book-swap"}}{{template "shell-oob" .}}{{template "book" .Book}}{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" true "OOB" true)}}{{end}}
@@ -60,11 +65,12 @@
 
 {{define "back"}}<label class="toolbar-btn books-back-btn" for="{{.For}}">{{ticon "arrow-left"}}{{.Label}}</label>{{end}}
 
-{{/* filter-ctx is the shelf and tag the filter box searches within. */}}
-{{define "filter-ctx"}}<span id="books-filter-ctx"{{if .OOB}} hx-swap-oob="true"{{end}}><input type="hidden" name="shelf" value="{{.Ctx.Shelf}}">{{with .Ctx.Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}</span>{{end}}
+{{/* filter-ctx is the shelf, tag and series the filter box searches
+     within. */}}
+{{define "filter-ctx"}}<span id="books-filter-ctx"{{if .OOB}} hx-swap-oob="true"{{end}}><input type="hidden" name="shelf" value="{{.Ctx.Shelf}}">{{with .Ctx.Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Ctx.Series}}<input type="hidden" name="series" value="{{.}}">{{end}}</span>{{end}}
 
 {{/* ctx-fields is a listCtx as hidden fields, for POSTs. */}}
-{{define "ctx-fields"}}<input type="hidden" name="shelf" value="{{.Shelf}}">{{with .Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Q}}<input type="hidden" name="q" value="{{.}}">{{end}}{{end}}
+{{define "ctx-fields"}}<input type="hidden" name="shelf" value="{{.Shelf}}">{{with .Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Q}}<input type="hidden" name="q" value="{{.}}">{{end}}{{with .Series}}<input type="hidden" name="series" value="{{.}}">{{end}}{{end}}
 
 {{define "sidebar"}}
 <nav class="books-side" id="books-side" aria-label="Shelves"{{if .OOB}} hx-swap-oob="true"{{end}}>
@@ -87,7 +93,7 @@
 
 {{/* list takes a listView. */}}
 {{define "list"}}
-<div class="books-list" id="books-list" data-shelf="{{.Ctx.Shelf}}" data-tag="{{.Ctx.Tag}}" data-q="{{.Ctx.Q}}">
+<div class="books-list" id="books-list" data-shelf="{{.Ctx.Shelf}}" data-tag="{{.Ctx.Tag}}" data-q="{{.Ctx.Q}}" data-series="{{.Ctx.Series}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
 	<h2 class="books-list-head">{{.Heading}}</h2>
 	{{if .Rows}}
 	<ul class="books-rows">
@@ -98,7 +104,7 @@
 				<span class="books-row-text">
 					<span class="books-row-title">{{.Title}}</span>
 					{{with .Byline}}<span class="books-row-byline">{{.}}</span>{{end}}
-					<span class="books-row-note">{{.Note}}</span>
+					<span class="books-row-note">{{if .Bar}}<progress class="books-row-bar" max="100" value="{{.Percent}}" aria-hidden="true"></progress> {{end}}{{if .Stars}}<span class="books-stars" role="img" aria-label="Rated {{.Rating}} of 5">{{.Stars}}</span> {{end}}{{.Note}}</span>
 				</span>
 			</a>
 		</li>
@@ -121,15 +127,18 @@
 			<h1>{{.Title}}</h1>
 			{{with .Subtitle}}<p class="books-subtitle">{{.}}</p>{{end}}
 			{{with .Authors}}<p class="books-authors">{{.}}</p>{{end}}
-			{{with .Series}}<p class="books-series">{{.}}</p>{{end}}
+			{{with .Series}}<p class="books-series"><a href="{{$.SeriesURL}}" hx-get="{{$.SeriesURL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true">{{.}}</a></p>{{end}}
 			{{with .Facts}}<p class="books-facts">{{range $i, $f := .}}{{if $i}} · {{end}}{{$f}}{{end}}</p>{{end}}
 			<p class="books-pills"><span class="books-pill books-pill-shelf">{{.ShelfLabel}}</span>{{range .Tags}} <span class="books-pill">{{.}}</span>{{end}}</p>
 		</div>
 		{{template "book-menu" .}}
 	</header>
 	{{template "reading-box" .}}
+	{{template "rating" .}}
+	{{template "review" .}}
 	{{with .Description}}<div class="books-description">{{.}}</div>{{end}}
 	{{template "tags-form" .}}
+	{{template "history" .}}
 {{else}}
 	<p class="empty">Pick a book, or add one.</p>
 {{end}}
@@ -176,7 +185,11 @@
 {{define "reading-box"}}
 <div class="books-reading">
 	{{if .Reading}}
-	<p class="books-reading-status">Reading{{with .StartedOn}} since {{.}}{{end}}</p>
+	<div class="books-reading-head">
+		<p class="books-reading-status">Reading{{with .StartedOn}} since {{.}}{{end}}</p>
+		{{template "format-menu" .}}
+	</div>
+	{{template "progress" .}}
 	<div class="books-reading-actions">
 		{{template "close-reading" (dict "Book" . "Action" "finish" "Label" "Finish" "DayLabel" "Finished on" "Submit" "Mark as read" "Primary" true)}}
 		{{template "close-reading" (dict "Book" . "Action" "dnf" "Label" "Did not finish" "DayLabel" "Stopped on" "Submit" "Put it down" "Primary" false)}}
@@ -190,20 +203,98 @@
 </div>
 {{end}}
 
+{{/* format-menu sets the format of the reading in progress: a no-JS
+     <details> disclosure (PATTERNS.md) whose summary is the format pill.
+     Takes a bookView. */}}
+{{define "format-menu"}}
+<details class="outline-menu books-format">
+	<summary class="books-pill books-format-pill" aria-label="Format: {{.FormatLabel}}">{{.FormatLabel}}</summary>
+	<form class="outline-menu-list outline-menu-list-end" method="post" action="/books/format/{{.ID}}"
+	      hx-post="/books/format/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+		{{template "post-ctx" .}}
+		{{range .FormatChoices}}<button type="submit" name="format" value="{{.Value}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</button>{{end}}
+	</form>
+</details>
+{{end}}
+
+{{/* progress is the progress box of a reading in progress: the input
+     saves on Enter — htmx swaps this box and the list (progress-swap);
+     without JavaScript it posts and comes back. Takes a bookView. */}}
+{{define "progress"}}
+<div class="books-progress" id="books-progress">
+	<form class="books-progress-form" novalidate method="post" action="/books/progress/{{.ID}}"
+	      hx-post="/books/progress/{{.ID}}" hx-target="#books-progress" hx-swap="outerHTML">
+		{{template "post-ctx" .}}
+		<label for="books-progress-input">{{if eq .Progress.Unit "page"}}Page{{else}}Percent read{{end}}</label>
+		<div class="books-progress-row">
+			<input id="books-progress-input" name="at" type="number" inputmode="numeric" min="0" max="{{.Progress.Max}}" value="{{.Progress.Value}}" required{{if .Progress.Error}} aria-invalid="true" aria-describedby="books-progress-error"{{end}}>
+			<span class="books-progress-of">{{if eq .Progress.Unit "page"}}of {{.Progress.Max}}{{else}}%{{end}}</span>
+			<button type="submit">Save</button>
+		</div>
+		{{with .Progress.Error}}<p class="books-field-error" id="books-progress-error" role="alert">{{.}}</p>{{end}}
+	</form>
+	<progress class="books-progress-bar" max="100" value="{{.Progress.Percent}}" aria-label="Progress">{{.Progress.Percent}}%</progress>
+	<p class="books-progress-note">{{.Progress.Note}}</p>
+</div>
+{{end}}
+
 {{/* close-reading is Finish or Did not finish: a no-JS <details>
      disclosure (PATTERNS.md) holding the date — today unless changed, never
-     before the start — and the button that sends it. */}}
+     before the start — then an optional rating (Finish) or the place it
+     stopped (Did not finish), and the button that sends it. */}}
 {{define "close-reading"}}
 <details class="books-close">
 	<summary class="button{{if .Primary}} primary{{end}}">{{.Label}}</summary>
-	<form class="books-close-form" method="post" action="/books/{{.Action}}/{{.Book.ID}}"
+	<form class="books-close-form" novalidate method="post" action="/books/{{.Action}}/{{.Book.ID}}"
 	      hx-post="/books/{{.Action}}/{{.Book.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
 		{{template "post-ctx" .Book}}
 		<label for="books-{{.Action}}-day">{{.DayLabel}}</label>
 		<input id="books-{{.Action}}-day" name="day" type="date" value="{{.Book.Today}}" max="{{.Book.Today}}"{{with .Book.MinDay}} min="{{.}}"{{end}}>
+		{{if eq .Action "finish"}}
+		<label for="books-finish-rating">Rating (optional)</label>
+		<select id="books-finish-rating" name="rating">
+			<option value="">No rating</option>
+			{{range .Book.RatingChoices}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}
+		</select>
+		{{else}}
+		<label for="books-dnf-at">Stopped at {{if eq .Book.Progress.Unit "page"}}page{{else}}percent{{end}} (optional)</label>
+		<input id="books-dnf-at" name="at" type="number" inputmode="numeric" min="0" max="{{.Book.Progress.Max}}" value="{{.Book.Progress.Value}}">
+		{{end}}
 		<button type="submit"{{if .Primary}} class="primary"{{end}}>{{.Submit}}</button>
 	</form>
 </details>
+{{end}}
+
+{{/* rating is the book's stars (spec "Book pane"): five submit buttons,
+     so it works without JavaScript; the current rating's own star clears
+     it. Takes a bookView. */}}
+{{define "rating"}}
+<form class="books-rating" method="post" action="/books/rating/{{.ID}}"
+      hx-post="/books/rating/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+	{{template "post-ctx" .}}
+	<span class="books-rating-label">{{if .Rating}}Your rating{{else}}Rate it{{end}}</span>
+	{{range .Stars}}<button type="submit" class="books-star{{if .On}} is-on{{end}}" name="rating" value="{{.Value}}" aria-label="{{.Label}}" title="{{.Label}}">{{if .On}}{{ticon "star-filled"}}{{else}}{{ticon "star-outline"}}{{end}}</button>{{end}}
+</form>
+{{end}}
+
+{{/* review is the book's review, rendered, and a no-JS <details> with a
+     textarea to write or edit it (decided 2026-10-09); htmx swaps the panes
+     on save. Takes a bookView. */}}
+{{define "review"}}
+<section class="books-review" aria-label="Review">
+	{{with .ReviewHTML}}<div class="books-review-text">{{.}}</div>{{end}}
+	<details class="books-review-edit">
+		<summary class="button">{{if .Review}}Edit review{{else}}Write a review{{end}}</summary>
+		<form class="books-review-form" method="post" action="/books/review/{{.ID}}"
+		      hx-post="/books/review/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+			{{template "post-ctx" .}}
+			<label for="books-review-input">Review</label>
+			<textarea id="books-review-input" name="review" rows="8">{{.Review}}</textarea>
+			<p class="books-hint">Markdown works: **bold**, *italic*, [a link](https://…). A blank line starts a new paragraph.</p>
+			<button type="submit" class="primary">Save review</button>
+		</form>
+	</details>
+</section>
 {{end}}
 
 {{/* tags-form edits a book's tags in place. Takes a bookView. */}}
@@ -217,6 +308,51 @@
 		<button type="submit">Save tags</button>
 	</div>
 </form>
+{{end}}
+
+{{/* history is every reading of the book, newest first (spec "Book
+     pane"), each with a no-JS <details> to change its dates and format,
+     and Delete (decided 2026-10-09: a reading's status isn't editable;
+     deleting it is how a wrong one is put right). Takes a bookView. */}}
+{{define "history"}}
+{{with .History}}
+<section class="books-history" aria-labelledby="books-history-head">
+	<h2 class="books-section-head" id="books-history-head">Reading history</h2>
+	<ul class="books-history-list">
+		{{range .}}
+		<li class="books-history-item">
+			<p class="books-history-line"><span class="books-pill">{{.Status}}</span> {{.Dates}}{{with .Format}} · {{.}}{{end}}</p>
+			<div class="books-history-actions">
+				<details class="books-reading-edit">
+					<summary class="button quiet">Edit</summary>
+					<form class="books-reading-edit-form" method="post" action="/books/readings/{{$.ID}}/{{.ID}}"
+					      hx-post="/books/readings/{{$.ID}}/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+						{{template "post-ctx" $}}
+						<label for="books-r{{.ID}}-started">Started on</label>
+						<input id="books-r{{.ID}}-started" name="started_on" type="date" value="{{.StartedOn}}" max="{{$.Today}}">
+						{{if not .InProgress}}
+						<label for="books-r{{.ID}}-finished">{{.FinishLabel}}</label>
+						<input id="books-r{{.ID}}-finished" name="finished_on" type="date" value="{{.FinishedOn}}" max="{{$.Today}}">
+						{{end}}
+						<label for="books-r{{.ID}}-format">Format</label>
+						<select id="books-r{{.ID}}-format" name="format">
+							{{range .Formats}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}
+						</select>
+						<button type="submit" class="primary">Save</button>
+					</form>
+				</details>
+				<form method="post" action="/books/readings/{{$.ID}}/{{.ID}}/delete">
+					{{template "post-ctx" $}}
+					<button type="submit" class="quiet"
+					        hx-post="/books/readings/{{$.ID}}/{{.ID}}/delete" hx-target="#books-panes" hx-swap="outerHTML"
+					        hx-confirm="Delete this reading? Its progress goes with it.">Delete</button>
+				</form>
+			</div>
+		</li>
+		{{end}}
+	</ul>
+</section>
+{{end}}
 {{end}}
 
 {{/* confirm is the one dialog every hx-confirm in the panes goes through

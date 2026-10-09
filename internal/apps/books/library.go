@@ -51,7 +51,7 @@ const (
 type Reading struct {
 	ID         int64
 	Status     Status
-	Format     string // "", "paper", "ebook" or "audio" (set from B2)
+	Format     string // "", "paper", "ebook" or "audio"
 	StartedOn  string
 	FinishedOn string
 }
@@ -60,12 +60,14 @@ type Reading struct {
 type Book struct {
 	ID int64
 	BookInput
-	Rating             int    // 1–5, 0 for none (set from B2)
-	Review             string // Markdown (set from B2)
+	Rating             int    // 1–5, 0 for none
+	Review             string // Markdown, "" for none
 	Tags               []string
 	Shelf              Shelf
-	Latest             Reading // zero ID before the first reading
-	CoverVersion       string  // "" when the book has no cover
+	Latest             Reading  // zero ID before the first reading
+	Progress           Progress // the latest reading's latest progress
+	CoverVersion       string   // "" when the book has no cover
+	SeriesBooks        int      // how many of the user's books are in its series (0: none)
 	AddedAt, UpdatedAt time.Time
 }
 
@@ -193,19 +195,24 @@ func (st *Store) Create(ctx context.Context, userID int64, nb NewBook) (int64, e
 // Get returns one of userID's books with its tags and latest reading.
 func (st *Store) Get(ctx context.Context, userID, id int64) (Book, error) {
 	var b Book
-	var year, pages, rating, rid sql.NullInt64
-	var isbn, status, format, started, finished, cover sql.NullString
+	var year, pages, rating, rid, atPage, atPercent sql.NullInt64
+	var isbn, status, format, started, finished, cover, recorded sql.NullString
 	var added, updated, shelf string
 	err := st.db.QueryRowContext(ctx, `
 		SELECT b.id, b.title, b.subtitle, b.authors, b.year, b.pages, b.isbn13, b.series_name,
 		       b.series_number, b.description, b.rating, b.review, b.added_at, b.updated_at,
-		       r.id, r.status, r.format, r.started_on, r.finished_on, `+shelfExpr+`, c.fetched_at
+		       r.id, r.status, r.format, r.started_on, r.finished_on, `+shelfExpr+`, c.fetched_at,
+		       p.page, p.percent, p.recorded_at,
+		       (SELECT count(*) FROM books_books s WHERE s.user_id = b.user_id AND b.series_name <> ''
+		           AND s.series_name = b.series_name COLLATE NOCASE)
 		  FROM books_books b `+latestJoin+`
+		  `+progressJoin+`
 		  LEFT JOIN books_covers c ON c.book_id = b.id
 		 WHERE b.id = ? AND b.user_id = ?`, id, userID).Scan(
 		&b.ID, &b.Title, &b.Subtitle, &b.Authors, &year, &pages, &isbn, &b.SeriesName,
 		&b.SeriesNumber, &b.Description, &rating, &b.Review, &added, &updated,
-		&rid, &status, &format, &started, &finished, &shelf, &cover)
+		&rid, &status, &format, &started, &finished, &shelf, &cover,
+		&atPage, &atPercent, &recorded, &b.SeriesBooks)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Book{}, ErrNotFound
 	}
@@ -218,6 +225,9 @@ func (st *Store) Get(ctx context.Context, userID, id int64) (Book, error) {
 		StartedOn: started.String, FinishedOn: finished.String}
 	b.Shelf = Shelf(shelf)
 	b.CoverVersion = coverVersion(cover.String)
+	if b.Progress, err = scanProgress(atPage, atPercent, recorded); err != nil {
+		return Book{}, err
+	}
 	if b.AddedAt, err = parseTime(added); err != nil {
 		return Book{}, fmt.Errorf("books: added_at: %w", err)
 	}
@@ -277,28 +287,39 @@ func (st *Store) Delete(ctx context.Context, userID, id int64) error {
 type ListItem struct {
 	ID                                       int64
 	Title, Authors, SeriesName, SeriesNumber string
+	Pages, Rating                            int
 	Shelf                                    Shelf
-	StartedOn, FinishedOn                    string // the latest reading's
+	StartedOn, FinishedOn, Format            string   // the latest reading's
+	Progress                                 Progress // the latest reading's latest progress
 	AddedAt                                  time.Time
 	CoverVersion                             string // "" when the book has no cover
 }
 
 // ListQuery picks the books a list shows. Shelf "" or ShelfAll is every
 // shelf; Tag is one tag name; Q matches title, subtitle, authors or series
-// name (SQLite LIKE: case-insensitive for ASCII).
+// name (SQLite LIKE: case-insensitive for ASCII); Series is one series'
+// name, matched whole and ignoring case.
 type ListQuery struct {
-	Shelf Shelf
-	Tag   string
-	Q     string
+	Shelf  Shelf
+	Tag    string
+	Q      string
+	Series string
 }
 
-// listOrder is each shelf's sort (spec "Layout"): Reading by start (B2
-// switches it to latest progress), Read by finish, Want to read by date
-// added, DNF and All by the latest change. NULL dates sort last.
-func listOrder(s Shelf) string {
-	switch s {
+// listOrder is each list's sort (spec "Layout"): a series in reading order
+// (by number, as a number where it is one: "2.5" sits between 2 and 3);
+// otherwise by shelf — Reading by the latest progress (a reading with none
+// yet by when it started), Read by finish, Want to read by date added, DNF
+// and All by the latest change. NULL dates sort last.
+func listOrder(q ListQuery) string {
+	if q.Series != "" {
+		// Unnumbered books sort after numbered ones; a non-numeric number
+		// casts to 0 and so sorts first among the numbered.
+		return `b.series_number = '', CAST(b.series_number AS REAL), b.series_number, b.title, b.id`
+	}
+	switch q.Shelf {
 	case ShelfReading:
-		return `r.started_on DESC, r.id DESC`
+		return `COALESCE(p.recorded_at, r.created_at) DESC, r.id DESC`
 	case ShelfRead:
 		return `r.finished_on DESC, r.id DESC`
 	case ShelfWant:
@@ -326,6 +347,10 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 			WHERE x.book_id = b.id AND t.name = ?)`)
 		args = append(args, tag)
 	}
+	if series := strings.TrimSpace(q.Series); series != "" {
+		where = append(where, `b.series_name = ? COLLATE NOCASE`)
+		args = append(args, series)
+	}
 	if text := strings.TrimSpace(q.Q); text != "" {
 		pat := "%" + likeEscape(text) + "%"
 		where = append(where, `(b.title LIKE ? ESCAPE '\' OR b.subtitle LIKE ? ESCAPE '\'
@@ -333,12 +358,14 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 		args = append(args, pat, pat, pat, pat)
 	}
 	rows, err := st.db.QueryContext(ctx, `
-		SELECT b.id, b.title, b.authors, b.series_name, b.series_number, b.added_at,
-		       r.started_on, r.finished_on, `+shelfExpr+`, c.fetched_at
+		SELECT b.id, b.title, b.authors, b.series_name, b.series_number, b.pages, b.rating, b.added_at,
+		       r.started_on, r.finished_on, r.format, `+shelfExpr+`, c.fetched_at,
+		       p.page, p.percent, p.recorded_at
 		  FROM books_books b `+latestJoin+`
+		  `+progressJoin+`
 		  LEFT JOIN books_covers c ON c.book_id = b.id
 		 WHERE `+strings.Join(where, " AND ")+`
-		 ORDER BY `+listOrder(q.Shelf), args...)
+		 ORDER BY `+listOrder(q), args...)
 	if err != nil {
 		return nil, fmt.Errorf("books: list: %w", err)
 	}
@@ -347,15 +374,20 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 	for rows.Next() {
 		var it ListItem
 		var added, shelf string
-		var started, finished, cover sql.NullString
-		if err := rows.Scan(&it.ID, &it.Title, &it.Authors, &it.SeriesName, &it.SeriesNumber, &added,
-			&started, &finished, &shelf, &cover); err != nil {
+		var pages, rating, atPage, atPercent sql.NullInt64
+		var started, finished, format, cover, recorded sql.NullString
+		if err := rows.Scan(&it.ID, &it.Title, &it.Authors, &it.SeriesName, &it.SeriesNumber, &pages, &rating, &added,
+			&started, &finished, &format, &shelf, &cover, &atPage, &atPercent, &recorded); err != nil {
 			return nil, fmt.Errorf("books: scan list: %w", err)
 		}
 		if it.AddedAt, err = parseTime(added); err != nil {
 			return nil, fmt.Errorf("books: added_at: %w", err)
 		}
-		it.StartedOn, it.FinishedOn, it.Shelf = started.String, finished.String, Shelf(shelf)
+		if it.Progress, err = scanProgress(atPage, atPercent, recorded); err != nil {
+			return nil, err
+		}
+		it.Pages, it.Rating = int(pages.Int64), int(rating.Int64)
+		it.StartedOn, it.FinishedOn, it.Format, it.Shelf = started.String, finished.String, format.String, Shelf(shelf)
 		it.CoverVersion = coverVersion(cover.String)
 		out = append(out, it)
 	}

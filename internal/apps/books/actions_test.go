@@ -191,3 +191,33 @@ func TestActionOverHTMXKeepsTheAddressOnTheBook(t *testing.T) {
 		t.Errorf("HX-Replace-Url = %q, want %q", got, want)
 	}
 }
+
+func TestFinishWithARatingAndDNFWithAPage(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	nb := titled("Dune", "", books.ShelfReading)
+	nb.Pages = 600
+	dune := add(t, s, uid, nb)
+	nb.Title = "Infinite Jest"
+	jest := add(t, s, uid, nb)
+	s.Submit(t, s.Alice, fmt.Sprintf("/books/finish/%d", dune), url.Values{"shelf": {"reading"}, "rating": {"4"}},
+		fmt.Sprintf("/books/b/%d?shelf=reading", dune))
+	s.Submit(t, s.Alice, fmt.Sprintf("/books/dnf/%d", jest), url.Values{"shelf": {"reading"}, "at": {"120"}},
+		fmt.Sprintf("/books/b/%d?shelf=reading", jest))
+	ctx := context.Background()
+	if b, _ := s.Store.Get(ctx, uid, dune); b.Rating != 4 || b.Shelf != books.ShelfRead {
+		t.Errorf("Dune: rating %d, shelf %q; want 4, read", b.Rating, b.Shelf)
+	}
+	if b, _ := s.Store.Get(ctx, uid, jest); b.Progress.Value != 120 || b.Shelf != books.ShelfDNF {
+		t.Errorf("Infinite Jest: progress %+v, shelf %q; want page 120, dnf", b.Progress, b.Shelf)
+	}
+}
+
+func TestFinishWithATamperedRatingIsABadRequest(t *testing.T) {
+	s := newServer(t)
+	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfReading))
+	rec := s.Post(t, s.Alice, fmt.Sprintf("/books/finish/%d", id), url.Values{"shelf": {"reading"}, "rating": {"ten"}})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("finish with rating=ten = %d, want 400", rec.Code)
+	}
+}

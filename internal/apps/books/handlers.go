@@ -48,7 +48,7 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.renderPanes(w, r, uid, ctxFrom(r.FormValue), 0, "")
+	a.renderPanes(w, r, uid, ctxFrom(r.FormValue), paneOpts{})
 }
 
 // book is a list with one book open.
@@ -61,18 +61,29 @@ func (a *App) book(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.renderPanes(w, r, uid, ctxFrom(r.FormValue), id, "")
+	a.renderPanes(w, r, uid, ctxFrom(r.FormValue), paneOpts{BookID: id})
 }
 
-// renderPanes draws the panes for list c with book bookID (0: none) open
-// and errMsg (if any) in the banner. A normal request gets the whole page —
-// 422 when there is an error, so a refused form post without JavaScript
-// isn't a 200. An htmx request gets the block for what it targeted, as
-// Reader's renderPanes does (#453): #books-list → list-swap (the list and
-// its out-of-band companions, the book pane untouched), #books-book →
-// book-swap, anything else (#books-panes) → the whole panes. Fragments are
-// always 200: htmx's default responseHandling only swaps 2xx/3xx.
-func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, c listCtx, bookID int64, errMsg string) {
+// paneOpts is what a render shows besides list c: the open book (0: none)
+// and a refusal — in the banner, or for a progress update inside the
+// progress box, with what was typed (spec "Errors": an inline message).
+type paneOpts struct {
+	BookID        int64
+	Banner        string
+	ProgressError string
+	ProgressInput string
+}
+
+// renderPanes draws the panes for list c as opts says. A normal request
+// gets the whole page — 422 when there is a refusal, so a refused form post
+// without JavaScript isn't a 200. An htmx request gets the block for what
+// it targeted, as Reader's renderPanes does (#453): #books-list → list-swap
+// (the list and its out-of-band companions, the book pane untouched),
+// #books-book → book-swap, #books-progress → progress-swap (the box, and
+// the list out of band), anything else (#books-panes) → the whole panes.
+// Fragments are always 200: htmx's default responseHandling only swaps
+// 2xx/3xx.
+func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, c listCtx, opts paneOpts) {
 	ctx := r.Context()
 	counts, err := a.store.ShelfCounts(ctx, userID)
 	if err != nil {
@@ -91,19 +102,28 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	}
 	title := listHeading(c)
 	var bv bookView
-	if bookID != 0 {
-		b, err := a.store.Get(ctx, userID, bookID)
+	if opts.BookID != 0 {
+		b, err := a.store.Get(ctx, userID, opts.BookID)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		rs, err := a.store.Readings(ctx, userID, opts.BookID)
 		if err != nil {
 			a.fail(w, r, err)
 			return
 		}
 		bv = viewBook(b, c, a.store.Today())
+		bv.History = viewHistory(rs)
 		title = b.Title
+		if opts.ProgressError != "" {
+			bv.Progress.Error, bv.Progress.Value = opts.ProgressError, opts.ProgressInput
+		}
 	}
 	page := a.deps.Page(r, title)
 	bv.Shell = page.Shell
-	v := panesView{Title: page.Title, Shell: page.Shell, Ctx: c, Error: errMsg,
-		Sidebar: viewSidebar(c, counts, tags), List: viewList(items, c, bookID), Book: bv}
+	v := panesView{Title: page.Title, Shell: page.Shell, Ctx: c, Error: opts.Banner,
+		Sidebar: viewSidebar(c, counts, tags), List: viewList(items, c, opts.BookID), Book: bv}
 
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
 		block := "panes-oob"
@@ -112,6 +132,9 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 			block = "list-swap"
 		case "books-book":
 			block = "book-swap"
+		case "books-progress":
+			block = "progress-swap"
+			v.List.OOB = true
 		}
 		if err := a.deps.Render.Fragment(w, http.StatusOK, "books/index", block, v); err != nil {
 			a.deps.Errors.Internal(w, r, err)
@@ -119,7 +142,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		return
 	}
 	status := http.StatusOK
-	if errMsg != "" {
+	if opts.Banner != "" || opts.ProgressError != "" {
 		status = http.StatusUnprocessableEntity
 	}
 	page.Data = v

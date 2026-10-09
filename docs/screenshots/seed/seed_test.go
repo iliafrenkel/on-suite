@@ -174,6 +174,25 @@ func TestSeedFillsEveryApp(t *testing.T) {
 		shelves[books.ShelfRead] < 2 || shelves[books.ShelfDNF] < 1 {
 		t.Errorf("books shelves = %v, %v; want reading/want/read >= 2 and dnf >= 1", shelves, err)
 	}
+	// ... with progress on every book being read and stars on the read ones.
+	onTheGo, err := bst.List(ctx, demo.ID, books.ListQuery{Shelf: books.ShelfReading})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range onTheGo {
+		if !it.Progress.Set() {
+			t.Errorf("reading %q has no progress", it.Title)
+		}
+	}
+	read, err := bst.List(ctx, demo.ID, books.ListQuery{Shelf: books.ShelfRead})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range read {
+		if it.Rating == 0 {
+			t.Errorf("read %q has no rating", it.Title)
+		}
+	}
 
 	// Flash: decks with cards, a review history and a streak.
 	fs := flash.NewStore(handle)
