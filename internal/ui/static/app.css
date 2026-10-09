@@ -4197,9 +4197,9 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-pills { display: flex; flex-wrap: wrap; gap: var(--s-1); margin: var(--s-2) 0 0; }
 .books-pill { padding: 0 var(--s-2); border-radius: 999px; background: var(--c-bg-subtle); color: var(--c-text-dim); font-size: var(--fs-xs); }
 .books-pill-shelf { background: var(--c-accent-bg); color: var(--c-accent); }
-.books-description { max-width: 38rem; margin-bottom: var(--s-4); color: var(--c-text-dim); white-space: pre-line; }
+.books-description { max-width: 38rem; margin-bottom: var(--s-4); color: var(--c-text-dim); }
 /* A long description is held to four lines until More is ticked (#566). */
-.books-description-text { margin: 0; }
+.books-description-text { margin: 0; white-space: pre-line; }
 .books-description-text.is-clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
 .books-description-toggle:checked ~ .books-description-text { display: block; -webkit-line-clamp: none; overflow: visible; }
 .books-description-more { display: inline-block; margin: var(--s-1) 0 0; color: var(--c-accent); font-size: var(--fs-sm); cursor: pointer; }
