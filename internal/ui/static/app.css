@@ -4420,3 +4420,17 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-goal-card-head { color: var(--c-text-dim); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; flex-basis: 100%; }
 .books-goal-card-text { font-weight: 600; }
 .books-goal-card .books-row-bar { flex: 1 1 100%; width: auto; }
+
+/* Import (B5): a page of its own, as Stats is, linked under Stats in the
+ * sidebar. */
+.books-side-link { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-1) var(--s-2); border-radius: var(--radius); color: var(--c-text); text-decoration: none; }
+.books-side-link:hover { background: var(--c-bg-subtle); }
+.books-import { max-width: var(--measure); }
+.books-import-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
+.books-import-head h1 { margin: 0; }
+.books-import-result { padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); }
+.books-import-result p { margin: 0 0 var(--s-2); }
+.books-import-result p:last-child { margin-bottom: 0; }
+.books-import-count { font-weight: 600; }
+.books-import-skipped { margin: 0 0 var(--s-2); padding-left: var(--s-4); overflow-wrap: anywhere; }
+.books-import-form input[type="file"] { max-width: 100%; }

@@ -1,0 +1,28 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="books-import stack">
+	<div class="books-import-head">
+		<h1>Import from Goodreads</h1>
+		<a class="button" href="/books/">← Books</a>
+	</div>
+	{{if $d.Done}}
+	<section class="books-import-result" role="status" aria-label="Import summary">
+		<p class="books-import-count">{{$d.Imported}}</p>
+		{{with $d.Skipped}}<p>{{.}}</p>{{end}}
+		{{with $d.Titles}}<ul class="books-import-skipped">{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}
+		<p><a href="/books/?shelf=all">See all your books</a></p>
+	</section>
+	{{end}}
+	<p>In Goodreads, open <strong>My Books</strong>, choose <strong>Import and export</strong> under Tools, and click <strong>Export Library</strong>. Download the file when it's ready and choose it here.</p>
+	<p>Each book comes with its shelf, your rating and review, the day you added it and the day you read it, and its other shelves as tags. A book already in your library — the same ISBN, or the same title and author — is skipped, so importing a file twice adds nothing new. Covers follow over the next few hours.</p>
+	<form class="books-import-form stack" method="post" action="/books/import" enctype="multipart/form-data">
+		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+		<div class="field">
+			<label for="books-import-file">Goodreads export (a .csv file, up to {{$d.MaxMB}} MB)</label>
+			<input id="books-import-file" name="file" type="file" accept=".csv,text/csv"{{if $d.Error}} aria-invalid="true" aria-describedby="books-import-error"{{end}}>
+			{{with $d.Error}}<p class="books-field-error" id="books-import-error" role="alert">{{.}}</p>{{end}}
+		</div>
+		<div><button class="primary" type="submit">Import</button></div>
+	</form>
+</div>
+{{end}}
