@@ -17,14 +17,15 @@ Decisions Ilia made on 2026-10-09 (binding; recorded in the spec's "Stats (B4)" 
 - **One B4 PR.** The tasks below are separate commits on branch `feat/books-b4-goals-stats` in the worktree `../on-suite-books-b4`. Eight code-and-docs tasks, smaller than B2's twelve.
 - **Stats is a separate page**, `/books/stats`, as `/reader/stats` is: a link back to the books, and a **Stats** link at the bottom of the Books sidebar. It must work at phone width.
 - **The goal card on the Reading shelf is read-only** — "12 of 30 · 2 ahead" — and links to Stats. It shows only when the current year has a goal. The goal is set, changed and removed only on the Stats page, and that works without JavaScript.
-- **#576 is out of scope.** Pages read are the spec's sum of positive deltas, so a repeated progress row adds 0; `TestPagesRead` pins that ("a repeated value adds nothing (#576)"). `closeReading` is not changed.
+- **#576 is out of scope.** A repeated progress row adds 0 pages; `TestPagesRead` pins that ("a repeated value adds nothing (#576)"). `closeReading` is not changed.
+- **Pages read by high-water mark** (decided after the first draft of this plan's PR, so a corrected typo isn't counted twice): within a reading, a progress row counts `max(0, page − highWater)` and the mark then rises to it, starting at 0. Going backwards counts nothing, and climbing back up to the old mark counts nothing either; finishing adds the pages from the mark to the page count on the finish date. 100 → 250 (a typo) → 150 → 180 counts 250, not 280. Each re-read has its own mark from 0.
 
-Defaults chosen while planning — **ask Ilia to confirm** (each is a small change if he wants another):
+Defaults chosen while planning — **confirmed by Ilia on 2026-10-09**:
 
 - **Goal range:** a whole number from 1 to `MaxGoal = 1000` books. Anything else — 0, 1001, "abc", empty — is refused inline: "Enter a goal from 1 to 1000 books." (422 without JavaScript, the box keeps what was typed).
 - **Year picker:** a row of year links (no `<select>`, so no JavaScript and one click), from the earliest year with a dated finish or a progress update — this year when there is none — to **next year**, so next year's goal can be set in December. `?year=` accepts `MinYear = 1900` to next year (a year before the first one still shows, and the picker reaches back to it); anything else is a 404. A goal form posting a year outside that range is a 400.
 - **Pace wording** (lowercase, after a "·"): this year — "2 ahead", "1 behind", "on track" against `Expected` (target × day-of-year ÷ days-in-year, rounded down, day-of-year counted from 1 on 1 January, so 31 December expects the whole target); any year once the target is met — "goal reached"; a past year short of it — "4 short"; a future year — nothing ("0 of 10").
-- **Pages-read reading of the spec:** a reading's first progress row counts from page 0 (logging page 50 on a new reading is 50 pages), and deltas are between *consecutive* rows, as the spec says — not above a high-water mark — so after going back from 200 to 150, reading on to 180 counts 30. A DNF reading's pages count; only a finish adds the remainder.
+- **Pages read, details:** a reading's mark starts at page 0 (logging page 50 on a new reading is 50 pages). A DNF reading's pages count; only a finish adds the rest of the book.
 - **All-time row:** books finished counts every finished reading, **including undated** (imported) ones, which count toward no year; pages read and average rating (over every rated book ever finished). Format split and longest/shortest are per year only.
 - **Average rating:** the book's own rating (ratings are per book), averaged over the *distinct* rated books finished in the year — a book read twice counts once — shown to one decimal place with a star ("4.3 ★"), "—" when none is rated.
 - **Format split:** finished readings that year by format, in the order Paper, Ebook, Audiobook, Not set; formats with none are left out; nothing at all is shown with no finishes.
@@ -37,7 +38,7 @@ From the spec:
 
 - `books_goals` — `user_id`, `year`, `target`; PK `(user_id, year)`. Per user, as every table.
 - **Books finished in a year** — readings with status `finished` and `finished_on` in that year. A re-read counts again; DNF never counts; undated readings don't count toward any year.
-- **Pages read** — the sum of positive deltas between consecutive progress rows of a reading, dated by `recorded_at` in the user's local day; finishing a reading with a page count adds the remainder on the finish date; going backwards counts nothing; percent converts through the page count, and counts nothing without one. Re-reads are separate readings and count again.
+- **Pages read** — each progress row of a reading counts only the pages above the highest page that reading had reached so far (its high-water mark, from 0), dated by `recorded_at` in the user's local day; going backwards, and climbing back up to the mark, count nothing; finishing a reading with a page count adds the pages from the mark to the end on the finish date; percent converts through the page count, and counts nothing without one. Re-reads are separate readings, each with its own mark, and count again.
 - Expected = target × day-of-year ÷ days-in-year, rounded down.
 - Charts are server-rendered SVG as in ON Focus (`internal/apps/focus/handlers_history.go`'s `buildChart`); `chartBar`/`buildChart` here say they mirror it. Apps never import each other (`internal/arch` enforces it).
 - Calendar days are local (server TZ, `time.Local`), suite-wide. Code reads time only through the store's `now()`.
@@ -55,7 +56,7 @@ From the spec:
 
 ## Open issues in the ON Books milestone that touch B4
 
-- **#576** (Did not finish with the prefilled page adds a duplicate progress row). Out of scope by Ilia's decision: the pages-read maths already ignores it (a repeated value adds 0), and `TestPagesRead` says so. Leave #576 open for the "days read" kind of figure it warns about; B4 has none.
+- **#576** (Did not finish with the prefilled page adds a duplicate progress row). Out of scope by Ilia's decision: the pages-read maths already ignores it (a repeated value is never above the high-water mark, so it adds 0), and `TestPagesRead` says so. Leave #576 open for the "days read" kind of figure it warns about; B4 has none.
 - **#578** (saving in the book pane scrolls it to the top) — untouched: B4 adds no book-pane controls.
 
 ## Lessons from earlier plans (read before starting)
@@ -507,9 +508,18 @@ func TestPagesRead(t *testing.T) {
 		{"deltas from page 0, by day",
 			books.ReadingLog{Pages: 300, Status: books.StatusReading, Steps: []books.Step{page(d1, 40), page(d1, 70), page(d2, 120)}},
 			map[string]int{d1: 70, d2: 50}},
-		{"going backwards counts nothing; reading on from there counts",
+		{"going backwards counts nothing; climbing back up to the old mark counts nothing either",
 			books.ReadingLog{Pages: 300, Status: books.StatusReading, Steps: []books.Step{page(d1, 100), page(d2, 60), page(d3, 90)}},
+			map[string]int{d1: 100}},
+		{"a corrected typo counts once: 100, 250, 150, 180 is 250 pages, not 280",
+			books.ReadingLog{Pages: 600, Status: books.StatusReading, Steps: []books.Step{page(d1, 100), page(d1, 250), page(d2, 150), page(d3, 180)}},
+			map[string]int{d1: 250}},
+		{"back, then up past the old mark: only the pages above it count",
+			books.ReadingLog{Pages: 300, Status: books.StatusReading, Steps: []books.Step{page(d1, 100), page(d2, 60), page(d3, 130)}},
 			map[string]int{d1: 100, d3: 30}},
+		{"finishing after going back adds the pages from the mark, not from the last row",
+			books.ReadingLog{Pages: 300, Status: books.StatusFinished, FinishedOn: d3, Steps: []books.Step{page(d1, 280), page(d2, 200)}},
+			map[string]int{d1: 280, d3: 20}},
 		{"a repeated value adds nothing (#576)",
 			books.ReadingLog{Pages: 300, Status: books.StatusReading, Steps: []books.Step{page(d1, 100), page(d2, 100)}},
 			map[string]int{d1: 100}},
@@ -596,26 +606,28 @@ type ReadingLog struct {
 }
 
 // PagesRead is how many pages one reading covered on each local day (spec
-// "Derived values"): the positive deltas between consecutive progress rows,
-// starting from page 0, each dated by the day of the later row. Finishing
-// with a page count adds the remainder — the last page minus the last
-// recorded page — on the finish date. Going backwards counts nothing, and
-// neither does a repeated value. A percentage converts through the page
-// count, and counts no pages without one. Days with nothing are absent.
+// "Derived values"). Each progress row counts only the pages above the
+// highest page the reading had reached so far (its high-water mark,
+// starting at 0), dated by the day the row was recorded; the mark then
+// rises to it. Going backwards counts nothing, and neither does climbing
+// back up to the old mark, so a corrected typo — 100, 250, 150, 180 —
+// counts once: 250 pages, not 280 (decided 2026-10-09 while planning B4).
+// A repeated value counts nothing either. Finishing with a page count adds
+// the pages from the mark to the end on the finish date. A percentage
+// converts through the page count, and counts no pages without one. Days
+// with nothing are absent.
 func PagesRead(r ReadingLog) map[string]int {
 	out := map[string]int{}
-	last := 0
+	high := 0
 	for _, s := range r.Steps {
 		page := Progress{Unit: s.Unit, Value: s.Value}.In(UnitPage, r.Pages)
-		if d := page - last; d > 0 {
-			out[s.Day] += d
+		if page > high {
+			out[s.Day] += page - high
+			high = page
 		}
-		last = page
 	}
-	if r.Status == StatusFinished && r.FinishedOn != "" && r.Pages > 0 {
-		if d := r.Pages - last; d > 0 {
-			out[r.FinishedOn] += d
-		}
+	if r.Status == StatusFinished && r.FinishedOn != "" && r.Pages > high {
+		out[r.FinishedOn] += r.Pages - high
 	}
 	return out
 }
@@ -2504,10 +2516,14 @@ For the year you get:
 - **Books finished** — every time you finished a book that year. A book you
   read twice counts twice; books you didn't finish don't count.
 - **Pages read** — worked out from your progress updates, on the days you
-  made them. Going from page 120 to page 180 is 60 pages; going back
-  counts nothing. When you finish a book, the pages after your last update
-  count on the day you finished, so a book you finished without ever
-  updating its progress counts in full. Progress kept in percent — an
+  made them. Going from page 120 to page 180 is 60 pages. Only pages past
+  the furthest point you've reached in this reading count, so fixing a
+  mistake doesn't count anything twice: if you typed 250 instead of 150,
+  then put it right and went on to 180, the stats count 250 pages, not
+  280, and nothing more until you pass page 250. When you finish
+  a book, the rest of it, from the furthest point you reached, counts on
+  the day you finished, so a book you finished without ever updating its
+  progress counts in full. Reading a book again starts from page 1. Progress kept in percent — an
   audiobook's, say — turns into pages through the book's page count; a
   book with no page count adds no pages.
 - **Average rating** of the books you finished that year.
@@ -2594,7 +2610,7 @@ git push -u origin feat/books-b4-goals-stats
 env -u GH_TOKEN gh pr create --title "feat(books): ON Books B4 — goals and stats (#490)" --body "$(cat <<'EOF'
 B4 of ON Books. A yearly reading goal (`books_goals`, migration 0006), set, changed and removed on a new Stats page (`/books/stats`), with plain forms that work without JavaScript. The page shows a year — books finished, pages read, average rating, format split, longest and shortest book, books by month — and an all-time row with books per year, as server-rendered SVG with a figures table under each chart. The Reading shelf shows this year's goal as a read-only card ("12 of 30 · 2 ahead") linking to Stats. The sidebar has a Stats link.
 
-Pages read follow the spec's "Derived values" (positive deltas between progress rows by local day, the remainder on the finish date); a repeated progress value adds nothing, so #576 doesn't affect them (it stays open).
+Pages read follow the spec's "Derived values": each progress update counts only the pages past the furthest point that reading had reached (a high-water mark), by local day, and finishing adds the rest of the book on the finish date. So a corrected typo isn't counted twice, and a repeated progress value adds nothing — #576 doesn't affect them (it stays open).
 
 Spec: docs/superpowers/specs/2026-10-09-on-books-design.md
 Plan: docs/superpowers/plans/2026-10-09-on-books-b4-goals-stats.md
@@ -2608,7 +2624,7 @@ Never merge it.
 
 ## Self-review
 
-- **Spec coverage.** `books_goals` → Task 1. Year picker, default current year → Task 4 (`parseYear`, `.books-years`). Goal card "N of T" with ahead/behind, expected rounded down → Task 1 (`Expected`, `Pace`, table-tested), Task 5 (Stats page), Task 6 (Reading shelf). Goal set and edited inline → Task 5. Books finished, pages read, average rating, format split, longest and shortest → Task 3 (store), Task 4 (page). All-time row → Tasks 3–4. Charts: books by month, books per year → Task 4. Pages read per "Derived values" (deltas, local day, finish remainder, backwards, percent with and without a page count, re-reads) → Task 2's table, Task 3's store tests. Books finished (re-reads again, DNF never, undated never) → Task 1's `TestGoalCountsTheYearsFinishedReadings`, Task 3. Store tests on real SQLite, handler tests with `apptest.Clock`, local-noon days → every task. User guide → Task 8.
+- **Spec coverage.** `books_goals` → Task 1. Year picker, default current year → Task 4 (`parseYear`, `.books-years`). Goal card "N of T" with ahead/behind, expected rounded down → Task 1 (`Expected`, `Pace`, table-tested), Task 5 (Stats page), Task 6 (Reading shelf). Goal set and edited inline → Task 5. Books finished, pages read, average rating, format split, longest and shortest → Task 3 (store), Task 4 (page). All-time row → Tasks 3–4. Charts: books by month, books per year → Task 4. Pages read per "Derived values" (high-water mark, a corrected typo, back then up, local day, finish from the mark, percent with and without a page count, re-reads) → Task 2's table, Task 3's store tests. Books finished (re-reads again, DNF never, undated never) → Task 1's `TestGoalCountsTheYearsFinishedReadings`, Task 3. Store tests on real SQLite, handler tests with `apptest.Clock`, local-noon days → every task. User guide → Task 8.
 - **Placeholders.** None: every code step has the code; every run step its command and expected result.
 - **Types.** `Goal{Year, Target, Done}`, `goalView`/`viewGoal`, `statsView.Goal`, `listView.Goal *goalView`, `renderStats(w, r, userID, year, status, goalDraft)` from Task 5 on, `Stats{Year YearStats; All AllTime}`, `chartView.Ticks`/`Points` are used with the same names and types wherever they appear.
 
