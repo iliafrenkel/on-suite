@@ -178,7 +178,10 @@ For the year you get:
   you finished, so a book you finished without ever updating its progress
   counts in full. Reading a book again starts from page 1. Progress kept
   in percent — an audiobook's, say — turns into pages through the book's
-  page count; a book with no page count adds no pages.
+  page count, so percent progress on a book with no page count adds no
+  pages. Page numbers still count, but finishing a book with no page count
+  adds nothing. A book you added as read without a date adds no pages
+  either, even to All time.
 - **Average rating** of the books you finished that year.
 - How many you read on paper, as ebooks and as audiobooks, and the
   longest and shortest book you finished.
