@@ -118,6 +118,7 @@ type rowView struct {
 	Note    string // what the book's shelf says about it: "Started 3 Oct 2026"
 	Spine   string // swatch colour name
 	Initial string
+	Cover   string // the stored cover; "" draws the mini spine
 	Active  bool
 }
 
@@ -140,7 +141,7 @@ func viewList(items []ListItem, c listCtx, openID int64) listView {
 	for _, it := range items {
 		v.Rows = append(v.Rows, rowView{ID: it.ID, URL: c.BookURL(it.ID), Title: it.Title,
 			Byline: byline(it.Authors, seriesText(it.SeriesName, it.SeriesNumber)), Note: rowNote(it),
-			Spine: SpineColor(it.Title), Initial: initial(it.Title), Active: it.ID == openID})
+			Spine: SpineColor(it.Title), Initial: initial(it.Title), Cover: coverURL(it.ID, it.CoverVersion), Active: it.ID == openID})
 	}
 	if len(v.Rows) == 0 {
 		v.Empty = emptyText(c)
@@ -166,6 +167,15 @@ func seriesText(name, number string) string {
 		return name
 	}
 	return name + " #" + number
+}
+
+// coverURL is a book's stored cover; the version makes a new cover a new
+// URL, so the old one can be cached for a year. "" draws the spine.
+func coverURL(id int64, version string) string {
+	if version == "" {
+		return ""
+	}
+	return "/books/cover/" + strconv.FormatInt(id, 10) + "?v=" + version
 }
 
 // rowNote is the right-hand side of a row. B2 replaces the Reading and
@@ -226,6 +236,7 @@ type bookView struct {
 	Facts                            []string // "2011", "592 pages", "ISBN 978…"
 	Description                      string
 	Spine                            string
+	Cover                            string // the stored cover; "" draws the spine
 	ShelfLabel                       string
 	Tags                             []string
 	TagsValue                        string // the tags box: "classics, sf"
@@ -243,7 +254,7 @@ type bookView struct {
 func viewBook(b Book, c listCtx, today string) bookView {
 	v := bookView{Selected: true, ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
 		Series: seriesText(b.SeriesName, b.SeriesNumber), Description: b.Description,
-		Spine: SpineColor(b.Title), ShelfLabel: b.Shelf.Label(),
+		Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion), ShelfLabel: b.Shelf.Label(),
 		Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Ctx: c}
 	if b.Year > 0 {
 		v.Facts = append(v.Facts, strconv.Itoa(b.Year))

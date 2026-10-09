@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/books"
 	"github.com/iliafrenkel/on-suite/internal/apptest"
+	"github.com/iliafrenkel/on-suite/internal/htmlassert"
 )
 
 // newServerWithOL is newServer with the app's Open Library client pointed
@@ -102,4 +104,40 @@ func TestThumbnailsAreProxied(t *testing.T) {
 	if rec := s.Do(t, nil, httptest.NewRequest("GET", "/books/olcover/10226290", nil)); rec.Code != http.StatusSeeOther {
 		t.Errorf("anonymous thumbnail = %d, want the sign-in redirect", rec.Code)
 	}
+}
+
+func TestCoversShowInTheListAndTheBookPane(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	with := add(t, s, uid, titled("Piranesi", "", books.ShelfWant))
+	without := add(t, s, uid, titled("Emma", "", books.ShelfWant))
+	if err := s.Store.SetCover(context.Background(), uid, with, "image/png", onePNG, books.CoverUpload); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := s.Store.Cover(context.Background(), uid, with)
+	want := fmt.Sprintf("/books/cover/%d?v=%s", with, c.Version)
+
+	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d?shelf=want", with))
+	minis := doc.QueryAll("img.books-mini-cover")
+	if len(minis) != 1 {
+		t.Fatalf("%d mini covers, want 1 (Emma has none)", len(minis))
+	}
+	if src, _ := htmlassert.Attr(minis[0], "src"); src != want {
+		t.Errorf("mini cover src = %q, want %q", src, want)
+	}
+	if n := len(doc.QueryAll(".books-mini-spine")); n != 1 {
+		t.Errorf("%d mini spines, want 1 for the book without a cover", n)
+	}
+	big := doc.MustHave("img.books-cover")
+	if src, _ := htmlassert.Attr(big, "src"); src != want {
+		t.Errorf("cover src = %q, want %q", src, want)
+	}
+	if alt, _ := htmlassert.Attr(big, "alt"); !strings.Contains(alt, "Piranesi") {
+		t.Errorf("cover alt = %q", alt)
+	}
+	doc.MustNotHave(".books-book .books-spine")
+
+	doc = s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d?shelf=want", without))
+	doc.MustHave(".books-book .books-spine")
+	doc.MustNotHave("img.books-cover")
 }

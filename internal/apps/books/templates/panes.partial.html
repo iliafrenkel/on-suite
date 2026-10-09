@@ -94,7 +94,7 @@
 		{{range .Rows}}
 		<li class="books-row{{if .Active}} is-active{{end}}" data-book-id="{{.ID}}">
 			<a class="books-row-link" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-book" hx-swap="outerHTML" hx-push-url="true">
-				<span class="books-mini-spine swatch-c-{{.Spine}}" aria-hidden="true">{{.Initial}}</span>
+				{{if .Cover}}<img class="books-mini-cover" src="{{.Cover}}" alt="" width="32" height="48" loading="lazy">{{else}}<span class="books-mini-spine swatch-c-{{.Spine}}" aria-hidden="true">{{.Initial}}</span>{{end}}
 				<span class="books-row-text">
 					<span class="books-row-title">{{.Title}}</span>
 					{{with .Byline}}<span class="books-row-byline">{{.}}</span>{{end}}
@@ -116,7 +116,7 @@
 {{if .Selected}}
 	{{template "back" (dict "For" "books-book-open" "Label" "Books")}}
 	<header class="books-book-head">
-		<div class="books-spine swatch-c-{{.Spine}}" aria-hidden="true"><span>{{.Title}}</span></div>
+		{{if .Cover}}<img class="books-cover" src="{{.Cover}}" alt="Cover of {{.Title}}" width="96" height="144">{{else}}<div class="books-spine swatch-c-{{.Spine}}" aria-hidden="true"><span>{{.Title}}</span></div>{{end}}
 		<div class="books-book-titles">
 			<h1>{{.Title}}</h1>
 			{{with .Subtitle}}<p class="books-subtitle">{{.}}</p>{{end}}

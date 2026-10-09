@@ -4274,3 +4274,7 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-form-sub { margin: var(--s-2) 0 0; font-size: var(--fs-base); }
 .books-picked { display: flex; align-items: center; gap: var(--s-3); }
 .books-picked p { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
+
+/* Covers: the same footprint as the spines they replace */
+.books-mini-cover { flex: 0 0 auto; display: block; width: 2rem; height: 3rem; object-fit: cover; border-radius: 2px; background: var(--c-bg-subtle); }
+.books-cover { flex: 0 0 auto; display: block; width: 6rem; height: auto; max-height: 9rem; object-fit: contain; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
