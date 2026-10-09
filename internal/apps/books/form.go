@@ -18,6 +18,7 @@ type formValues struct {
 	SeriesName, SeriesNumber, Description       string
 	AddTo, FinishedOn, Tags                     string
 	OLWork, OLEdition, CoverID                  string
+	CoverURL                                    string // the edit form's image address, echoed back on an error
 }
 
 func valuesOf(in BookInput) formValues {
@@ -61,6 +62,9 @@ type formView struct {
 	Today   string // the latest finish date the form allows
 	Ctx     listCtx
 	Search  searchView
+	// Cover is the edit form's current cover ("" draws Spine instead).
+	Cover string
+	Spine string
 }
 
 // parseForm reads a posted book form: the input, the raw values to echo
@@ -70,7 +74,7 @@ func parseForm(get func(string) string) (BookInput, formValues, FieldErrors) {
 		Year: get("year"), Pages: get("pages"), ISBN: get("isbn"),
 		SeriesName: get("series_name"), SeriesNumber: get("series_number"), Description: get("description"),
 		AddTo: get("add_to"), FinishedOn: strings.TrimSpace(get("finished_on")), Tags: get("tags"),
-		OLWork: olID(get("ol_work"), 'W'), OLEdition: olID(get("ol_edition"), 'M'), CoverID: coverIDText(get("cover_id"))}
+		OLWork: olID(get("ol_work"), 'W'), OLEdition: olID(get("ol_edition"), 'M'), CoverID: coverIDText(get("cover_id")), CoverURL: get("cover_url")}
 	in := BookInput{Title: v.Title, Subtitle: v.Subtitle, Authors: v.Authors, ISBN: v.ISBN,
 		SeriesName: v.SeriesName, SeriesNumber: v.SeriesNumber, Description: v.Description}
 	errs := FieldErrors{}
@@ -248,9 +252,9 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, listCtx{Shelf: shelf}.BookURL(id), http.StatusSeeOther)
 }
 
-func editBookForm(id int64, v formValues, errs FieldErrors, c listCtx) formView {
+func editBookForm(id int64, v formValues, errs FieldErrors, c listCtx, cover string) formView {
 	return formView{Action: "/books/edit/" + strconv.FormatInt(id, 10), Heading: "Edit book", Submit: "Save",
-		Cancel: c.BookURL(id), Values: v, Errors: errs, Ctx: c}
+		Cancel: c.BookURL(id), Values: v, Errors: errs, Ctx: c, Cover: cover, Spine: SpineColor(v.Title)}
 }
 
 func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
@@ -267,9 +271,12 @@ func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderForm(w, r, http.StatusOK, editBookForm(id, valuesOf(b.BookInput), nil, ctxFrom(r.FormValue)))
+	a.renderForm(w, r, http.StatusOK, editBookForm(id, valuesOf(b.BookInput), nil, ctxFrom(r.FormValue), coverURL(b.ID, b.CoverVersion)))
 }
 
+// update saves the edit form. The owner check comes first, before any
+// cover address is fetched; a bad cover is a 422 like any other field, and
+// then nothing is saved.
 func (a *App) update(w http.ResponseWriter, r *http.Request) {
 	uid, ok := a.userID(w, r)
 	if !ok {
@@ -279,19 +286,27 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	b, err := a.store.Get(r.Context(), uid, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
 	c := ctxFrom(r.PostFormValue)
 	in, vals, errs := parseForm(r.PostFormValue)
 	errs = merge(errs, in.Normalize().Validate())
+	change, msg := a.readCoverChange(r)
+	if msg != "" {
+		errs["cover"] = msg
+	}
 	if len(errs) > 0 {
-		// Someone else's book is a 404 even when the form is wrong too.
-		if _, err := a.store.Get(r.Context(), uid, id); err != nil {
-			a.fail(w, r, err)
-			return
-		}
-		a.renderForm(w, r, http.StatusUnprocessableEntity, editBookForm(id, vals, errs, c))
+		a.renderForm(w, r, http.StatusUnprocessableEntity, editBookForm(id, vals, errs, c, coverURL(b.ID, b.CoverVersion)))
 		return
 	}
 	if err := a.store.Update(r.Context(), uid, id, in); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.applyCoverChange(r.Context(), uid, id, change); err != nil {
 		a.fail(w, r, err)
 		return
 	}

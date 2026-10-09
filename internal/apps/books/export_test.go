@@ -1,6 +1,7 @@
 package books
 
 import (
+	"database/sql"
 	"net"
 	"net/netip"
 
@@ -27,3 +28,7 @@ func (a *App) UseOpenLibraryForTest(base string) {
 		return webfetch.ErrBlockedAddress
 	}
 }
+
+// DBForTest is the store's handle, for tests that check a column no store
+// method returns.
+func (st *Store) DBForTest() *sql.DB { return st.db }

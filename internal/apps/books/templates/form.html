@@ -3,7 +3,7 @@
 <div class="books-form-page stack">
 	<h1>{{$d.Heading}}</h1>
 	{{if $d.New}}{{template "ol-search" $d.Search}}{{end}}
-	<form class="books-form stack" method="post" action="{{$d.Action}}" novalidate>
+	<form class="books-form stack" method="post" action="{{$d.Action}}"{{if not $d.New}} enctype="multipart/form-data"{{end}} novalidate>
 		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
 		{{if not $d.New}}{{template "ctx-fields" $d.Ctx}}{{end}}
 		{{if $d.New}}
@@ -37,6 +37,27 @@
 			<textarea id="books-description" name="description" rows="5"{{if index $d.Errors "description"}} aria-invalid="true" aria-describedby="books-description-error"{{end}}>{{$d.Values.Description}}</textarea>
 			{{template "field-error" (dict "Name" "description" "Error" (index $d.Errors "description"))}}
 		</div>
+
+		{{if not $d.New}}
+		<fieldset class="field books-cover-field"{{if index $d.Errors "cover"}} aria-describedby="books-cover-error"{{end}}>
+			<legend>Cover</legend>
+			<div class="books-cover-edit">
+				{{if $d.Cover}}<img class="books-cover" src="{{$d.Cover}}" alt="The current cover" width="96" height="144">{{else}}<div class="books-spine swatch-c-{{$d.Spine}}" aria-hidden="true"><span>{{$d.Values.Title}}</span></div>{{end}}
+				<div class="stack">
+					<div>
+						<label for="books-cover_file">Upload an image</label>
+						<input id="books-cover_file" name="cover_file" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+					</div>
+					<div>
+						<label for="books-cover_url">…or paste the address of one</label>
+						<input id="books-cover_url" name="cover_url" type="url" placeholder="https://…" value="{{$d.Values.CoverURL}}">
+					</div>
+					{{if $d.Cover}}<label class="books-choice"><input type="checkbox" name="remove_cover" value="1"> Remove the cover</label>{{end}}
+				</div>
+			</div>
+			{{template "field-error" (dict "Name" "cover" "Error" (index $d.Errors "cover"))}}
+		</fieldset>
+		{{end}}
 
 		{{if $d.New}}
 		<fieldset class="field books-add-to"{{if index $d.Errors "add_to"}} aria-describedby="books-add_to-error"{{end}}>

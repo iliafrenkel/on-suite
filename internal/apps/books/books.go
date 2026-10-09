@@ -52,6 +52,10 @@ func (a *App) Templates() fs.FS {
 	return sub
 }
 
+// editFormMaxBytes is the edit form's body budget: one cover plus the
+// form's text fields and multipart overhead (the suite default is 1 MiB).
+const editFormMaxBytes = MaxCoverBytes + 1<<20
+
 func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.deps = deps
 	a.store = NewStore(deps.DB)
@@ -70,6 +74,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /new", a.newForm)
 	r.HandleFunc("POST /new", a.create)
 	r.HandleFunc("GET /edit/{id}", a.editForm)
+	r.RegisterBodyLimit("POST /edit/{id}", editFormMaxBytes)
 	r.HandleFunc("POST /edit/{id}", a.update)
 	r.HandleFunc("POST /start/{id}", a.act(a.start, false))
 	r.HandleFunc("POST /finish/{id}", a.act(a.finish, false))

@@ -4278,3 +4278,8 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 /* Covers: the same footprint as the spines they replace */
 .books-mini-cover { flex: 0 0 auto; display: block; width: 2rem; height: 3rem; object-fit: cover; border-radius: 2px; background: var(--c-bg-subtle); }
 .books-cover { flex: 0 0 auto; display: block; width: 6rem; height: auto; max-height: 9rem; object-fit: contain; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+
+/* Edit page: the cover */
+.books-cover-edit { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4); }
+.books-cover-edit > .stack { flex: 1 1 14rem; min-width: 0; }
+.books-cover-edit input[type="url"] { width: 100%; }
