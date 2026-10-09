@@ -4317,7 +4317,8 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-reading-edit-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-2); margin-top: var(--s-2); }
 .books-reading-edit-form label { margin: 0; flex-basis: 100%; }
 /* Notes and quotes (B3): "+ Add" and Edit disclosures, as the review's */
-.books-notes { max-width: 38rem; margin-top: var(--s-4); }
+.books-notes,
+.books-quotes { max-width: 38rem; margin-top: var(--s-4); }
 .books-entry-add > summary,
 .books-entry-edit > summary { display: inline-flex; list-style: none; cursor: pointer; }
 .books-entry-add > summary::-webkit-details-marker,
@@ -4333,6 +4334,10 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-entry-text p { margin: var(--s-1) 0; }
 .books-entry-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); }
 .books-entry-edit[open] { flex-basis: 100%; }
+/* Quotes are cards; the text keeps the line breaks it was typed with. */
+.books-quote { margin-top: var(--s-2); padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); }
+.books-quote-text { margin: 0 0 var(--s-1); padding-left: var(--s-3); border-left: 3px solid var(--c-accent); font-style: italic; white-space: pre-line; overflow-wrap: anywhere; }
+.books-quote-comment { margin-bottom: var(--s-1); }
 .books-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1rem; border: var(--border); border-radius: var(--radius); color: var(--c-text); background: var(--c-bg); }
 .books-dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 

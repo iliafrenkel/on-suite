@@ -304,6 +304,8 @@ type bookView struct {
 	Pages         int           // the book's page count (0: unknown), the page boxes' max
 	Notes         []noteView    // newest first
 	NewNote       entryForm     // the "+ Add note" form
+	Quotes        []quoteView   // newest first
+	NewQuote      entryForm     // the "+ Add quote" form
 	Ctx           listCtx
 	Shell         render.Shell
 }
@@ -451,18 +453,19 @@ func readingDates(rd Reading) string {
 
 // entryDraft is a note or quote form the store refused, to show again
 // with its message and what was typed (spec "Errors": an inline message,
-// as for progress). Form names the form: "note-new" or "note-12".
+// as for progress). Form names the form: "note-new", "note-12",
+// "quote-new", "quote-5". Body is a note's text or a quote's.
 type entryDraft struct {
-	Form, Error string
-	Page, Body  string
+	Form, Error         string
+	Page, Body, Comment string
 }
 
 // entryForm is a note or quote form's state: what its boxes hold, and
 // whether it opens with a message.
 type entryForm struct {
-	Open       bool
-	Error      string
-	Page, Body string
+	Open                bool
+	Error               string
+	Page, Body, Comment string
 }
 
 // formFor is the form named key: what was typed into it when it is the
@@ -471,7 +474,7 @@ func formFor(key string, d entryDraft, stored entryForm) entryForm {
 	if d.Form != key {
 		return stored
 	}
-	return entryForm{Open: true, Error: d.Error, Page: d.Page, Body: d.Body}
+	return entryForm{Open: true, Error: d.Error, Page: d.Page, Body: d.Body, Comment: d.Comment}
 }
 
 // noteView is one note in the book pane: dated, with its page, its
@@ -490,6 +493,27 @@ func viewNotes(ns []Note, d entryDraft) []noteView {
 		out = append(out, noteView{ID: n.ID, Date: n.CreatedAt.Local().Format("2 Jan 2006"), Page: pageText(n.Page),
 			HTML: RenderReview(n.Body),
 			Form: formFor("note-"+strconv.FormatInt(n.ID, 10), d, entryForm{Page: pageValue(n.Page), Body: n.Body})})
+	}
+	return out
+}
+
+// quoteView is one quote card: the text as typed, its line breaks kept
+// (decided 2026-10-09: plain text, drawn with white-space: pre-line), its
+// page, its comment drawn as Markdown, and its Edit form.
+type quoteView struct {
+	ID          int64
+	Text        string
+	Page        string // "p. 112"; "" for none
+	CommentHTML template.HTML
+	Form        entryForm
+}
+
+func viewQuotes(qs []Quote, d entryDraft) []quoteView {
+	var out []quoteView
+	for _, q := range qs {
+		out = append(out, quoteView{ID: q.ID, Text: q.Text, Page: pageText(q.Page), CommentHTML: RenderReview(q.Comment),
+			Form: formFor("quote-"+strconv.FormatInt(q.ID, 10), d,
+				entryForm{Page: pageValue(q.Page), Body: q.Text, Comment: q.Comment})})
 	}
 	return out
 }

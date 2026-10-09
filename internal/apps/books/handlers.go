@@ -82,8 +82,9 @@ type paneOpts struct {
 // it targeted, as Reader's renderPanes does (#453): #books-list → list-swap
 // (the list and its out-of-band companions, the book pane untouched),
 // #books-book → book-swap, #books-progress → progress-swap (the box, and
-// the list out of band), #books-notes → notes-swap (the same for the
-// notes), anything else (#books-panes) → the whole panes.
+// the list out of band), #books-notes → notes-swap and #books-quotes →
+// quotes-swap (the same for the notes and the quotes), anything else
+// (#books-panes) → the whole panes.
 // Fragments are always 200: htmx's default responseHandling only swaps
 // 2xx/3xx.
 func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, c listCtx, opts paneOpts) {
@@ -121,9 +122,15 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 			a.fail(w, r, err)
 			return
 		}
+		qs, err := a.store.Quotes(ctx, userID, opts.BookID)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
 		bv = viewBook(b, c, a.store.Today())
 		bv.History = viewHistory(rs)
 		bv.Notes, bv.NewNote = viewNotes(ns, opts.Draft), formFor("note-new", opts.Draft, entryForm{})
+		bv.Quotes, bv.NewQuote = viewQuotes(qs, opts.Draft), formFor("quote-new", opts.Draft, entryForm{})
 		title = b.Title
 		if opts.ProgressError != "" {
 			bv.Progress.Error, bv.Progress.Value = opts.ProgressError, opts.ProgressInput
@@ -146,6 +153,9 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 			v.List.OOB = true
 		case "books-notes":
 			block = "notes-swap"
+			v.List.OOB = true
+		case "books-quotes":
+			block = "quotes-swap"
 			v.List.OOB = true
 		}
 		if err := a.deps.Render.Fragment(w, http.StatusOK, "books/index", block, v); err != nil {

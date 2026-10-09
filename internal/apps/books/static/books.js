@@ -243,8 +243,9 @@
 
 	// --- Keyboard shortcuts --------------------------------------------------
 
-	// openEntry opens an add disclosure in the book pane ("+ Add note") and
-	// puts the cursor in its box; false when the pane has none.
+	// openEntry opens an add disclosure in the book pane ("+ Add note",
+	// "+ Add quote") and puts the cursor in its box; false when the pane
+	// has none.
 	function openEntry(detailsId, inputId) {
 		var details = document.getElementById(detailsId);
 		var input = document.getElementById(inputId);
@@ -319,6 +320,9 @@
 			break;
 		case "n":
 			if (!openEntry("books-note-new", "books-note-new-body")) return;
+			break;
+		case "q":
+			if (!openEntry("books-quote-new", "books-quote-new-text")) return;
 			break;
 		case "Escape":
 			document.querySelectorAll("#books-book details[open]").forEach(function (d) {

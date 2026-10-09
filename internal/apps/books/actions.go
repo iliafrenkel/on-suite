@@ -241,6 +241,35 @@ func (a *App) deleteNote(r *http.Request, userID, id int64) error {
 	return a.store.DeleteNote(r.Context(), userID, id, nid)
 }
 
+// quoteDraft is a posted quote form, named form.
+func quoteDraft(r *http.Request, form string) entryDraft {
+	return entryDraft{Form: form, Page: strings.TrimSpace(r.PostFormValue("page")),
+		Body: r.PostFormValue("text"), Comment: r.PostFormValue("comment")}
+}
+
+func (a *App) addQuote(r *http.Request, userID, id int64) (entryDraft, error) {
+	d := quoteDraft(r, "quote-new")
+	_, err := a.store.AddQuote(r.Context(), userID, id, QuoteInput{Page: pageField(r), Text: d.Body, Comment: d.Comment})
+	return d, err
+}
+
+func (a *App) editQuote(r *http.Request, userID, id int64) (entryDraft, error) {
+	qid, err := childID(r, "qid")
+	if err != nil {
+		return entryDraft{}, err
+	}
+	d := quoteDraft(r, "quote-"+strconv.FormatInt(qid, 10))
+	return d, a.store.UpdateQuote(r.Context(), userID, id, qid, QuoteInput{Page: pageField(r), Text: d.Body, Comment: d.Comment})
+}
+
+func (a *App) deleteQuote(r *http.Request, userID, id int64) error {
+	qid, err := childID(r, "qid")
+	if err != nil {
+		return err
+	}
+	return a.store.DeleteQuote(r.Context(), userID, id, qid)
+}
+
 func (a *App) setTags(r *http.Request, userID, id int64) error {
 	return a.store.SetTags(r.Context(), userID, id, ParseTags(r.PostFormValue("tags")))
 }
