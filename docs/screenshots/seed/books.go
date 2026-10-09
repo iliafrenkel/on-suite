@@ -29,7 +29,7 @@ func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time
 		stopped  int // where a DNF stopped; 0 = not said
 		rating   int
 		review   string
-		notes    []books.NoteInput  // one a day from the day after it was started
+		notes    []books.NoteInput  // dated by the progress that reached their page
 		quotes   []books.QuoteInput // likewise
 	}
 	library := []seed{
@@ -82,21 +82,33 @@ func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time
 		if err := st.SetFormat(ctx, userID, id, b.format); err != nil {
 			return err
 		}
-		for j, value := range b.progress {
-			st.SetClock(func() time.Time { return at(len(b.progress) - j) })
-			if err := st.RecordProgress(ctx, userID, id, value); err != nil {
-				return err
+		// An entry is dated the day the progress reached its page; one with
+		// no page, or on a book with no progress, takes the next day after
+		// the start. They are written before the progress, so the last
+		// progress is the book's latest change.
+		written := func(page, j int) int {
+			for k, value := range b.progress {
+				if page > 0 && value >= page {
+					return len(b.progress) - k
+				}
 			}
+			return b.started - j - 1
 		}
 		for j, n := range b.notes {
-			st.SetClock(func() time.Time { return at(b.started - j - 1) })
+			st.SetClock(func() time.Time { return at(written(n.Page, j)) })
 			if _, err := st.AddNote(ctx, userID, id, n); err != nil {
 				return err
 			}
 		}
 		for j, q := range b.quotes {
-			st.SetClock(func() time.Time { return at(b.started - j - 1) })
+			st.SetClock(func() time.Time { return at(written(q.Page, j)) })
 			if _, err := st.AddQuote(ctx, userID, id, q); err != nil {
+				return err
+			}
+		}
+		for j, value := range b.progress {
+			st.SetClock(func() time.Time { return at(len(b.progress) - j) })
+			if err := st.RecordProgress(ctx, userID, id, value); err != nil {
 				return err
 			}
 		}

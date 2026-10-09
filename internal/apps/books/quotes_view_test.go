@@ -63,6 +63,10 @@ func TestQuotesShowAsCards(t *testing.T) {
 	if n := len(doc.QueryAll(".books-quote-comment")); n != 1 {
 		t.Errorf("%d comments, want 1: no empty comment box", n)
 	}
+	doc.MustHave(".books-quote button[hx-confirm]")
+	if n := len(doc.QueryAll(".books-quote button[hx-confirm]")); n != 2 {
+		t.Errorf("%d delete buttons with a confirmation, want one per quote", n)
+	}
 	body := rec.Body.String()
 	notes, quotes, history := strings.Index(body, `id="books-notes"`), strings.Index(body, `id="books-quotes"`), strings.Index(body, `id="books-history-head"`)
 	if !(notes < quotes && quotes < history) {
@@ -193,5 +197,19 @@ func TestQuoteRoutesAreNotFoundForOthers(t *testing.T) {
 	}
 	if qs, _ := s.Store.Quotes(context.Background(), s.Alice.User.ID, id); len(qs) != 1 || qs[0].Text != "Mine." {
 		t.Errorf("quotes = %+v, want Alice's quote untouched", qs)
+	}
+}
+
+func TestDeletingAQuoteWithoutJavaScript(t *testing.T) {
+	s := newServer(t)
+	id := readBook(t, s, "Dune", 600)
+	qid, err := s.Store.AddQuote(context.Background(), s.Alice.User.ID, id, books.QuoteInput{Text: "Gone."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Submit(t, s.Alice, fmt.Sprintf("/books/quotes/%d/%d/delete", id, qid), url.Values{"shelf": {"read"}},
+		fmt.Sprintf("/books/b/%d?shelf=read", id))
+	if n := len(quoteIDs(t, s, id)); n != 0 {
+		t.Errorf("%d quotes after delete", n)
 	}
 }

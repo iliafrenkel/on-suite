@@ -14,9 +14,14 @@ type snippetPart struct {
 }
 
 // snippetParts splits a List snippet at its SnippetOpen/SnippetClose
-// markers, collapsing whitespace (the notes, quotes and comments columns
-// separate entries with newlines). An unclosed marker runs to the end.
+// markers, collapsing whitespace. An unclosed marker runs to the end.
+//
+// Books differs from Later here: the notes, quotes and comments columns
+// join their entries with newlines, so a snippet can run from one entry
+// into the next. Only the line holding the first match is kept, with an
+// ellipsis where a line was dropped.
 func snippetParts(s string) []snippetPart {
+	s = oneEntry(s)
 	s = strings.Join(strings.Fields(s), " ")
 	var parts []snippetPart
 	for s != "" {
@@ -41,6 +46,34 @@ func snippetParts(s string) []snippetPart {
 	return parts
 }
 
+// oneEntry keeps the newline-separated line that holds the first
+// SnippetOpen, marking dropped lines with an ellipsis (unless the text
+// already begins or ends with one). Without a newline, or a marker, it is s itself.
+func oneEntry(s string) string {
+	if !strings.Contains(s, "\n") {
+		return s
+	}
+	if !strings.Contains(s, SnippetOpen) {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	k := 0
+	for i, l := range lines {
+		if strings.Contains(l, SnippetOpen) {
+			k = i
+			break
+		}
+	}
+	line := lines[k]
+	if k > 0 && !strings.HasPrefix(strings.TrimSpace(line), "…") {
+		line = "…" + line
+	}
+	if k < len(lines)-1 && !strings.HasSuffix(strings.TrimSpace(line), "…") {
+		line += "…"
+	}
+	return line
+}
+
 // snippetView is a filtered row's third line: where the filter matched
 // and the words around it (decided 2026-10-09).
 type snippetView struct {
@@ -55,8 +88,8 @@ var matchLabels = map[MatchIn]string{
 	MatchReview:  "Review:",
 }
 
-// newSnippet is it's snippet line, or nil when the filter matched only
-// what the row already shows.
+// newSnippet is a row's snippet line, or nil when the filter matched only
+// what the row shows.
 func newSnippet(it ListItem) *snippetView {
 	if it.Match == MatchBook {
 		return nil

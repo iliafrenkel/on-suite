@@ -50,3 +50,23 @@ func TestTheFilterBoxSearchesEverything(t *testing.T) {
 		t.Errorf("placeholder = %q", got)
 	}
 }
+
+func TestSnippetPartsKeepOneEntry(t *testing.T) {
+	const o, c = books.SnippetOpen, books.SnippetClose
+	tests := []struct {
+		name, in, want string
+	}{
+		{"single line", "The " + o + "spice" + c + "  must	flow.", "The [spice] must flow."},
+		{"middle of three", "First quote.\nThe " + o + "spice" + c + " must flow.\nThird.", "…The [spice] must flow.…"},
+		{"first line", "The " + o + "spice" + c + " must flow.\nSecond quote…", "The [spice] must flow.…"},
+		{"last line", "Earlier entry.\nThe " + o + "spice" + c + " must flow.", "…The [spice] must flow."},
+		{"already ends with an ellipsis", "The " + o + "spice" + c + " must…\nSecond.", "The [spice] must…"},
+		{"already starts with an ellipsis", "One.\n…" + o + "spice" + c + " must flow.", "…[spice] must flow."},
+		{"no marker", "Just some text\nand more.", "Just some text and more."},
+	}
+	for _, tt := range tests {
+		if got := books.SnippetPartsForTest(tt.in); got != tt.want {
+			t.Errorf("%s: %q -> %q, want %q", tt.name, tt.in, got, tt.want)
+		}
+	}
+}

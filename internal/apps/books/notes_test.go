@@ -3,6 +3,7 @@ package books_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -252,6 +253,72 @@ func TestDeletingABookTakesItsNotesAndQuotes(t *testing.T) {
 		var n int
 		if err := f.db.QueryRow(`SELECT count(*) FROM ` + table).Scan(&n); err != nil || n != 0 {
 			t.Errorf("%s has %d rows after the book went, %v", table, n, err)
+		}
+	}
+}
+
+func TestUpdatesRefuseABadPage(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	dune := withPages(t, f, "Dune", 600)
+	nid, err := f.store.AddNote(ctx, f.alice.ID, dune, books.NoteInput{Page: 10, Body: "Note."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	qid, err := f.store.AddQuote(ctx, f.alice.ID, dune, books.QuoteInput{Page: 10, Text: "Quote."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, page := range []int{601, -1} {
+		err := f.store.UpdateNote(ctx, f.alice.ID, dune, nid, books.NoteInput{Page: page, Body: "Changed."})
+		wantRefusal(t, fmt.Sprintf("UpdateNote page %d", page), err, "Enter a page from 1 to 600.")
+		err = f.store.UpdateQuote(ctx, f.alice.ID, dune, qid, books.QuoteInput{Page: page, Text: "Changed."})
+		wantRefusal(t, fmt.Sprintf("UpdateQuote page %d", page), err, "Enter a page from 1 to 600.")
+	}
+	err = f.store.UpdateQuote(ctx, f.alice.ID, dune, qid, books.QuoteInput{Text: " "})
+	wantRefusal(t, "UpdateQuote with no text", err, "Type the quote first.")
+	err = f.store.UpdateQuote(ctx, f.alice.ID, dune, qid, books.QuoteInput{Text: strings.Repeat("x", books.MaxQuoteRunes+1)})
+	wantRefusal(t, "UpdateQuote with long text", err, "Keep the quote to 5000 characters or fewer.")
+	if n := notes(t, f, f.alice.ID, dune)[0]; n.Body != "Note." || n.Page != 10 {
+		t.Errorf("note after refused updates = %+v, want it unchanged", n)
+	}
+	if q := quotes(t, f, f.alice.ID, dune)[0]; q.Text != "Quote." || q.Page != 10 {
+		t.Errorf("quote after refused updates = %+v, want it unchanged", q)
+	}
+}
+
+func TestEditsAndDeletesMarkTheBookChanged(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	dune := withPages(t, f, "Dune", 600)
+	nid, err := f.store.AddNote(ctx, f.alice.ID, dune, books.NoteInput{Body: "Note."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	qid, err := f.store.AddQuote(ctx, f.alice.ID, dune, books.QuoteInput{Text: "Quote."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []struct {
+		name string
+		do   func() error
+	}{
+		{"UpdateNote", func() error {
+			return f.store.UpdateNote(ctx, f.alice.ID, dune, nid, books.NoteInput{Body: "Edited."})
+		}},
+		{"UpdateQuote", func() error {
+			return f.store.UpdateQuote(ctx, f.alice.ID, dune, qid, books.QuoteInput{Text: "Edited."})
+		}},
+		{"DeleteNote", func() error { return f.store.DeleteNote(ctx, f.alice.ID, dune, nid) }},
+		{"DeleteQuote", func() error { return f.store.DeleteQuote(ctx, f.alice.ID, dune, qid) }},
+	}
+	for _, st := range steps {
+		f.now = f.now.Add(time.Hour)
+		if err := st.do(); err != nil {
+			t.Fatalf("%s: %v", st.name, err)
+		}
+		if b := getBook(t, f, f.alice.ID, dune); !b.UpdatedAt.Equal(f.now) {
+			t.Errorf("after %s book updated_at = %v, want %v", st.name, b.UpdatedAt, f.now)
 		}
 	}
 }

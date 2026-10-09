@@ -176,9 +176,28 @@ func TestTheSearchIndexFollowsEveryChange(t *testing.T) {
 func TestFilterIgnoresSearchSyntax(t *testing.T) {
 	f := newFixture(t)
 	shelfOfNotes(t, f)
-	for _, q := range []string{`AND`, `"`, `(`, `title:dune`, `NEAR(a b)`, `*`, `-dune`, `100%`} {
-		if _, err := f.store.List(context.Background(), f.alice.ID, books.ListQuery{Shelf: books.ShelfAll, Q: q}); err != nil {
-			t.Errorf("List(%q) = %v, want no error", q, err)
+	// Dune's text says "and" (the review), Emma's doesn't; no text says "title".
+	tests := []struct {
+		q    string
+		want []string
+	}{
+		{`*`, nil},
+		{`-dune`, []string{"Dune"}},
+		{`AND`, []string{"Dune"}},
+		{`title:dune`, nil},
+		{`"`, nil},
+		{`(`, nil},
+		{`NEAR(a b)`, nil},
+		{`100%`, nil},
+	}
+	for _, tt := range tests {
+		items, err := f.store.List(context.Background(), f.alice.ID, books.ListQuery{Shelf: books.ShelfAll, Q: tt.q})
+		if err != nil {
+			t.Errorf("List(%q) = %v, want no error", tt.q, err)
+			continue
+		}
+		if got := titles(items); !slices.Equal(got, tt.want) && !(len(got) == 0 && len(tt.want) == 0) {
+			t.Errorf("List(%q) = %v, want %v", tt.q, got, tt.want)
 		}
 	}
 }

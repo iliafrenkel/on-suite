@@ -300,7 +300,7 @@ type ListItem struct {
 // ListQuery picks the books a list shows. Shelf "" or ShelfAll is every
 // shelf; Tag is one tag name; Q is full-text search over books_search —
 // title, subtitle, authors, series, review, notes, quotes and comments —
-// every word matching, the last one or any as a prefix; Series is one
+// every word having to match, each as a prefix; Series is one
 // series' name, matched whole and ignoring case.
 type ListQuery struct {
 	Shelf  Shelf

@@ -232,3 +232,17 @@ func TestNoteRoutesAreNotFoundForOthers(t *testing.T) {
 		t.Errorf("notes = %+v, want Alice's note untouched", ns)
 	}
 }
+
+func TestDeletingANoteWithoutJavaScript(t *testing.T) {
+	s := newServer(t)
+	id := readBook(t, s, "Dune", 600)
+	nid, err := s.Store.AddNote(context.Background(), s.Alice.User.ID, id, books.NoteInput{Body: "Gone."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Submit(t, s.Alice, fmt.Sprintf("/books/notes/%d/%d/delete", id, nid), url.Values{"shelf": {"read"}},
+		fmt.Sprintf("/books/b/%d?shelf=read", id))
+	if n := len(noteIDs(t, s, id)); n != 0 {
+		t.Errorf("%d notes after delete", n)
+	}
+}

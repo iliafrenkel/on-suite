@@ -104,7 +104,7 @@ many times you read it.
 
 ## Notes and quotes
 
-Under the review are your notes on the book, newest first, each with the
+Your notes on the book come after its Tags box, newest first, each with the
 day you wrote it. **+ Add note** opens a box for one; give it a page if you
 like, and it shows as "p. 112". Notes take the same little Markdown as
 reviews.
@@ -135,7 +135,7 @@ order. Add a series name and number with **⋯ → Edit details**.
 ## Tags
 
 Tags are your own labels — *sf*, *book club*, *favourites*. Edit them in the
-**Tags** box at the bottom of a book and click **Save tags**. Your tags are
+**Tags** box under a book's description and click **Save tags**. Your tags are
 listed under the shelves; click one to see every book with it. A tag nobody
 uses any more disappears.
 
