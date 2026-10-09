@@ -249,6 +249,21 @@ add-note box and `q` the add-quote box, `Esc` closes dialogs.
 - Charts, server-rendered SVG as in ON Focus: books by month for the year,
   and books per year all-time.
 
+(Decided 2026-10-09 while planning B4: B4 is one PR. Stats is a page of
+its own, `/books/stats`, as `/reader/stats` is, with a link back to the
+books and a Stats link at the bottom of the sidebar; it works at phone
+width. The year picker is a row of year links, from the first year with
+any reading to next year, so next year's goal can be set ahead. The goal
+is set, changed and removed only on the Stats page, with plain forms that
+work without JavaScript. The card on the Reading shelf — "12 of 30 · 2
+ahead" — is read-only, shows only when this year has a goal, and links to
+Stats. Ahead or behind is for this year; a past year says "4 short" or
+"goal reached", a future year shows no pace. The all-time row counts
+every finished reading, dated or not; an undated one counts toward no
+year and adds no pages. Format split and longest and shortest are per
+year. Pages read follow "Derived values" as written, so a repeated
+progress value adds nothing and #576 doesn't touch them.)
+
 ## Import (B5)
 
 A Books import page takes a Goodreads "Export Library" CSV.
