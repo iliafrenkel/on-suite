@@ -6,13 +6,14 @@ can't see it in ON Suite unless you choose to share it.
 
 ## What ON Suite is
 
-ON Suite is one place for your notes, snippets, news feeds, study cards and focus timers.
-You sign in once and move freely between six apps:
+ON Suite is one place for your notes, snippets, news feeds, study cards, focus timers, saved articles and a reading log.
+You sign in once and move freely between seven apps:
 
 - **[ON Notes](notes.md)** — organise notes and to-do lists in one outline.
 - **[ON Paste](paste.md)** — keep and share snippets of text or code.
 - **[ON Reader](reader.md)** — follow your favourite websites and read what's new.
 - **[ON Later](later.md)** — save articles and read them properly.
+- **[ON Books](books.md)** — a private reading log: what you're reading, what you've read and what's next.
 - **[ON Flash](flash.md)** — make flash card decks and study them.
 - **[ON Focus](focus.md)** — focus timers you set up once and reuse.
 
@@ -118,6 +119,7 @@ These guides explain everything each app can do:
 - [ON Paste](paste.md) — saving and sharing snippets.
 - [ON Reader](reader.md) — following feeds and reading articles.
 - [ON Later](later.md) — saving and reading articles.
+- [ON Books](books.md) — keeping track of your reading.
 - [ON Flash](flash.md) — making decks and studying cards.
 - [ON Focus](focus.md) — making and running focus timers.
 - [Admin](admin.md) — managing accounts and the server (for admins only).

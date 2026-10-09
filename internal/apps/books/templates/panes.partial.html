@@ -1,0 +1,232 @@
+{{/* ON Books' three panes — shelves and tags, the list, the book — on ON
+     Reader's layout (internal/apps/reader/templates/panes.partial.html).
+     Apps never import each other, so these blocks are Books' own. Every
+     block here takes a panesView (or the part named in its comment). */}}
+
+{{/* The <title> and crumb ride along with every fragment, so the page
+     chrome follows the panes (#205). */}}
+{{define "shell-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{end}}
+
+{{/* panes-oob answers anything that changes a book: the whole panes. */}}
+{{define "panes-oob"}}{{template "shell-oob" .}}{{template "panes" .}}{{end}}
+
+{{/* list-swap answers a shelf, tag or filter change (target #books-list).
+     The sidebar comes along out of band — its highlight and links follow
+     the list, and unlike Reader's tree it holds nothing worth keeping — as
+     do the filter's hidden fields and the phone drill-down boxes. The book
+     pane is left as it is; books.js moves the row highlight. */}}
+{{define "list-swap"}}{{template "shell-oob" .}}{{template "list" .List}}{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" true)}}{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" true)}}{{template "pane-toggle" (dict "ID" "books-list-open" "Label" "Shelves" "Checked" true "OOB" true)}}{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" false "OOB" true)}}{{end}}
+
+{{/* book-swap answers opening a book (target #books-book). The checkbox
+     out of band is what makes a phone drill into the book. */}}
+{{define "book-swap"}}{{template "shell-oob" .}}{{template "book" .Book}}{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" true "OOB" true)}}{{end}}
+
+{{define "panes"}}
+<div class="books-panes" id="books-panes">
+	{{with .Error}}<p class="notice notice-error books-banner" role="alert">{{.}}</p>{{end}}
+	<div class="books-panes-row" id="books-panes-row">
+		{{/* The narrow-screen drill-down (Reader's technique): the list is
+		     always "open" over the sidebar, a book over the list. Siblings
+		     of the panes so the CSS reaches them with ~; the back labels in
+		     the panes uncheck them. */}}
+		{{template "pane-toggle" (dict "ID" "books-list-open" "Label" "Shelves" "Checked" true "OOB" false)}}
+		{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" .Book.Selected "OOB" false)}}
+		{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" false)}}
+		<div class="pane-gutter" data-gutter-for="side" role="separator"
+		     aria-orientation="vertical" aria-label="Resize the shelves" tabindex="0"></div>
+		<section class="books-listpane" aria-label="Books">
+			{{template "back" (dict "For" "books-list-open" "Label" "Shelves")}}
+			{{/* The filter lives outside #books-list so a list swap never
+			     replaces the box being typed in (PATTERNS.md, SyncSearch). */}}
+			<form class="books-filter" method="get" action="/books/" role="search">
+				{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" false)}}
+				<label class="visually-hidden" for="books-q">Filter by title or author</label>
+				<input type="search" id="books-q" name="q" value="{{.Ctx.Q}}" placeholder="Filter by title or author…"
+				       hx-get="/books/" hx-target="#books-list" hx-swap="outerHTML"
+				       hx-include="closest form" hx-trigger="input changed delay:300ms, search"
+				       hx-replace-url="true">
+			</form>
+			{{template "list" .List}}
+		</section>
+		<div class="pane-gutter" data-gutter-for="list" role="separator"
+		     aria-orientation="vertical" aria-label="Resize the book pane" tabindex="0"></div>
+		{{template "book" .Book}}
+	</div>
+	{{template "confirm"}}
+</div>
+{{end}}
+
+{{define "pane-toggle"}}<input type="checkbox" id="{{.ID}}" class="visually-hidden books-pane-toggle"{{if .Checked}} checked{{end}}{{if .OOB}} hx-swap-oob="true"{{end}} aria-label="{{.Label}}">{{end}}
+
+{{define "back"}}<label class="toolbar-btn books-back-btn" for="{{.For}}">{{ticon "arrow-left"}}{{.Label}}</label>{{end}}
+
+{{/* filter-ctx is the shelf and tag the filter box searches within. */}}
+{{define "filter-ctx"}}<span id="books-filter-ctx"{{if .OOB}} hx-swap-oob="true"{{end}}><input type="hidden" name="shelf" value="{{.Ctx.Shelf}}">{{with .Ctx.Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}</span>{{end}}
+
+{{/* ctx-fields is a listCtx as hidden fields, for POSTs. */}}
+{{define "ctx-fields"}}<input type="hidden" name="shelf" value="{{.Shelf}}">{{with .Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Q}}<input type="hidden" name="q" value="{{.}}">{{end}}{{end}}
+
+{{define "sidebar"}}
+<nav class="books-side" id="books-side" aria-label="Shelves"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	<a class="button primary books-add" href="/books/new">{{ticon "plus"}}Add book</a>
+	<ul class="books-shelves">
+		{{range .Sidebar.Shelves}}
+		<li><a class="books-shelf" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true"{{if .Current}} aria-current="page"{{end}}>{{.Label}}<span class="books-count">{{if .Count}}{{.Count}}{{end}}</span></a></li>
+		{{end}}
+	</ul>
+	{{with .Sidebar.Tags}}
+	<h2 class="books-side-head">Tags</h2>
+	<ul class="books-shelves">
+		{{range .}}
+		<li><a class="books-shelf" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a></li>
+		{{end}}
+	</ul>
+	{{end}}
+</nav>
+{{end}}
+
+{{/* list takes a listView. */}}
+{{define "list"}}
+<div class="books-list" id="books-list" data-shelf="{{.Ctx.Shelf}}" data-tag="{{.Ctx.Tag}}" data-q="{{.Ctx.Q}}">
+	<h2 class="books-list-head">{{.Heading}}</h2>
+	{{if .Rows}}
+	<ul class="books-rows">
+		{{range .Rows}}
+		<li class="books-row{{if .Active}} is-active{{end}}" data-book-id="{{.ID}}">
+			<a class="books-row-link" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-book" hx-swap="outerHTML" hx-push-url="true">
+				<span class="books-mini-spine swatch-c-{{.Spine}}" aria-hidden="true">{{.Initial}}</span>
+				<span class="books-row-text">
+					<span class="books-row-title">{{.Title}}</span>
+					{{with .Byline}}<span class="books-row-byline">{{.}}</span>{{end}}
+					<span class="books-row-note">{{.Note}}</span>
+				</span>
+			</a>
+		</li>
+		{{end}}
+	</ul>
+	{{else}}
+	<p class="empty">{{.Empty}}</p>
+	{{end}}
+</div>
+{{end}}
+
+{{/* book takes a bookView. */}}
+{{define "book"}}
+<section class="books-book" id="books-book" aria-label="Book"{{if .Selected}} data-book-id="{{.ID}}"{{end}}>
+{{if .Selected}}
+	{{template "back" (dict "For" "books-book-open" "Label" "Books")}}
+	<header class="books-book-head">
+		<div class="books-spine swatch-c-{{.Spine}}" aria-hidden="true"><span>{{.Title}}</span></div>
+		<div class="books-book-titles">
+			<h1>{{.Title}}</h1>
+			{{with .Subtitle}}<p class="books-subtitle">{{.}}</p>{{end}}
+			{{with .Authors}}<p class="books-authors">{{.}}</p>{{end}}
+			{{with .Series}}<p class="books-series">{{.}}</p>{{end}}
+			{{with .Facts}}<p class="books-facts">{{range $i, $f := .}}{{if $i}} · {{end}}{{$f}}{{end}}</p>{{end}}
+			<p class="books-pills"><span class="books-pill books-pill-shelf">{{.ShelfLabel}}</span>{{range .Tags}} <span class="books-pill">{{.}}</span>{{end}}</p>
+		</div>
+		{{template "book-menu" .}}
+	</header>
+	{{template "reading-box" .}}
+	{{with .Description}}<div class="books-description">{{.}}</div>{{end}}
+	{{template "tags-form" .}}
+{{else}}
+	<p class="empty">Pick a book, or add one.</p>
+{{end}}
+</section>
+{{end}}
+
+{{/* text-field is one labelled text input with its error. Pass a dict
+     with Name, Label, Value, Error and optionally Placeholder and Mode
+     (inputmode). */}}
+{{define "text-field"}}
+<div class="field">
+	<label for="books-{{.Name}}">{{.Label}}</label>
+	<input id="books-{{.Name}}" name="{{.Name}}" type="text"{{with .Mode}} inputmode="{{.}}"{{end}}{{with .Placeholder}} placeholder="{{.}}"{{end}} value="{{.Value}}"{{if .Error}} aria-invalid="true" aria-describedby="books-{{.Name}}-error"{{end}}>
+	{{template "field-error" .}}
+</div>
+{{end}}
+
+{{define "field-error"}}{{with .Error}}<p class="books-field-error" id="books-{{$.Name}}-error">{{.}}</p>{{end}}{{end}}
+
+{{/* book-menu is the book pane's ⋯ menu: a no-JS <details> disclosure
+     (PATTERNS.md). Delete goes through the confirm dialog (books.js);
+     without JavaScript it simply submits. Takes a bookView. */}}
+{{define "book-menu"}}
+<details class="outline-menu books-menu">
+	<summary class="outline-menu-toggle quiet" aria-label="Book actions">{{ticon "more"}}</summary>
+	<div class="outline-menu-list outline-menu-list-end">
+		<a class="books-edit-link" href="{{.Ctx.EditURL .ID}}">Edit details</a>
+		<form method="post" action="/books/delete/{{.ID}}">
+			{{template "post-ctx" .}}
+			<button type="submit" class="outline-menu-delete"
+			        hx-post="/books/delete/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML"
+			        hx-confirm="Delete “{{.Title}}” for good? Its readings and tags go too.">Delete</button>
+		</form>
+	</div>
+</details>
+{{end}}
+
+{{/* post-ctx is what every book-pane POST carries: the CSRF token and the
+     list context. Takes a bookView. */}}
+{{define "post-ctx"}}<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">{{template "ctx-fields" .Ctx}}{{end}}
+
+{{/* reading-box is the current reading: Finish / Did not finish while one
+     is in progress, otherwise a button to start one. Takes a bookView. */}}
+{{define "reading-box"}}
+<div class="books-reading">
+	{{if .Reading}}
+	<p class="books-reading-status">Reading{{with .StartedOn}} since {{.}}{{end}}</p>
+	<div class="books-reading-actions">
+		{{template "close-reading" (dict "Book" . "Action" "finish" "Label" "Finish" "DayLabel" "Finished on" "Submit" "Mark as read" "Primary" true)}}
+		{{template "close-reading" (dict "Book" . "Action" "dnf" "Label" "Did not finish" "DayLabel" "Stopped on" "Submit" "Put it down" "Primary" false)}}
+	</div>
+	{{else}}
+	<form method="post" action="/books/start/{{.ID}}" hx-post="/books/start/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+		{{template "post-ctx" .}}
+		<button type="submit" class="primary books-start">{{.StartLabel}}</button>
+	</form>
+	{{end}}
+</div>
+{{end}}
+
+{{/* close-reading is Finish or Did not finish: a no-JS <details>
+     disclosure (PATTERNS.md) holding the date — today unless changed, never
+     before the start — and the button that sends it. */}}
+{{define "close-reading"}}
+<details class="books-close">
+	<summary class="button{{if .Primary}} primary{{end}}">{{.Label}}</summary>
+	<form class="books-close-form" method="post" action="/books/{{.Action}}/{{.Book.ID}}"
+	      hx-post="/books/{{.Action}}/{{.Book.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+		{{template "post-ctx" .Book}}
+		<label for="books-{{.Action}}-day">{{.DayLabel}}</label>
+		<input id="books-{{.Action}}-day" name="day" type="date" value="{{.Book.Today}}" max="{{.Book.Today}}"{{with .Book.MinDay}} min="{{.}}"{{end}}>
+		<button type="submit"{{if .Primary}} class="primary"{{end}}>{{.Submit}}</button>
+	</form>
+</details>
+{{end}}
+
+{{/* tags-form edits a book's tags in place. Takes a bookView. */}}
+{{define "tags-form"}}
+<form class="books-tags-form" method="post" action="/books/tags/{{.ID}}"
+      hx-post="/books/tags/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+	{{template "post-ctx" .}}
+	<label for="books-tags-input">Tags</label>
+	<div class="books-tags-row">
+		<input id="books-tags-input" name="tags" type="text" value="{{.TagsValue}}" placeholder="sf, favourites" autocomplete="off">
+		<button type="submit">Save tags</button>
+	</div>
+</form>
+{{end}}
+
+{{/* confirm is the one dialog every hx-confirm in the panes goes through
+     (books.js), instead of window.confirm. */}}
+{{define "confirm"}}
+<dialog id="books-confirm-dialog" class="books-dialog">
+	<p id="books-confirm-message"></p>
+	<div class="dialog-actions">
+		<button type="button" id="books-confirm-ok" class="danger">Delete</button>
+		<button type="button" class="books-dialog-cancel">Cancel</button>
+	</div>
+</dialog>
+{{end}}

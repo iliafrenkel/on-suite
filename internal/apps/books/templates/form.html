@@ -1,0 +1,49 @@
+{{define "content"}}
+{{$d := .Data}}
+<form class="books-form stack" method="post" action="{{$d.Action}}" novalidate>
+	<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+	{{if not $d.New}}{{template "ctx-fields" $d.Ctx}}{{end}}
+	<h1>{{$d.Heading}}</h1>
+	{{if $d.Errors}}<div class="notice notice-error" role="alert">Please fix the fields marked below.</div>{{end}}
+
+	{{template "text-field" (dict "Name" "title" "Label" "Title" "Value" $d.Values.Title "Error" (index $d.Errors "title"))}}
+	{{template "text-field" (dict "Name" "subtitle" "Label" "Subtitle" "Value" $d.Values.Subtitle "Error" (index $d.Errors "subtitle"))}}
+	{{template "text-field" (dict "Name" "authors" "Label" "Author(s)" "Placeholder" "Ursula K. Le Guin" "Value" $d.Values.Authors "Error" (index $d.Errors "authors"))}}
+	<div class="books-form-row">
+		{{template "text-field" (dict "Name" "year" "Label" "First published" "Mode" "numeric" "Value" $d.Values.Year "Error" (index $d.Errors "year"))}}
+		{{template "text-field" (dict "Name" "pages" "Label" "Pages" "Mode" "numeric" "Value" $d.Values.Pages "Error" (index $d.Errors "pages"))}}
+		{{template "text-field" (dict "Name" "isbn" "Label" "ISBN" "Value" $d.Values.ISBN "Error" (index $d.Errors "isbn"))}}
+	</div>
+	<div class="books-form-row">
+		{{template "text-field" (dict "Name" "series_name" "Label" "Series" "Value" $d.Values.SeriesName "Error" (index $d.Errors "series_name"))}}
+		{{template "text-field" (dict "Name" "series_number" "Label" "Number in series" "Value" $d.Values.SeriesNumber "Error" (index $d.Errors "series_number"))}}
+	</div>
+	<div class="field">
+		<label for="books-description">Description</label>
+		<textarea id="books-description" name="description" rows="5"{{if index $d.Errors "description"}} aria-invalid="true" aria-describedby="books-description-error"{{end}}>{{$d.Values.Description}}</textarea>
+		{{template "field-error" (dict "Name" "description" "Error" (index $d.Errors "description"))}}
+	</div>
+
+	{{if $d.New}}
+	<fieldset class="field books-add-to"{{if index $d.Errors "add_to"}} aria-describedby="books-add_to-error"{{end}}>
+		<legend>Add it to</legend>
+		<label class="books-choice"><input type="radio" name="add_to" value="want"{{if eq $d.Values.AddTo "want"}} checked{{end}}> Want to read</label>
+		<label class="books-choice"><input type="radio" name="add_to" value="reading"{{if eq $d.Values.AddTo "reading"}} checked{{end}}> Reading now — started today</label>
+		<label class="books-choice"><input type="radio" name="add_to" value="read"{{if eq $d.Values.AddTo "read"}} checked{{end}}> Already read</label>
+		{{template "field-error" (dict "Name" "add_to" "Error" (index $d.Errors "add_to"))}}
+	</fieldset>
+	{{/* Shown only while "Already read" is picked (CSS :has(), no script). */}}
+	<div class="field books-finished">
+		<label for="books-finished_on">Finished on</label>
+		<input id="books-finished_on" name="finished_on" type="date" max="{{$d.Today}}" value="{{if $d.Values.FinishedOn}}{{$d.Values.FinishedOn}}{{else}}{{$d.Today}}{{end}}"{{if index $d.Errors "finished_on"}} aria-invalid="true" aria-describedby="books-finished_on-error"{{end}}>
+		{{template "field-error" (dict "Name" "finished_on" "Error" (index $d.Errors "finished_on"))}}
+	</div>
+	{{template "text-field" (dict "Name" "tags" "Label" "Tags" "Placeholder" "sf, favourites" "Value" $d.Values.Tags "Error" "")}}
+	{{end}}
+
+	<div class="books-form-actions">
+		<button class="primary" type="submit">{{$d.Submit}}</button>
+		<a href="{{$d.Cancel}}">Cancel</a>
+	</div>
+</form>
+{{end}}

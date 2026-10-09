@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/apps/books"
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/apps/focus"
 	"github.com/iliafrenkel/on-suite/internal/apps/later"
@@ -164,6 +165,14 @@ func TestSeedFillsEveryApp(t *testing.T) {
 	}
 	if n, err := fst.SessionCount(ctx, demo.ID); err != nil || n < 30 {
 		t.Errorf("focus sessions = %d, %v; want >= 30", n, err)
+	}
+
+	// Books: a small library across every shelf.
+	bst := books.NewStore(handle)
+	shelves, err := bst.ShelfCounts(ctx, demo.ID)
+	if err != nil || shelves[books.ShelfReading] < 2 || shelves[books.ShelfWant] < 2 ||
+		shelves[books.ShelfRead] < 2 || shelves[books.ShelfDNF] < 1 {
+		t.Errorf("books shelves = %v, %v; want reading/want/read >= 2 and dnf >= 1", shelves, err)
 	}
 
 	// Flash: decks with cards, a review history and a streak.

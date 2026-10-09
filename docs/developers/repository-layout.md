@@ -10,6 +10,7 @@ on-suite/
 ├── cmd/onsuite/                  the single binary: commands, server wiring (stack.go), backup, export, TLS
 ├── internal/
 │   ├── apps/                     one package per app; never import each other
+│   │   ├── books/                ON Books: a private reading log — shelves, readings and tags; Open Library, progress and stats to come
 │   │   ├── flash/                ON Flash: decks, cards, FSRS review, import, media, sharing, stats
 │   │   │   ├── migrations/       flash:0001… schema, forward-only
 │   │   │   ├── static/           flash.js, served by the app itself

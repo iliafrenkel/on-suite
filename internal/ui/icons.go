@@ -32,6 +32,11 @@ var icons = map[string]template.HTML{
 		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>
 		<path d="M8.5 6.5h7v11l-3.5-2.6-3.5 2.6z" fill="none" stroke="var(--c-accent)" stroke-width="1.5" stroke-linejoin="round"/>
 	</svg>`,
+	// An open book: two pages meeting at the spine.
+	"books": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>
+		<path d="M12 8.5C10.4 7.3 8.6 6.9 6.5 7v9.5c2.1-.1 3.9.3 5.5 1.5 1.6-1.2 3.4-1.6 5.5-1.5V7c-2.1-.1-3.9.3-5.5 1.5zM12 8.5V18" fill="none" stroke="var(--c-accent)" stroke-width="1.5" stroke-linejoin="round"/>
+	</svg>`,
 	// A stopwatch: a ring with the crown on top.
 	"focus": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
 		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>

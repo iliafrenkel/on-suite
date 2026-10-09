@@ -12,7 +12,9 @@ step. **ON Paste** (snippets with syntax highlighting and shareable links),
 Reader** (a feed reader, with search, OPML import/export, full-article
 extraction, and reading-stats), **ON Later** (a read-it-later app: save
 pages, read them in a calm view, highlight, comment and tag them, export as
-Markdown), **ON Flash** (flash cards with FSRS review, import from
+Markdown), **ON Books** (a private reading log: shelves, readings and tags,
+with Open Library search, progress, notes and stats to come),
+**ON Flash** (flash cards with FSRS review, import from
 AI-written Markdown/JSON, media, household sharing and stats), and **ON
 Focus** (saved, reusable focus timers — single blocks or Pomodoro-style
 intervals — with a calm running view and a history of focused time) are all
