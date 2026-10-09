@@ -32,7 +32,7 @@ Single user today; per-user scoping as in every other app.
 | Quotes | Separate list: text, optional page, optional comment. Not shared with Later's highlights |
 | Goal | Yearly target, number of books only |
 | Stats | Per-year page plus an all-time row; server-rendered SVG |
-| Layout | List+detail split view, like Later |
+| Layout | Three-pane split view (sidebar, list, book), like ON Reader |
 | Import | Goodreads CSV; covers filled in by a background job; "Find cover" button |
 | Export | `onsuite export` JSON + `books-export.md` |
 
@@ -130,7 +130,7 @@ the suite has done since v2.1.0.
 
 ### Layout
 
-A list+detail split view, like ON Later.
+A three-pane list+detail view, like ON Reader (sidebar, list, book), with its resizable gutters; one pane at a time on phones.
 
 - **Sidebar** — **Add book** button; shelves with counts (Reading · Want to
   read · Read · DNF · All); tags; Stats. *Reading* is the default shelf.
