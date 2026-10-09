@@ -4220,3 +4220,16 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 	#books-list-open:checked ~ .books-listpane .books-back-btn { display: inline-flex; }
 	#books-book-open:checked ~ .books-listpane { display: none; }
 }
+
+/* Add / edit form */
+.books-form { max-width: var(--measure); padding: var(--s-4) 0; }
+.books-form fieldset { border: 0; padding: 0; margin-inline: 0; min-inline-size: 0; }
+.books-form legend { font-weight: 600; margin-bottom: var(--s-2); }
+.books-form-row { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+.books-form-row .field { flex: 1 1 8rem; }
+.books-choice { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-2); font-size: var(--fs-base); color: var(--c-text); }
+.books-field-error { margin: var(--s-1) 0 0; color: var(--c-danger); font-size: var(--fs-sm); }
+.books-finished { display: none; }
+.books-form:has(input[name="add_to"][value="read"]:checked) .books-finished { display: block; }
+.books-form-actions { display: flex; align-items: center; gap: var(--s-3); }
+.books-menu { margin-left: auto; }

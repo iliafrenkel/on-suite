@@ -212,3 +212,5 @@ func TestHTMXBookOpenSwapsTheBookOnly(t *testing.T) {
 	doc.MustNotHave("#books-list")
 	doc.MustNotHave("#books-side")
 }
+
+func httptestGet(path string) *http.Request { return httptest.NewRequest("GET", path, nil) }

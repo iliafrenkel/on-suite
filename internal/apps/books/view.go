@@ -249,3 +249,8 @@ func viewBook(b Book, c listCtx, today string) bookView {
 	}
 	return v
 }
+
+// EditURL is a book's edit page, coming back to this list afterwards.
+func (c listCtx) EditURL(id int64) string {
+	return "/books/edit/" + strconv.FormatInt(id, 10) + "?" + c.Query()
+}

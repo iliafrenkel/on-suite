@@ -124,10 +124,35 @@
 			{{with .Facts}}<p class="books-facts">{{range $i, $f := .}}{{if $i}} · {{end}}{{$f}}{{end}}</p>{{end}}
 			<p class="books-pills"><span class="books-pill books-pill-shelf">{{.ShelfLabel}}</span>{{range .Tags}} <span class="books-pill">{{.}}</span>{{end}}</p>
 		</div>
+		{{template "book-menu" .}}
 	</header>
 	{{with .Description}}<div class="books-description">{{.}}</div>{{end}}
 {{else}}
 	<p class="empty">Pick a book, or add one.</p>
 {{end}}
 </section>
+{{end}}
+
+{{/* text-field is one labelled text input with its error. Pass a dict
+     with Name, Label, Value, Error and optionally Placeholder and Mode
+     (inputmode). */}}
+{{define "text-field"}}
+<div class="field">
+	<label for="books-{{.Name}}">{{.Label}}</label>
+	<input id="books-{{.Name}}" name="{{.Name}}" type="text"{{with .Mode}} inputmode="{{.}}"{{end}}{{with .Placeholder}} placeholder="{{.}}"{{end}} value="{{.Value}}"{{if .Error}} aria-invalid="true" aria-describedby="books-{{.Name}}-error"{{end}}>
+	{{template "field-error" .}}
+</div>
+{{end}}
+
+{{define "field-error"}}{{with .Error}}<p class="books-field-error" id="books-{{$.Name}}-error">{{.}}</p>{{end}}{{end}}
+
+{{/* book-menu is the book pane's ⋯ menu: a no-JS <details> disclosure
+     (PATTERNS.md). Takes a bookView. */}}
+{{define "book-menu"}}
+<details class="outline-menu books-menu">
+	<summary class="outline-menu-toggle quiet" aria-label="Book actions">{{ticon "more"}}</summary>
+	<div class="outline-menu-list outline-menu-list-end">
+		<a href="{{.Ctx.EditURL .ID}}">Edit details</a>
+	</div>
+</details>
 {{end}}
