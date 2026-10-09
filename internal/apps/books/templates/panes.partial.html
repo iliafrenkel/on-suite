@@ -222,7 +222,7 @@
      without JavaScript it posts and comes back. Takes a bookView. */}}
 {{define "progress"}}
 <div class="books-progress" id="books-progress">
-	<form class="books-progress-form" method="post" action="/books/progress/{{.ID}}"
+	<form class="books-progress-form" novalidate method="post" action="/books/progress/{{.ID}}"
 	      hx-post="/books/progress/{{.ID}}" hx-target="#books-progress" hx-swap="outerHTML">
 		{{template "post-ctx" .}}
 		<label for="books-progress-input">{{if eq .Progress.Unit "page"}}Page{{else}}Percent read{{end}}</label>
@@ -245,7 +245,7 @@
 {{define "close-reading"}}
 <details class="books-close">
 	<summary class="button{{if .Primary}} primary{{end}}">{{.Label}}</summary>
-	<form class="books-close-form" method="post" action="/books/{{.Action}}/{{.Book.ID}}"
+	<form class="books-close-form" novalidate method="post" action="/books/{{.Action}}/{{.Book.ID}}"
 	      hx-post="/books/{{.Action}}/{{.Book.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
 		{{template "post-ctx" .Book}}
 		<label for="books-{{.Action}}-day">{{.DayLabel}}</label>

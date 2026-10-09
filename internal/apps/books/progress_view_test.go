@@ -43,6 +43,9 @@ func TestTheProgressBoxIsInTheUnitOfTheReading(t *testing.T) {
 	}
 
 	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", paper))
+	if _, ok := htmlassert.Attr(doc.MustHave("form.books-progress-form"), "novalidate"); !ok {
+		t.Error("progress form lacks novalidate: the server's message must show, not the browser's")
+	}
 	input := doc.MustHave("input#books-progress-input")
 	if v, _ := htmlassert.Attr(input, "max"); v != "600" {
 		t.Errorf("paper max = %q, want 600", v)

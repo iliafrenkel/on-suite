@@ -79,7 +79,10 @@ func TestEditingAReading(t *testing.T) {
 	path := fmt.Sprintf("/books/readings/%d/%d", id, past)
 	s.Submit(t, s.Alice, path, url.Values{"shelf": {"read"}, "started_on": {"2026-09-20"}, "finished_on": {"2026-09-28"}, "format": {"ebook"}},
 		fmt.Sprintf("/books/b/%d?shelf=read", id))
-	rs, _ := s.Store.Readings(context.Background(), s.Alice.User.ID, id)
+	rs, err := s.Store.Readings(context.Background(), s.Alice.User.ID, id)
+	if err != nil || len(rs) < 2 {
+		t.Fatalf("Readings = %+v, %v; want 2 readings", rs, err)
+	}
 	if got := rs[1]; got.StartedOn != "2026-09-20" || got.FinishedOn != "2026-09-28" || got.Format != "ebook" {
 		t.Errorf("edited reading = %+v", got)
 	}

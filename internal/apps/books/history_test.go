@@ -168,3 +168,29 @@ func TestDeleteReadingMovesTheShelf(t *testing.T) {
 		t.Errorf("deleting it again = %v, want ErrNotFound", err)
 	}
 }
+
+func TestUpdateReadingInProgressKeepsStartAndFormatButNoFinish(t *testing.T) {
+	f := newFixture(t)
+	id := readTwice(t, f)
+	current := readings(t, f, id)[0].ID
+	if err := f.store.UpdateReading(context.Background(), f.alice.ID, id, current, books.ReadingEdit{
+		StartedOn: "2026-10-04", FinishedOn: "", Format: "ebook"}); err != nil {
+		t.Fatal(err)
+	}
+	got := readings(t, f, id)[0]
+	if got.StartedOn != "2026-10-04" || got.Format != "ebook" || got.FinishedOn != "" || got.Status != books.StatusReading {
+		t.Errorf("current reading = %+v, want started 2026-10-04 on ebook, no finish, still reading", got)
+	}
+}
+
+func TestSetFormatEmptyClearsTheFormat(t *testing.T) {
+	f := newFixture(t)
+	id := readTwice(t, f)
+	if err := f.store.SetFormat(context.Background(), f.alice.ID, id, ""); err != nil {
+		t.Fatal(err)
+	}
+	rs := readings(t, f, id)
+	if rs[0].Format != "" || rs[1].Format != "paper" {
+		t.Errorf("formats = %q, %q; want cleared now, paper before", rs[0].Format, rs[1].Format)
+	}
+}

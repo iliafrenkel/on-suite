@@ -19,6 +19,9 @@ func TestRenderReview(t *testing.T) {
 		{"bare link", "see https://example.com/a_(b) too",
 			`<p>see <a href="https://example.com/a_(b)" target="_blank" rel="noopener noreferrer">https://example.com/a_(b)</a> too</p>`},
 		{"no javascript links", "[x](javascript:alert(1))", "<p>[x](javascript:alert(1))</p>"},
+		{"uppercase javascript link", "[x](JAVASCRIPT:alert(1))", "<p>[x](JAVASCRIPT:alert(1))</p>"},
+		{"quote in a url stays in the attribute", `[x](https://a.example/"onmouseover=alert(1))`,
+			`<p><a href="https://a.example/&#34;onmouseover=alert(1" target="_blank" rel="noopener noreferrer">x</a>)</p>`},
 		{"html is text", "<script>alert(1)</script> & co", "<p>&lt;script&gt;alert(1)&lt;/script&gt; &amp; co</p>"},
 		{"windows line ends", "a\r\n\r\nb", "<p>a</p><p>b</p>"},
 	}

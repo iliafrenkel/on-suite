@@ -31,7 +31,7 @@ func TestListASeriesInReadingOrder(t *testing.T) {
 	addBook(t, f, f.bob.ID, inSeries("Bob's Expanse", "The Expanse", "4"))
 
 	got := list(t, f, books.ListQuery{Shelf: books.ShelfAll, Series: "The Expanse"})
-	want := []string{"Gods of Risk", "Leviathan Wakes", "Caliban's War", "The Churn", "Abaddon's Gate"}
+	want := []string{"Leviathan Wakes", "Caliban's War", "The Churn", "Abaddon's Gate", "Gods of Risk"}
 	if !slices.Equal(got, want) {
 		t.Errorf("series list = %v, want %v", got, want)
 	}

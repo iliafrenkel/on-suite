@@ -313,7 +313,9 @@ type ListQuery struct {
 // and All by the latest change. NULL dates sort last.
 func listOrder(q ListQuery) string {
 	if q.Series != "" {
-		return `CAST(b.series_number AS REAL), b.series_number, b.title, b.id`
+		// Unnumbered books sort after numbered ones; a non-numeric number
+		// casts to 0 and so sorts first among the numbered.
+		return `b.series_number = '', CAST(b.series_number AS REAL), b.series_number, b.title, b.id`
 	}
 	switch q.Shelf {
 	case ShelfReading:

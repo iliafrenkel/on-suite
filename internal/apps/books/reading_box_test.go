@@ -65,6 +65,11 @@ func TestFinishOffersARatingAndDNFAPlace(t *testing.T) {
 	if v, _ := htmlassert.Attr(doc.MustHave(`option[selected]`), "value"); v != "3" {
 		t.Errorf("selected rating = %q, want the book's 3", v)
 	}
+	for _, f := range doc.QueryAll("details.books-close form") {
+		if _, ok := htmlassert.Attr(f, "novalidate"); !ok {
+			t.Errorf("close form %q lacks novalidate", htmlassert.Text(f))
+		}
+	}
 	at := doc.MustHave(`input[name="at"]`)
 	if v, _ := htmlassert.Attr(at, "max"); v != "600" {
 		t.Errorf("DNF page max = %q, want 600", v)
