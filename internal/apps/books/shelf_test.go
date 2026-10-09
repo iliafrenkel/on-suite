@@ -193,7 +193,9 @@ func TestListFiltersByTagAndText(t *testing.T) {
 		{books.ListQuery{Shelf: books.ShelfAll, Q: "le guin"}, []string{"A Wizard of Earthsea", "The Dispossessed"}},
 		{books.ListQuery{Shelf: books.ShelfWant, Q: "le guin"}, []string{"The Dispossessed"}},
 		{books.ListQuery{Shelf: books.ShelfAll, Q: "earthsea"}, []string{"A Wizard of Earthsea"}},
-		{books.ListQuery{Shelf: books.ShelfAll, Q: "100%"}, []string{"100% Real"}},
+		// Punctuation separates words, and a word matches as a prefix
+		// (full-text search, B3).
+		{books.ListQuery{Shelf: books.ShelfAll, Q: "100%"}, []string{"100% Real", "1000 Years"}},
 		{books.ListQuery{Shelf: books.ShelfAll, Tag: "SF"}, []string{"The Dispossessed"}},
 		{books.ListQuery{Shelf: books.ShelfAll, Tag: "nope"}, nil},
 	}
