@@ -31,7 +31,7 @@ func (a *App) act(do change, gone bool) http.HandlerFunc {
 		var ref *Refusal
 		switch {
 		case errors.As(err, &ref):
-			a.renderPanes(w, r, uid, c, id, ref.Msg)
+			a.renderPanes(w, r, uid, c, paneOpts{BookID: id, Banner: ref.Msg})
 			return
 		case err != nil:
 			a.fail(w, r, err)
@@ -45,11 +45,47 @@ func (a *App) act(do change, gone bool) http.HandlerFunc {
 			// The form posted from the address bar's book; say where the panes
 			// now stand (the list, once the book is gone).
 			w.Header().Set("HX-Replace-Url", target)
-			a.renderPanes(w, r, uid, c, open, "")
+			a.renderPanes(w, r, uid, c, paneOpts{BookID: open})
 			return
 		}
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	}
+}
+
+// progress records where the reading in progress stands. htmx aims it at
+// the progress box, so the answer is the box with the list out of band;
+// a value the store refuses comes back inside the box with what was typed
+// (spec "Errors"). Nothing typed is refused like any other bad value.
+func (a *App) progress(w http.ResponseWriter, r *http.Request) {
+	uid, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	c := ctxFrom(r.PostFormValue)
+	typed := strings.TrimSpace(r.PostFormValue("at"))
+	at := formInt(r, "at")
+	if typed == "" {
+		at = -1
+	}
+	err := a.store.RecordProgress(r.Context(), uid, id, at)
+	var ref *Refusal
+	switch {
+	case errors.As(err, &ref):
+		a.renderPanes(w, r, uid, c, paneOpts{BookID: id, ProgressError: ref.Msg, ProgressInput: typed})
+		return
+	case err != nil:
+		a.fail(w, r, err)
+		return
+	}
+	if web.IsHTMX(r) {
+		a.renderPanes(w, r, uid, c, paneOpts{BookID: id})
+		return
+	}
+	http.Redirect(w, r, c.BookURL(id), http.StatusSeeOther)
 }
 
 func (a *App) start(r *http.Request, userID, id int64) error {

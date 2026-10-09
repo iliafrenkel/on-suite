@@ -254,7 +254,7 @@
 		if (!document.getElementById("books-panes")) return;
 		if (isTyping(e.target)) {
 			if (e.key === "Escape") {
-				if (e.target.id === "books-q") {
+				if (e.target.id === "books-q" || e.target.id === "books-progress-input") {
 					e.target.blur();
 				} else {
 					// Esc from the date field of an open Finish/DNF disclosure (or
@@ -284,6 +284,12 @@
 			break;
 		case "a":
 			window.location.href = "/books/new";
+			break;
+		case "p":
+			var progress = document.getElementById("books-progress-input");
+			if (!progress) return;
+			progress.focus();
+			progress.select();
 			break;
 		case "Escape":
 			document.querySelectorAll("details.books-close[open], details.books-menu[open]").forEach(function (d) {

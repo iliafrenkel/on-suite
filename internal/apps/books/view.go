@@ -121,7 +121,11 @@ type rowView struct {
 	URL     string
 	Title   string
 	Byline  string // "Authors · Series #3"
-	Note    string // what the book's shelf says about it: "Started 3 Oct 2026"
+	Note    string // what the book's shelf says about it: "Started 3 Oct 2026", "20%"
+	Bar     bool   // a reading with progress: draw Percent as a bar before Note
+	Percent int
+	Rating  int    // 1–5 on a read book, 0 otherwise
+	Stars   string // Rating drawn: "★★★★☆"
 	Spine   string // swatch colour name
 	Initial string
 	Cover   string // the stored cover; "" draws the mini spine
@@ -133,6 +137,7 @@ type listView struct {
 	Heading string
 	Rows    []rowView
 	Empty   string
+	OOB     bool // swapped out of band, alongside a progress update
 }
 
 func listHeading(c listCtx) string {
@@ -148,9 +153,16 @@ func listHeading(c listCtx) string {
 func viewList(items []ListItem, c listCtx, openID int64) listView {
 	v := listView{Ctx: c, Heading: listHeading(c)}
 	for _, it := range items {
-		v.Rows = append(v.Rows, rowView{ID: it.ID, URL: c.BookURL(it.ID), Title: it.Title,
+		row := rowView{ID: it.ID, URL: c.BookURL(it.ID), Title: it.Title,
 			Byline: byline(it.Authors, seriesText(it.SeriesName, it.SeriesNumber)), Note: rowNote(it),
-			Spine: SpineColor(it.Title), Initial: initial(it.Title), Cover: coverURL(it.ID, it.CoverVersion), Active: it.ID == openID})
+			Spine: SpineColor(it.Title), Initial: initial(it.Title), Cover: coverURL(it.ID, it.CoverVersion), Active: it.ID == openID}
+		switch it.Shelf {
+		case ShelfReading:
+			row.Bar, row.Percent = it.Progress.Set(), it.Progress.Percent(it.Pages)
+		case ShelfRead:
+			row.Rating, row.Stars = it.Rating, stars(it.Rating)
+		}
+		v.Rows = append(v.Rows, row)
 	}
 	if len(v.Rows) == 0 {
 		v.Empty = emptyText(c)
@@ -187,11 +199,14 @@ func coverURL(id int64, version string) string {
 	return "/books/cover/" + strconv.FormatInt(id, 10) + "?v=" + version
 }
 
-// rowNote is the right-hand side of a row. B2 replaces the Reading and
-// Read notes with a progress bar and stars.
+// rowNote is the text on the right-hand side of a row (spec "Layout"):
+// how far through a book being read is, when a read book was finished.
 func rowNote(it ListItem) string {
 	switch it.Shelf {
 	case ShelfReading:
+		if it.Progress.Set() {
+			return strconv.Itoa(it.Progress.Percent(it.Pages)) + "%"
+		}
 		if it.StartedOn != "" {
 			return "Started " + ShowDay(it.StartedOn)
 		}
@@ -205,6 +220,14 @@ func rowNote(it ListItem) string {
 		return "Did not finish"
 	}
 	return "Added " + it.AddedAt.Local().Format("2 Jan 2006")
+}
+
+// stars draws a 1–5 rating as five stars, "" for none.
+func stars(rating int) string {
+	if rating < 1 || rating > 5 {
+		return ""
+	}
+	return strings.Repeat("★", rating) + strings.Repeat("☆", 5-rating)
 }
 
 // countText is "1 book" or "9 books".
@@ -261,11 +284,12 @@ type bookView struct {
 	Tags                             []string
 	TagsValue                        string // the tags box: "classics, sf"
 	// The reading box.
-	Reading    bool   // a reading is in progress
-	StartedOn  string // "3 Oct 2026"; "" when unknown
-	MinDay     string // the earliest finish date allowed (the start), YYYY-MM-DD
-	Today      string // the latest date allowed, YYYY-MM-DD
-	StartLabel string // "Start reading", "Read again" or "Start again"
+	Reading    bool         // a reading is in progress
+	Progress   progressView // its progress, when Reading
+	StartedOn  string       // "3 Oct 2026"; "" when unknown
+	MinDay     string       // the earliest finish date allowed (the start), YYYY-MM-DD
+	Today      string       // the latest date allowed, YYYY-MM-DD
+	StartLabel string       // "Start reading", "Read again" or "Start again"
 	Ctx        listCtx
 	Shell      render.Shell
 }
@@ -294,6 +318,7 @@ func viewBook(b Book, c listCtx, today string) bookView {
 	switch {
 	case b.Latest.Status == StatusReading:
 		v.Reading = true
+		v.Progress = viewProgress(b)
 		v.MinDay = b.Latest.StartedOn
 		if b.Latest.StartedOn != "" {
 			v.StartedOn = ShowDay(b.Latest.StartedOn)
@@ -304,6 +329,32 @@ func viewBook(b Book, c listCtx, today string) bookView {
 		v.StartLabel = "Start again"
 	default:
 		v.StartLabel = "Start reading"
+	}
+	return v
+}
+
+// progressView is the progress box: an input in the reading's unit, a
+// bar and a note. Error and a typed Value come from a refused update.
+type progressView struct {
+	Unit    Unit
+	Value   string // the input: the current progress in Unit ("" for none yet)
+	Max     int    // the book's pages, or 100 for percent
+	Percent int    // the bar
+	Note    string // "20% · updated 9 Oct 2026"
+	Error   string
+}
+
+// viewProgress is the progress box of b's reading in progress, in the unit
+// it is counted in now (UnitFor); an older row in the other unit converts.
+func viewProgress(b Book) progressView {
+	u := UnitFor(b.Latest.Format, b.Pages)
+	v := progressView{Unit: u, Max: 100, Percent: b.Progress.Percent(b.Pages), Note: "No progress yet."}
+	if u == UnitPage {
+		v.Max = b.Pages
+	}
+	if b.Progress.Set() {
+		v.Value = strconv.Itoa(b.Progress.In(u, b.Pages))
+		v.Note = strconv.Itoa(v.Percent) + "% · updated " + b.Progress.RecordedAt.Local().Format("2 Jan 2006")
 	}
 	return v
 }
