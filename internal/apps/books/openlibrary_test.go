@@ -32,6 +32,20 @@ func fakeOpenLibrary(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /search.json", func(w http.ResponseWriter, r *http.Request) {
+		// Find cover's search, by title (B5): "Piranesi" finds the usual
+		// answer, "Broken" fails, anything else finds nothing.
+		switch r.URL.Query().Get("title") {
+		case "":
+		case "Piranesi":
+			_, _ = w.Write([]byte(searchJSON))
+			return
+		case "Broken":
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		default:
+			_, _ = w.Write([]byte(`{"docs":[{"key":"/works/OL9W","title":"No cover"}]}`))
+			return
+		}
 		switch r.URL.Query().Get("q") {
 		case "broken":
 			http.Error(w, "down", http.StatusServiceUnavailable)

@@ -179,13 +179,19 @@
 {{define "field-error"}}{{with .Error}}<p class="books-field-error" id="books-{{$.Name}}-error">{{.}}</p>{{end}}{{end}}
 
 {{/* book-menu is the book pane's ⋯ menu: a no-JS <details> disclosure
-     (PATTERNS.md). Delete goes through the confirm dialog (books.js);
+     (PATTERNS.md). Find cover shows while the book has none (B5). Delete goes through the confirm dialog (books.js);
      without JavaScript it simply submits. Takes a bookView. */}}
 {{define "book-menu"}}
 <details class="outline-menu books-menu">
 	<summary class="outline-menu-toggle quiet" aria-label="Book actions">{{ticon "more"}}</summary>
 	<div class="outline-menu-list outline-menu-list-end">
 		<a class="books-edit-link" href="{{.Ctx.EditURL .ID}}">Edit details</a>
+		{{if not .Cover}}
+		<form method="post" action="/books/find-cover/{{.ID}}">
+			{{template "post-ctx" .}}
+			<button type="submit" hx-post="/books/find-cover/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">Find cover</button>
+		</form>
+		{{end}}
 		<form method="post" action="/books/delete/{{.ID}}">
 			{{template "post-ctx" .}}
 			<button type="submit" class="outline-menu-delete"
