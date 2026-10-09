@@ -105,6 +105,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("GET /import", a.importPage)
 	r.RegisterBodyLimit("POST /import", importBodyMaxBytes)
 	r.HandleFunc("POST /import", a.importUpload)
+	r.HandleFunc("GET /export", a.download)
 	r.HandleFunc("GET /cover/{id}", a.cover)
 	r.HandleFunc("GET /olcover/{id}", a.olThumb)
 	r.HandleFunc("GET /books.js", a.script("books.js"))
