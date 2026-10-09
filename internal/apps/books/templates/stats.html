@@ -1,0 +1,104 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="books-stats stack">
+	<div class="books-stats-head">
+		<h1>Reading stats</h1>
+		<a class="button" href="/books/">← Books</a>
+	</div>
+	<nav class="books-years" aria-label="Year">
+		{{range $d.Years}}<a class="books-year" href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Year}}</a>{{end}}
+	</nav>
+
+	{{template "goal" (dict "Goal" $d.Goal "Shell" .Shell)}}
+
+	<section class="books-stats-section" id="books-year" aria-labelledby="books-year-head">
+		<h2 id="books-year-head">{{$d.Year}}</h2>
+		{{template "stat-tiles" $d.Tiles}}
+		{{with $d.Formats}}<p class="books-stat-line"><span class="books-stat-label">Formats</span> {{range $i, $f := .}}{{if $i}} · {{end}}{{$f.Label}} {{$f.Value}}{{end}}</p>{{end}}
+		{{range $d.Lengths}}<p class="books-stat-line"><span class="books-stat-label">{{.Label}}</span> <a href="{{.URL}}">{{.Title}}</a> · {{.Pages}}</p>{{end}}
+		{{template "stats-chart" (dict "Chart" $d.Months "Title" (printf "Books finished by month, %d" $d.Year) "Empty" (printf "No books finished in %d." $d.Year) "Head" "Month")}}
+	</section>
+
+	<section class="books-stats-section" id="books-all" aria-labelledby="books-all-head">
+		<h2 id="books-all-head">All time</h2>
+		{{template "stat-tiles" $d.AllTiles}}
+		{{template "stats-chart" (dict "Chart" $d.PerYear "Title" "Books finished per year" "Empty" "No dated finishes yet." "Head" "Year")}}
+	</section>
+</div>
+{{end}}
+
+{{/* goal is the year's goal and its form (spec "Stats (B4)": set and
+     edited inline, here only — the Reading shelf's card just shows it).
+     Plain form posts, so it works without JavaScript. With a goal the form
+     sits in a "Change goal" disclosure, opened when a target was refused.
+     Pass a dict with Goal (a goalView) and Shell. */}}
+{{define "goal"}}
+<section class="books-goal" id="books-goal" aria-labelledby="books-goal-head">
+	<h2 id="books-goal-head">Goal for {{.Goal.Year}}</h2>
+	{{if .Goal.Target}}
+	<p class="books-goal-text"><span class="books-goal-count">{{.Goal.Text}}</span>{{with .Goal.Pace}} · {{.}}{{end}}</p>
+	<progress class="books-progress-bar" max="100" value="{{.Goal.Percent}}" aria-label="Goal progress">{{.Goal.Percent}}%</progress>
+	<div class="books-goal-actions">
+		<details class="books-goal-edit"{{if .Goal.Error}} open{{end}}>
+			<summary class="button">Change goal</summary>
+			{{template "goal-form" .}}
+		</details>
+		<form method="post" action="/books/goal/clear">
+			<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+			<input type="hidden" name="year" value="{{.Goal.Year}}">
+			<button type="submit" class="quiet">Remove goal</button>
+		</form>
+	</div>
+	{{else}}
+	<p class="books-hint">No goal for {{.Goal.Year}} yet. How many books would you like to read?</p>
+	{{template "goal-form" .}}
+	{{end}}
+</section>
+{{end}}
+
+{{/* goal-form sets or changes a goal. novalidate, so the store's message
+     shows rather than the browser's. Takes goal's dict. */}}
+{{define "goal-form"}}
+<form class="books-goal-form" method="post" action="/books/goal" novalidate>
+	<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+	<input type="hidden" name="year" value="{{.Goal.Year}}">
+	<label for="books-goal-target">Books to read in {{.Goal.Year}}</label>
+	<div class="books-goal-row">
+		<input id="books-goal-target" name="target" type="number" inputmode="numeric" min="1" max="{{.Goal.Max}}" value="{{.Goal.Value}}"{{if .Goal.Error}} aria-invalid="true" aria-describedby="books-goal-error"{{end}}>
+		<button type="submit" class="primary">{{if .Goal.Target}}Save goal{{else}}Set goal{{end}}</button>
+	</div>
+	{{with .Goal.Error}}<p class="books-field-error" id="books-goal-error" role="alert">{{.}}</p>{{end}}
+</form>
+{{end}}
+
+{{/* stat-tiles takes []statTile. */}}
+{{define "stat-tiles"}}
+<div class="books-stat-tiles">
+	{{range .}}<div class="books-stat-tile"><div class="value">{{.Value}}</div><div class="label">{{.Label}}</div></div>{{end}}
+</div>
+{{end}}
+
+{{/* stats-chart is one bar chart, server-rendered SVG as in ON Focus, with
+     its ticks underneath and a table as its text alternative (Reader's
+     #242 lesson). Pass a dict with Chart (a chartView), Title, Empty (what
+     to say with nothing to draw) and Head (the table's first column). */}}
+{{define "stats-chart"}}
+<figure class="books-chart">
+	<figcaption>{{.Title}}</figcaption>
+	{{if .Chart.Empty}}
+	<p class="empty">{{.Empty}}</p>
+	{{else}}
+	<svg viewBox="0 0 {{.Chart.Width}} {{.Chart.Height}}" role="img" aria-label="{{.Title}}, peak {{.Chart.Peak}}" preserveAspectRatio="none">
+		{{range .Chart.Bars}}<rect x="{{.X}}" y="{{.Y}}" width="{{.Width}}" height="{{.Height}}" rx="1"><title>{{.Label}}</title></rect>{{end}}
+	</svg>
+	<ol class="books-chart-ticks" aria-hidden="true">{{range .Chart.Ticks}}<li>{{.}}</li>{{end}}</ol>
+	<details class="books-chart-figures">
+		<summary>Figures (text alternative to the chart)</summary>
+		<table class="books-stats-table">
+			<thead><tr><th>{{.Head}}</th><th>Books finished</th></tr></thead>
+			<tbody>{{range .Chart.Points}}<tr><td>{{.Name}}</td><td>{{.N}}</td></tr>{{end}}</tbody>
+		</table>
+	</details>
+	{{end}}
+</figure>
+{{end}}

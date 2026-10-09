@@ -4365,3 +4365,58 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-cover-edit { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4); }
 .books-cover-edit > .stack { flex: 1 1 14rem; min-width: 0; }
 .books-cover-edit input[type="url"] { width: 100%; }
+
+/* Stats (B4): a page of its own, as Reader's is; tiles and charts mirror
+ * ON Focus's History. */
+.books-stats-link { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-4); padding: var(--s-1) var(--s-2); border-radius: var(--radius); color: var(--c-text); text-decoration: none; }
+.books-stats-link:hover { background: var(--c-bg-subtle); }
+.books-stats { max-width: 48rem; }
+.books-stats-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
+.books-stats-head h1 { margin: 0; }
+.books-years { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.books-year { padding: var(--s-1) var(--s-2); border-radius: var(--radius); color: var(--c-text); text-decoration: none; font-variant-numeric: tabular-nums; }
+.books-year:hover { background: var(--c-bg-subtle); }
+.books-year[aria-current="page"] { background: var(--c-accent-bg); color: var(--c-accent); font-weight: 600; }
+.books-stats-section h2 { margin: 0 0 var(--s-3); font-size: var(--fs-lg); }
+.books-stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--s-3); margin-bottom: var(--s-3); }
+.books-stat-tile { background: var(--c-bg-subtle); border-radius: var(--radius); padding: var(--s-3); }
+.books-stat-tile .value { font-size: var(--fs-xl); }
+.books-stat-tile .label { color: var(--c-text-dim); font-size: var(--fs-xs); }
+.books-stat-line { margin: 0 0 var(--s-2); overflow-wrap: anywhere; }
+.books-stat-label { color: var(--c-text-dim); font-size: var(--fs-sm); margin-right: var(--s-1); }
+.books-chart { margin: var(--s-4) 0 0; }
+.books-chart figcaption { font-size: var(--fs-sm); color: var(--c-text-dim); margin-bottom: var(--s-2); }
+.books-chart svg { width: 100%; height: 120px; display: block; overflow: visible; }
+.books-chart rect { fill: var(--c-accent); }
+.books-chart rect:hover { fill: var(--c-text); }
+.books-chart .empty { color: var(--c-text-dim); }
+.books-chart-ticks { display: flex; list-style: none; margin: var(--s-1) 0 0; padding: 0; }
+.books-chart-ticks li { flex: 1 1 0; min-width: 0; overflow: hidden; text-align: center; color: var(--c-text-dim); font-size: var(--fs-xs); }
+.books-chart-figures { margin-top: var(--s-2); font-size: var(--fs-sm); }
+.books-stats-table { width: 100%; border-collapse: collapse; }
+.books-stats-table th,
+.books-stats-table td { text-align: left; padding: var(--s-1) var(--s-2); border-bottom: 1px solid var(--c-border); }
+.books-stats-table th { color: var(--c-text-dim); font-weight: 500; }
+
+/* The goal on the Stats page, where it is set and changed. */
+.books-goal { padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); }
+.books-goal h2 { margin: 0 0 var(--s-2); font-size: var(--fs-lg); }
+.books-goal-text { margin: 0; }
+.books-goal-count { font-size: var(--fs-xl); font-weight: 600; }
+.books-goal .books-progress-bar { margin: var(--s-2) 0 var(--s-3); }
+.books-goal-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); }
+.books-goal-edit > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.books-goal-edit > summary::-webkit-details-marker { display: none; }
+.books-goal-edit[open] { flex-basis: 100%; }
+.books-goal-form { margin-top: var(--s-2); }
+.books-goal-form label { margin: 0 0 var(--s-1); }
+.books-goal-row { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.books-goal-row input { width: 6rem; }
+
+/* The goal card at the top of the Reading shelf: read-only, a link to
+ * the Stats page. */
+.books-goal-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); margin-bottom: var(--s-3); padding: var(--s-2) var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); color: var(--c-text); text-decoration: none; }
+.books-goal-card:hover { border-color: var(--c-accent); }
+.books-goal-card-head { color: var(--c-text-dim); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; flex-basis: 100%; }
+.books-goal-card-text { font-weight: 600; }
+.books-goal-card .books-row-bar { flex: 1 1 100%; width: auto; }

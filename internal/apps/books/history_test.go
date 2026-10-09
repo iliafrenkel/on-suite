@@ -117,6 +117,8 @@ func TestUpdateReadingChecksItsInput(t *testing.T) {
 		{StartedOn: "2026-09-28", FinishedOn: "2026-09-20"},
 		{StartedOn: "2026-10-20"},
 		{FinishedOn: "yesterday"},
+		{StartedOn: "0026-03-01"},
+		{StartedOn: "1899-12-31", FinishedOn: "2026-09-20"},
 	} {
 		if err := f.store.UpdateReading(ctx, f.alice.ID, id, past, ed); !errors.As(err, &ref) {
 			t.Errorf("UpdateReading(%+v) = %v, want a Refusal", ed, err)

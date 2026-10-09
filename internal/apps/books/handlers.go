@@ -104,6 +104,11 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		a.fail(w, r, err)
 		return
 	}
+	goal, err := a.shelfGoal(r, userID, c)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
 	title := listHeading(c)
 	var bv bookView
 	if opts.BookID != 0 {
@@ -140,6 +145,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	bv.Shell = page.Shell
 	v := panesView{Title: page.Title, Shell: page.Shell, Ctx: c, Error: opts.Banner,
 		Sidebar: viewSidebar(c, counts, tags), List: viewList(items, c, opts.BookID), Book: bv}
+	v.List.Goal = goal
 
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
 		block := "panes-oob"
@@ -171,4 +177,21 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 	if err := a.deps.Render.Page(w, status, "books/index", page); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
+}
+
+// shelfGoal is the goal card for list c: this year's goal at the top of
+// the Reading shelf, when one is set (spec "Stats (B4)"). Read-only — it
+// links to the Stats page, where the goal is set (decided 2026-10-09 while
+// planning B4). A tag or series list isn't the shelf, so it has none.
+func (a *App) shelfGoal(r *http.Request, userID int64, c listCtx) (*goalView, error) {
+	if c.Shelf != ShelfReading || c.Tag != "" || c.Series != "" {
+		return nil, nil
+	}
+	today := a.store.now().Local()
+	g, err := a.store.Goal(r.Context(), userID, today.Year())
+	if err != nil || g.Target == 0 {
+		return nil, err
+	}
+	v := viewGoal(g, today)
+	return &v, nil
 }

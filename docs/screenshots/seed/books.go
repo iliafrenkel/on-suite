@@ -11,10 +11,10 @@ import (
 // two books on the go (one on paper, one an audiobook, each with a few
 // days of progress), three waiting, three finished and rated (one with a
 // review) and one put down part-way, with a few tags, two books of a
-// series, notes on two books and quotes from one, so each shelf, the book
-// pane and the search have something to show. Quotes come only from a
-// book long out of copyright. Dates are offsets from now, so nothing is
-// ever in the future.
+// series, notes on two books and quotes from one, and a goal for this
+// year, so each shelf, the book pane, the search and the Stats page have
+// something to show. Quotes come only from a book long out of copyright.
+// Dates are offsets from now, so nothing is ever in the future.
 func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time) error {
 	at := func(daysAgo int) time.Time { return now.AddDate(0, 0, -daysAgo) }
 	day := func(daysAgo int) string { return at(daysAgo).Local().Format("2006-01-02") }
@@ -131,5 +131,5 @@ func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time
 		}
 	}
 	st.SetClock(func() time.Time { return now })
-	return nil
+	return st.SetGoal(ctx, userID, now.Local().Year(), 24)
 }

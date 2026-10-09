@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strconv"
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
@@ -74,13 +75,18 @@ func (e *Refusal) Error() string { return "books: " + e.Msg }
 // Unwrap makes a Refusal an ErrInvalid for errors.Is.
 func (e *Refusal) Unwrap() error { return ErrInvalid }
 
-// checkDay accepts a YYYY-MM-DD date that is not after today.
+// checkDay accepts a YYYY-MM-DD date from MinYear on that is not after
+// today. The floor catches a year typed half way, which browsers save as
+// 0026-03-01.
 func (st *Store) checkDay(day string) error {
 	if _, err := time.Parse(dayLayout, day); err != nil {
 		return &Refusal{Msg: "Enter a date like " + st.Today() + "."}
 	}
 	if day > st.Today() {
 		return &Refusal{Msg: "That date is in the future."}
+	}
+	if day < strconv.Itoa(MinYear) {
+		return &Refusal{Msg: fmt.Sprintf("Enter a date from %d on.", MinYear)}
 	}
 	return nil
 }
