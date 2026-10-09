@@ -92,10 +92,27 @@ func execOne(ctx context.Context, tx *sql.Tx, query string, args ...any) error {
 	if err != nil {
 		return fmt.Errorf("books: %w", err)
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("books: %w", err)
+	}
+	if n == 0 {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// parseStamps parses a row's created_at and updated_at.
+func parseStamps(created, updated string) (time.Time, time.Time, error) {
+	c, err := parseTime(created)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("created_at: %w", err)
+	}
+	u, err := parseTime(updated)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("updated_at: %w", err)
+	}
+	return c, u, nil
 }
 
 // checkNote cleans a note and refuses an empty or over-long one.
@@ -167,11 +184,8 @@ func (st *Store) Notes(ctx context.Context, userID, bookID int64) ([]Note, error
 			return nil, fmt.Errorf("books: scan note: %w", err)
 		}
 		n.Page = int(page.Int64)
-		if n.CreatedAt, err = parseTime(created); err != nil {
-			return nil, fmt.Errorf("books: note created_at: %w", err)
-		}
-		if n.UpdatedAt, err = parseTime(updated); err != nil {
-			return nil, fmt.Errorf("books: note updated_at: %w", err)
+		if n.CreatedAt, n.UpdatedAt, err = parseStamps(created, updated); err != nil {
+			return nil, fmt.Errorf("books: note %d: %w", n.ID, err)
 		}
 		out = append(out, n)
 	}

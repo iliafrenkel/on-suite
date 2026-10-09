@@ -97,11 +97,8 @@ func (st *Store) Quotes(ctx context.Context, userID, bookID int64) ([]Quote, err
 			return nil, fmt.Errorf("books: scan quote: %w", err)
 		}
 		q.Page = int(page.Int64)
-		if q.CreatedAt, err = parseTime(created); err != nil {
-			return nil, fmt.Errorf("books: quote created_at: %w", err)
-		}
-		if q.UpdatedAt, err = parseTime(updated); err != nil {
-			return nil, fmt.Errorf("books: quote updated_at: %w", err)
+		if q.CreatedAt, q.UpdatedAt, err = parseStamps(created, updated); err != nil {
+			return nil, fmt.Errorf("books: quote %d: %w", q.ID, err)
 		}
 		out = append(out, q)
 	}
