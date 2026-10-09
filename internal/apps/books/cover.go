@@ -20,6 +20,13 @@ const (
 	CoverFromURL = "url"
 )
 
+// coverTypes are the image types a cover may be, judged by sniffing the
+// bytes rather than trusting what a server or browser claims — the same
+// rule webfetch.GetImage follows, narrowed to formats every browser draws.
+var coverTypes = map[string]bool{"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true}
+
+func coverType(ct string) bool { return coverTypes[ct] }
+
 // Cover is a stored cover. Version changes whenever the cover does.
 type Cover struct {
 	ContentType string
