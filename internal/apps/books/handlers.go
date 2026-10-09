@@ -108,7 +108,13 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 			a.fail(w, r, err)
 			return
 		}
+		rs, err := a.store.Readings(ctx, userID, opts.BookID)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
 		bv = viewBook(b, c, a.store.Today())
+		bv.History = viewHistory(rs)
 		title = b.Title
 		if opts.ProgressError != "" {
 			bv.Progress.Error, bv.Progress.Value = opts.ProgressError, opts.ProgressInput

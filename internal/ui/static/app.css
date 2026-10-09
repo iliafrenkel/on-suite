@@ -4296,6 +4296,18 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-review-form textarea { width: 100%; }
 .books-review-form button { align-self: flex-start; }
 .books-hint { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
+
+/* Reading history */
+.books-history { max-width: 38rem; margin-top: var(--s-4); }
+.books-section-head { margin: 0 0 var(--s-2); font-size: var(--fs-base); }
+.books-history-list { list-style: none; margin: 0; padding: 0; }
+.books-history-item { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); padding: var(--s-2) 0; border-bottom: 1px solid var(--c-border); }
+.books-history-line { flex: 1 1 14rem; margin: 0; }
+.books-history-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); }
+.books-reading-edit > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.books-reading-edit > summary::-webkit-details-marker { display: none; }
+.books-reading-edit-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-2); margin-top: var(--s-2); }
+.books-reading-edit-form label { margin: 0; flex-basis: 100%; }
 .books-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1rem; border: var(--border); border-radius: var(--radius); color: var(--c-text); background: var(--c-bg); }
 .books-dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 

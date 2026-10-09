@@ -298,6 +298,7 @@ type bookView struct {
 	Stars         []starButton // the rating buttons
 	Review        string       // Markdown, for the edit box
 	ReviewHTML    template.HTML
+	History       []historyView // every reading, newest first
 	Ctx           listCtx
 	Shell         render.Shell
 }
@@ -394,6 +395,53 @@ func viewBook(b Book, c listCtx, today string) bookView {
 		v.StartLabel = "Start reading"
 	}
 	return v
+}
+
+var statusLabels = map[Status]string{StatusReading: "Reading", StatusFinished: "Read", StatusDNF: "Did not finish"}
+
+// historyView is one reading in the book pane's history, with what its
+// edit form needs.
+type historyView struct {
+	ID          int64
+	Status      string // "Reading", "Read", "Did not finish"
+	Dates       string // "3 Oct 2026 – 9 Oct 2026"
+	Format      string // "Paper"; "" when not set
+	InProgress  bool   // no finish date to edit
+	FinishLabel string // "Finished on" or "Stopped on"
+	StartedOn   string // YYYY-MM-DD for the date inputs
+	FinishedOn  string
+	Formats     []choice
+}
+
+func viewHistory(rs []Reading) []historyView {
+	var out []historyView
+	for _, rd := range rs {
+		h := historyView{ID: rd.ID, Status: statusLabels[rd.Status], Dates: readingDates(rd),
+			InProgress: rd.Status == StatusReading, FinishLabel: "Finished on",
+			StartedOn: rd.StartedOn, FinishedOn: rd.FinishedOn, Formats: formatChoices(rd.Format)}
+		if rd.Format != "" {
+			h.Format = formatLabels[rd.Format]
+		}
+		if rd.Status == StatusDNF {
+			h.FinishLabel = "Stopped on"
+		}
+		out = append(out, h)
+	}
+	return out
+}
+
+// readingDates is a reading's dates for people; imported readings may
+// have neither (B5).
+func readingDates(rd Reading) string {
+	switch {
+	case rd.StartedOn != "" && rd.FinishedOn != "":
+		return ShowDay(rd.StartedOn) + " – " + ShowDay(rd.FinishedOn)
+	case rd.StartedOn != "":
+		return "From " + ShowDay(rd.StartedOn)
+	case rd.FinishedOn != "":
+		return "Until " + ShowDay(rd.FinishedOn)
+	}
+	return "No dates"
 }
 
 // progressView is the progress box: an input in the reading's unit, a

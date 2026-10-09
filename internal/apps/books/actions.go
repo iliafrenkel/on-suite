@@ -128,6 +128,36 @@ func (a *App) setReview(r *http.Request, userID, id int64) error {
 	return a.store.SetReview(r.Context(), userID, id, r.PostFormValue("review"))
 }
 
+// readingID is the {rid} path segment. Anything but a positive integer is
+// ErrNotFound, so act answers 404, as for a reading that isn't there.
+func readingID(r *http.Request) (int64, error) {
+	rid, err := strconv.ParseInt(r.PathValue("rid"), 10, 64)
+	if err != nil || rid <= 0 {
+		return 0, ErrNotFound
+	}
+	return rid, nil
+}
+
+func (a *App) editReading(r *http.Request, userID, id int64) error {
+	rid, err := readingID(r)
+	if err != nil {
+		return err
+	}
+	return a.store.UpdateReading(r.Context(), userID, id, rid, ReadingEdit{
+		StartedOn:  strings.TrimSpace(r.PostFormValue("started_on")),
+		FinishedOn: strings.TrimSpace(r.PostFormValue("finished_on")),
+		Format:     r.PostFormValue("format"),
+	})
+}
+
+func (a *App) deleteReading(r *http.Request, userID, id int64) error {
+	rid, err := readingID(r)
+	if err != nil {
+		return err
+	}
+	return a.store.DeleteReading(r.Context(), userID, id, rid)
+}
+
 func (a *App) setTags(r *http.Request, userID, id int64) error {
 	return a.store.SetTags(r.Context(), userID, id, ParseTags(r.PostFormValue("tags")))
 }

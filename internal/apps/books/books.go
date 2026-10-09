@@ -83,6 +83,8 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /format/{id}", a.act(a.setFormat, false))
 	r.HandleFunc("POST /rating/{id}", a.act(a.setRating, false))
 	r.HandleFunc("POST /review/{id}", a.act(a.setReview, false))
+	r.HandleFunc("POST /readings/{id}/{rid}", a.act(a.editReading, false))
+	r.HandleFunc("POST /readings/{id}/{rid}/delete", a.act(a.deleteReading, false))
 	r.HandleFunc("POST /tags/{id}", a.act(a.setTags, false))
 	r.HandleFunc("POST /delete/{id}", a.act(a.remove, true))
 	r.HandleFunc("GET /cover/{id}", a.cover)

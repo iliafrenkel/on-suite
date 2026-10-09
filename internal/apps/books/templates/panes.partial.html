@@ -138,6 +138,7 @@
 	{{template "review" .}}
 	{{with .Description}}<div class="books-description">{{.}}</div>{{end}}
 	{{template "tags-form" .}}
+	{{template "history" .}}
 {{else}}
 	<p class="empty">Pick a book, or add one.</p>
 {{end}}
@@ -307,6 +308,51 @@
 		<button type="submit">Save tags</button>
 	</div>
 </form>
+{{end}}
+
+{{/* history is every reading of the book, newest first (spec "Book
+     pane"), each with a no-JS <details> to change its dates and format,
+     and Delete (decided 2026-10-09: a reading's status isn't editable;
+     deleting it is how a wrong one is put right). Takes a bookView. */}}
+{{define "history"}}
+{{with .History}}
+<section class="books-history" aria-labelledby="books-history-head">
+	<h2 class="books-section-head" id="books-history-head">Reading history</h2>
+	<ul class="books-history-list">
+		{{range .}}
+		<li class="books-history-item">
+			<p class="books-history-line"><span class="books-pill">{{.Status}}</span> {{.Dates}}{{with .Format}} · {{.}}{{end}}</p>
+			<div class="books-history-actions">
+				<details class="books-reading-edit">
+					<summary class="button quiet">Edit</summary>
+					<form class="books-reading-edit-form" method="post" action="/books/readings/{{$.ID}}/{{.ID}}"
+					      hx-post="/books/readings/{{$.ID}}/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+						{{template "post-ctx" $}}
+						<label for="books-r{{.ID}}-started">Started on</label>
+						<input id="books-r{{.ID}}-started" name="started_on" type="date" value="{{.StartedOn}}" max="{{$.Today}}">
+						{{if not .InProgress}}
+						<label for="books-r{{.ID}}-finished">{{.FinishLabel}}</label>
+						<input id="books-r{{.ID}}-finished" name="finished_on" type="date" value="{{.FinishedOn}}" max="{{$.Today}}">
+						{{end}}
+						<label for="books-r{{.ID}}-format">Format</label>
+						<select id="books-r{{.ID}}-format" name="format">
+							{{range .Formats}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}
+						</select>
+						<button type="submit" class="primary">Save</button>
+					</form>
+				</details>
+				<form method="post" action="/books/readings/{{$.ID}}/{{.ID}}/delete">
+					{{template "post-ctx" $}}
+					<button type="submit" class="quiet"
+					        hx-post="/books/readings/{{$.ID}}/{{.ID}}/delete" hx-target="#books-panes" hx-swap="outerHTML"
+					        hx-confirm="Delete this reading? Its progress goes with it.">Delete</button>
+				</form>
+			</div>
+		</li>
+		{{end}}
+	</ul>
+</section>
+{{end}}
 {{end}}
 
 {{/* confirm is the one dialog every hx-confirm in the panes goes through
