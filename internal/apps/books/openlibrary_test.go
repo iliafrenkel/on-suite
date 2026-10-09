@@ -61,6 +61,15 @@ func fakeOpenLibrary(t *testing.T) *httptest.Server {
 	}
 	mux.HandleFunc("GET /b/id/10226290-S.jpg", png)
 	mux.HandleFunc("GET /b/id/10226290-M.jpg", png)
+	// Covers by ISBN (B5): one found, one down, one that isn't an image;
+	// any other ISBN is the mux's own 404, Open Library's "no cover".
+	mux.HandleFunc("GET /b/isbn/9781635575637-M.jpg", png)
+	mux.HandleFunc("GET /b/isbn/9780306406157-M.jpg", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	})
+	mux.HandleFunc("GET /b/isbn/9780547928227-M.jpg", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<html><body>not an image</body></html>"))
+	})
 	mux.HandleFunc("GET /b/id/666-M.jpg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
 		_, _ = w.Write([]byte("<html><body>not an image</body></html>"))

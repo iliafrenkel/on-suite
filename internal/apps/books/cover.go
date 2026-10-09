@@ -93,7 +93,8 @@ func (st *Store) Cover(ctx context.Context, userID, id int64) (Cover, error) {
 	return c, nil
 }
 
-// RemoveCover drops a book's cover, so it shows its spine again.
+// RemoveCover drops a book's cover, so it shows its spine again, and
+// marks it checked so the cover backfill doesn't bring it back.
 func (st *Store) RemoveCover(ctx context.Context, userID, id int64) error {
 	tx, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -104,6 +105,11 @@ func (st *Store) RemoveCover(ctx context.Context, userID, id int64) error {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM books_covers WHERE book_id = ?`, id); err != nil {
+		return fmt.Errorf("books: remove cover: %w", err)
+	}
+	// A cover taken off by hand stays off: the backfill skips the book.
+	if _, err := tx.ExecContext(ctx, `UPDATE books_books SET cover_checked_at = ? WHERE id = ?`,
+		formatTime(st.now()), id); err != nil {
 		return fmt.Errorf("books: remove cover: %w", err)
 	}
 	return tx.Commit()

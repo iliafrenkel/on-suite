@@ -240,7 +240,8 @@ func (st *Store) Get(ctx context.Context, userID, id int64) (Book, error) {
 	return b, nil
 }
 
-// Update replaces a book's details. Readings and tags are untouched.
+// Update replaces a book's details. Readings and tags are untouched. A
+// new ISBN clears cover_checked_at, so the backfill looks again.
 func (st *Store) Update(ctx context.Context, userID, id int64, in BookInput) error {
 	in = in.Normalize()
 	if errs := in.Validate(); errs != nil {
@@ -249,10 +250,11 @@ func (st *Store) Update(ctx context.Context, userID, id int64, in BookInput) err
 	res, err := st.db.ExecContext(ctx, `
 		UPDATE books_books
 		   SET title = ?, subtitle = ?, authors = ?, year = ?, pages = ?, isbn13 = ?,
-		       series_name = ?, series_number = ?, description = ?, updated_at = ?
+		       series_name = ?, series_number = ?, description = ?, updated_at = ?,
+		       cover_checked_at = CASE WHEN isbn13 IS ? THEN cover_checked_at END
 		 WHERE id = ? AND user_id = ?`,
 		in.Title, in.Subtitle, in.Authors, nullInt(in.Year), nullInt(in.Pages), nullText(in.ISBN),
-		in.SeriesName, in.SeriesNumber, in.Description, formatTime(st.now()), id, userID)
+		in.SeriesName, in.SeriesNumber, in.Description, formatTime(st.now()), nullText(in.ISBN), id, userID)
 	if err != nil {
 		return fmt.Errorf("books: update: %w", err)
 	}
