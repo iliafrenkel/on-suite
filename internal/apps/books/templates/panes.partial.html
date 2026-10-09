@@ -86,7 +86,7 @@
 	<a class="button primary books-add" href="/books/new">{{ticon "plus"}}Add book</a>
 	<ul class="books-shelves">
 		{{range .Sidebar.Shelves}}
-		<li><a class="books-shelf" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true"{{if .Current}} aria-current="page"{{end}}>{{.Label}}<span class="books-count">{{if .Count}}{{.Count}}{{end}}</span></a></li>
+		<li><a class="books-shelf" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true"{{if .Current}} aria-current="page"{{end}}>{{.Label}}<span class="books-count">{{if .Count}}<span class="visually-hidden">, </span>{{.Count}}<span class="visually-hidden"> {{if eq .Count 1}}book{{else}}books{{end}}</span>{{end}}</span></a></li>
 		{{end}}
 	</ul>
 	{{with .Sidebar.Tags}}
@@ -156,7 +156,7 @@
 	{{template "reading-box" .}}
 	{{template "rating" .}}
 	{{template "review" .}}
-	{{with .Description}}<div class="books-description">{{.}}</div>{{end}}
+	{{template "description" .}}
 	{{template "tags-form" .}}
 	{{template "notes" .}}
 	{{template "quotes" .}}
@@ -295,13 +295,14 @@
 
 {{/* rating is the book's stars (spec "Book pane"): five submit buttons,
      so it works without JavaScript; the current rating's own star clears
-     it. Takes a bookView. */}}
+     it. The stars wrap together, never one by one, in a narrow pane
+     (#579). Takes a bookView. */}}
 {{define "rating"}}
 <form class="books-rating" method="post" action="/books/rating/{{.ID}}"
       hx-post="/books/rating/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
 	{{template "post-ctx" .}}
 	<span class="books-rating-label">{{if .Rating}}Your rating{{else}}Rate it{{end}}</span>
-	{{range .Stars}}<button type="submit" class="books-star{{if .On}} is-on{{end}}" name="rating" value="{{.Value}}" aria-label="{{.Label}}" title="{{.Label}}">{{if .On}}{{ticon "star-filled"}}{{else}}{{ticon "star-outline"}}{{end}}</button>{{end}}
+	<span class="books-star-row">{{range .Stars}}<button type="submit" class="books-star{{if .On}} is-on{{end}}" name="rating" value="{{.Value}}" aria-label="{{.Label}}" title="{{.Label}}">{{if .On}}{{ticon "star-filled"}}{{else}}{{ticon "star-outline"}}{{end}}</button>{{end}}</span>
 </form>
 {{end}}
 
@@ -323,6 +324,19 @@
 		</form>
 	</details>
 </section>
+{{end}}
+
+{{/* description is the Open Library description, held to four lines
+     when it is long, with a More / Less toggle (#566): the checkbox
+     technique (PATTERNS.md), so it needs no JavaScript. Takes a bookView. */}}
+{{define "description"}}
+{{with .Description}}
+<div class="books-description">
+	{{if $.DescriptionLong}}<input type="checkbox" id="books-description-more" class="visually-hidden books-description-toggle">{{end}}
+	<p class="books-description-text{{if $.DescriptionLong}} is-clamped{{end}}">{{.}}</p>
+	{{if $.DescriptionLong}}<label class="books-description-more" for="books-description-more"><span class="books-more-label">More</span><span class="books-less-label">Less</span></label>{{end}}
+</div>
+{{end}}
 {{end}}
 
 {{/* tags-form edits a book's tags in place. Takes a bookView. */}}

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 )
@@ -282,6 +283,7 @@ type bookView struct {
 	SeriesURL                        string   // the list of the book's series
 	Facts                            []string // "2011", "592 pages", "ISBN 978…"
 	Description                      string
+	DescriptionLong                  bool // held to a few lines, with a More toggle (#566)
 	Spine                            string
 	Cover                            string // the stored cover; "" draws the spine
 	ShelfLabel                       string
@@ -366,6 +368,7 @@ func viewBook(b Book, c listCtx, today string) bookView {
 		Description: b.Description, Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion),
 		ShelfLabel: b.Shelf.Label(), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Pages: b.Pages,
 		Rating: b.Rating, Stars: starButtons(b.Rating), Review: b.Review, ReviewHTML: RenderReview(b.Review), Ctx: c}
+	v.DescriptionLong = longDescription(b.Description)
 	if b.SeriesName != "" {
 		v.Series = seriesText(b.SeriesName, b.SeriesNumber)
 		if b.SeriesBooks > 1 { // the count only says something once there are two
@@ -564,4 +567,11 @@ func viewProgress(b Book) progressView {
 // EditURL is a book's edit page, coming back to this list afterwards.
 func (c listCtx) EditURL(id int64) string {
 	return "/books/edit/" + strconv.FormatInt(id, 10) + "?" + c.Query()
+}
+
+// longDescription says whether a description is long enough to fold
+// (#566): more than about four lines of the pane's width, or more than
+// four lines of its own.
+func longDescription(s string) bool {
+	return utf8.RuneCountInString(s) > 300 || strings.Count(s, "\n") >= 4
 }
