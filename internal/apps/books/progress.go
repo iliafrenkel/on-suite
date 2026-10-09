@@ -83,9 +83,10 @@ func scanProgress(page, percent sql.NullInt64, at sql.NullString) (Progress, err
 
 // active is a book's reading in progress, with what its unit depends on.
 type active struct {
-	id     int64
-	format string
-	pages  int
+	id        int64
+	startedOn string
+	format    string
+	pages     int
 }
 
 // activeReading finds the reading in progress of book id inside tx; a
@@ -93,9 +94,9 @@ type active struct {
 func activeReading(ctx context.Context, tx *sql.Tx, id int64) (active, error) {
 	var a active
 	err := tx.QueryRowContext(ctx, `
-		SELECT r.id, COALESCE(r.format, ''), COALESCE(b.pages, 0)
+		SELECT r.id, COALESCE(r.started_on, ''), COALESCE(r.format, ''), COALESCE(b.pages, 0)
 		  FROM books_readings r JOIN books_books b ON b.id = r.book_id
-		 WHERE r.book_id = ? AND r.status = 'reading'`, id).Scan(&a.id, &a.format, &a.pages)
+		 WHERE r.book_id = ? AND r.status = 'reading'`, id).Scan(&a.id, &a.startedOn, &a.format, &a.pages)
 	if errors.Is(err, sql.ErrNoRows) {
 		return active{}, &Refusal{Msg: "This book isn't being read right now."}
 	}

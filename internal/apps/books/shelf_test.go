@@ -43,9 +43,9 @@ func TestShelfFollowsTheLatestReading(t *testing.T) {
 		}
 	}
 	step("start", func() error { return f.store.StartReading(ctx, f.alice.ID, id) }, books.ShelfReading)
-	step("finish", func() error { return f.store.FinishReading(ctx, f.alice.ID, id, "") }, books.ShelfRead)
+	step("finish", func() error { return f.store.FinishReading(ctx, f.alice.ID, id, "", 0) }, books.ShelfRead)
 	step("re-read", func() error { return f.store.StartReading(ctx, f.alice.ID, id) }, books.ShelfReading)
-	step("give up", func() error { return f.store.MarkDNF(ctx, f.alice.ID, id, "") }, books.ShelfDNF)
+	step("give up", func() error { return f.store.MarkDNF(ctx, f.alice.ID, id, "", 0) }, books.ShelfDNF)
 }
 
 func TestStartRefusesASecondReadingInProgress(t *testing.T) {
@@ -86,13 +86,13 @@ func TestFinishUsesTheGivenDayAndChecksIt(t *testing.T) {
 		"2026-10-10": "in the future",
 		"soon":       "Enter a date",
 	} {
-		err := f.store.FinishReading(ctx, f.alice.ID, id, day)
+		err := f.store.FinishReading(ctx, f.alice.ID, id, day, 0)
 		var ref *books.Refusal
 		if !errors.As(err, &ref) || !strings.Contains(ref.Msg, want) {
 			t.Errorf("FinishReading(%q) = %v, want a Refusal saying %q", day, err, want)
 		}
 	}
-	if err := f.store.FinishReading(ctx, f.alice.ID, id, "2026-10-05"); err != nil {
+	if err := f.store.FinishReading(ctx, f.alice.ID, id, "2026-10-05", 0); err != nil {
 		t.Fatal(err)
 	}
 	b := getBook(t, f, f.alice.ID, id)
@@ -105,7 +105,7 @@ func TestFinishWithNothingInProgressIsRefused(t *testing.T) {
 	f := newFixture(t)
 	id := addBook(t, f, f.alice.ID, onShelf("Dune", books.ShelfWant))
 	var ref *books.Refusal
-	if err := f.store.MarkDNF(context.Background(), f.alice.ID, id, ""); !errors.As(err, &ref) {
+	if err := f.store.MarkDNF(context.Background(), f.alice.ID, id, "", 0); !errors.As(err, &ref) {
 		t.Errorf("MarkDNF on a want-to-read book = %v, want a Refusal", err)
 	}
 }
@@ -118,7 +118,7 @@ func TestReadingActionsAreScopedToTheOwner(t *testing.T) {
 	if err := f.store.StartReading(ctx, f.bob.ID, want); !errors.Is(err, books.ErrNotFound) {
 		t.Errorf("Bob's StartReading = %v, want ErrNotFound", err)
 	}
-	if err := f.store.FinishReading(ctx, f.bob.ID, reading, ""); !errors.Is(err, books.ErrNotFound) {
+	if err := f.store.FinishReading(ctx, f.bob.ID, reading, "", 0); !errors.Is(err, books.ErrNotFound) {
 		t.Errorf("Bob's FinishReading = %v, want ErrNotFound", err)
 	}
 }
@@ -143,7 +143,7 @@ func TestListShowsOneShelfInItsOrder(t *testing.T) {
 		addBook(t, f, f.alice.ID, nb)
 	}
 	gone := addBook(t, f, f.alice.ID, onShelf("Gave up", books.ShelfReading))
-	if err := f.store.MarkDNF(ctx, f.alice.ID, gone, ""); err != nil {
+	if err := f.store.MarkDNF(ctx, f.alice.ID, gone, "", 0); err != nil {
 		t.Fatal(err)
 	}
 

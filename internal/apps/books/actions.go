@@ -3,6 +3,7 @@ package books
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -55,12 +56,28 @@ func (a *App) start(r *http.Request, userID, id int64) error {
 	return a.store.StartReading(r.Context(), userID, id)
 }
 
+// formInt reads an optional whole-number field: 0 when it is empty, -1
+// when it isn't a number — outside every range the store accepts, so a
+// typo comes back as the store's own message (or a 400 for a field no
+// person types into).
+func formInt(r *http.Request, name string) int {
+	s := strings.TrimSpace(r.PostFormValue(name))
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
 func (a *App) finish(r *http.Request, userID, id int64) error {
-	return a.store.FinishReading(r.Context(), userID, id, strings.TrimSpace(r.PostFormValue("day")))
+	return a.store.FinishReading(r.Context(), userID, id, strings.TrimSpace(r.PostFormValue("day")), formInt(r, "rating"))
 }
 
 func (a *App) dnf(r *http.Request, userID, id int64) error {
-	return a.store.MarkDNF(r.Context(), userID, id, strings.TrimSpace(r.PostFormValue("day")))
+	return a.store.MarkDNF(r.Context(), userID, id, strings.TrimSpace(r.PostFormValue("day")), formInt(r, "at"))
 }
 
 func (a *App) setTags(r *http.Request, userID, id int64) error {

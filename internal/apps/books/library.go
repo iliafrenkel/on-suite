@@ -60,8 +60,8 @@ type Reading struct {
 type Book struct {
 	ID int64
 	BookInput
-	Rating             int    // 1–5, 0 for none (set from B2)
-	Review             string // Markdown (set from B2)
+	Rating             int    // 1–5, 0 for none
+	Review             string // Markdown, "" for none
 	Tags               []string
 	Shelf              Shelf
 	Latest             Reading  // zero ID before the first reading
@@ -284,7 +284,7 @@ func (st *Store) Delete(ctx context.Context, userID, id int64) error {
 type ListItem struct {
 	ID                                       int64
 	Title, Authors, SeriesName, SeriesNumber string
-	Pages                                    int
+	Pages, Rating                            int
 	Shelf                                    Shelf
 	StartedOn, FinishedOn, Format            string   // the latest reading's
 	Progress                                 Progress // the latest reading's latest progress
@@ -343,7 +343,7 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 		args = append(args, pat, pat, pat, pat)
 	}
 	rows, err := st.db.QueryContext(ctx, `
-		SELECT b.id, b.title, b.authors, b.series_name, b.series_number, b.pages, b.added_at,
+		SELECT b.id, b.title, b.authors, b.series_name, b.series_number, b.pages, b.rating, b.added_at,
 		       r.started_on, r.finished_on, r.format, `+shelfExpr+`, c.fetched_at,
 		       p.page, p.percent, p.recorded_at
 		  FROM books_books b `+latestJoin+`
@@ -359,9 +359,9 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 	for rows.Next() {
 		var it ListItem
 		var added, shelf string
-		var pages, atPage, atPercent sql.NullInt64
+		var pages, rating, atPage, atPercent sql.NullInt64
 		var started, finished, format, cover, recorded sql.NullString
-		if err := rows.Scan(&it.ID, &it.Title, &it.Authors, &it.SeriesName, &it.SeriesNumber, &pages, &added,
+		if err := rows.Scan(&it.ID, &it.Title, &it.Authors, &it.SeriesName, &it.SeriesNumber, &pages, &rating, &added,
 			&started, &finished, &format, &shelf, &cover, &atPage, &atPercent, &recorded); err != nil {
 			return nil, fmt.Errorf("books: scan list: %w", err)
 		}
@@ -371,7 +371,7 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 		if it.Progress, err = scanProgress(atPage, atPercent, recorded); err != nil {
 			return nil, err
 		}
-		it.Pages = int(pages.Int64)
+		it.Pages, it.Rating = int(pages.Int64), int(rating.Int64)
 		it.StartedOn, it.FinishedOn, it.Format, it.Shelf = started.String, finished.String, format.String, Shelf(shelf)
 		it.CoverVersion = coverVersion(cover.String)
 		out = append(out, it)

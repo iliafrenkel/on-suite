@@ -58,9 +58,9 @@ func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time
 		}
 		st.SetClock(func() time.Time { return at(b.finished) })
 		if b.dnf {
-			err = st.MarkDNF(ctx, userID, id, day(b.finished))
+			err = st.MarkDNF(ctx, userID, id, day(b.finished), 0)
 		} else {
-			err = st.FinishReading(ctx, userID, id, day(b.finished))
+			err = st.FinishReading(ctx, userID, id, day(b.finished), 0)
 		}
 		if err != nil {
 			return err
