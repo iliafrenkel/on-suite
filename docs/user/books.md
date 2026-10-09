@@ -82,7 +82,7 @@ percentage instead. Reaching the last page doesn't finish the book: click
 **Finish** when you're done.
 
 ON Books keeps every update you make. You only see the latest, but they're
-what the reading stats will be counted from.
+what [your stats](#reading-goal-and-stats) count pages from.
 
 ### Format
 
@@ -157,6 +157,48 @@ stays as you switch shelves; clear the box to see everything again.
 Open a book and use the **⋯** menu: **Edit details** changes the title,
 author and the rest; **Delete** removes the book for good, with its
 readings, notes and quotes.
+
+## Reading goal and stats
+
+**Stats**, at the bottom of the sidebar, opens a page of numbers about your
+reading. It shows this year to begin with; the years along the top switch
+to another one.
+
+For the year you get:
+
+- **Books finished** — every time you finished a book that year. A book you
+  read twice counts twice; books you didn't finish don't count.
+- **Pages read** — worked out from your progress updates, on the days you
+  made them. Going from page 120 to page 180 is 60 pages. Only pages past
+  the furthest point you've reached in this reading count, so fixing a
+  mistake doesn't count anything twice: if you typed 250 instead of 150,
+  then put it right and went on to 180, the stats count 250 pages, not
+  280, and nothing more until you pass page 250. When you finish
+  a book, the rest of it, from the furthest point you reached, counts on
+  the day you finished, so a book you finished without ever updating its
+  progress counts in full. Reading a book again starts from page 1. Progress kept in percent — an
+  audiobook's, say — turns into pages through the book's page count; a
+  book with no page count adds no pages.
+- **Average rating** of the books you finished that year.
+- How many you read on paper, as ebooks and as audiobooks, and the
+  longest and shortest book you finished.
+- A chart of the books you finished each month.
+
+Under **All time** are the same three numbers for everything you've read,
+and a chart of the books you finished each year. A book you added as read
+without a date — imported, say — counts toward All time but not toward any
+year.
+
+### A yearly goal
+
+Set a goal on the Stats page: type how many books you'd like to read that
+year and click **Set goal**. The page then shows how you're doing — "12 of
+30" — and whether you're ahead or behind: by the middle of the year you'd
+expect to have read half your goal. **Change goal** and **Remove goal** do
+what they say. You can set a goal for next year ahead of time, too.
+
+While this year has a goal, it also shows at the top of the Reading shelf.
+Click it to go to your stats.
 
 ## Keyboard shortcuts
 
