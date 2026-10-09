@@ -9,10 +9,12 @@ import (
 
 // seedBooks gives the demo account a small library across every shelf:
 // two books on the go (one on paper, one an audiobook, each with a few
-// days of progress), three waiting, two finished and rated (one with a
-// review) and one put down part-way, with a few tags and two books of a
-// series, so each shelf and the book pane have something to show. Dates
-// are offsets from now, so nothing is ever in the future.
+// days of progress), three waiting, three finished and rated (one with a
+// review) and one put down part-way, with a few tags, two books of a
+// series, notes on two books and quotes from one, so each shelf, the book
+// pane and the search have something to show. Quotes come only from a
+// book long out of copyright. Dates are offsets from now, so nothing is
+// ever in the future.
 func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time) error {
 	at := func(daysAgo int) time.Time { return now.AddDate(0, 0, -daysAgo) }
 	day := func(daysAgo int) string { return at(daysAgo).Local().Format("2006-01-02") }
@@ -27,12 +29,18 @@ func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time
 		stopped  int // where a DNF stopped; 0 = not said
 		rating   int
 		review   string
+		notes    []books.NoteInput  // dated by the progress that reached their page
+		quotes   []books.QuoteInput // likewise
 	}
 	library := []seed{
 		{in: books.BookInput{Title: "Leviathan Wakes", Authors: "James S. A. Corey", Year: 2011, Pages: 592,
 			SeriesName: "The Expanse", SeriesNumber: "1",
 			Description: "A detective and a ship's officer find the same missing woman at the edge of the solar system."},
-			tags: []string{"sf", "space"}, started: 9, format: "paper", progress: []int{48, 120, 205, 260, 344}, finished: -1},
+			tags: []string{"sf", "space"}, started: 9, format: "paper", progress: []int{48, 120, 205, 260, 344}, finished: -1,
+			notes: []books.NoteInput{
+				{Page: 120, Body: "Miller and Holden finally meet. The two voices work better together than apart."},
+				{Page: 260, Body: "The *protomolecule*. Didn't see that coming — the detective story was cover for something much bigger."},
+			}},
 		{in: books.BookInput{Title: "Piranesi", Authors: "Susanna Clarke", Year: 2020, Pages: 272},
 			tags: []string{"fantasy"}, started: 3, format: "audio", progress: []int{18, 41}, finished: -1},
 		{in: books.BookInput{Title: "The Dispossessed", Subtitle: "An Ambiguous Utopia", Authors: "Ursula K. Le Guin",
@@ -49,6 +57,13 @@ func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time
 			started: 35, format: "paper", finished: 20, rating: 4},
 		{in: books.BookInput{Title: "Infinite Jest", Authors: "David Foster Wallace", Year: 1996, Pages: 1079},
 			started: 120, format: "paper", finished: 90, dnf: true, stopped: 312},
+		{in: books.BookInput{Title: "Persuasion", Authors: "Jane Austen", Year: 1817, Pages: 249},
+			tags: []string{"classics"}, started: 48, format: "ebook", finished: 40, rating: 5,
+			notes: []books.NoteInput{{Body: "Anne is the quietest of Austen's heroines, and the best."}},
+			quotes: []books.QuoteInput{
+				{Page: 229, Text: "All the privilege I claim for my own sex (it is not a very enviable one; you need not covet it), is that of loving longest, when existence or when hope is gone."},
+				{Page: 231, Text: "You pierce my soul. I am half agony, half hope.", Comment: "**The letter.** Worth the whole book."},
+			}},
 	}
 	for i, b := range library {
 		// Added in this order, a day apart, before anything was started.
@@ -66,6 +81,30 @@ func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time
 		}
 		if err := st.SetFormat(ctx, userID, id, b.format); err != nil {
 			return err
+		}
+		// An entry is dated the day the progress reached its page; one with
+		// no page, or on a book with no progress, takes the next day after
+		// the start. They are written before the progress, so the last
+		// progress is the book's latest change.
+		written := func(page, j int) int {
+			for k, value := range b.progress {
+				if page > 0 && value >= page {
+					return len(b.progress) - k
+				}
+			}
+			return b.started - j - 1
+		}
+		for j, n := range b.notes {
+			st.SetClock(func() time.Time { return at(written(n.Page, j)) })
+			if _, err := st.AddNote(ctx, userID, id, n); err != nil {
+				return err
+			}
+		}
+		for j, q := range b.quotes {
+			st.SetClock(func() time.Time { return at(written(q.Page, j)) })
+			if _, err := st.AddQuote(ctx, userID, id, q); err != nil {
+				return err
+			}
 		}
 		for j, value := range b.progress {
 			st.SetClock(func() time.Time { return at(len(b.progress) - j) })

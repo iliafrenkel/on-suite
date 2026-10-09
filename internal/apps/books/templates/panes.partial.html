@@ -22,6 +22,15 @@
      shelf's order follow (spec "Progress and finishing"). */}}
 {{define "progress-swap"}}{{template "progress" .Book}}{{template "list" .List}}{{end}}
 
+{{/* notes-swap answers a note being added, edited or deleted (target
+     #books-notes): the section, and the list out of band — the row's
+     snippet and its place on a shelf sorted by the latest change can both
+     move. */}}
+{{define "notes-swap"}}{{template "notes" .Book}}{{template "list" .List}}{{end}}
+
+{{/* quotes-swap is notes-swap for the quotes (target #books-quotes). */}}
+{{define "quotes-swap"}}{{template "quotes" .Book}}{{template "list" .List}}{{end}}
+
 {{/* book-swap answers opening a book (target #books-book). The checkbox
      out of band is what makes a phone drill into the book. */}}
 {{define "book-swap"}}{{template "shell-oob" .}}{{template "book" .Book}}{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" true "OOB" true)}}{{end}}
@@ -45,8 +54,8 @@
 			     replaces the box being typed in (PATTERNS.md, SyncSearch). */}}
 			<form class="books-filter" method="get" action="/books/" role="search">
 				{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" false)}}
-				<label class="visually-hidden" for="books-q">Filter by title or author</label>
-				<input type="search" id="books-q" name="q" value="{{.Ctx.Q}}" placeholder="Filter by title or author…"
+				<label class="visually-hidden" for="books-q">Search your books</label>
+				<input type="search" id="books-q" name="q" value="{{.Ctx.Q}}" placeholder="Search books, notes and quotes…"
 				       hx-get="/books/" hx-target="#books-list" hx-swap="outerHTML"
 				       hx-include="closest form" hx-trigger="input changed delay:300ms, search"
 				       hx-replace-url="true">
@@ -105,6 +114,7 @@
 					<span class="books-row-title">{{.Title}}</span>
 					{{with .Byline}}<span class="books-row-byline">{{.}}</span>{{end}}
 					<span class="books-row-note">{{if .Bar}}<progress class="books-row-bar" max="100" value="{{.Percent}}" aria-hidden="true"></progress> {{end}}{{if .Stars}}<span class="books-stars" role="img" aria-label="Rated {{.Rating}} of 5">{{.Stars}}</span> {{end}}{{.Note}}</span>
+					{{with .Snippet}}<span class="books-row-snippet"><span class="books-snippet-in">{{.In}}</span> {{range .Parts}}{{if .Hit}}<mark>{{.Text}}</mark>{{else}}{{.Text}}{{end}}{{end}}</span>{{end}}
 				</span>
 			</a>
 		</li>
@@ -138,6 +148,8 @@
 	{{template "review" .}}
 	{{with .Description}}<div class="books-description">{{.}}</div>{{end}}
 	{{template "tags-form" .}}
+	{{template "notes" .}}
+	{{template "quotes" .}}
 	{{template "history" .}}
 {{else}}
 	<p class="empty">Pick a book, or add one.</p>
@@ -170,7 +182,7 @@
 			{{template "post-ctx" .}}
 			<button type="submit" class="outline-menu-delete"
 			        hx-post="/books/delete/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML"
-			        hx-confirm="Delete “{{.Title}}” for good? Its readings and tags go too.">Delete</button>
+			        hx-confirm="Delete “{{.Title}}” for good? Its readings, notes and quotes go too.">Delete</button>
 		</form>
 	</div>
 </details>
@@ -307,6 +319,117 @@
 		<input id="books-tags-input" name="tags" type="text" value="{{.TagsValue}}" placeholder="sf, favourites" autocomplete="off">
 		<button type="submit">Save tags</button>
 	</div>
+</form>
+{{end}}
+
+{{/* notes is the book's notes, newest first (spec "Book pane"): a
+     "+ Add note" disclosure, then each note with its date and page, an
+     Edit disclosure and Delete (decided 2026-10-09). Every form works
+     without JavaScript; htmx swaps just this section (notes-swap). Takes a
+     bookView. */}}
+{{define "notes"}}
+<section class="books-notes" id="books-notes" aria-labelledby="books-notes-head">
+	<h2 class="books-section-head" id="books-notes-head">Notes</h2>
+	<details class="books-entry-add" id="books-note-new"{{if .NewNote.Open}} open{{end}}>
+		<summary class="button">+ Add note</summary>
+		{{template "note-form" (dict "Book" . "Key" "new" "Action" (printf "/books/notes/%d" .ID) "Form" .NewNote "Submit" "Add note")}}
+	</details>
+	{{with .Notes}}
+	<ul class="books-entries">
+		{{range .}}
+		<li class="books-note">
+			<p class="books-entry-meta">{{.Date}}{{with .Page}} · {{.}}{{end}}</p>
+			<div class="books-entry-text">{{.HTML}}</div>
+			<div class="books-entry-actions">
+				<details class="books-entry-edit"{{if .Form.Open}} open{{end}}>
+					<summary class="button quiet">Edit</summary>
+					{{template "note-form" (dict "Book" $ "Key" .ID "Action" (printf "/books/notes/%d/%d" $.ID .ID) "Form" .Form "Submit" "Save note")}}
+				</details>
+				<form method="post" action="/books/notes/{{$.ID}}/{{.ID}}/delete">
+					{{template "post-ctx" $}}
+					<button type="submit" class="quiet"
+					        hx-post="/books/notes/{{$.ID}}/{{.ID}}/delete" hx-target="#books-notes" hx-swap="outerHTML"
+					        hx-confirm="Delete this note?">Delete</button>
+				</form>
+			</div>
+		</li>
+		{{end}}
+	</ul>
+	{{end}}
+</section>
+{{end}}
+
+{{/* note-form adds or edits a note. Pass a dict with Book (a bookView),
+     Key ("new" or the note's id, for element ids), Action, Form (an
+     entryForm) and Submit. novalidate, so the store's message shows rather
+     than the browser's. */}}
+{{define "note-form"}}
+<form class="books-entry-form" novalidate method="post" action="{{.Action}}"
+      hx-post="{{.Action}}" hx-target="#books-notes" hx-swap="outerHTML">
+	{{template "post-ctx" .Book}}
+	<label for="books-note-{{.Key}}-body">Note</label>
+	<textarea id="books-note-{{.Key}}-body" name="body" rows="4"{{if .Form.Error}} aria-describedby="books-note-{{.Key}}-error"{{end}}>{{.Form.Body}}</textarea>
+	<p class="books-hint">Markdown works: **bold**, *italic*, [a link](https://…).</p>
+	<label for="books-note-{{.Key}}-page">Page (optional)</label>
+	<input id="books-note-{{.Key}}-page" name="page" type="number" inputmode="numeric" min="1"{{with .Book.Pages}} max="{{.}}"{{end}} value="{{.Form.Page}}"{{if .Form.Error}} aria-describedby="books-note-{{.Key}}-error"{{end}}>
+	{{with .Form.Error}}<p class="books-field-error" id="books-note-{{$.Key}}-error" role="alert">{{.}}</p>{{end}}
+	<button type="submit" class="primary">{{.Submit}}</button>
+</form>
+{{end}}
+
+{{/* quotes is the book's quotes as cards, newest first (spec "Book
+     pane"): a "+ Add quote" disclosure, then each quote — its text with
+     its line breaks, its page and its comment — with an Edit disclosure
+     and Delete, as the notes have. htmx swaps just this section
+     (quotes-swap). Takes a bookView. */}}
+{{define "quotes"}}
+<section class="books-quotes" id="books-quotes" aria-labelledby="books-quotes-head">
+	<h2 class="books-section-head" id="books-quotes-head">Quotes</h2>
+	<details class="books-entry-add" id="books-quote-new"{{if .NewQuote.Open}} open{{end}}>
+		<summary class="button">+ Add quote</summary>
+		{{template "quote-form" (dict "Book" . "Key" "new" "Action" (printf "/books/quotes/%d" .ID) "Form" .NewQuote "Submit" "Add quote")}}
+	</details>
+	{{with .Quotes}}
+	<ul class="books-entries">
+		{{range .}}
+		<li class="books-quote">
+			<blockquote class="books-quote-text">{{.Text}}</blockquote>
+			{{with .Page}}<p class="books-entry-meta">{{.}}</p>{{end}}
+			{{with .CommentHTML}}<div class="books-entry-text books-quote-comment">{{.}}</div>{{end}}
+			<div class="books-entry-actions">
+				<details class="books-entry-edit"{{if .Form.Open}} open{{end}}>
+					<summary class="button quiet">Edit</summary>
+					{{template "quote-form" (dict "Book" $ "Key" .ID "Action" (printf "/books/quotes/%d/%d" $.ID .ID) "Form" .Form "Submit" "Save quote")}}
+				</details>
+				<form method="post" action="/books/quotes/{{$.ID}}/{{.ID}}/delete">
+					{{template "post-ctx" $}}
+					<button type="submit" class="quiet"
+					        hx-post="/books/quotes/{{$.ID}}/{{.ID}}/delete" hx-target="#books-quotes" hx-swap="outerHTML"
+					        hx-confirm="Delete this quote?">Delete</button>
+				</form>
+			</div>
+		</li>
+		{{end}}
+	</ul>
+	{{end}}
+</section>
+{{end}}
+
+{{/* quote-form adds or edits a quote: its text, an optional comment and
+     an optional page. Pass a dict as for note-form. */}}
+{{define "quote-form"}}
+<form class="books-entry-form" novalidate method="post" action="{{.Action}}"
+      hx-post="{{.Action}}" hx-target="#books-quotes" hx-swap="outerHTML">
+	{{template "post-ctx" .Book}}
+	<label for="books-quote-{{.Key}}-text">Quote</label>
+	<textarea id="books-quote-{{.Key}}-text" name="text" rows="4"{{if .Form.Error}} aria-describedby="books-quote-{{.Key}}-error"{{end}}>{{.Form.Body}}</textarea>
+	<label for="books-quote-{{.Key}}-comment">Comment (optional)</label>
+	<textarea id="books-quote-{{.Key}}-comment" name="comment" rows="2"{{if .Form.Error}} aria-describedby="books-quote-{{.Key}}-error"{{end}}>{{.Form.Comment}}</textarea>
+	<p class="books-hint">The quote is kept as typed, line breaks and all. Markdown works in the comment.</p>
+	<label for="books-quote-{{.Key}}-page">Page (optional)</label>
+	<input id="books-quote-{{.Key}}-page" name="page" type="number" inputmode="numeric" min="1"{{with .Book.Pages}} max="{{.}}"{{end}} value="{{.Form.Page}}"{{if .Form.Error}} aria-describedby="books-quote-{{.Key}}-error"{{end}}>
+	{{with .Form.Error}}<p class="books-field-error" id="books-quote-{{$.Key}}-error" role="alert">{{.}}</p>{{end}}
+	<button type="submit" class="primary">{{.Submit}}</button>
 </form>
 {{end}}
 

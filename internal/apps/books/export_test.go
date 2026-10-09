@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net"
 	"net/netip"
+	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
@@ -32,3 +33,16 @@ func (a *App) UseOpenLibraryForTest(base string) {
 // DBForTest is the store's handle, for tests that check a column no store
 // method returns.
 func (st *Store) DBForTest() *sql.DB { return st.db }
+
+// SnippetPartsForTest renders snippetParts as text with each hit in [ ].
+func SnippetPartsForTest(s string) string {
+	var b strings.Builder
+	for _, p := range snippetParts(s) {
+		if p.Hit {
+			b.WriteString("[" + p.Text + "]")
+		} else {
+			b.WriteString(p.Text)
+		}
+	}
+	return b.String()
+}

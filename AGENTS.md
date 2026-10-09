@@ -13,8 +13,8 @@ Reader** (a feed reader, with search, OPML import/export, full-article
 extraction, and reading-stats), **ON Later** (a read-it-later app: save
 pages, read them in a calm view, highlight, comment and tag them, export as
 Markdown), **ON Books** (a private reading log: shelves, readings, tags,
-Open Library search, progress, ratings and reviews, with notes and stats
-to come),
+Open Library search, progress, ratings and reviews, notes and quotes, and
+full-text search, with stats to come),
 **ON Flash** (flash cards with FSRS review, import from
 AI-written Markdown/JSON, media, household sharing and stats), and **ON
 Focus** (saved, reusable focus timers — single blocks or Pomodoro-style

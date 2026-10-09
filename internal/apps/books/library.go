@@ -292,13 +292,16 @@ type ListItem struct {
 	StartedOn, FinishedOn, Format            string   // the latest reading's
 	Progress                                 Progress // the latest reading's latest progress
 	AddedAt                                  time.Time
-	CoverVersion                             string // "" when the book has no cover
+	CoverVersion                             string  // "" when the book has no cover
+	Match                                    MatchIn // where a filtered book matched
+	Snippet                                  string  // the match, between SnippetOpen/SnippetClose; "" for MatchBook
 }
 
 // ListQuery picks the books a list shows. Shelf "" or ShelfAll is every
-// shelf; Tag is one tag name; Q matches title, subtitle, authors or series
-// name (SQLite LIKE: case-insensitive for ASCII); Series is one series'
-// name, matched whole and ignoring case.
+// shelf; Tag is one tag name; Q is full-text search over books_search —
+// title, subtitle, authors, series, review, notes, quotes and comments —
+// every word having to match, each as a prefix; Series is one
+// series' name, matched whole and ignoring case.
 type ListQuery struct {
 	Shelf  Shelf
 	Tag    string
@@ -329,12 +332,8 @@ func listOrder(q ListQuery) string {
 	}
 }
 
-// likeEscape makes s match itself literally in a LIKE ... ESCAPE '\'.
-func likeEscape(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
-}
-
-// List returns userID's books matching q, in the shelf's order.
+// List returns userID's books matching q, in the shelf's order — a search
+// keeps it too (decided 2026-10-09), so filtering never reshuffles a shelf.
 func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListItem, error) {
 	where := []string{"b.user_id = ?"}
 	args := []any{userID}
@@ -351,17 +350,19 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 		where = append(where, `b.series_name = ? COLLATE NOCASE`)
 		args = append(args, series)
 	}
-	if text := strings.TrimSpace(q.Q); text != "" {
-		pat := "%" + likeEscape(text) + "%"
-		where = append(where, `(b.title LIKE ? ESCAPE '\' OR b.subtitle LIKE ? ESCAPE '\'
-			OR b.authors LIKE ? ESCAPE '\' OR b.series_name LIKE ? ESCAPE '\')`)
-		args = append(args, pat, pat, pat, pat)
+	search, snippets := "", noSnippets
+	if match := ftsQuery(q.Q); match != "" {
+		search, snippets = searchJoin, snippetCols
+		where = append(where, `books_search MATCH ?`)
+		args = append(args, match)
 	}
 	rows, err := st.db.QueryContext(ctx, `
 		SELECT b.id, b.title, b.authors, b.series_name, b.series_number, b.pages, b.rating, b.added_at,
 		       r.started_on, r.finished_on, r.format, `+shelfExpr+`, c.fetched_at,
-		       p.page, p.percent, p.recorded_at
-		  FROM books_books b `+latestJoin+`
+		       p.page, p.percent, p.recorded_at,
+		       `+snippets+`
+		  FROM books_books b `+search+`
+		  `+latestJoin+`
 		  `+progressJoin+`
 		  LEFT JOIN books_covers c ON c.book_id = b.id
 		 WHERE `+strings.Join(where, " AND ")+`
@@ -376,10 +377,13 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 		var added, shelf string
 		var pages, rating, atPage, atPercent sql.NullInt64
 		var started, finished, format, cover, recorded sql.NullString
+		var inQuote, inComment, inNote, inReview string
 		if err := rows.Scan(&it.ID, &it.Title, &it.Authors, &it.SeriesName, &it.SeriesNumber, &pages, &rating, &added,
-			&started, &finished, &format, &shelf, &cover, &atPage, &atPercent, &recorded); err != nil {
+			&started, &finished, &format, &shelf, &cover, &atPage, &atPercent, &recorded,
+			&inQuote, &inComment, &inNote, &inReview); err != nil {
 			return nil, fmt.Errorf("books: scan list: %w", err)
 		}
+		it.Match, it.Snippet = matchOf(inQuote, inComment, inNote, inReview)
 		if it.AddedAt, err = parseTime(added); err != nil {
 			return nil, fmt.Errorf("books: added_at: %w", err)
 		}

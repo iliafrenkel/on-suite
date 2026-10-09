@@ -102,6 +102,22 @@ blank line to start a new paragraph. **Save review** keeps it; **Edit
 review** changes it later. A book has one rating and one review, however
 many times you read it.
 
+## Notes and quotes
+
+Your notes on the book come after its Tags box, newest first, each with the
+day you wrote it. **+ Add note** opens a box for one; give it a page if you
+like, and it shows as "p. 112". Notes take the same little Markdown as
+reviews.
+
+**Quotes** are passages you want to keep. **+ Add quote** opens a box for
+the words, an optional comment and an optional page. A quote keeps its
+line breaks exactly as you typed them, so poetry stays poetry; the comment
+takes Markdown.
+
+**Edit** on a note or quote changes it in place; **Delete** removes it,
+after asking. A page has to be one the book has — from 1 to its page
+count.
+
 ## Reading history
 
 At the bottom of a book is every time you've read it, newest first: when
@@ -119,21 +135,28 @@ order. Add a series name and number with **⋯ → Edit details**.
 ## Tags
 
 Tags are your own labels — *sf*, *book club*, *favourites*. Edit them in the
-**Tags** box at the bottom of a book and click **Save tags**. Your tags are
+**Tags** box under a book's description and click **Save tags**. Your tags are
 listed under the shelves; click one to see every book with it. A tag nobody
 uses any more disappears.
 
 ## Finding a book
 
-Type in the box above the list to narrow it to books whose title,
-subtitle, author or series contains what you typed. The filter stays as you
-switch shelves; clear the box to see everything again.
+Type in the box above the list to search your books: their titles,
+subtitles, authors and series, and everything you've written about them —
+reviews, notes, quotes and quote comments. Every word you type has to
+match, and the list narrows while you're still typing a word. When a book
+matched inside a review, note or quote, its row gets a third line showing
+where, with the matching words highlighted — "Quote: The spice must
+flow."
+
+The search stays within the shelf, tag or series you're looking at, and
+stays as you switch shelves; clear the box to see everything again.
 
 ## Editing and deleting
 
 Open a book and use the **⋯** menu: **Edit details** changes the title,
 author and the rest; **Delete** removes the book for good, with its
-readings and tags.
+readings, notes and quotes.
 
 ## Keyboard shortcuts
 
@@ -141,8 +164,11 @@ readings and tags.
 - **/** — jump to the filter box
 - **a** — add a book
 - **p** — jump to the progress box of the book you're reading
+- **n** — add a note to the open book
+- **q** — add a quote to the open book
 - **Esc** — close an open box in the book (Finish, Did not finish, a
-  menu, the review), or leave the filter or the progress box
+  menu, the review, a note or quote), or leave the filter or the
+  progress box
 
 ## On a phone
 
