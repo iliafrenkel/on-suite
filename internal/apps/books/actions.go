@@ -116,6 +116,10 @@ func (a *App) dnf(r *http.Request, userID, id int64) error {
 	return a.store.MarkDNF(r.Context(), userID, id, strings.TrimSpace(r.PostFormValue("day")), formInt(r, "at"))
 }
 
+func (a *App) setFormat(r *http.Request, userID, id int64) error {
+	return a.store.SetFormat(r.Context(), userID, id, r.PostFormValue("format"))
+}
+
 func (a *App) setTags(r *http.Request, userID, id int64) error {
 	return a.store.SetTags(r.Context(), userID, id, ParseTags(r.PostFormValue("tags")))
 }

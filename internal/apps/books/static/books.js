@@ -271,9 +271,10 @@
 				if (e.target.id === "books-q" || e.target.id === "books-progress-input") {
 					e.target.blur();
 				} else {
-					// Esc from the date field of an open Finish/DNF disclosure (or
-					// the menu) closes it and returns focus to its summary.
-					var open = e.target.closest("details.books-close[open], details.books-menu[open]");
+					// Esc from a field in an open disclosure of the book pane
+					// (Finish, Did not finish, the menus) closes it and returns
+					// focus to its summary.
+					var open = e.target.closest("#books-book details[open]");
 					if (open) {
 						open.open = false;
 						var summary = open.querySelector("summary");
@@ -306,7 +307,7 @@
 			progress.select();
 			break;
 		case "Escape":
-			document.querySelectorAll("details.books-close[open], details.books-menu[open]").forEach(function (d) {
+			document.querySelectorAll("#books-book details[open]").forEach(function (d) {
 				d.open = false;
 			});
 			return;

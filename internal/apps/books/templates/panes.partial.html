@@ -182,7 +182,10 @@
 {{define "reading-box"}}
 <div class="books-reading">
 	{{if .Reading}}
-	<p class="books-reading-status">Reading{{with .StartedOn}} since {{.}}{{end}}</p>
+	<div class="books-reading-head">
+		<p class="books-reading-status">Reading{{with .StartedOn}} since {{.}}{{end}}</p>
+		{{template "format-menu" .}}
+	</div>
 	{{template "progress" .}}
 	<div class="books-reading-actions">
 		{{template "close-reading" (dict "Book" . "Action" "finish" "Label" "Finish" "DayLabel" "Finished on" "Submit" "Mark as read" "Primary" true)}}
@@ -195,6 +198,20 @@
 	</form>
 	{{end}}
 </div>
+{{end}}
+
+{{/* format-menu sets the format of the reading in progress: a no-JS
+     <details> disclosure (PATTERNS.md) whose summary is the format pill.
+     Takes a bookView. */}}
+{{define "format-menu"}}
+<details class="outline-menu books-format">
+	<summary class="books-pill books-format-pill" aria-label="Format: {{.FormatLabel}}">{{.FormatLabel}}</summary>
+	<form class="outline-menu-list outline-menu-list-end" method="post" action="/books/format/{{.ID}}"
+	      hx-post="/books/format/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+		{{template "post-ctx" .}}
+		{{range .FormatChoices}}<button type="submit" name="format" value="{{.Value}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</button>{{end}}
+	</form>
+</details>
 {{end}}
 
 {{/* progress is the progress box of a reading in progress: the input
@@ -220,7 +237,8 @@
 
 {{/* close-reading is Finish or Did not finish: a no-JS <details>
      disclosure (PATTERNS.md) holding the date — today unless changed, never
-     before the start — and the button that sends it. */}}
+     before the start — then an optional rating (Finish) or the place it
+     stopped (Did not finish), and the button that sends it. */}}
 {{define "close-reading"}}
 <details class="books-close">
 	<summary class="button{{if .Primary}} primary{{end}}">{{.Label}}</summary>
@@ -229,6 +247,16 @@
 		{{template "post-ctx" .Book}}
 		<label for="books-{{.Action}}-day">{{.DayLabel}}</label>
 		<input id="books-{{.Action}}-day" name="day" type="date" value="{{.Book.Today}}" max="{{.Book.Today}}"{{with .Book.MinDay}} min="{{.}}"{{end}}>
+		{{if eq .Action "finish"}}
+		<label for="books-finish-rating">Rating (optional)</label>
+		<select id="books-finish-rating" name="rating">
+			<option value="">No rating</option>
+			{{range .Book.RatingChoices}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}
+		</select>
+		{{else}}
+		<label for="books-dnf-at">Stopped at {{if eq .Book.Progress.Unit "page"}}page{{else}}percent{{end}} (optional)</label>
+		<input id="books-dnf-at" name="at" type="number" inputmode="numeric" min="0" max="{{.Book.Progress.Max}}" value="{{.Book.Progress.Value}}">
+		{{end}}
 		<button type="submit"{{if .Primary}} class="primary"{{end}}>{{.Submit}}</button>
 	</form>
 </details>

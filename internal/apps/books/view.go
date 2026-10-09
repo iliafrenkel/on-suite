@@ -284,21 +284,53 @@ type bookView struct {
 	Tags                             []string
 	TagsValue                        string // the tags box: "classics, sf"
 	// The reading box.
-	Reading    bool         // a reading is in progress
-	Progress   progressView // its progress, when Reading
-	StartedOn  string       // "3 Oct 2026"; "" when unknown
-	MinDay     string       // the earliest finish date allowed (the start), YYYY-MM-DD
-	Today      string       // the latest date allowed, YYYY-MM-DD
-	StartLabel string       // "Start reading", "Read again" or "Start again"
-	Ctx        listCtx
-	Shell      render.Shell
+	Reading       bool         // a reading is in progress
+	Progress      progressView // its progress, when Reading
+	FormatLabel   string       // its format, for the pill: "Paper", "Format not set"
+	FormatChoices []choice     // the format menu
+	StartedOn     string       // "3 Oct 2026"; "" when unknown
+	MinDay        string       // the earliest finish date allowed (the start), YYYY-MM-DD
+	Today         string       // the latest date allowed, YYYY-MM-DD
+	StartLabel    string       // "Start reading", "Read again" or "Start again"
+	Rating        int          // 1–5, 0 for none
+	RatingChoices []choice     // the Finish step's rating select
+	Ctx           listCtx
+	Shell         render.Shell
+}
+
+// choice is one option of a menu or select.
+type choice struct {
+	Value, Label string
+	Current      bool
+}
+
+var formatLabels = map[string]string{"paper": "Paper", "ebook": "Ebook", "audio": "Audiobook", "": "Not set"}
+
+// formatChoices is the format menu: every format, then "not set".
+func formatChoices(current string) []choice {
+	var out []choice
+	for _, f := range Formats {
+		out = append(out, choice{Value: f, Label: formatLabels[f], Current: f == current})
+	}
+	return append(out, choice{Value: "", Label: formatLabels[""], Current: current == ""})
+}
+
+// ratingChoices is the Finish step's rating select, best first; the book's
+// rating is picked already, so finishing a re-read keeps it unless changed.
+func ratingChoices(current int) []choice {
+	var out []choice
+	for n := 5; n >= 1; n-- {
+		out = append(out, choice{Value: strconv.Itoa(n), Label: stars(n) + " " + strconv.Itoa(n) + " of 5", Current: n == current})
+	}
+	return out
 }
 
 // viewBook draws a book; today bounds the reading box's date fields.
 func viewBook(b Book, c listCtx, today string) bookView {
 	v := bookView{Selected: true, ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
 		Description: b.Description, Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion),
-		ShelfLabel: b.Shelf.Label(), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Ctx: c}
+		ShelfLabel: b.Shelf.Label(), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today,
+		Rating: b.Rating, Ctx: c}
 	if b.SeriesName != "" {
 		v.Series = seriesText(b.SeriesName, b.SeriesNumber)
 		if b.SeriesBooks > 1 { // the count only says something once there are two
@@ -319,6 +351,11 @@ func viewBook(b Book, c listCtx, today string) bookView {
 	case b.Latest.Status == StatusReading:
 		v.Reading = true
 		v.Progress = viewProgress(b)
+		v.FormatLabel, v.FormatChoices = "Format not set", formatChoices(b.Latest.Format)
+		if b.Latest.Format != "" {
+			v.FormatLabel = formatLabels[b.Latest.Format]
+		}
+		v.RatingChoices = ratingChoices(b.Rating)
 		v.MinDay = b.Latest.StartedOn
 		if b.Latest.StartedOn != "" {
 			v.StartedOn = ShowDay(b.Latest.StartedOn)

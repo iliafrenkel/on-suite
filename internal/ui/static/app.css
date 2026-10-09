@@ -4247,6 +4247,13 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 /* Reading box, tags, confirm dialog */
 .books-reading { margin-bottom: var(--s-4); padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); }
 .books-reading-status { margin: 0 0 var(--s-2); font-weight: 600; }
+.books-reading-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2); }
+.books-format > summary { list-style: none; cursor: pointer; }
+.books-format > summary::-webkit-details-marker { display: none; }
+/* An outlined pill: the reading box is the same colour as a plain one. */
+.books-format-pill { box-shadow: inset 0 0 0 1px var(--c-border-firm); }
+.books-format-pill:hover { color: var(--c-text); }
+.books-format button[aria-current="true"] { font-weight: 600; }
 .books-reading-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); }
 .books-close > summary { display: inline-flex; list-style: none; cursor: pointer; }
 .books-close > summary::-webkit-details-marker { display: none; }
