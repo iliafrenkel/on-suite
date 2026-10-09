@@ -193,6 +193,13 @@ func TestSeedFillsEveryApp(t *testing.T) {
 			t.Errorf("read %q has no rating", it.Title)
 		}
 	}
+	// ... and notes and quotes the filter finds.
+	for q, want := range map[string]books.MatchIn{"protomolecule": books.MatchNote, "agony": books.MatchQuote} {
+		found, err := bst.List(ctx, demo.ID, books.ListQuery{Shelf: books.ShelfAll, Q: q})
+		if err != nil || len(found) != 1 || found[0].Match != want {
+			t.Errorf("books search %q = %+v, %v; want one book matched in a %s", q, found, err, want)
+		}
+	}
 
 	// Flash: decks with cards, a review history and a streak.
 	fs := flash.NewStore(handle)
