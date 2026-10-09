@@ -88,6 +88,20 @@ func TestARefusedFinishShowsTheBanner(t *testing.T) {
 	}
 }
 
+func TestAnEarlyYearFinishShowsTheBanner(t *testing.T) {
+	s := newServer(t)
+	s.Clock.Set(time.Date(2026, 10, 9, 1, 0, 0, 0, time.UTC))
+	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfReading))
+	rec := s.PostHX(t, s.Alice, fmt.Sprintf("/books/finish/%d", id), url.Values{"shelf": {"reading"}, "day": {"0026-03-01"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("htmx refused finish = %d, want 200", rec.Code)
+	}
+	banner := htmlassert.Text(htmlassert.Parse(t, rec.Body.String()).MustHave(".books-banner"))
+	if !strings.Contains(banner, "1900") {
+		t.Errorf("banner = %q, want it to mention 1900", banner)
+	}
+}
+
 func TestDidNotFinish(t *testing.T) {
 	s := newServer(t)
 	id := add(t, s, s.Alice.User.ID, titled("Infinite Jest", "", books.ShelfReading))

@@ -174,6 +174,9 @@ func summarise(fs []finish, logs []ReadingLog, year, thisYear int) Stats {
 		if err != nil { // undated: all time only
 			continue
 		}
+		if day.Year() < MinYear { // counted in All.Finished, but no year of its own
+			continue
+		}
 		perYear[day.Year()]++
 		if firstFinish == 0 || day.Year() < firstFinish {
 			firstFinish = day.Year()
@@ -217,7 +220,7 @@ func summarise(fs []finish, logs []ReadingLog, year, thisYear int) Stats {
 			if strings.HasPrefix(day, prefix) {
 				s.Year.Pages += n
 			}
-			if y, err := strconv.Atoi(day[:4]); err == nil {
+			if y, err := strconv.Atoi(day[:4]); err == nil && y >= MinYear {
 				s.All.First = min(s.All.First, y)
 			}
 		}

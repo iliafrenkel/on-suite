@@ -101,6 +101,31 @@ func TestFinishUsesTheGivenDayAndChecksIt(t *testing.T) {
 	}
 }
 
+func TestDatesBeforeMinYearAreRefused(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.now = noon("2026-10-09")
+	id := addBook(t, f, f.alice.ID, onShelf("Dune", books.ShelfReading))
+
+	for _, day := range []string{"0026-03-01", "1899-12-31"} {
+		var ref *books.Refusal
+		err := f.store.FinishReading(ctx, f.alice.ID, id, day, 0)
+		if !errors.As(err, &ref) || !strings.Contains(ref.Msg, "1900") {
+			t.Errorf("FinishReading(%q) = %v, want a Refusal naming 1900", day, err)
+		}
+		nb := onShelf("Emma", books.ShelfRead)
+		nb.FinishedOn = day
+		if _, err := f.store.Create(ctx, f.alice.ID, nb); !errors.As(err, &ref) {
+			t.Errorf("Add read on %q = %v, want a Refusal", day, err)
+		}
+	}
+	nb := onShelf("Emma", books.ShelfRead)
+	nb.FinishedOn = "1900-01-01"
+	if _, err := f.store.Create(ctx, f.alice.ID, nb); err != nil {
+		t.Errorf("Add read on 1900-01-01 = %v, want it accepted", err)
+	}
+}
+
 func TestFinishWithNothingInProgressIsRefused(t *testing.T) {
 	f := newFixture(t)
 	id := addBook(t, f, f.alice.ID, onShelf("Dune", books.ShelfWant))

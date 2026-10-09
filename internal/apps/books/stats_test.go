@@ -199,3 +199,26 @@ func TestStatsOfAnEmptyYear(t *testing.T) {
 		t.Errorf("all time with no books = %+v, want no years and this year first", s.All)
 	}
 }
+
+func TestStatsClampYearsBeforeMinYear(t *testing.T) {
+	f := newFixture(t)
+	uid := f.alice.ID
+	f.now = noon("2026-02-10")
+	finished(t, f, uid, "Dune", 600, "2026-02-10")
+	odd := finished(t, f, uid, "Odd", 100, "2026-02-10")
+	// The store refuses such a date now; old rows or an import may hold one.
+	if _, err := f.db.Exec(`UPDATE books_readings SET finished_on = '0026-03-01' WHERE book_id = ?`, odd); err != nil {
+		t.Fatal(err)
+	}
+
+	s := stats(t, f, uid, 2026)
+	if s.All.Finished != 2 {
+		t.Errorf("all-time finished = %d, want 2 (the 0026 finish still counts)", s.All.Finished)
+	}
+	if s.All.First < books.MinYear {
+		t.Errorf("first year = %d, want at least %d", s.All.First, books.MinYear)
+	}
+	if len(s.All.ByYear) != 1 || s.All.ByYear[0].Year != 2026 {
+		t.Errorf("by year has %d entries from %d, want just 2026", len(s.All.ByYear), s.All.ByYear[0].Year)
+	}
+}
