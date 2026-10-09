@@ -1,19 +1,23 @@
 package books
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 )
 
 // formValues is what the book form shows: the raw text, so a mistyped
 // number comes back exactly as typed. AddTo, FinishedOn and Tags are for a
-// new book only.
+// new book only; so are OLWork, OLEdition and CoverID, which carry an Open
+// Library pick through the form in hidden fields.
 type formValues struct {
 	Title, Subtitle, Authors, Year, Pages, ISBN string
 	SeriesName, SeriesNumber, Description       string
 	AddTo, FinishedOn, Tags                     string
+	OLWork, OLEdition, CoverID                  string
 }
 
 func valuesOf(in BookInput) formValues {
@@ -29,6 +33,22 @@ func numText(n int) string {
 	return strconv.Itoa(n)
 }
 
+// searchView is the Open Library search on the Add book page.
+type searchView struct {
+	Query    string
+	Searched bool
+	Error    string
+	Results  []resultView
+}
+
+// resultView is one search result.
+type resultView struct {
+	Title   string
+	Byline  string // "Authors · Year"
+	Thumb   string // the proxied thumbnail; "" when Open Library has no cover
+	PickURL string // the Add book page pre-filled with this result
+}
+
 // formView is the Add/Edit book page.
 type formView struct {
 	New     bool
@@ -40,6 +60,7 @@ type formView struct {
 	Errors  FieldErrors
 	Today   string // the latest finish date the form allows
 	Ctx     listCtx
+	Search  searchView
 }
 
 // parseForm reads a posted book form: the input, the raw values to echo
@@ -48,7 +69,8 @@ func parseForm(get func(string) string) (BookInput, formValues, FieldErrors) {
 	v := formValues{Title: get("title"), Subtitle: get("subtitle"), Authors: get("authors"),
 		Year: get("year"), Pages: get("pages"), ISBN: get("isbn"),
 		SeriesName: get("series_name"), SeriesNumber: get("series_number"), Description: get("description"),
-		AddTo: get("add_to"), FinishedOn: strings.TrimSpace(get("finished_on")), Tags: get("tags")}
+		AddTo: get("add_to"), FinishedOn: strings.TrimSpace(get("finished_on")), Tags: get("tags"),
+		OLWork: olID(get("ol_work"), 'W'), OLEdition: olID(get("ol_edition"), 'M'), CoverID: coverIDText(get("cover_id"))}
 	in := BookInput{Title: v.Title, Subtitle: v.Subtitle, Authors: v.Authors, ISBN: v.ISBN,
 		SeriesName: v.SeriesName, SeriesNumber: v.SeriesNumber, Description: v.Description}
 	errs := FieldErrors{}
@@ -80,6 +102,75 @@ func merge(a, b FieldErrors) FieldErrors {
 	return a
 }
 
+// coverIDText keeps an Open Library cover id: 1–12 digits, not zero.
+func coverIDText(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" || len(s) > 12 || strings.Trim(s, "0123456789") != "" || strings.TrimLeft(s, "0") == "" {
+		return ""
+	}
+	return s
+}
+
+// thumbURL is a search result's proxied thumbnail.
+func thumbURL(coverID int64) string {
+	if coverID <= 0 {
+		return ""
+	}
+	return "/books/olcover/" + strconv.FormatInt(coverID, 10)
+}
+
+// pickURL is the Add book page pre-filled with c. Everything travels in
+// the link: the values are only a starting point the person edits anyway.
+func pickURL(c Candidate) string {
+	v := url.Values{"pick": {"1"}}
+	for k, val := range map[string]string{"title": c.Title, "subtitle": c.Subtitle, "authors": c.Authors,
+		"year": numText(c.Year), "pages": numText(c.Pages), "isbn": c.ISBN,
+		"ol_work": c.WorkID, "ol_edition": c.EditionID} {
+		if val != "" {
+			v.Set(k, val)
+		}
+	}
+	if c.CoverID > 0 {
+		v.Set("cover", strconv.FormatInt(c.CoverID, 10))
+	}
+	return "/books/new?" + v.Encode()
+}
+
+const searchFailed = "Open Library didn't answer. Try again, or fill in the book yourself below."
+
+// search asks Open Library for q. A failure is logged and shown as a
+// notice; the page still works.
+func (a *App) search(ctx context.Context, q string) searchView {
+	sv := searchView{Query: q, Searched: true}
+	found, err := a.ol.Search(ctx, q)
+	if err != nil {
+		a.deps.Log.Info("books open library search failed", "error", err)
+		sv.Error = searchFailed
+		return sv
+	}
+	for _, c := range found {
+		sv.Results = append(sv.Results, resultView{Title: c.Title, Byline: byline(c.Authors, numText(c.Year)),
+			Thumb: thumbURL(c.CoverID), PickURL: pickURL(c)})
+	}
+	return sv
+}
+
+// picked is the form pre-filled from a "Use this" link, with the work's
+// description fetched now (a failure leaves it empty).
+func (a *App) picked(ctx context.Context, q url.Values) formValues {
+	v := formValues{Title: q.Get("title"), Subtitle: q.Get("subtitle"), Authors: q.Get("authors"),
+		Year: q.Get("year"), Pages: q.Get("pages"), ISBN: q.Get("isbn"), AddTo: string(ShelfWant),
+		OLWork: olID(q.Get("ol_work"), 'W'), OLEdition: olID(q.Get("ol_edition"), 'M'), CoverID: coverIDText(q.Get("cover"))}
+	if v.OLWork != "" {
+		d, err := a.ol.Description(ctx, v.OLWork)
+		if err != nil {
+			a.deps.Log.Info("books open library description failed", "work", v.OLWork, "error", err)
+		}
+		v.Description = d
+	}
+	return v
+}
+
 func (a *App) renderForm(w http.ResponseWriter, r *http.Request, status int, v formView) {
 	page := a.deps.Page(r, v.Heading)
 	page.Data = v
@@ -93,11 +184,31 @@ func (a *App) newBookForm(v formValues, errs FieldErrors) formView {
 		Cancel: "/books/", Values: v, Errors: errs, Today: a.store.Today()}
 }
 
+// newForm is the Add book page: an Open Library search (q), a result
+// picked from it (pick), or an empty form.
 func (a *App) newForm(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.userID(w, r); !ok {
 		return
 	}
-	a.renderForm(w, r, http.StatusOK, a.newBookForm(formValues{AddTo: string(ShelfWant)}, nil))
+	q := r.URL.Query()
+	v := formValues{AddTo: string(ShelfWant)}
+	if q.Get("pick") != "" {
+		v = a.picked(r.Context(), q)
+	}
+	view := a.newBookForm(v, nil)
+	if text := strings.TrimSpace(q.Get("q")); text != "" {
+		view.Search = a.search(r.Context(), text)
+		// Nothing to pick from: start the form with what was typed (spec
+		// "Screens → Add book").
+		if len(view.Search.Results) == 0 && view.Values.Title == "" && view.Values.ISBN == "" {
+			if isbn, ok := ISBN13(text); ok {
+				view.Values.ISBN = isbn
+			} else {
+				view.Values.Title = text
+			}
+		}
+	}
+	a.renderForm(w, r, http.StatusOK, view)
 }
 
 func (a *App) create(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +224,8 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, err := a.store.Create(r.Context(), uid, NewBook{BookInput: in, Shelf: shelf,
-		FinishedOn: vals.FinishedOn, Tags: ParseTags(vals.Tags)})
+		FinishedOn: vals.FinishedOn, Tags: ParseTags(vals.Tags),
+		OLWorkID: vals.OLWork, OLEditionID: vals.OLEdition})
 	var verr *ValidationError
 	var ref *Refusal
 	switch {
@@ -129,6 +241,9 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		a.fail(w, r, err)
 		return
+	}
+	if coverID, err := strconv.ParseInt(vals.CoverID, 10, 64); err == nil {
+		a.saveOLCover(r.Context(), uid, id, coverID)
 	}
 	http.Redirect(w, r, listCtx{Shelf: shelf}.BookURL(id), http.StatusSeeOther)
 }

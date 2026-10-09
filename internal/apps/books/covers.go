@@ -1,6 +1,8 @@
 package books
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strconv"
 )
@@ -77,4 +79,23 @@ func (a *App) olThumb(w http.ResponseWriter, r *http.Request) {
 	h.Set("Content-Type", ct)
 	h.Set("Content-Length", strconv.Itoa(len(data)))
 	_, _ = w.Write(data)
+}
+
+// errNotACover is an image that isn't one of the cover types.
+var errNotACover = errors.New("books: not a JPEG, PNG, GIF or WebP image")
+
+// saveOLCover fetches a new book's Open Library cover and stores it. A
+// failure is logged, not shown: the book is already saved and shows its
+// spine (spec "Errors").
+func (a *App) saveOLCover(ctx context.Context, userID, id, coverID int64) {
+	ct, data, err := a.ol.Cover(ctx, coverID, "M")
+	if err == nil && !coverType(ct) {
+		err = errNotACover
+	}
+	if err == nil {
+		err = a.store.SetCover(ctx, userID, id, ct, data, CoverFromOL)
+	}
+	if err != nil {
+		a.deps.Log.Info("books cover fetch failed", "book", id, "cover", coverID, "error", err)
+	}
 }
