@@ -4258,3 +4258,28 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-tags-row button { white-space: nowrap; }
 .books-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1rem; border: var(--border); border-radius: var(--radius); color: var(--c-text); background: var(--c-bg); }
 .books-dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+
+/* Add book page: Open Library search */
+.books-form-page { max-width: var(--measure); padding: var(--s-4) 0; }
+.books-form-page .books-form { padding: 0; }
+.books-search-row { display: flex; gap: var(--s-2); }
+.books-search-row input { flex: 1 1 auto; min-width: 0; }
+.books-results { list-style: none; margin: 0; padding: 0; }
+.books-result { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) 0; border-bottom: 1px solid var(--c-border); }
+.books-result-cover { flex: 0 0 auto; display: block; width: 2.5rem; height: 3.75rem; object-fit: cover; border-radius: 2px; background: var(--c-bg-subtle); }
+.books-result-text { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.books-result-title { font-weight: 600; }
+.books-result-byline { color: var(--c-text-dim); font-size: var(--fs-sm); }
+.books-result-use { flex: 0 0 auto; }
+.books-form-sub { margin: var(--s-2) 0 0; font-size: var(--fs-base); }
+.books-picked { display: flex; align-items: center; gap: var(--s-3); }
+.books-picked p { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
+
+/* Covers: the same footprint as the spines they replace */
+.books-mini-cover { flex: 0 0 auto; display: block; width: 2rem; height: 3rem; object-fit: cover; border-radius: 2px; background: var(--c-bg-subtle); }
+.books-cover { flex: 0 0 auto; display: block; width: 6rem; height: auto; max-height: 9rem; object-fit: contain; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+
+/* Edit page: the cover */
+.books-cover-edit { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4); }
+.books-cover-edit > .stack { flex: 1 1 14rem; min-width: 0; }
+.books-cover-edit input[type="url"] { width: 100%; }

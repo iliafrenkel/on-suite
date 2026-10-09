@@ -155,21 +155,27 @@ A three-pane list+detail view, like ON Reader (sidebar, list, book), with its re
   - Quotes — cards with text, page and comment.
   - Reading history — every reading with dates, format and status; each
     editable and deletable.
-  - A ⋯ menu: Edit details, Change cover, Find cover (B5), Delete.
+  - A ⋯ menu: Edit details (which also changes the cover), Find cover (B5), Delete.
 
 ### Add book
 
-A dialog with one search box. Results come back as rows: cover thumbnail,
-title, author, year, **Add**. **Add** opens the book form pre-filled from the
-result, with a shelf choice: *Want to read* / *Reading now* / *Already read*
-(the last asks for a finish date). Saving creates the book (and a reading if
-needed) and fetches the cover. A "Can't find it? Enter manually" link is
-always visible; when OL fails, the dialog says so and offers the manual form
-with what was typed.
+The Add book page (`/books/new`) starts with **Find it on Open Library**: a
+plain search box (title, author or ISBN). Results come back on the page as
+rows — cover thumbnail, title, author, year, **Use this**. **Use this**
+reloads the page with the book form pre-filled from the result (and the
+work's description); the person checks it and picks a shelf: *Want to
+read* / *Reading now* / *Already read*. Saving creates the book (and a
+reading if needed) and fetches its cover. The manual form is always right
+there under the search; when Open Library fails or finds nothing, the page
+says so and starts the form with what was typed.
 
-Thumbnails in search results load directly from `covers.openlibrary.org` in
-the browser; the CSP gets that one image origin. Only the saved cover is
-fetched by the server.
+Thumbnails in search results are proxied through `/books/olcover/{coverID}`:
+Open Library's cover URLs redirect to archive.org storage hosts, which a
+CSP would have to allow by wildcard, so the suite's `img-src 'self'` stays
+as it is. Only digits reach the proxy, never a URL.
+
+(Decided 2026-10-09 while planning B1b: search on the page rather than in a
+dialog, and proxied thumbnails rather than a wider CSP.)
 
 ### Progress and finishing
 
@@ -251,8 +257,8 @@ A Books import page takes a Goodreads "Export Library" CSV.
 
 Follow PATTERNS.md's error-surfacing patterns.
 
-- OL search failures (timeout, 5xx, bad JSON) show inline in the dialog and
-  offer manual entry.
+- OL search failures (timeout, 5xx, bad JSON) show inline on the Add book page and
+  pre-fill the form with what was typed.
 - Cover fetch failures are logged; the book shows its spine.
 - Bad progress (negative, past the page count, percent over 100) and bad
   dates (finish before start) show an inline message.
@@ -284,7 +290,7 @@ One PR each, in order.
 | Phase | Issue | Scope |
 |---|---|---|
 | B1a | #487 Library and shelves (part 1) | App skeleton; books, readings and tags tables; manual entry on an Add book page; generated spines; the three panes; Start reading / Finish / DNF; tags; edit and delete; title/author filter |
-| B1b | #487 Library and shelves (part 2) | Open Library search in an Add book dialog in front of the B1a form; covers (`books_covers`): fetch on save, upload, image URL |
+| B1b | #487 Library and shelves (part 2) | Open Library search on the Add book page; covers (`books_covers`): fetched on save from a pick, upload, image address, remove; covers in the list and book pane; thumbnail proxy |
 | B2 | #488 Reading progress and history | Progress input and history; format; re-reads and the reading history list; rating and review; series links |
 | B3 | #489 Notes and quotes | Dated notes; quotes; FTS search |
 | B4 | #490 Goals and stats | Yearly goal; stats page; goal card on the Reading shelf |

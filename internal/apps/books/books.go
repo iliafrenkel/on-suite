@@ -4,8 +4,10 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
+	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
 
 var _ app.App = (*App)(nil)
@@ -20,6 +22,12 @@ var scriptFiles embed.FS
 type App struct {
 	store *Store
 	deps  app.Deps
+	// web is the only way this app reaches the network.
+	web *webfetch.Client
+	ol  *OpenLibrary
+	// thumbSem bounds concurrent thumbnail fetches: a results page asks for
+	// up to ten at once, and Open Library is a free service.
+	thumbSem chan struct{}
 }
 
 // New returns the app for registration in cmd/onsuite.
@@ -44,23 +52,37 @@ func (a *App) Templates() fs.FS {
 	return sub
 }
 
+// editFormMaxBytes is the edit form's body budget: one cover plus the
+// form's text fields and multipart overhead (the suite default is 1 MiB).
+const editFormMaxBytes = MaxCoverBytes + 1<<20
+
 func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.deps = deps
 	a.store = NewStore(deps.DB)
 	if deps.Now != nil {
 		a.store.SetClock(deps.Now)
 	}
+	a.web = webfetch.New(webfetch.Config{
+		UserAgent:       "onsuite/" + deps.Version + " (ON Books; +https://github.com/iliafrenkel/on-suite)",
+		DefaultAccept:   "application/json",
+		DefaultMaxBytes: webfetch.MaxPageBytes,
+	})
+	a.ol = &OpenLibrary{Web: a.web, Base: "https://openlibrary.org", Covers: "https://covers.openlibrary.org", Timeout: 5 * time.Second}
+	a.thumbSem = make(chan struct{}, 4)
 	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("GET /b/{id}", a.book)
 	r.HandleFunc("GET /new", a.newForm)
 	r.HandleFunc("POST /new", a.create)
 	r.HandleFunc("GET /edit/{id}", a.editForm)
+	r.RegisterBodyLimit("POST /edit/{id}", editFormMaxBytes)
 	r.HandleFunc("POST /edit/{id}", a.update)
 	r.HandleFunc("POST /start/{id}", a.act(a.start, false))
 	r.HandleFunc("POST /finish/{id}", a.act(a.finish, false))
 	r.HandleFunc("POST /dnf/{id}", a.act(a.dnf, false))
 	r.HandleFunc("POST /tags/{id}", a.act(a.setTags, false))
 	r.HandleFunc("POST /delete/{id}", a.act(a.remove, true))
+	r.HandleFunc("GET /cover/{id}", a.cover)
+	r.HandleFunc("GET /olcover/{id}", a.olThumb)
 	r.HandleFunc("GET /books.js", a.script("books.js"))
 }
 

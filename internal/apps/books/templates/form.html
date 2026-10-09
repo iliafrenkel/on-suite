@@ -1,49 +1,113 @@
 {{define "content"}}
 {{$d := .Data}}
-<form class="books-form stack" method="post" action="{{$d.Action}}" novalidate>
-	<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
-	{{if not $d.New}}{{template "ctx-fields" $d.Ctx}}{{end}}
+<div class="books-form-page stack">
 	<h1>{{$d.Heading}}</h1>
-	{{if $d.Errors}}<div class="notice notice-error" role="alert">Please fix the fields marked below.</div>{{end}}
+	{{if $d.New}}{{template "ol-search" $d.Search}}{{end}}
+	<form class="books-form stack" method="post" action="{{$d.Action}}"{{if not $d.New}} enctype="multipart/form-data"{{end}} novalidate>
+		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+		{{if not $d.New}}{{template "ctx-fields" $d.Ctx}}{{end}}
+		{{if $d.New}}
+		<input type="hidden" name="ol_work" value="{{$d.Values.OLWork}}">
+		<input type="hidden" name="ol_edition" value="{{$d.Values.OLEdition}}">
+		<input type="hidden" name="cover_id" value="{{$d.Values.CoverID}}">
+		{{if $d.Search.Searched}}<h2 class="books-form-sub">Or fill it in yourself</h2>{{end}}
+		{{with $d.Values.CoverID}}
+		<div class="books-picked">
+			<img class="books-result-cover" src="/books/olcover/{{.}}" alt="" width="40" height="60">
+			<p>From Open Library — check the details, then add it. The cover comes too.</p>
+		</div>
+		{{end}}
+		{{end}}
+		{{if $d.Errors}}<div class="notice notice-error" role="alert">Please fix the fields marked below.</div>{{end}}
 
-	{{template "text-field" (dict "Name" "title" "Label" "Title" "Value" $d.Values.Title "Error" (index $d.Errors "title"))}}
-	{{template "text-field" (dict "Name" "subtitle" "Label" "Subtitle" "Value" $d.Values.Subtitle "Error" (index $d.Errors "subtitle"))}}
-	{{template "text-field" (dict "Name" "authors" "Label" "Author(s)" "Placeholder" "Ursula K. Le Guin" "Value" $d.Values.Authors "Error" (index $d.Errors "authors"))}}
-	<div class="books-form-row">
-		{{template "text-field" (dict "Name" "year" "Label" "First published" "Mode" "numeric" "Value" $d.Values.Year "Error" (index $d.Errors "year"))}}
-		{{template "text-field" (dict "Name" "pages" "Label" "Pages" "Mode" "numeric" "Value" $d.Values.Pages "Error" (index $d.Errors "pages"))}}
-		{{template "text-field" (dict "Name" "isbn" "Label" "ISBN" "Value" $d.Values.ISBN "Error" (index $d.Errors "isbn"))}}
-	</div>
-	<div class="books-form-row">
-		{{template "text-field" (dict "Name" "series_name" "Label" "Series" "Value" $d.Values.SeriesName "Error" (index $d.Errors "series_name"))}}
-		{{template "text-field" (dict "Name" "series_number" "Label" "Number in series" "Value" $d.Values.SeriesNumber "Error" (index $d.Errors "series_number"))}}
-	</div>
-	<div class="field">
-		<label for="books-description">Description</label>
-		<textarea id="books-description" name="description" rows="5"{{if index $d.Errors "description"}} aria-invalid="true" aria-describedby="books-description-error"{{end}}>{{$d.Values.Description}}</textarea>
-		{{template "field-error" (dict "Name" "description" "Error" (index $d.Errors "description"))}}
-	</div>
+		{{template "text-field" (dict "Name" "title" "Label" "Title" "Value" $d.Values.Title "Error" (index $d.Errors "title"))}}
+		{{template "text-field" (dict "Name" "subtitle" "Label" "Subtitle" "Value" $d.Values.Subtitle "Error" (index $d.Errors "subtitle"))}}
+		{{template "text-field" (dict "Name" "authors" "Label" "Author(s)" "Placeholder" "Ursula K. Le Guin" "Value" $d.Values.Authors "Error" (index $d.Errors "authors"))}}
+		<div class="books-form-row">
+			{{template "text-field" (dict "Name" "year" "Label" "First published" "Mode" "numeric" "Value" $d.Values.Year "Error" (index $d.Errors "year"))}}
+			{{template "text-field" (dict "Name" "pages" "Label" "Pages" "Mode" "numeric" "Value" $d.Values.Pages "Error" (index $d.Errors "pages"))}}
+			{{template "text-field" (dict "Name" "isbn" "Label" "ISBN" "Value" $d.Values.ISBN "Error" (index $d.Errors "isbn"))}}
+		</div>
+		<div class="books-form-row">
+			{{template "text-field" (dict "Name" "series_name" "Label" "Series" "Value" $d.Values.SeriesName "Error" (index $d.Errors "series_name"))}}
+			{{template "text-field" (dict "Name" "series_number" "Label" "Number in series" "Value" $d.Values.SeriesNumber "Error" (index $d.Errors "series_number"))}}
+		</div>
+		<div class="field">
+			<label for="books-description">Description</label>
+			<textarea id="books-description" name="description" rows="5"{{if index $d.Errors "description"}} aria-invalid="true" aria-describedby="books-description-error"{{end}}>{{$d.Values.Description}}</textarea>
+			{{template "field-error" (dict "Name" "description" "Error" (index $d.Errors "description"))}}
+		</div>
 
-	{{if $d.New}}
-	<fieldset class="field books-add-to"{{if index $d.Errors "add_to"}} aria-describedby="books-add_to-error"{{end}}>
-		<legend>Add it to</legend>
-		<label class="books-choice"><input type="radio" name="add_to" value="want"{{if eq $d.Values.AddTo "want"}} checked{{end}}> Want to read</label>
-		<label class="books-choice"><input type="radio" name="add_to" value="reading"{{if eq $d.Values.AddTo "reading"}} checked{{end}}> Reading now — started today</label>
-		<label class="books-choice"><input type="radio" name="add_to" value="read"{{if eq $d.Values.AddTo "read"}} checked{{end}}> Already read</label>
-		{{template "field-error" (dict "Name" "add_to" "Error" (index $d.Errors "add_to"))}}
-	</fieldset>
-	{{/* Shown only while "Already read" is picked (CSS :has(), no script). */}}
-	<div class="field books-finished">
-		<label for="books-finished_on">Finished on</label>
-		<input id="books-finished_on" name="finished_on" type="date" max="{{$d.Today}}" value="{{if $d.Values.FinishedOn}}{{$d.Values.FinishedOn}}{{else}}{{$d.Today}}{{end}}"{{if index $d.Errors "finished_on"}} aria-invalid="true" aria-describedby="books-finished_on-error"{{end}}>
-		{{template "field-error" (dict "Name" "finished_on" "Error" (index $d.Errors "finished_on"))}}
-	</div>
-	{{template "text-field" (dict "Name" "tags" "Label" "Tags" "Placeholder" "sf, favourites" "Value" $d.Values.Tags "Error" "")}}
+		{{if not $d.New}}
+		<fieldset class="field books-cover-field"{{if index $d.Errors "cover"}} aria-describedby="books-cover-error"{{end}}>
+			<legend>Cover</legend>
+			<div class="books-cover-edit">
+				{{if $d.Cover}}<img class="books-cover" src="{{$d.Cover}}" alt="The current cover" width="96" height="144">{{else}}<div class="books-spine swatch-c-{{$d.Spine}}" aria-hidden="true"><span>{{$d.Values.Title}}</span></div>{{end}}
+				<div class="stack">
+					<div>
+						<label for="books-cover_file">Upload an image</label>
+						<input id="books-cover_file" name="cover_file" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+					</div>
+					<div>
+						<label for="books-cover_url">…or paste the address of one</label>
+						<input id="books-cover_url" name="cover_url" type="url" placeholder="https://…" value="{{$d.Values.CoverURL}}">
+					</div>
+					{{if $d.Cover}}<label class="books-choice"><input type="checkbox" name="remove_cover" value="1"> Remove the cover</label>{{end}}
+				</div>
+			</div>
+			{{template "field-error" (dict "Name" "cover" "Error" (index $d.Errors "cover"))}}
+		</fieldset>
+		{{end}}
+
+		{{if $d.New}}
+		<fieldset class="field books-add-to"{{if index $d.Errors "add_to"}} aria-describedby="books-add_to-error"{{end}}>
+			<legend>Add it to</legend>
+			<label class="books-choice"><input type="radio" name="add_to" value="want"{{if eq $d.Values.AddTo "want"}} checked{{end}}> Want to read</label>
+			<label class="books-choice"><input type="radio" name="add_to" value="reading"{{if eq $d.Values.AddTo "reading"}} checked{{end}}> Reading now — started today</label>
+			<label class="books-choice"><input type="radio" name="add_to" value="read"{{if eq $d.Values.AddTo "read"}} checked{{end}}> Already read</label>
+			{{template "field-error" (dict "Name" "add_to" "Error" (index $d.Errors "add_to"))}}
+		</fieldset>
+		{{/* Shown only while "Already read" is picked (CSS :has(), no script). */}}
+		<div class="field books-finished">
+			<label for="books-finished_on">Finished on</label>
+			<input id="books-finished_on" name="finished_on" type="date" max="{{$d.Today}}" value="{{if $d.Values.FinishedOn}}{{$d.Values.FinishedOn}}{{else}}{{$d.Today}}{{end}}"{{if index $d.Errors "finished_on"}} aria-invalid="true" aria-describedby="books-finished_on-error"{{end}}>
+			{{template "field-error" (dict "Name" "finished_on" "Error" (index $d.Errors "finished_on"))}}
+		</div>
+		{{template "text-field" (dict "Name" "tags" "Label" "Tags" "Placeholder" "sf, favourites" "Value" $d.Values.Tags "Error" "")}}
+		{{end}}
+
+		<div class="books-form-actions">
+			<button class="primary" type="submit">{{$d.Submit}}</button>
+			<a href="{{$d.Cancel}}">Cancel</a>
+		</div>
+	</form>
+</div>
+{{end}}
+
+{{/* ol-search is the Open Library search on the Add book page: a plain
+     GET form, so it works without JavaScript. Takes a searchView. */}}
+{{define "ol-search"}}
+<section class="books-search stack" aria-label="Find a book on Open Library">
+	<form class="books-search-form" method="get" action="/books/new" role="search">
+		<label for="books-search-q">Find it on Open Library</label>
+		<div class="books-search-row">
+			<input id="books-search-q" name="q" type="search" value="{{.Query}}" placeholder="Title, author or ISBN">
+			<button type="submit">Search</button>
+		</div>
+	</form>
+	{{with .Error}}<p class="notice notice-error" role="alert">{{.}}</p>{{end}}
+	{{if .Results}}
+	<ul class="books-results">
+		{{range .Results}}
+		<li class="books-result">
+			{{if .Thumb}}<img class="books-result-cover" src="{{.Thumb}}" alt="" width="40" height="60" loading="lazy">{{else}}<span class="books-result-cover" aria-hidden="true"></span>{{end}}
+			<span class="books-result-text"><span class="books-result-title">{{.Title}}</span>{{with .Byline}}<span class="books-result-byline">{{.}}</span>{{end}}</span>
+			<a class="button books-result-use" href="{{.PickURL}}" aria-label="Use {{.Title}}">Use this</a>
+		</li>
+		{{end}}
+	</ul>
+	{{else if and .Searched (not .Error)}}
+	<p class="empty">Open Library has nothing for “{{.Query}}”. Fill it in yourself below.</p>
 	{{end}}
-
-	<div class="books-form-actions">
-		<button class="primary" type="submit">{{$d.Submit}}</button>
-		<a href="{{$d.Cancel}}">Cancel</a>
-	</div>
-</form>
+</section>
 {{end}}

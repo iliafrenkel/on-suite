@@ -22,11 +22,19 @@ to Read.
 
 ## Adding a book
 
-Click **Add book** at the top of the sidebar. Only the title is required;
-fill in as much else as you like — author, the year it first came out, the
-number of pages, the ISBN, the series and its number in it, and a short
-description. An ISBN can be the 10- or 13-digit kind, with or without
-hyphens; ON Books keeps it as 13 digits.
+Click **Add book** at the top of the sidebar.
+
+The quickest way is to find the book on [Open Library](https://openlibrary.org),
+a free catalogue of books: type its title, its author or its ISBN into
+**Find it on Open Library** and click **Search**. Pick the right one from
+the results with **Use this**. The form below fills in with what Open
+Library knows — title, author, the year it first came out, the number of
+pages, the ISBN and a short description — and the book's cover comes with
+it when you add it. Change anything you like before you do.
+
+If the book isn't there, or Open Library doesn't answer, fill the form in
+yourself. Only the title is required. An ISBN can be the 10- or 13-digit
+kind, with or without hyphens; ON Books keeps it as 13 digits.
 
 Then choose where the book goes:
 
@@ -35,6 +43,17 @@ Then choose where the book goes:
 - **Already read** — pick the day you finished it.
 
 You can add tags at the same time, separated by commas.
+
+## Covers
+
+A book added from Open Library brings its cover. A book without one shows
+a coloured spine with its title instead.
+
+To change a cover, open the book, choose **⋯ → Edit details**, and under
+**Cover** either upload an image or paste the address of one on the web.
+JPEG, PNG, GIF and WebP images up to 2 MB work. **Remove the cover** goes
+back to the spine. ON Books keeps its own copy of every cover, so they show
+even if the original disappears.
 
 ## Reading a book
 
