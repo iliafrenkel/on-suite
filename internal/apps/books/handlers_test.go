@@ -201,6 +201,18 @@ func TestHTMXListNavigationSwapsTheListOnly(t *testing.T) {
 	doc.MustNotHave("#books-panes")
 }
 
+func TestListCarriesItsContextForTheBookPane(t *testing.T) {
+	s := newServer(t)
+	add(t, s, s.Alice.User.ID, titled("Emma", "", books.ShelfWant))
+	doc := htmlassert.Parse(t, hx(t, s, "/books/?shelf=all&tag=sf&q=em", "books-list"))
+	list := doc.MustHave("#books-list")
+	for name, want := range map[string]string{"data-shelf": "all", "data-tag": "sf", "data-q": "em"} {
+		if got, _ := htmlassert.Attr(list, name); got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+}
+
 func TestHTMXBookOpenSwapsTheBookOnly(t *testing.T) {
 	s := newServer(t)
 	id := add(t, s, s.Alice.User.ID, titled("Emma", "", books.ShelfWant))

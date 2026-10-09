@@ -4233,6 +4233,17 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-form:has(input[name="add_to"][value="read"]:checked) .books-finished { display: block; }
 .books-form-actions { display: flex; align-items: center; gap: var(--s-3); }
 .books-menu { margin-left: auto; }
+/* "Edit details" is a link among the menu's buttons; match their look. */
+.books-menu .outline-menu-list a {
+	display: block;
+	padding: var(--s-1) var(--s-2);
+	border-radius: var(--radius);
+	color: var(--c-text);
+	font-size: var(--fs-xs);
+	line-height: 1.5;
+	text-decoration: none;
+}
+.books-menu .outline-menu-list a:hover { background: var(--c-bg-inset); }
 /* Reading box, tags, confirm dialog */
 .books-reading { margin-bottom: var(--s-4); padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); }
 .books-reading-status { margin: 0 0 var(--s-2); font-weight: 600; }

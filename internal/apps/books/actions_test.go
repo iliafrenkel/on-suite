@@ -166,3 +166,28 @@ func TestBookPaneOffersTheRightReadingActions(t *testing.T) {
 		t.Errorf("read button = %q, want Read again", got)
 	}
 }
+
+func TestDeleteOverHTMXFixesTheAddressBar(t *testing.T) {
+	s := newServer(t)
+	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfWant))
+	rec := s.PostHX(t, s.Alice, fmt.Sprintf("/books/delete/%d", id), url.Values{"shelf": {"want"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("htmx delete = %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("HX-Replace-Url"); got != "/books/?shelf=want" {
+		t.Errorf("HX-Replace-Url = %q, want the list", got)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave(".books-book .empty")
+	doc.MustNotHave(".books-book h1")
+}
+
+func TestActionOverHTMXKeepsTheAddressOnTheBook(t *testing.T) {
+	s := newServer(t)
+	id := add(t, s, s.Alice.User.ID, titled("Emma", "", books.ShelfWant))
+	rec := s.PostHX(t, s.Alice, fmt.Sprintf("/books/start/%d", id), url.Values{"shelf": {"want"}})
+	want := fmt.Sprintf("/books/b/%d?shelf=want", id)
+	if got := rec.Header().Get("HX-Replace-Url"); got != want {
+		t.Errorf("HX-Replace-Url = %q, want %q", got, want)
+	}
+}

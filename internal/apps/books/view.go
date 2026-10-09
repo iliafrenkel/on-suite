@@ -122,6 +122,7 @@ type rowView struct {
 }
 
 type listView struct {
+	Ctx     listCtx // the list's own context, for books.js to sync the book pane
 	Heading string
 	Rows    []rowView
 	Empty   string
@@ -135,7 +136,7 @@ func listHeading(c listCtx) string {
 }
 
 func viewList(items []ListItem, c listCtx, openID int64) listView {
-	v := listView{Heading: listHeading(c)}
+	v := listView{Ctx: c, Heading: listHeading(c)}
 	for _, it := range items {
 		v.Rows = append(v.Rows, rowView{ID: it.ID, URL: c.BookURL(it.ID), Title: it.Title,
 			Byline: byline(it.Authors, seriesText(it.SeriesName, it.SeriesNumber)), Note: rowNote(it),

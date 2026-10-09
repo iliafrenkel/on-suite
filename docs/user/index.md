@@ -6,7 +6,7 @@ can't see it in ON Suite unless you choose to share it.
 
 ## What ON Suite is
 
-ON Suite is one place for your notes, snippets, news feeds, study cards and focus timers.
+ON Suite is one place for your notes, snippets, news feeds, study cards, focus timers, saved articles and a reading log.
 You sign in once and move freely between seven apps:
 
 - **[ON Notes](notes.md)** — organise notes and to-do lists in one outline.

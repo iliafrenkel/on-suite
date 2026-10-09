@@ -179,7 +179,49 @@
 		if (!e.target || e.target.id !== "books-list") return;
 		var book = document.getElementById("books-book");
 		markActive((book && book.getAttribute("data-book-id")) || "");
+		syncBookContext(e.target, book);
 	});
+
+	// A list swap leaves the book pane alone, so its hidden shelf/tag/q
+	// fields and Edit link would keep POSTing and returning to the previous
+	// list while the address bar shows the new one. Copy the new list's
+	// context (data-* on #books-list) into them, as reader.js does for its
+	// own panes. tag and q are only rendered when non-empty, so they are
+	// created and removed here too.
+	function syncBookContext(list, book) {
+		if (!book) return;
+		var ctx = {
+			shelf: list.getAttribute("data-shelf") || "",
+			tag: list.getAttribute("data-tag") || "",
+			q: list.getAttribute("data-q") || "",
+		};
+		book.querySelectorAll("input[name=shelf]").forEach(function (shelf) {
+			shelf.value = ctx.shelf;
+			["tag", "q"].forEach(function (name) {
+				var field = shelf.parentNode.querySelector("input[name=" + name + "]");
+				if (!ctx[name]) {
+					if (field) field.remove();
+					return;
+				}
+				if (!field) {
+					field = document.createElement("input");
+					field.type = "hidden";
+					field.name = name;
+					shelf.parentNode.appendChild(field);
+				}
+				field.value = ctx[name];
+			});
+		});
+		var edit = book.querySelector(".books-edit-link");
+		var id = book.getAttribute("data-book-id");
+		if (edit && id) {
+			var qs = new URLSearchParams();
+			qs.set("shelf", ctx.shelf);
+			if (ctx.tag) qs.set("tag", ctx.tag);
+			if (ctx.q) qs.set("q", ctx.q);
+			edit.setAttribute("href", "/books/edit/" + id + "?" + qs.toString());
+		}
+	}
 
 	// --- Keyboard shortcuts --------------------------------------------------
 
@@ -203,9 +245,24 @@
 
 	document.addEventListener("keydown", function (e) {
 		if (e.defaultPrevented || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+		// The modal confirm owns the keyboard (Escape still closes it natively).
+		if (document.querySelector("dialog[open]")) return;
 		if (!document.getElementById("books-panes")) return;
 		if (isTyping(e.target)) {
-			if (e.key === "Escape" && e.target.id === "books-q") e.target.blur();
+			if (e.key === "Escape") {
+				if (e.target.id === "books-q") {
+					e.target.blur();
+				} else {
+					// Esc from the date field of an open Finish/DNF disclosure (or
+					// the menu) closes it and returns focus to its summary.
+					var open = e.target.closest("details.books-close[open], details.books-menu[open]");
+					if (open) {
+						open.open = false;
+						var summary = open.querySelector("summary");
+						if (summary) summary.focus();
+					}
+				}
+			}
 			return;
 		}
 		switch (e.key) {

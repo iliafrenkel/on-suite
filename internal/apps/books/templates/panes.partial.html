@@ -87,7 +87,7 @@
 
 {{/* list takes a listView. */}}
 {{define "list"}}
-<div class="books-list" id="books-list">
+<div class="books-list" id="books-list" data-shelf="{{.Ctx.Shelf}}" data-tag="{{.Ctx.Tag}}" data-q="{{.Ctx.Q}}">
 	<h2 class="books-list-head">{{.Heading}}</h2>
 	{{if .Rows}}
 	<ul class="books-rows">
@@ -156,7 +156,7 @@
 <details class="outline-menu books-menu">
 	<summary class="outline-menu-toggle quiet" aria-label="Book actions">{{ticon "more"}}</summary>
 	<div class="outline-menu-list outline-menu-list-end">
-		<a href="{{.Ctx.EditURL .ID}}">Edit details</a>
+		<a class="books-edit-link" href="{{.Ctx.EditURL .ID}}">Edit details</a>
 		<form method="post" action="/books/delete/{{.ID}}">
 			{{template "post-ctx" .}}
 			<button type="submit" class="outline-menu-delete"

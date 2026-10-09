@@ -41,6 +41,9 @@ func (a *App) act(do change, gone bool) http.HandlerFunc {
 			open, target = 0, c.ListURL()
 		}
 		if web.IsHTMX(r) {
+			// The form posted from the address bar's book; say where the panes
+			// now stand (the list, once the book is gone).
+			w.Header().Set("HX-Replace-Url", target)
 			a.renderPanes(w, r, uid, c, open, "")
 			return
 		}

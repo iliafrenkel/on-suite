@@ -45,9 +45,10 @@ Pick a book in the list to open it on the right.
   and moves the book to Read.
 - **Did not finish** works the same way and moves it to Did not finish.
 
-A finished book offers **Read again**: that starts a new reading, and the
-earlier one is kept. A book is read once at a time, so a book you're
-reading can't be started again until you finish it or put it down.
+A finished book offers **Read again**, and a book you put down offers
+**Start again**: either starts a new reading, and the earlier one is kept.
+You read a book one time at a time: while you're reading it there's no start
+button; finish it or put it down first.
 
 ## Tags
 
