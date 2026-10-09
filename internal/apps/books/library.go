@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -249,4 +250,121 @@ func (st *Store) Delete(ctx context.Context, userID, id int64) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// ListItem is the slice of a book a list row needs.
+type ListItem struct {
+	ID                                       int64
+	Title, Authors, SeriesName, SeriesNumber string
+	Shelf                                    Shelf
+	StartedOn, FinishedOn                    string // the latest reading's
+	AddedAt                                  time.Time
+}
+
+// ListQuery picks the books a list shows. Shelf "" or ShelfAll is every
+// shelf; Tag is one tag name; Q matches title, subtitle, authors or series
+// name (SQLite LIKE: case-insensitive for ASCII).
+type ListQuery struct {
+	Shelf Shelf
+	Tag   string
+	Q     string
+}
+
+// listOrder is each shelf's sort (spec "Layout"): Reading by start (B2
+// switches it to latest progress), Read by finish, Want to read by date
+// added, DNF and All by the latest change. NULL dates sort last.
+func listOrder(s Shelf) string {
+	switch s {
+	case ShelfReading:
+		return `r.started_on DESC, r.id DESC`
+	case ShelfRead:
+		return `r.finished_on DESC, r.id DESC`
+	case ShelfWant:
+		return `b.added_at DESC, b.id DESC`
+	default:
+		return `b.updated_at DESC, b.id DESC`
+	}
+}
+
+// likeEscape makes s match itself literally in a LIKE ... ESCAPE '\'.
+func likeEscape(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+// List returns userID's books matching q, in the shelf's order.
+func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListItem, error) {
+	where := []string{"b.user_id = ?"}
+	args := []any{userID}
+	if q.Shelf != "" && q.Shelf != ShelfAll {
+		where = append(where, shelfExpr+" = ?")
+		args = append(args, string(q.Shelf))
+	}
+	if tag := strings.ToLower(strings.TrimSpace(q.Tag)); tag != "" {
+		where = append(where, `EXISTS (SELECT 1 FROM books_book_tags x JOIN books_tags t ON t.id = x.tag_id
+			WHERE x.book_id = b.id AND t.name = ?)`)
+		args = append(args, tag)
+	}
+	if text := strings.TrimSpace(q.Q); text != "" {
+		pat := "%" + likeEscape(text) + "%"
+		where = append(where, `(b.title LIKE ? ESCAPE '\' OR b.subtitle LIKE ? ESCAPE '\'
+			OR b.authors LIKE ? ESCAPE '\' OR b.series_name LIKE ? ESCAPE '\')`)
+		args = append(args, pat, pat, pat, pat)
+	}
+	rows, err := st.db.QueryContext(ctx, `
+		SELECT b.id, b.title, b.authors, b.series_name, b.series_number, b.added_at,
+		       r.started_on, r.finished_on, `+shelfExpr+`
+		  FROM books_books b `+latestJoin+`
+		 WHERE `+strings.Join(where, " AND ")+`
+		 ORDER BY `+listOrder(q.Shelf), args...)
+	if err != nil {
+		return nil, fmt.Errorf("books: list: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []ListItem
+	for rows.Next() {
+		var it ListItem
+		var added, shelf string
+		var started, finished sql.NullString
+		if err := rows.Scan(&it.ID, &it.Title, &it.Authors, &it.SeriesName, &it.SeriesNumber, &added,
+			&started, &finished, &shelf); err != nil {
+			return nil, fmt.Errorf("books: scan list: %w", err)
+		}
+		if it.AddedAt, err = parseTime(added); err != nil {
+			return nil, fmt.Errorf("books: added_at: %w", err)
+		}
+		it.StartedOn, it.FinishedOn, it.Shelf = started.String, finished.String, Shelf(shelf)
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("books: list: %w", err)
+	}
+	return out, nil
+}
+
+// ShelfCounts returns how many of userID's books are on each shelf, with
+// ShelfAll the total. Empty shelves are absent (zero).
+func (st *Store) ShelfCounts(ctx context.Context, userID int64) (map[Shelf]int, error) {
+	rows, err := st.db.QueryContext(ctx, `
+		SELECT `+shelfExpr+` AS shelf, count(*)
+		  FROM books_books b `+latestJoin+`
+		 WHERE b.user_id = ?
+		 GROUP BY shelf`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("books: shelf counts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	counts := map[Shelf]int{}
+	for rows.Next() {
+		var shelf string
+		var n int
+		if err := rows.Scan(&shelf, &n); err != nil {
+			return nil, fmt.Errorf("books: scan shelf count: %w", err)
+		}
+		counts[Shelf(shelf)] = n
+		counts[ShelfAll] += n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("books: shelf counts: %w", err)
+	}
+	return counts, nil
 }
