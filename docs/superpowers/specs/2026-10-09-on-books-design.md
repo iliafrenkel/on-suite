@@ -116,12 +116,17 @@ the suite has done since v2.1.0.
 - **Shelf** — no readings → *Want to read*; otherwise the latest reading
   (by `created_at`) decides: `reading` → *Reading*, `finished` → *Read*,
   `dnf` → *DNF*. A book can only have one reading in `reading` status.
-- **Pages read in a period** — the sum of positive deltas between consecutive
-  progress rows of a reading, dated by `recorded_at` in the user's local day.
-  Finishing a reading with a page count adds the remainder (last page minus
-  last recorded page) on the finish date. Going backwards counts nothing.
+- **Pages read in a period** — within a reading, each progress row counts
+  only the pages above the highest page that reading had reached so far
+  (its high-water mark, starting at 0): `max(0, page − mark)`, dated by
+  `recorded_at` in the user's local day, and the mark then rises to the
+  page. Going backwards counts nothing, and neither does climbing back up
+  to the old mark: 100 → 250 (a typo) → 150 → 180 counts 250, not 280.
+  Finishing a reading with a page count adds the pages from the mark to the
+  last page on the finish date (none if it is already there).
   Percent-based readings convert through the page count when there is one,
-  and count no pages otherwise.
+  and count no pages otherwise. Each re-read is a new reading with its own
+  mark from 0.
 - **Books finished in a year** — readings with status `finished` and
   `finished_on` in that year. A re-read counts again; DNF never counts.
   Imported readings with no date don't count toward any year.
@@ -261,8 +266,12 @@ Stats. Ahead or behind is for this year; a past year says "4 short" or
 "goal reached", a future year shows no pace. The all-time row counts
 every finished reading, dated or not; an undated one counts toward no
 year and adds no pages. Format split and longest and shortest are per
-year. Pages read follow "Derived values" as written, so a repeated
-progress value adds nothing and #576 doesn't touch them.)
+year. Pages read are counted by a high-water mark (see "Derived
+values"), chosen so a corrected typo isn't counted twice; a repeated
+progress value adds nothing, so #576 doesn't touch them. The plan's
+defaults — goal of 1–1000 books, the year range, the pace wording,
+all-time counting, average rating over distinct books, format order,
+ties, empty states and chart slots — were confirmed the same day.)
 
 ## Import (B5)
 
