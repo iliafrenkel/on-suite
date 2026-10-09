@@ -4233,3 +4233,17 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-form:has(input[name="add_to"][value="read"]:checked) .books-finished { display: block; }
 .books-form-actions { display: flex; align-items: center; gap: var(--s-3); }
 .books-menu { margin-left: auto; }
+/* Reading box, tags, confirm dialog */
+.books-reading { margin-bottom: var(--s-4); padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); }
+.books-reading-status { margin: 0 0 var(--s-2); font-weight: 600; }
+.books-reading-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); }
+.books-close > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.books-close > summary::-webkit-details-marker { display: none; }
+.books-close-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-2); margin-top: var(--s-2); }
+.books-close-form label { margin: 0; flex-basis: 100%; }
+.books-tags-form { max-width: 28rem; }
+.books-tags-row { display: flex; gap: var(--s-2); }
+.books-tags-row input { flex: 1 1 auto; min-width: 0; }
+.books-tags-row button { white-space: nowrap; }
+.books-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1rem; border: var(--border); border-radius: var(--radius); color: var(--c-text); background: var(--c-bg); }
+.books-dialog::backdrop { background: rgba(0, 0, 0, 0.35); }

@@ -52,6 +52,7 @@
 		     aria-orientation="vertical" aria-label="Resize the book pane" tabindex="0"></div>
 		{{template "book" .Book}}
 	</div>
+	{{template "confirm"}}
 </div>
 {{end}}
 
@@ -126,7 +127,9 @@
 		</div>
 		{{template "book-menu" .}}
 	</header>
+	{{template "reading-box" .}}
 	{{with .Description}}<div class="books-description">{{.}}</div>{{end}}
+	{{template "tags-form" .}}
 {{else}}
 	<p class="empty">Pick a book, or add one.</p>
 {{end}}
@@ -147,12 +150,83 @@
 {{define "field-error"}}{{with .Error}}<p class="books-field-error" id="books-{{$.Name}}-error">{{.}}</p>{{end}}{{end}}
 
 {{/* book-menu is the book pane's ⋯ menu: a no-JS <details> disclosure
-     (PATTERNS.md). Takes a bookView. */}}
+     (PATTERNS.md). Delete goes through the confirm dialog (books.js);
+     without JavaScript it simply submits. Takes a bookView. */}}
 {{define "book-menu"}}
 <details class="outline-menu books-menu">
 	<summary class="outline-menu-toggle quiet" aria-label="Book actions">{{ticon "more"}}</summary>
 	<div class="outline-menu-list outline-menu-list-end">
 		<a href="{{.Ctx.EditURL .ID}}">Edit details</a>
+		<form method="post" action="/books/delete/{{.ID}}">
+			{{template "post-ctx" .}}
+			<button type="submit" class="outline-menu-delete"
+			        hx-post="/books/delete/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML"
+			        hx-confirm="Delete “{{.Title}}” for good? Its readings and tags go too.">Delete</button>
+		</form>
 	</div>
 </details>
+{{end}}
+
+{{/* post-ctx is what every book-pane POST carries: the CSRF token and the
+     list context. Takes a bookView. */}}
+{{define "post-ctx"}}<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">{{template "ctx-fields" .Ctx}}{{end}}
+
+{{/* reading-box is the current reading: Finish / Did not finish while one
+     is in progress, otherwise a button to start one. Takes a bookView. */}}
+{{define "reading-box"}}
+<div class="books-reading">
+	{{if .Reading}}
+	<p class="books-reading-status">Reading{{with .StartedOn}} since {{.}}{{end}}</p>
+	<div class="books-reading-actions">
+		{{template "close-reading" (dict "Book" . "Action" "finish" "Label" "Finish" "DayLabel" "Finished on" "Submit" "Mark as read" "Primary" true)}}
+		{{template "close-reading" (dict "Book" . "Action" "dnf" "Label" "Did not finish" "DayLabel" "Stopped on" "Submit" "Put it down" "Primary" false)}}
+	</div>
+	{{else}}
+	<form method="post" action="/books/start/{{.ID}}" hx-post="/books/start/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+		{{template "post-ctx" .}}
+		<button type="submit" class="primary books-start">{{.StartLabel}}</button>
+	</form>
+	{{end}}
+</div>
+{{end}}
+
+{{/* close-reading is Finish or Did not finish: a no-JS <details>
+     disclosure (PATTERNS.md) holding the date — today unless changed, never
+     before the start — and the button that sends it. */}}
+{{define "close-reading"}}
+<details class="books-close">
+	<summary class="button{{if .Primary}} primary{{end}}">{{.Label}}</summary>
+	<form class="books-close-form" method="post" action="/books/{{.Action}}/{{.Book.ID}}"
+	      hx-post="/books/{{.Action}}/{{.Book.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+		{{template "post-ctx" .Book}}
+		<label for="books-{{.Action}}-day">{{.DayLabel}}</label>
+		<input id="books-{{.Action}}-day" name="day" type="date" value="{{.Book.Today}}" max="{{.Book.Today}}"{{with .Book.MinDay}} min="{{.}}"{{end}}>
+		<button type="submit"{{if .Primary}} class="primary"{{end}}>{{.Submit}}</button>
+	</form>
+</details>
+{{end}}
+
+{{/* tags-form edits a book's tags in place. Takes a bookView. */}}
+{{define "tags-form"}}
+<form class="books-tags-form" method="post" action="/books/tags/{{.ID}}"
+      hx-post="/books/tags/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+	{{template "post-ctx" .}}
+	<label for="books-tags-input">Tags</label>
+	<div class="books-tags-row">
+		<input id="books-tags-input" name="tags" type="text" value="{{.TagsValue}}" placeholder="sf, favourites" autocomplete="off">
+		<button type="submit">Save tags</button>
+	</div>
+</form>
+{{end}}
+
+{{/* confirm is the one dialog every hx-confirm in the panes goes through
+     (books.js), instead of window.confirm. */}}
+{{define "confirm"}}
+<dialog id="books-confirm-dialog" class="books-dialog">
+	<p id="books-confirm-message"></p>
+	<div class="dialog-actions">
+		<button type="button" id="books-confirm-ok" class="danger">Delete</button>
+		<button type="button" class="books-dialog-cancel">Cancel</button>
+	</div>
+</dialog>
 {{end}}

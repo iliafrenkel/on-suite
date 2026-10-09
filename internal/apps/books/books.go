@@ -56,6 +56,11 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /new", a.create)
 	r.HandleFunc("GET /edit/{id}", a.editForm)
 	r.HandleFunc("POST /edit/{id}", a.update)
+	r.HandleFunc("POST /start/{id}", a.act(a.start, false))
+	r.HandleFunc("POST /finish/{id}", a.act(a.finish, false))
+	r.HandleFunc("POST /dnf/{id}", a.act(a.dnf, false))
+	r.HandleFunc("POST /tags/{id}", a.act(a.setTags, false))
+	r.HandleFunc("POST /delete/{id}", a.act(a.remove, true))
 	r.HandleFunc("GET /books.js", a.script("books.js"))
 }
 

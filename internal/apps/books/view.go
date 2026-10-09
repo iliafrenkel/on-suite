@@ -224,20 +224,26 @@ type bookView struct {
 	Title, Subtitle, Authors, Series string
 	Facts                            []string // "2011", "592 pages", "ISBN 978…"
 	Description                      string
-	Spine, Initial                   string
+	Spine                            string
 	ShelfLabel                       string
 	Tags                             []string
-	Ctx                              listCtx
-	Shell                            render.Shell
+	TagsValue                        string // the tags box: "classics, sf"
+	// The reading box.
+	Reading    bool   // a reading is in progress
+	StartedOn  string // "3 Oct 2026"; "" when unknown
+	MinDay     string // the earliest finish date allowed (the start), YYYY-MM-DD
+	Today      string // the latest date allowed, YYYY-MM-DD
+	StartLabel string // "Start reading", "Read again" or "Start again"
+	Ctx        listCtx
+	Shell      render.Shell
 }
 
-// viewBook draws a book; today is for the reading box's date fields
-// (Task 7).
+// viewBook draws a book; today bounds the reading box's date fields.
 func viewBook(b Book, c listCtx, today string) bookView {
 	v := bookView{Selected: true, ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
 		Series: seriesText(b.SeriesName, b.SeriesNumber), Description: b.Description,
-		Spine: SpineColor(b.Title), Initial: initial(b.Title), ShelfLabel: b.Shelf.Label(),
-		Tags: b.Tags, Ctx: c}
+		Spine: SpineColor(b.Title), ShelfLabel: b.Shelf.Label(),
+		Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Ctx: c}
 	if b.Year > 0 {
 		v.Facts = append(v.Facts, strconv.Itoa(b.Year))
 	}
@@ -246,6 +252,20 @@ func viewBook(b Book, c listCtx, today string) bookView {
 	}
 	if b.ISBN != "" {
 		v.Facts = append(v.Facts, "ISBN "+b.ISBN)
+	}
+	switch {
+	case b.Latest.Status == StatusReading:
+		v.Reading = true
+		v.MinDay = b.Latest.StartedOn
+		if b.Latest.StartedOn != "" {
+			v.StartedOn = ShowDay(b.Latest.StartedOn)
+		}
+	case b.Shelf == ShelfRead:
+		v.StartLabel = "Read again"
+	case b.Shelf == ShelfDNF:
+		v.StartLabel = "Start again"
+	default:
+		v.StartLabel = "Start reading"
 	}
 	return v
 }
