@@ -4,11 +4,15 @@
 package books
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"errors"
+	"fmt"
 	"io/fs"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/db"
 )
 
 // ID is the app id: URL prefix, migration namespace, table prefix.
@@ -55,3 +59,45 @@ func (st *Store) SetClock(now func() time.Time) { st.now = now }
 // Today is the server's local date, YYYY-MM-DD: days follow time.Local,
 // set by TZ, everywhere in the suite (#424).
 func (st *Store) Today() string { return st.now().Local().Format(dayLayout) }
+
+func formatTime(t time.Time) string { return db.FormatTime(t) }
+
+func parseTime(s string) (time.Time, error) { return db.ParseTime(s) }
+
+// Refusal is an action the store won't take for a reason the person can
+// fix — a finish date before the start, a second reading at once. Msg is
+// shown to them as is.
+type Refusal struct{ Msg string }
+
+func (e *Refusal) Error() string { return "books: " + e.Msg }
+
+// Unwrap makes a Refusal an ErrInvalid for errors.Is.
+func (e *Refusal) Unwrap() error { return ErrInvalid }
+
+// checkDay accepts a YYYY-MM-DD date that is not after today.
+func (st *Store) checkDay(day string) error {
+	if _, err := time.Parse(dayLayout, day); err != nil {
+		return &Refusal{Msg: "Enter a date like " + st.Today() + "."}
+	}
+	if day > st.Today() {
+		return &Refusal{Msg: "That date is in the future."}
+	}
+	return nil
+}
+
+// touch bumps a book's updated_at inside tx and is the owner check: it is
+// ErrNotFound for a missing or someone else's book. It runs inside the
+// transaction, as ON Later's SetTags does (#294): with one connection, a
+// check before it could race a delete.
+func (st *Store) touch(ctx context.Context, tx *sql.Tx, userID, id int64) error {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE books_books SET updated_at = ? WHERE id = ? AND user_id = ?`,
+		formatTime(st.now()), id, userID)
+	if err != nil {
+		return fmt.Errorf("books: touch: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
