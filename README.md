@@ -7,7 +7,7 @@ own computer.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
-    <img src="docs/images/hero-light.png" alt="The ON Suite dashboard, with a card for each app: ON Notes, ON Paste, ON Reader, ON Later, ON Flash and ON Focus" width="100%">
+    <img src="docs/images/hero-light.png" alt="The ON Suite dashboard, with a card for each app: ON Notes, ON Paste, ON Reader, ON Later, ON Flash, ON Books and ON Focus" width="100%">
   </picture>
 </p>
 
@@ -21,8 +21,9 @@ clones to share text between computers and people. They are all excellent!
 But I wanted something simple, something I can host myself, and something
 that is _all in one place_.
 
-ON Suite is a handful of small apps — notes, snippets, news feeds, flash
-cards and focus timers — all on one private website. It is built for a small
+ON Suite is a handful of small apps — notes, snippets, news feeds, a
+read-it-later shelf, a reading log, flash cards and focus timers — all on
+one private website. It is built for a small
 group of people: a family, a group of friends, a small team. It can probably
 support a few hundred people, maybe even several thousand. But it is not an
 alternative to SaaS products like Gmail. Accounts are created by an admin, there is no
@@ -42,7 +43,7 @@ multi-tenant hardening, this isn't it. It's the opposite bet, optimised for
 
 ## The apps
 
-Sign in once and move freely between six apps.
+Sign in once and move freely between seven apps.
 
 ### ON Notes
 
@@ -115,6 +116,21 @@ race circuits. ON Flash shows you a few cards each day: the hard ones come
 back often, the easy ones less and less. You can give a copy of a deck to
 someone else in your ON Suite instance.
 [Read the ON Flash guide →](docs/user/flash.md)
+
+### ON Books
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-books-dark.png">
+    <img src="docs/images/app-books-light.png" alt="ON Books: shelves on the left, the books being read in the middle and Leviathan Wakes open on the right, with its progress and notes">
+  </picture>
+</p>
+
+A private reading log: what you're reading, what you've read and what's
+next. Find books on Open Library, track your progress page by page, rate
+and review them, keep notes and quotes, and set a yearly goal. Bring your
+library over from Goodreads, and download it all as Markdown.
+[Read the ON Books guide →](docs/user/books.md)
 
 ### ON Focus
 

@@ -252,11 +252,13 @@ var shotIDs = map[string]map[int64]string{
 	"flash":  {1: "Japanese travel phrases", 2: "F1 circuits"},
 	"later":  {1: "The case for reading slowly"},
 	"focus":  {1: "Deep work"},
+	"books":  {1: "Leviathan Wakes"},
 }
 
 // shotIDRe finds the seeded IDs in shots.go URLs: /paste/3, /notes/25,
-// /reader/item/10, /flash/2/cards/, /flash/review/2, /later/a/1, /focus/run/1.
-var shotIDRe = regexp.MustCompile(`URL: "/(paste|notes|reader/item|flash(?:/review)?|later/a|focus/run)/(\d+)`)
+// /reader/item/10, /flash/2/cards/, /flash/review/2, /later/a/1, /focus/run/1,
+// /books/b/1.
+var shotIDRe = regexp.MustCompile(`URL: "/(paste|notes|reader/item|flash(?:/review)?|later/a|focus/run|books/b)/(\d+)`)
 
 func TestShotIDsPointAtTheIntendedItems(t *testing.T) {
 	src, err := os.ReadFile("../capture/shots.go")
@@ -310,6 +312,10 @@ func TestShotIDsPointAtTheIntendedItems(t *testing.T) {
 		"focus": func(id int64) (string, error) {
 			tm, err := focus.NewStore(handle).Timer(ctx, demo.ID, id)
 			return tm.Name, err
+		},
+		"books": func(id int64) (string, error) {
+			b, err := books.NewStore(handle).Get(ctx, demo.ID, id)
+			return b.Title, err
 		},
 		"flash": func(id int64) (string, error) {
 			d, err := flash.NewStore(handle).DeckByID(ctx, demo.ID, id)
