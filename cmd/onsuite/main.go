@@ -12,6 +12,7 @@ import (
 	// zone (#424), so without it a container would always count in UTC.
 	_ "time/tzdata"
 
+	"github.com/iliafrenkel/on-suite/internal/apps/books"
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/apps/focus"
 	"github.com/iliafrenkel/on-suite/internal/apps/later"
@@ -82,6 +83,7 @@ Run "onsuite serve -h" for serve flags.
 // this build contains.
 func registeredApps() []app.App {
 	return []app.App{
+		books.New(),
 		flash.New(),
 		focus.New(),
 		later.New(),

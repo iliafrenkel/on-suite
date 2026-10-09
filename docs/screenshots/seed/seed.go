@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/iliafrenkel/on-suite/internal/apps/books"
 	"github.com/iliafrenkel/on-suite/internal/apps/flash"
 	"github.com/iliafrenkel/on-suite/internal/apps/focus"
 	"github.com/iliafrenkel/on-suite/internal/apps/later"
@@ -70,7 +71,7 @@ func Seed(ctx context.Context, dataDir string, now time.Time) (string, error) {
 	// list duplicates registeredApps() in cmd/onsuite/main.go, which is
 	// unexported in a main package and so can't be imported: keep the two in
 	// step when adding an app.
-	reg, err := app.NewRegistry(flash.New(), focus.New(), later.New(), notes.New(), paste.New(), reader.New())
+	reg, err := app.NewRegistry(books.New(), flash.New(), focus.New(), later.New(), notes.New(), paste.New(), reader.New())
 	if err != nil {
 		return "", err
 	}

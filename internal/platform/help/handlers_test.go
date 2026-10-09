@@ -28,8 +28,8 @@ func TestHelpPageRendersInTheShellWithASidebar(t *testing.T) {
 	if href, _ := htmlassert.Attr(cur, "href"); href != "/help/notes" {
 		t.Errorf("current sidebar link = %q, want /help/notes", href)
 	}
-	if got := len(d.QueryAll(".help-nav a")); got != 8 {
-		t.Errorf("sidebar has %d links, want 8", got)
+	if got := len(d.QueryAll(".help-nav a")); got != 9 {
+		t.Errorf("sidebar has %d links, want 9", got)
 	}
 	d.MustHave(".help-body h1")
 }
