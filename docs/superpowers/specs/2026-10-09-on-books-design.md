@@ -136,7 +136,9 @@ A three-pane list+detail view, like ON Reader (sidebar, list, book), with its re
   read · Read · DNF · All); tags; Stats. *Reading* is the default shelf.
 - **List pane** — a filter box (title/author in B1, full-text from B3), then
   compact two-line rows: small cover (or mini spine), title, `author ·
-  series #n`. The right side depends on the shelf:
+  series #n`, and — when the filter matched inside a review, note or
+  quote — a third line with the match ("Quote: …the spice must flow…").
+  The right side depends on the shelf:
   - Reading: progress bar and %, sorted by latest progress
   - Read: stars and finish date, sorted by finish date, newest first
   - Want to read: date added, newest first
@@ -151,8 +153,11 @@ A three-pane list+detail view, like ON Reader (sidebar, list, book), with its re
     once it has been read).
   - Rating stars (click to set, click again to clear) and the review
     (Markdown, edited in a "Write a review" / "Edit review" disclosure).
-  - Notes — dated entries, newest first, with an add box.
-  - Quotes — cards with text, page and comment.
+  - Notes — dated entries, newest first, each with its page if one was
+    given ("p. 112"); a "+ Add note" disclosure, and Edit and Delete on
+    each.
+  - Quotes — cards with text, page and comment, newest first; a "+ Add
+    quote" disclosure, and Edit and Delete on each.
   - Reading history — every reading with dates, format and status; each
     one's dates and format editable, and each deletable.
   - A ⋯ menu: Edit details (which also changes the cover), Find cover (B5), Delete.
@@ -202,11 +207,35 @@ mirrors ON Notes' (apps don't share code; goldmark stays contained to the
 help pages), with blank-line paragraphs on top. The series link opens the
 list filtered to the series (`?series=`), in series order.)
 
+### Notes, quotes and search
+
+- A note is Markdown, drawn as the review is. A quote's text is plain
+  text with its line breaks kept; its comment is Markdown.
+- A page is optional: a whole number from 1 to the book's page count, or
+  any positive number when the book has none. A bad page, or a note or
+  quote with no text, is refused inline, inside its form, with what was
+  typed; a note is capped at 20,000 characters, a quote's text and its
+  comment at 5,000 each.
+- The filter box searches `books_search`: every word must match, each as
+  a prefix, so the list narrows while a word is still being typed. It
+  searches within the shelf, tag or series on screen, and keeps that
+  list's order.
+
+(Decided 2026-10-09 while planning B3: B3 is one PR. Notes and quotes
+are edited and deleted inline — an Edit `<details>` disclosure and a
+Delete button through the confirm dialog, like the reading history — and
+everything works without JavaScript. With htmx a note or quote form swaps
+only its own section, and the list out of band. The book pane stacks
+Notes, then Quotes, then Reading history. A filtered row that matched
+inside a review, note or quote gets a third line — a label and the
+highlighted words, as in ON Later's search; a match on the title,
+subtitle, authors or series alone shows none.)
+
 ### Keyboard
 
 As in Later and Reader: `j`/`k` move through the list, `/` focuses the
-filter, `a` opens Add book, `p` focuses the progress input, `Esc` closes
-dialogs.
+filter, `a` opens Add book, `p` focuses the progress input, `n` opens the
+add-note box and `q` the add-quote box, `Esc` closes dialogs.
 
 ### Stats (B4)
 
