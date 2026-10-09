@@ -1,9 +1,11 @@
 package books
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,27 +38,127 @@ func (a *App) stats(w http.ResponseWriter, r *http.Request) {
 		a.deps.Errors.Status(w, r, http.StatusNotFound)
 		return
 	}
-	a.renderStats(w, r, uid, year)
+	a.renderStats(w, r, uid, year, http.StatusOK, goalDraft{})
 }
 
-// renderStats draws the Stats page for year.
-func (a *App) renderStats(w http.ResponseWriter, r *http.Request, userID int64, year int) {
-	s, err := a.store.Stats(r.Context(), userID, year)
+// goalDraft is a goal the store refused, to show again in the goal form
+// with its message and what was typed (spec "Errors": an inline message).
+type goalDraft struct{ Error, Value string }
+
+// renderStats draws the Stats page for year; a refused goal comes back
+// in its form, with status 422.
+func (a *App) renderStats(w http.ResponseWriter, r *http.Request, userID int64, year, status int, d goalDraft) {
+	ctx := r.Context()
+	s, err := a.store.Stats(ctx, userID, year)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
+	g, err := a.store.Goal(ctx, userID, year)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	today := a.store.now().Local()
+	v := viewStats(s, today)
+	v.Goal = viewGoal(g, today)
+	if d.Error != "" {
+		v.Goal.Error, v.Goal.Value = d.Error, d.Value
+	}
 	page := a.deps.Page(r, "Reading stats")
-	page.Data = viewStats(s, a.store.now().Local())
-	if err := a.deps.Render.Page(w, http.StatusOK, "books/stats", page); err != nil {
+	page.Data = v
+	if err := a.deps.Render.Page(w, status, "books/stats", page); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
+}
+
+// goalYear reads a goal form's year; one the Stats page can't show is a
+// tampered form, a 400.
+func (a *App) goalYear(w http.ResponseWriter, r *http.Request) (int, bool) {
+	year, ok := parseYear(r.PostFormValue("year"), a.store.now().Local().Year())
+	if !ok {
+		a.deps.Errors.Status(w, r, http.StatusBadRequest)
+	}
+	return year, ok
+}
+
+// setGoal sets or changes the year's goal from the Stats page and goes
+// back to it; a target the store refuses comes back inline, with what was
+// typed. A plain form post: the page works without JavaScript.
+func (a *App) setGoal(w http.ResponseWriter, r *http.Request) {
+	uid, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	year, ok := a.goalYear(w, r)
+	if !ok {
+		return
+	}
+	typed := strings.TrimSpace(r.PostFormValue("target"))
+	target, err := strconv.Atoi(typed)
+	if err != nil {
+		target = -1 // refused with the store's own message
+	}
+	err = a.store.SetGoal(r.Context(), uid, year, target)
+	var ref *Refusal
+	switch {
+	case errors.As(err, &ref):
+		a.renderStats(w, r, uid, year, http.StatusUnprocessableEntity, goalDraft{Error: ref.Msg, Value: typed})
+		return
+	case err != nil:
+		a.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, statsURL(year), http.StatusSeeOther)
+}
+
+// clearGoal removes the year's goal and goes back to the Stats page.
+func (a *App) clearGoal(w http.ResponseWriter, r *http.Request) {
+	uid, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	year, ok := a.goalYear(w, r)
+	if !ok {
+		return
+	}
+	if err := a.store.ClearGoal(r.Context(), uid, year); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, statsURL(year), http.StatusSeeOther)
+}
+
+// goalView is a year's goal: on the Stats page with its form, and as the
+// read-only card at the top of the Reading shelf.
+type goalView struct {
+	Year    int
+	Target  int    // 0: no goal
+	Text    string // "12 of 30"
+	Pace    string // "2 ahead", "goal reached"; "" for none
+	Percent int    // the bar, 0–100
+	Value   string // the target box
+	Max     int
+	Error   string
+}
+
+// viewGoal draws g as of today, a local time.
+func viewGoal(g Goal, today time.Time) goalView {
+	v := goalView{Year: g.Year, Target: g.Target, Max: MaxGoal}
+	if g.Target > 0 {
+		v.Text = strconv.Itoa(g.Done) + " of " + strconv.Itoa(g.Target)
+		v.Pace = g.Pace(today)
+		v.Percent = min(100, g.Done*100/g.Target)
+		v.Value = strconv.Itoa(g.Target)
+	}
+	return v
 }
 
 // statsView is the Stats page.
 type statsView struct {
 	Year     int
 	Years    []yearLink // the year picker
+	Goal     goalView
 	Tiles    []statTile // the year's numbers
 	Formats  []statTile // the year's finished readings by format
 	Lengths  []lengthLine

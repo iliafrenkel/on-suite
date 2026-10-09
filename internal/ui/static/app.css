@@ -4397,3 +4397,18 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-stats-table th,
 .books-stats-table td { text-align: left; padding: var(--s-1) var(--s-2); border-bottom: 1px solid var(--c-border); }
 .books-stats-table th { color: var(--c-text-dim); font-weight: 500; }
+
+/* The goal on the Stats page, where it is set and changed. */
+.books-goal { padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); }
+.books-goal h2 { margin: 0 0 var(--s-2); font-size: var(--fs-lg); }
+.books-goal-text { margin: 0; }
+.books-goal-count { font-size: var(--fs-xl); font-weight: 600; }
+.books-goal .books-progress-bar { margin: var(--s-2) 0 var(--s-3); }
+.books-goal-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-2); }
+.books-goal-edit > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.books-goal-edit > summary::-webkit-details-marker { display: none; }
+.books-goal-edit[open] { flex-basis: 100%; }
+.books-goal-form { margin-top: var(--s-2); }
+.books-goal-form label { margin: 0 0 var(--s-1); }
+.books-goal-row { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.books-goal-row input { width: 6rem; }

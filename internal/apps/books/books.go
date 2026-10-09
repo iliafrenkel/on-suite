@@ -94,6 +94,8 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /tags/{id}", a.act(a.setTags, false))
 	r.HandleFunc("POST /delete/{id}", a.act(a.remove, true))
 	r.HandleFunc("GET /stats", a.stats)
+	r.HandleFunc("POST /goal", a.setGoal)
+	r.HandleFunc("POST /goal/clear", a.clearGoal)
 	r.HandleFunc("GET /cover/{id}", a.cover)
 	r.HandleFunc("GET /olcover/{id}", a.olThumb)
 	r.HandleFunc("GET /books.js", a.script("books.js"))

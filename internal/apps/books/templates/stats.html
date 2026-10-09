@@ -9,6 +9,8 @@
 		{{range $d.Years}}<a class="books-year" href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Year}}</a>{{end}}
 	</nav>
 
+	{{template "goal" (dict "Goal" $d.Goal "Shell" .Shell)}}
+
 	<section class="books-stats-section" id="books-year" aria-labelledby="books-year-head">
 		<h2 id="books-year-head">{{$d.Year}}</h2>
 		{{template "stat-tiles" $d.Tiles}}
@@ -23,6 +25,50 @@
 		{{template "stats-chart" (dict "Chart" $d.PerYear "Title" "Books finished per year" "Empty" "No dated finishes yet." "Head" "Year")}}
 	</section>
 </div>
+{{end}}
+
+{{/* goal is the year's goal and its form (spec "Stats (B4)": set and
+     edited inline, here only — the Reading shelf's card just shows it).
+     Plain form posts, so it works without JavaScript. With a goal the form
+     sits in a "Change goal" disclosure, opened when a target was refused.
+     Pass a dict with Goal (a goalView) and Shell. */}}
+{{define "goal"}}
+<section class="books-goal" id="books-goal" aria-labelledby="books-goal-head">
+	<h2 id="books-goal-head">Goal for {{.Goal.Year}}</h2>
+	{{if .Goal.Target}}
+	<p class="books-goal-text"><span class="books-goal-count">{{.Goal.Text}}</span>{{with .Goal.Pace}} · {{.}}{{end}}</p>
+	<progress class="books-progress-bar" max="100" value="{{.Goal.Percent}}" aria-label="Goal progress">{{.Goal.Percent}}%</progress>
+	<div class="books-goal-actions">
+		<details class="books-goal-edit"{{if .Goal.Error}} open{{end}}>
+			<summary class="button">Change goal</summary>
+			{{template "goal-form" .}}
+		</details>
+		<form method="post" action="/books/goal/clear">
+			<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+			<input type="hidden" name="year" value="{{.Goal.Year}}">
+			<button type="submit" class="quiet">Remove goal</button>
+		</form>
+	</div>
+	{{else}}
+	<p class="books-hint">No goal for {{.Goal.Year}} yet. How many books would you like to read?</p>
+	{{template "goal-form" .}}
+	{{end}}
+</section>
+{{end}}
+
+{{/* goal-form sets or changes a goal. novalidate, so the store's message
+     shows rather than the browser's. Takes goal's dict. */}}
+{{define "goal-form"}}
+<form class="books-goal-form" method="post" action="/books/goal" novalidate>
+	<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+	<input type="hidden" name="year" value="{{.Goal.Year}}">
+	<label for="books-goal-target">Books to read in {{.Goal.Year}}</label>
+	<div class="books-goal-row">
+		<input id="books-goal-target" name="target" type="number" inputmode="numeric" min="1" max="{{.Goal.Max}}" value="{{.Goal.Value}}"{{if .Goal.Error}} aria-invalid="true" aria-describedby="books-goal-error"{{end}}>
+		<button type="submit" class="primary">{{if .Goal.Target}}Save goal{{else}}Set goal{{end}}</button>
+	</div>
+	{{with .Goal.Error}}<p class="books-field-error" id="books-goal-error" role="alert">{{.}}</p>{{end}}
+</form>
 {{end}}
 
 {{/* stat-tiles takes []statTile. */}}
