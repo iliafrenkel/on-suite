@@ -182,6 +182,20 @@
 		syncBookContext(e.target, book);
 	});
 
+	// The progress form swaps its whole box (input included), so focus would
+	// drop to <body> after Enter. Put it back on the new input, selected, so
+	// the next number replaces the old one — on success and on the inline
+	// error alike. Only for swaps the progress form itself made: opening a
+	// book swaps the pane and should leave focus alone.
+	document.addEventListener("htmx:afterSwap", function (e) {
+		var src = (e.detail && (e.detail.requestConfig && e.detail.requestConfig.elt || e.detail.elt)) || e.target;
+		if (!src || !src.classList || !src.classList.contains("books-progress-form")) return;
+		var input = document.getElementById("books-progress-input");
+		if (!input) return;
+		input.focus();
+		input.select();
+	});
+
 	// A list swap leaves the book pane alone, so its hidden shelf/tag/q/
 	// series fields and Edit link would keep POSTing and returning to the
 	// previous list while the address bar shows the new one. Copy the new
