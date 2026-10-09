@@ -129,7 +129,8 @@ type rowView struct {
 	Stars   string // Rating drawn: "★★★★☆"
 	Spine   string // swatch colour name
 	Initial string
-	Cover   string // the stored cover; "" draws the mini spine
+	Cover   string       // the stored cover; "" draws the mini spine
+	Snippet *snippetView // where a filtered row matched; nil when it shows already
 	Active  bool
 }
 
@@ -156,7 +157,8 @@ func viewList(items []ListItem, c listCtx, openID int64) listView {
 	for _, it := range items {
 		row := rowView{ID: it.ID, URL: c.BookURL(it.ID), Title: it.Title,
 			Byline: byline(it.Authors, seriesText(it.SeriesName, it.SeriesNumber)), Note: rowNote(it),
-			Spine: SpineColor(it.Title), Initial: initial(it.Title), Cover: coverURL(it.ID, it.CoverVersion), Active: it.ID == openID}
+			Spine: SpineColor(it.Title), Initial: initial(it.Title), Cover: coverURL(it.ID, it.CoverVersion),
+			Snippet: newSnippet(it), Active: it.ID == openID}
 		switch it.Shelf {
 		case ShelfReading:
 			row.Bar, row.Percent = it.Progress.Set(), it.Progress.Percent(it.Pages)

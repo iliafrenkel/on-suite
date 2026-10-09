@@ -4179,6 +4179,11 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-row-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .books-row-byline,
 .books-row-note { color: var(--c-text-dim); font-size: var(--fs-sm); }
+/* A filtered row's third line: where the filter matched (B3), as ON Later
+ * shows it, held to two lines. */
+.books-row-snippet { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--c-text-dim); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.books-row-snippet mark { background: var(--c-accent-attention-bg); color: inherit; border-radius: 2px; }
+.books-snippet-in { color: var(--c-text-faint); }
 
 /* Book */
 .books-book-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4); margin-bottom: var(--s-4); }

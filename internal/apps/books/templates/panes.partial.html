@@ -45,8 +45,8 @@
 			     replaces the box being typed in (PATTERNS.md, SyncSearch). */}}
 			<form class="books-filter" method="get" action="/books/" role="search">
 				{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" false)}}
-				<label class="visually-hidden" for="books-q">Filter by title or author</label>
-				<input type="search" id="books-q" name="q" value="{{.Ctx.Q}}" placeholder="Filter by title or author…"
+				<label class="visually-hidden" for="books-q">Search your books</label>
+				<input type="search" id="books-q" name="q" value="{{.Ctx.Q}}" placeholder="Search books, notes and quotes…"
 				       hx-get="/books/" hx-target="#books-list" hx-swap="outerHTML"
 				       hx-include="closest form" hx-trigger="input changed delay:300ms, search"
 				       hx-replace-url="true">
@@ -105,6 +105,7 @@
 					<span class="books-row-title">{{.Title}}</span>
 					{{with .Byline}}<span class="books-row-byline">{{.}}</span>{{end}}
 					<span class="books-row-note">{{if .Bar}}<progress class="books-row-bar" max="100" value="{{.Percent}}" aria-hidden="true"></progress> {{end}}{{if .Stars}}<span class="books-stars" role="img" aria-label="Rated {{.Rating}} of 5">{{.Stars}}</span> {{end}}{{.Note}}</span>
+					{{with .Snippet}}<span class="books-row-snippet"><span class="books-snippet-in">{{.In}}</span> {{range .Parts}}{{if .Hit}}<mark>{{.Text}}</mark>{{else}}{{.Text}}{{end}}{{end}}</span>{{end}}
 				</span>
 			</a>
 		</li>
