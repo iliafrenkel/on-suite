@@ -215,11 +215,12 @@
 		var edit = book.querySelector(".books-edit-link");
 		var id = book.getAttribute("data-book-id");
 		if (edit && id) {
+			var safeId = encodeURIComponent(id);
 			var qs = new URLSearchParams();
 			qs.set("shelf", ctx.shelf);
 			if (ctx.tag) qs.set("tag", ctx.tag);
 			if (ctx.q) qs.set("q", ctx.q);
-			edit.setAttribute("href", "/books/edit/" + id + "?" + qs.toString());
+			edit.setAttribute("href", "/books/edit/" + safeId + "?" + qs.toString());
 		}
 	}
 
