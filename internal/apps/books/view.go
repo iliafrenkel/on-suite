@@ -139,7 +139,8 @@ type listView struct {
 	Heading string
 	Rows    []rowView
 	Empty   string
-	OOB     bool // swapped out of band, alongside a progress update
+	OOB     bool      // swapped out of band, alongside a progress update
+	Goal    *goalView // this year's goal, at the top of the Reading shelf; nil for none
 }
 
 func listHeading(c listCtx) string {

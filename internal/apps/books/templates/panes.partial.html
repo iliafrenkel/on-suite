@@ -104,6 +104,13 @@
 {{/* list takes a listView. */}}
 {{define "list"}}
 <div class="books-list" id="books-list" data-shelf="{{.Ctx.Shelf}}" data-tag="{{.Ctx.Tag}}" data-q="{{.Ctx.Q}}" data-series="{{.Ctx.Series}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	{{with .Goal}}
+	<a class="books-goal-card" href="/books/stats">
+		<span class="books-goal-card-head">{{.Year}} goal</span>
+		<span class="books-goal-card-text">{{.Text}}{{with .Pace}} · {{.}}{{end}}</span>
+		<progress class="books-row-bar" max="100" value="{{.Percent}}" aria-hidden="true"></progress>
+	</a>
+	{{end}}
 	<h2 class="books-list-head">{{.Heading}}</h2>
 	{{if .Rows}}
 	<ul class="books-rows">

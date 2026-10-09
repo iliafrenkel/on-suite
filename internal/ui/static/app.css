@@ -4412,3 +4412,19 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-goal-form label { margin: 0 0 var(--s-1); }
 .books-goal-row { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .books-goal-row input { width: 6rem; }
+
+/* The goal card at the top of the Reading shelf: read-only, a link to
+ * the Stats page. */
+.books-goal-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); margin-bottom: var(--s-3); padding: var(--s-2) var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); color: var(--c-text); text-decoration: none; }
+.books-goal-card:hover { border-color: var(--c-accent); }
+.books-goal-card-head { color: var(--c-text-dim); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; flex-basis: 100%; }
+.books-goal-card-text { font-weight: 600; }
+.books-goal-card .books-row-bar { flex: 1 1 100%; width: auto; }
+
+/* The goal card at the top of the Reading shelf: read-only, a link to
+ * the Stats page. */
+.books-goal-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); margin-bottom: var(--s-3); padding: var(--s-2) var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); color: var(--c-text); text-decoration: none; }
+.books-goal-card:hover { border-color: var(--c-accent); }
+.books-goal-card-head { color: var(--c-text-dim); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; flex-basis: 100%; }
+.books-goal-card-text { font-weight: 600; }
+.books-goal-card .books-row-bar { flex: 1 1 100%; width: auto; }
