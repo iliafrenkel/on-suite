@@ -20,7 +20,8 @@ Chosen while planning (2026-10-10); each is one constant or one line to change.
 2. **Backfill job: every 5 minutes, 25 books a run, 1 second between requests** ("fetch book covers"). Open Library allows 100 cover-by-ISBN lookups per 5 minutes per address, so this stays well inside it even with Find cover in use: ~300 covers an hour. A 404 (or an answer that isn't an image) marks the book checked; any other failure (timeout, 5xx) stops the run with an error on /admin/jobs and leaves the book to be tried next time.
 3. **Duplicates: ISBN-13 against ISBN-13; when either the row or the existing book has no ISBN, title + authors ignoring case, spaces and punctuation.** The spec says "same title and authors (case-insensitive) when there is no ISBN"; the trial run showed that reading it as "when the *row* has no ISBN" re-imports every book typed in by hand without one (the demo's Piranesi and Remains of the Day), and that plain case-insensitive matching misses "James S.A. Corey" (Goodreads) against "James S. A. Corey" (Open Library). A row with an ISBN and a book with a *different* ISBN are two editions, and both are kept.
 4. **Goodreads columns are found by header name**, and only `Title`, `Author` and `Exclusive Shelf` are required, so older exports with extra columns still import. The spec's "Other Bookshelves" is Goodreads' `Bookshelves` column; `read`, `currently-reading` and `to-read` are dropped from it (they are shelves here, not tags).
-5. **An exclusive shelf of the person's own** (e.g. `did-not-finish`, `abandoned`) → no reading (Want to read) and the shelf name as a tag. Nothing is lost, and nothing is guessed. See Open questions.
+5. **Gave-up shelves → DNF** (Ilia, 2026-10-10): a shelf named `dnf`, `did-not-finish` or `abandoned`, in any case, as the Exclusive Shelf *or* among the other Bookshelves, makes a DNF reading instead of a tag — and wins over `read`/`currently-reading`/`to-read`. Its `finished_on` (the "stopped on" date) is Date Read when there is one, else none; no start date; the Binding's format; Read Count − 1 earlier undated finished readings as for *read*. Any other shelf of the person's own (e.g. `owned`) → no reading (Want to read) and the shelf name as a tag.
+5a. **Private Notes → one book note** (Ilia, 2026-10-10), cleaned like the review, `created_at`/`updated_at` = Date Added (local midnight; the import time when there is none), capped at 20,000 characters like any note (more is a line error). The notes insert trigger puts it in `books_search`.
 6. **Series from the title:** `Leviathan Wakes (The Expanse, #1)` → title "Leviathan Wakes", series "The Expanse" #1 (Goodreads' own format; numbers like 2.5 work). Titles with two series or a range (`#1-3`) are left whole. Not in the spec's mapping, but otherwise every series book's title carries the series and the series links don't work.
 7. **Dates:** `Date Added` → `added_at` at local midnight of that day; `updated_at` is the later of Date Added and Date Read (so "latest change" on All/DNF follows the reading, not the import). Imported readings' `created_at` is the import time; the earlier, undated readings are inserted first so the dated one is latest.
 8. **Read Count:** `n − 1` earlier finished, undated readings for *read* and *currently-reading* (a re-read in progress counts the reads before it); ignored for *to-read*. More than `MaxReadCount` = 100 is refused as a broken file. Only the main reading gets the Binding's format.
@@ -29,19 +30,16 @@ Chosen while planning (2026-10-10); each is one constant or one line to change.
 11. **Find cover is shown only while the book has no cover** (it would otherwise silently replace an upload). It tries the ISBN first, then — when there is no ISBN *or* Open Library has no cover for it — a title + first-author search. "None found" marks the book checked and says so in the banner; Open Library not answering says that instead. The title search gets the 10-second image timeout (the trial saw Open Library's field search take 9s).
 12. **The backfill never touches `updated_at`** and never replaces a cover that appeared meanwhile; **removing a cover by hand sets `cover_checked_at`** (or the job would bring it back), and **saving a new ISBN clears it** (so the job looks again).
 13. **JSON shape** (`apps.books` in `onsuite export`): `{"books": [...], "goals": [{"year", "target"}]}`; each book has its details, `shelf`, `tags`, `readings` (oldest first, each with its `progress` rows: `page` or `percent`, `recorded_at`), `notes`, `quotes`, `added_at`, `updated_at`. No cover bytes, no `cover_checked_at`. Empty lists are `[]`, not `null`.
-14. **Markdown layout** (`books-export.md`): `# My books`, a line with the date and count, the goals, then `## Title` per book **alphabetically (ignoring case)**: subtitle in italics, a list of details (Author, Series, First published, Pages, ISBN, Shelf, Tags, Rating as stars, Added), then `### Readings` (newest first, as the book pane), `### Review`, `### Notes` (`**9 Oct 2026 · p. 112**` then the note), `### Quotes` (a blockquote, `— p. 8`, then the comment). The Open Library description is left out (it isn't the person's writing; it is in the JSON).
+14. **Markdown layout** (`books-export.md`): `# My books`, a line with the date and count, the goals, then `## Title` per book **alphabetically (ignoring case)**: subtitle in italics, a list of details (Author, Series, First published, Pages, ISBN, Shelf, Tags, Rating as stars, Added), then `### Readings` (newest first, as the book pane), `### Review`, `### Notes` (`**9 Oct 2026 · p. 112**` then the note), `### Quotes` (a blockquote, `— p. 8`, then the comment). `### Description` (the Open Library description, as stored) comes after the details (Ilia, 2026-10-10).
 15. **Sidebar links** under Stats: "Import from Goodreads" (`/books/import`) and "Export as Markdown" (`/books/export`, with `download`).
 16. **#566:** a description over 300 characters, or with 4+ line breaks, is clamped to 4 lines with a **More / Less** toggle (the checkbox technique, no JavaScript); shorter ones show no toggle.
 17. **#568:** each shelf count carries visually hidden words — the link reads "Want to read, 2 books".
 18. **#579:** the five stars sit in a `nowrap` group (`.books-star-row`), so in a narrow pane they wrap *together* under the label instead of the fifth star wrapping alone. Checked at 1024px: the pane is 240px and all five stars are on one line under "Your rating".
 19. **#578: keep the scroll in `books.js`** rather than narrower swap targets. Every action that swaps `#books-panes` (stars, review, tags, format, readings, Find cover) can move the shelf counts, the list and the book at once, so narrowing each would mean a new swap block with two or three out-of-band companions per action; the script is ~40 lines, covers future actions for free, and keeps the progress/notes/quotes swaps as they are. It restores the book pane's scroll when the same book is still open, and the list's when the same list is.
 
-## Open questions (the spec was silent; picked something, worth a look)
+## Decided after the first draft (2026-10-10)
 
-- **A Goodreads "did-not-finish"-style shelf:** should a shelf named `dnf`, `did-not-finish` or `abandoned` make a DNF reading instead of a tag (default 5)?
-- **Private Notes:** Goodreads exports a `Private Notes` column. The spec doesn't map it; it could become a book note. Left out.
-- **Description in the Markdown** (default 14) — in or out?
-- **Open Library's search was timing out** from this machine during the trial (both the Add page's and Find cover's); covers by ISBN worked. Nothing to change in the code — the banner says "Open Library didn't answer" — but if it keeps happening, Find cover without an ISBN will often fail.
+Ilia answered the first draft's open questions: gave-up shelves make a DNF reading (default 5), Private Notes become a note (5a), the description goes in the Markdown (14), and Open Library's occasional search timeouts are accepted as they are (Find cover then shows "Open Library didn't answer").
 
 ## Global Constraints
 
@@ -122,12 +120,12 @@ A pure parser: no database, no HTTP. It reads the whole file before anything is 
 - Consumes: `BookInput` (`Normalize`, `Validate`, `FieldErrors`), `ISBN13`, `ParseTags`, `Shelf*`, `MaxPages`, `MaxYear`, `MinYear`, `MaxReviewRunes`, `dayLayout`, `ErrInvalid` (existing).
 - Produces:
   - `const MaxImportBytes = 10 << 20`, `const MaxReadCount = 100`
-  - `type ImportBook struct { Line int; BookInput; Rating int; Review string; Shelf Shelf; FinishedOn, StartedOn string; EarlierReads int; Format string; Tags []string; AddedOn string }` — `BookInput` normalized and valid; `Shelf` is `ShelfRead`, `ShelfReading` or `ShelfWant`; dates `YYYY-MM-DD` or ""
+  - `type ImportBook struct { Line int; BookInput; Rating int; Review, Note string; Shelf Shelf; FinishedOn, StartedOn string; EarlierReads int; Format string; Tags []string; AddedOn string }` — `BookInput` normalized and valid; `Shelf` is `ShelfRead`, `ShelfReading`, `ShelfDNF` or `ShelfWant`; dates `YYYY-MM-DD` or ""
   - `type ImportError struct { Line int; Msg string }` — `Error()` is `"Line 4: …"` (just `Msg` when `Line` is 0); unwraps to `ErrInvalid`
   - `func ParseGoodreads(r io.Reader) ([]ImportBook, error)`
   - test helpers `grFixture(t) []byte`, `grHeader`, `grLine(title, rating, binding, dateRead, shelves, exclusive, review, readCount string) string`, `parse(t, csv) []books.ImportBook`
 
-The fixture's rows, by line: 2 Leviathan Wakes (series in the title, `="…"` ISBNs, a `<br/>` review with `&amp;`, Read Count 2, Paperback, shelves "sf, space"); 3 Piranesi (currently-reading, **Kindle Edition**, **rating 0**); 4 Good Omens (**a quoted comma** in the title, two authors, **empty `=""` ISBNs**, to-read); 5–8 The Remains of the Day (a review with **quoted line breaks and quotes**, Audible Audio); 9 Good Omens again (a duplicate within the file, no page count); 10 The Odyssey (Original Publication Year **−700**, a "classics" shelf); 11 Infinite Jest (a **shelf of its own**, `did-not-finish`). The header is the real one from Goodreads' "Export Library" (24 columns, `Book Id` … `Owned Copies`).
+The fixture's rows, by line: 2 Leviathan Wakes (series in the title, `="…"` ISBNs, a `<br/>` review with `&amp;`, Read Count 2, Paperback, shelves "sf, space"); 3 Piranesi (currently-reading, **Kindle Edition**, **rating 0**); 4 Good Omens (**a quoted comma** in the title, two authors, **empty `=""` ISBNs**, to-read); 5–8 The Remains of the Day (a review with **quoted line breaks and quotes**, Audible Audio); 9 Good Omens again (a duplicate within the file, no page count); 10 The Odyssey (Original Publication Year **−700**, a "classics" shelf); 11 Infinite Jest (a **gave-up shelf**, `did-not-finish`, with a Date Read). Leviathan Wakes also has **Private Notes**. The header is the real one from Goodreads' "Export Library" (24 columns, `Book Id` … `Owned Copies`).
 
 - [ ] **Step 1: Write the fixture and the failing tests**
 
@@ -135,7 +133,7 @@ Create `internal/apps/books/testdata/goodreads_library_export.csv`:
 
 ```csv
 Book Id,Title,Author,Author l-f,Additional Authors,ISBN,ISBN13,My Rating,Average Rating,Publisher,Binding,Number of Pages,Year Published,Original Publication Year,Date Read,Date Added,Bookshelves,Bookshelves with positions,Exclusive Shelf,My Review,Spoiler,Private Notes,Read Count,Owned Copies
-8855321,"Leviathan Wakes (The Expanse, #1)",James S.A. Corey,"Corey, James S.A.",,"=""0316129089""","=""9780316129084""",4,4.27,Orbit,Paperback,592,2011,2011,2024/03/14,2024/02/01,"sf, space","sf (#3), space (#1)",read,"Great fun.<br/><br/>Loved <i>Miller</i> &amp; Holden.",,,2,0
+8855321,"Leviathan Wakes (The Expanse, #1)",James S.A. Corey,"Corey, James S.A.",,"=""0316129089""","=""9780316129084""",4,4.27,Orbit,Paperback,592,2011,2011,2024/03/14,2024/02/01,"sf, space","sf (#3), space (#1)",read,"Great fun.<br/><br/>Loved <i>Miller</i> &amp; Holden.",,Lent to Sam in May.,2,0
 50202953,Piranesi,Susanna Clarke,"Clarke, Susanna",,"=""1635575648""","=""9781635575637""",0,4.21,Bloomsbury Publishing,Kindle Edition,272,2020,2020,,2025/01/05,currently-reading,currently-reading (#1),currently-reading,,,,1,0
 12067,"Good Omens: The Nice and Accurate Prophecies of Agnes Nutter, Witch",Terry Pratchett,"Pratchett, Terry",Neil Gaiman,"=""""","=""""",0,4.25,William Morrow,Mass Market Paperback,491,2006,1990,,2025/06/30,to-read,to-read (#4),to-read,,,,0,0
 28921,The Remains of the Day,Kazuo Ishiguro,"Ishiguro, Kazuo",,"=""0679731725""","=""9780679731726""",5,4.14,Vintage,Audible Audio,245,1993,1989,2023/11/02,2023/10/01,favourites,favourites (#1),read,"Stevens on ""dignity"".
@@ -144,7 +142,7 @@ So quiet, so sad.
 The best ending.",,,1,0
 12068,"Good Omens: The Nice and Accurate Prophecies of Agnes Nutter, Witch",Terry Pratchett,"Pratchett, Terry",Neil Gaiman,"=""""","=""""",0,4.25,Gollancz,Hardcover,,2014,1990,,2025/07/01,to-read,to-read (#5),to-read,,,,0,0
 1381,The Odyssey,Homer,"Homer, ",Robert Fagles,"=""0140268863""","=""9780140268867""",0,3.80,Penguin Classics,Paperback,541,1999,-700,,2022/08/15,"to-read, classics","to-read (#9), classics (#2)",to-read,,,,0,0
-6759,Infinite Jest,David Foster Wallace,"Wallace, David Foster",,"=""0316066524""","=""9780316066525""",2,4.30,Little Brown,Paperback,1079,2006,1996,,2021/04/02,did-not-finish,did-not-finish (#1),did-not-finish,,,,0,0
+6759,Infinite Jest,David Foster Wallace,"Wallace, David Foster",,"=""0316066524""","=""9780316066525""",2,4.30,Little Brown,Paperback,1079,2006,1996,2021/06/01,2021/04/02,did-not-finish,did-not-finish (#1),did-not-finish,,,,0,0
 ```
 
 Create `internal/apps/books/goodreads_test.go`:
@@ -166,7 +164,8 @@ import (
 // are awkward on purpose (spec "Testing"): quoted commas and line breaks,
 // ="…" ISBNs and an empty one, Read Count 2, a Kindle and an Audible
 // binding, rating 0, a series in a title, a negative year, a shelf of the
-// person's own, and the same book twice.
+// person's own that means "gave up" (did-not-finish), Private Notes, and
+// the same book twice.
 func grFixture(t *testing.T) []byte {
 	t.Helper()
 	data, err := os.ReadFile("testdata/goodreads_library_export.csv")
@@ -206,7 +205,7 @@ func TestParseGoodreadsMapsTheFixture(t *testing.T) {
 	want := []books.ImportBook{
 		{Line: 2, BookInput: books.BookInput{Title: "Leviathan Wakes", Authors: "James S.A. Corey", Year: 2011, Pages: 592,
 			ISBN: "9780316129084", SeriesName: "The Expanse", SeriesNumber: "1"},
-			Rating: 4, Review: "Great fun.\n\nLoved Miller & Holden.", Shelf: books.ShelfRead, FinishedOn: "2024-03-14",
+			Rating: 4, Review: "Great fun.\n\nLoved Miller & Holden.", Note: "Lent to Sam in May.", Shelf: books.ShelfRead, FinishedOn: "2024-03-14",
 			EarlierReads: 1, Format: "paper", Tags: []string{"sf", "space"}, AddedOn: "2024-02-01"},
 		{Line: 3, BookInput: books.BookInput{Title: "Piranesi", Authors: "Susanna Clarke", Year: 2020, Pages: 272, ISBN: "9781635575637"},
 			Shelf: books.ShelfReading, StartedOn: "2025-01-05", Format: "ebook", AddedOn: "2025-01-05"},
@@ -219,7 +218,7 @@ func TestParseGoodreadsMapsTheFixture(t *testing.T) {
 		{Line: 10, BookInput: books.BookInput{Title: "The Odyssey", Authors: "Homer, Robert Fagles", Year: 1999, Pages: 541,
 			ISBN: "9780140268867"}, Shelf: books.ShelfWant, Tags: []string{"classics"}, AddedOn: "2022-08-15"},
 		{Line: 11, BookInput: books.BookInput{Title: "Infinite Jest", Authors: "David Foster Wallace", Year: 1996, Pages: 1079,
-			ISBN: "9780316066525"}, Rating: 2, Shelf: books.ShelfWant, Tags: []string{"did-not-finish"}, AddedOn: "2021-04-02"},
+			ISBN: "9780316066525"}, Rating: 2, Shelf: books.ShelfDNF, FinishedOn: "2021-06-01", Format: "paper", AddedOn: "2021-04-02"},
 	}
 	if len(rows) != len(want) {
 		t.Fatalf("%d rows, want %d: %+v", len(rows), len(want), rows)
@@ -308,6 +307,27 @@ func TestParseGoodreadsTitlesAndTags(t *testing.T) {
 	}
 }
 
+func TestParseGoodreadsGaveUpShelves(t *testing.T) {
+	tests := []struct {
+		name, shelves, exclusive, dateRead string
+		wantShelf                          books.Shelf
+		wantFinished                       string
+		wantTags                           []string
+	}{
+		{"a DNF exclusive shelf", "DNF, sf", "DNF", "2024/05/01", books.ShelfDNF, "2024-05-01", []string{"sf"}},
+		{"abandoned among the others", "Abandoned, sf", "to-read", "", books.ShelfDNF, "", []string{"sf"}},
+		{"did-not-finish beats read", "did-not-finish", "read", "2024/05/01", books.ShelfDNF, "2024-05-01", nil},
+		{"another shelf of their own", "owned", "owned", "", books.ShelfWant, "", []string{"owned"}},
+	}
+	for _, tt := range tests {
+		b := parse(t, grHeader+grLine("A Book", "0", "Paperback", tt.dateRead, tt.shelves, tt.exclusive, "", "1"))[0]
+		if b.Shelf != tt.wantShelf || b.FinishedOn != tt.wantFinished || !reflect.DeepEqual(b.Tags, tt.wantTags) {
+			t.Errorf("%s: shelf %s, finished %q, tags %q; want %s, %q, %q", tt.name, b.Shelf, b.FinishedOn, b.Tags,
+				tt.wantShelf, tt.wantFinished, tt.wantTags)
+		}
+	}
+}
+
 func TestParseGoodreadsRefusesBadFiles(t *testing.T) {
 	tests := []struct {
 		name, csv, want string
@@ -391,8 +411,12 @@ type ImportBook struct {
 	BookInput
 	Rating int    // 1–5, 0 for none
 	Review string // plain text, line breaks kept
+	// Note is the row's Private Notes, plain text: one book note, dated
+	// Date Added. "" for none.
+	Note string
 	// Shelf is where the book goes: ShelfRead (a finished reading dated
-	// FinishedOn), ShelfReading (a reading started on StartedOn) or
+	// FinishedOn), ShelfReading (a reading started on StartedOn),
+	// ShelfDNF (a reading not finished, stopped on FinishedOn) or
 	// ShelfWant (no reading).
 	Shelf      Shelf
 	FinishedOn string // YYYY-MM-DD, "" when Goodreads has no Date Read
@@ -441,6 +465,7 @@ const (
 	grShelves    = "Bookshelves"
 	grExclusive  = "Exclusive Shelf"
 	grReview     = "My Review"
+	grNotes      = "Private Notes"
 	grReadCount  = "Read Count"
 	grDateLayout = "2006/01/02"
 )
@@ -461,6 +486,11 @@ var grBindings = map[string]string{
 // grBuiltIn are Goodreads' three built-in exclusive shelves, which become
 // shelves here, never tags.
 var grBuiltIn = map[string]Shelf{"read": ShelfRead, "currently-reading": ShelfReading, "to-read": ShelfWant}
+
+// grDNF are the shelf names people give books they gave up on (decided
+// 2026-10-10 while planning B5): as the Exclusive Shelf or among the
+// other shelves, any case, they make the book a DNF, not a tag.
+var grDNF = map[string]bool{"dnf": true, "did-not-finish": true, "abandoned": true}
 
 // fieldLabels names a book field by its Goodreads column, for messages.
 var fieldLabels = map[string]string{"title": grTitle, "subtitle": grTitle, "authors": grAuthor,
@@ -553,6 +583,10 @@ func grRow(get func(string) string) (ImportBook, string) {
 	if utf8.RuneCountInString(b.Review) > MaxReviewRunes {
 		return b, fmt.Sprintf("%s: Keep it to %d characters or fewer.", grReview, MaxReviewRunes)
 	}
+	b.Note = grReviewText(get(grNotes))
+	if utf8.RuneCountInString(b.Note) > MaxNoteRunes {
+		return b, fmt.Sprintf("%s: Keep it to %d characters or fewer.", grNotes, MaxNoteRunes)
+	}
 	if b.AddedOn, msg = grDate(get(grDateAdded), grDateAdded); msg != "" {
 		return b, msg
 	}
@@ -566,13 +600,19 @@ func grRow(get func(string) string) (ImportBook, string) {
 	}
 
 	exclusive := strings.ToLower(get(grExclusive))
+	others := strings.Split(get(grShelves), ",")
 	shelf, builtIn := grBuiltIn[exclusive]
 	if !builtIn {
 		shelf = ShelfWant // a shelf of the person's own: no reading, and a tag
 	}
+	for _, name := range append(others, exclusive) {
+		if grDNF[strings.ToLower(strings.TrimSpace(name))] {
+			shelf = ShelfDNF // given up on, whatever else it says
+		}
+	}
 	b.Shelf = shelf
 	switch shelf {
-	case ShelfRead:
+	case ShelfRead, ShelfDNF:
 		b.FinishedOn = read
 	case ShelfReading:
 		b.StartedOn = b.AddedOn
@@ -583,12 +623,13 @@ func grRow(get func(string) string) (ImportBook, string) {
 	}
 
 	var tags []string
-	for _, name := range strings.Split(get(grShelves), ",") {
-		if _, ok := grBuiltIn[strings.ToLower(strings.TrimSpace(name))]; !ok {
+	for _, name := range others {
+		lower := strings.ToLower(strings.TrimSpace(name))
+		if _, ok := grBuiltIn[lower]; !ok && !grDNF[lower] {
 			tags = append(tags, name)
 		}
 	}
-	if !builtIn && exclusive != "" {
+	if !builtIn && exclusive != "" && !grDNF[exclusive] {
 		tags = append(tags, exclusive)
 	}
 	b.Tags = ParseTags(strings.Join(tags, ","))
@@ -698,7 +739,7 @@ git commit -m "feat(books): read a Goodreads library export (#491)"
 
 ### Task 2: Import into the library
 
-One transaction for the whole file. Duplicates are skipped against the library and against earlier rows (default 3). The insert trigger of `books_search` (migration 0005) indexes each book, review included, as it is written.
+One transaction for the whole file: each book, its readings (a DNF one for a gave-up shelf), its Private Notes as a note, and its tags. Duplicates are skipped against the library and against earlier rows (default 3). The insert triggers of `books_search` (migration 0005) index each book, review and note included, as they are written.
 
 **Files:**
 - Create: `internal/apps/books/import.go`
@@ -773,7 +814,7 @@ func TestImportAddsTheBooksWithTheirReadings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (map[books.Shelf]int{books.ShelfRead: 2, books.ShelfReading: 1, books.ShelfWant: 3, books.ShelfAll: 6}); !reflect.DeepEqual(counts, want) {
+	if want := (map[books.Shelf]int{books.ShelfRead: 2, books.ShelfReading: 1, books.ShelfWant: 2, books.ShelfDNF: 1, books.ShelfAll: 6}); !reflect.DeepEqual(counts, want) {
 		t.Errorf("shelf counts = %v, want %v", counts, want)
 	}
 
@@ -802,8 +843,15 @@ func TestImportAddsTheBooksWithTheirReadings(t *testing.T) {
 		t.Errorf("Piranesi = shelf %s, %+v, rating %d; want reading since its Date Added, as an ebook, no rating", p.Shelf, p.Latest, p.Rating)
 	}
 	ij := getBook(t, f, uid, bookTitled(t, f, uid, "Infinite Jest"))
-	if ij.Shelf != books.ShelfWant || !reflect.DeepEqual(ij.Tags, []string{"did-not-finish"}) {
-		t.Errorf("Infinite Jest = %s %v, want Want to read, tagged with its own shelf", ij.Shelf, ij.Tags)
+	if ij.Shelf != books.ShelfDNF || ij.Latest.FinishedOn != "2021-06-01" || len(ij.Tags) != 0 {
+		t.Errorf("Infinite Jest = %s %+v %v, want Did not finish on its Date Read, untagged", ij.Shelf, ij.Latest, ij.Tags)
+	}
+	ns, err := f.store.Notes(ctx, uid, lw.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ns) != 1 || ns[0].Body != "Lent to Sam in May." || !ns[0].CreatedAt.Equal(time.Date(2024, 2, 1, 0, 0, 0, 0, time.Local)) {
+		t.Errorf("notes = %+v, want its Private Notes, dated Date Added", ns)
 	}
 	if items, err := f.store.List(ctx, f.bob.ID, books.ListQuery{Shelf: books.ShelfAll}); err != nil || len(items) != 0 {
 		t.Errorf("Bob's books = %+v, %v; want none", items, err)
@@ -813,7 +861,7 @@ func TestImportAddsTheBooksWithTheirReadings(t *testing.T) {
 func TestImportedBooksAreSearchable(t *testing.T) {
 	f := newFixture(t)
 	importFixture(t, f, f.alice.ID)
-	for q, want := range map[string]books.MatchIn{"holden": books.MatchReview, "fagles": books.MatchBook, "expanse": books.MatchBook} {
+	for q, want := range map[string]books.MatchIn{"holden": books.MatchReview, "sam": books.MatchNote, "fagles": books.MatchBook, "expanse": books.MatchBook} {
 		items, err := f.store.List(context.Background(), f.alice.ID, books.ListQuery{Shelf: books.ShelfAll, Q: q})
 		if err != nil || len(items) != 1 || items[0].Match != want {
 			t.Errorf("search %q = %+v, %v; want one book matched in %q", q, items, err, want)
@@ -1000,7 +1048,8 @@ func libraryKeys(ctx context.Context, tx *sql.Tx, userID int64) (keySet, error) 
 	return have, nil
 }
 
-// importBook writes one row: the book, its readings and its tags. Earlier
+// importBook writes one row: the book, its readings, its note and its
+// tags. Earlier
 // reads go in first, so the main reading is the latest and decides the
 // shelf (latestJoin breaks the created_at tie by id).
 func importBook(ctx context.Context, tx *sql.Tx, userID int64, b ImportBook, now string) error {
@@ -1034,9 +1083,21 @@ func importBook(ctx context.Context, tx *sql.Tx, userID int64, b ImportBook, now
 	case ShelfReading:
 		_, err = tx.ExecContext(ctx, `INSERT INTO books_readings (book_id, status, format, started_on, created_at)
 			VALUES (?, 'reading', ?, ?, ?)`, id, nullText(b.Format), nullText(b.StartedOn), now)
+	case ShelfDNF:
+		_, err = tx.ExecContext(ctx, `INSERT INTO books_readings (book_id, status, format, finished_on, created_at)
+			VALUES (?, 'dnf', ?, ?, ?)`, id, nullText(b.Format), nullText(b.FinishedOn), now)
 	}
 	if err != nil {
 		return fmt.Errorf("books: import a reading: %w", err)
+	}
+	// Private Notes become one note, dated when the book was added; the
+	// notes' insert trigger puts it in books_search.
+	if b.Note != "" {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO books_notes (book_id, body, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+			id, b.Note, added, added); err != nil {
+			return fmt.Errorf("books: import a note: %w", err)
+		}
 	}
 	return linkTags(ctx, tx, userID, id, b.Tags)
 }
@@ -2929,8 +2990,8 @@ import (
 )
 
 // wantMarkdown is the download of the library TestMarkdownDownload
-// builds: books by title, each with its details, readings (newest
-// first), rating and review, notes and quotes.
+// builds: books by title, each with its details, description, readings
+// (newest first), rating and review, notes and quotes.
 const wantMarkdown = `# My books
 
 Exported from ON Books on 9 Oct 2026: 2 books.
@@ -2950,6 +3011,11 @@ Reading goals — 2026: 24 books.
 - Tags: classics, sf
 - Rating: ★★★★★ (5 of 5)
 - Added: 1 Oct 2026
+
+### Description
+
+A desert planet.
+Spice.
 
 ### Readings
 
@@ -2990,6 +3056,7 @@ func TestMarkdownDownload(t *testing.T) {
 	nb := titled("Dune", "Frank Herbert", books.ShelfReading)
 	nb.Subtitle, nb.Year, nb.Pages, nb.ISBN = "Book One", 1965, 600, "9780441013593"
 	nb.SeriesName, nb.SeriesNumber, nb.Tags = "Dune", "1", []string{"sf", "classics"}
+	nb.Description = "A desert planet.\nSpice."
 	id := add(t, s, uid, nb)
 	if err := s.Store.SetFormat(ctx, uid, id, "paper"); err != nil {
 		t.Fatal(err)
@@ -3059,9 +3126,9 @@ import (
 
 // exportMarkdown is the whole library as one Markdown file (spec "Export
 // (B5)"): a section per book, by title — its details, readings, rating and
-// review, notes and quotes. today is the date it says it was made
-// ("10 Oct 2026"). The OL description is left out: the file is the
-// person's own reading and writing (decided 2026-10-10 while planning B5).
+// description, review, notes and quotes (the description too, decided
+// 2026-10-10 while planning B5). today is the date it says it was made
+// ("10 Oct 2026").
 func exportMarkdown(p exportPayload, today string) string {
 	var b strings.Builder
 	b.WriteString("# My books\n\nExported from ON Books on " + today + ": " + countText(len(p.Books), "book", "books") + ".\n")
@@ -3103,6 +3170,9 @@ func writeBook(b *strings.Builder, bk exportedBook) {
 		item("Rating", stars(bk.Rating)+" ("+strconv.Itoa(bk.Rating)+" of 5)")
 	}
 	item("Added", bk.AddedAt.Local().Format("2 Jan 2006"))
+	if bk.Description != "" {
+		b.WriteString("\n### Description\n\n" + bk.Description + "\n")
+	}
 
 	if len(bk.Readings) > 0 {
 		b.WriteString("\n### Readings\n\n")
@@ -3256,7 +3326,7 @@ import (
 func TestAdminCardCountsEveryUsersBooks(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	importFixture(t, f, f.alice.ID) // 2 read (3 readings), 1 reading, 3 want
+	importFixture(t, f, f.alice.ID) // 2 read (3 readings), 1 reading, 1 DNF, 2 want, 1 note
 	id := addBook(t, f, f.bob.ID, onShelf("Dune", books.ShelfReading))
 	if err := f.store.MarkDNF(ctx, f.bob.ID, id, "", 0); err != nil {
 		t.Fatal(err)
@@ -3280,8 +3350,8 @@ func TestAdminCardCountsEveryUsersBooks(t *testing.T) {
 	for _, st := range stats {
 		got[st.Label] = st.Value
 	}
-	want := map[string]string{"Books": "7", "Reading": "1", "Want to read": "3", "Read": "2", "Did not finish": "1",
-		"Readings": "5", "Notes": "1", "Quotes": "1", "Stored covers": "2.0 KiB"}
+	want := map[string]string{"Books": "7", "Reading": "1", "Want to read": "2", "Read": "2", "Did not finish": "2",
+		"Readings": "6", "Notes": "2", "Quotes": "1", "Stored covers": "2.0 KiB"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("admin card = %v, want %v", got, want)
 	}
@@ -4156,7 +4226,8 @@ Each book comes over with:
   *currently-reading* books are being read since the day you added them,
   and *to-read* books wait on Want to read. A book you read more than once
   gets an earlier reading, without dates, for each time before.
-- your rating (a book you didn't rate has none) and your review;
+- your rating (a book you didn't rate has none), your review, and your
+  private notes, as a note dated the day you added the book;
 - the day you added it, the number of pages, the year it first came out
   and its ISBN;
 - its series, when Goodreads puts one in the title — "Leviathan Wakes
@@ -4164,8 +4235,11 @@ Each book comes over with:
 - its format, when the binding says — a Kindle edition is an ebook, an
   Audible one an audiobook, a paperback or hardcover paper;
 - your other Goodreads shelves, as tags. A shelf of your own that takes
-  the place of read or to-read, like *did-not-finish*, becomes a tag too,
-  and the book goes on Want to read.
+  the place of read or to-read, like *owned*, becomes a tag too, and the
+  book goes on Want to read.
+- a book on a shelf called *dnf*, *did-not-finish* or *abandoned* goes on
+  Did not finish instead, stopped on the day Goodreads says you read it,
+  if it says.
 
 A book that's already in your library is skipped: the same ISBN, or —
 when one of the two has no ISBN — the same title and author. So importing
@@ -4178,8 +4252,9 @@ says which line of the file is wrong.
 ## Exporting your books
 
 **Export as Markdown**, at the bottom of the sidebar, downloads your whole
-library as one file, `books-export.md`: every book with its details, your
-readings, rating and review, notes and quotes, in alphabetical order.
+library as one file, `books-export.md`: every book with its details and
+description, your readings, rating and review, notes and quotes, in
+alphabetical order.
 Markdown is plain text, so it opens in any text editor and outlives any
 app.
 
@@ -4414,7 +4489,7 @@ Remove the `onsuite-books` entry from `.claude/launch.json` (do not commit it), 
 ```bash
 git push -u origin feat/books-b5-import-export
 env -u GH_TOKEN gh pr create --title "feat(books): ON Books B5 — import and export (#491)" --body "$(cat <<'EOF'
-B5 of ON Books, the last phase. Goodreads CSV import (`/books/import`): parsed in full first, one transaction, errors name the line; shelves, readings (Read Count > 1 adds undated earlier ones), rating, review, dates, series from the title, binding → format, other shelves → tags; duplicates skipped by ISBN, or by title and author (ignoring case, spaces and punctuation) when either side has no ISBN. A background job (`fetch book covers`, every 5 minutes, 25 books, in /admin/jobs with Run now) fetches covers by ISBN; migration 0007 adds `cover_checked_at` so a miss isn't retried. **Find cover** in the ⋯ menu does the same at once, falling back to a title/author search. `onsuite export` now includes Books (no cover bytes), the sidebar's **Export as Markdown** downloads `books-export.md`, and the admin page has a Books card.
+B5 of ON Books, the last phase. Goodreads CSV import (`/books/import`): parsed in full first, one transaction, errors name the line; shelves (dnf/did-not-finish/abandoned → Did not finish), readings (Read Count > 1 adds undated earlier ones), rating, review, Private Notes as a note, dates, series from the title, binding → format, other shelves → tags; duplicates skipped by ISBN, or by title and author (ignoring case, spaces and punctuation) when either side has no ISBN. A background job (`fetch book covers`, every 5 minutes, 25 books, in /admin/jobs with Run now) fetches covers by ISBN; migration 0007 adds `cover_checked_at` so a miss isn't retried. **Find cover** in the ⋯ menu does the same at once, falling back to a title/author search. `onsuite export` now includes Books (no cover bytes), the sidebar's **Export as Markdown** downloads `books-export.md`, and the admin page has a Books card.
 
 Polish: long descriptions fold behind More (#566), shelf counts read as words (#568), the book pane keeps its scroll after a save (#578), the stars wrap together in a narrow pane (#579). User guide, README section and hero, AGENTS.md, screenshots (#567).
 
@@ -4430,6 +4505,6 @@ Never merge it.
 
 ## Self-review
 
-- **Spec coverage.** Import page taking a Goodreads export → Tasks 1, 2, 5. Parsed fully before writing, one transaction, errors name the line → `ParseGoodreads` + `TestParseGoodreadsRefusesBadFiles`, `TestImportIsAllOrNothing`, the 422 page. Mapping: Title, Author + Additional Authors, ISBN13 → ISBN, pages, original → published year, rating 0 → none, review `<br/>`/tags/entities, Exclusive Shelf → readings, Read Count, Bookshelves → tags, Binding → format, Date Added, `="…"` → `TestParseGoodreadsMapsTheFixture` and its table tests. Duplicates (library and file) → `TestImportSkipsBooksAlreadyInTheLibrary`. Summary with counts and skipped titles → Task 5. FTS → `TestImportedBooksAreSearchable`. Backfill job (ISBN, no cover, not checked, a few per run, pause, miss sets `cover_checked_at`) → Task 3. Find cover (same lookup, title/author without an ISBN) → Task 4. `onsuite export` with books, readings, progress, rating, review, notes, quotes, tags, goals, no covers → Task 6. `books-export.md` → Task 7. Admin card → Task 8. Errors: Open Library failures shown and logged → Tasks 3–4; 404 for foreign ids → `TestFindCoverOfSomeoneElsesBookIsNotFound`. Testing: real SQLite, `apptest.Clock`, fixture with the listed awkward rows → Tasks 1–2. Docs and screenshots → Task 11. #566/#568/#579 → Task 9, #578 → Task 10, #567 → Task 11.
+- **Spec coverage.** Import page taking a Goodreads export → Tasks 1, 2, 5. Parsed fully before writing, one transaction, errors name the line → `ParseGoodreads` + `TestParseGoodreadsRefusesBadFiles`, `TestImportIsAllOrNothing`, the 422 page. Mapping: Title, Author + Additional Authors, ISBN13 → ISBN, pages, original → published year, rating 0 → none, review `<br/>`/tags/entities, Exclusive Shelf → readings, gave-up shelves → DNF, Private Notes → a note, Read Count, Bookshelves → tags, Binding → format, Date Added, `="…"` → `TestParseGoodreadsMapsTheFixture` and its table tests. Duplicates (library and file) → `TestImportSkipsBooksAlreadyInTheLibrary`. Summary with counts and skipped titles → Task 5. FTS (review and note) → `TestImportedBooksAreSearchable`. Backfill job (ISBN, no cover, not checked, a few per run, pause, miss sets `cover_checked_at`) → Task 3. Find cover (same lookup, title/author without an ISBN) → Task 4. `onsuite export` with books, readings, progress, rating, review, notes, quotes, tags, goals, no covers → Task 6. `books-export.md` → Task 7. Admin card → Task 8. Errors: Open Library failures shown and logged → Tasks 3–4; 404 for foreign ids → `TestFindCoverOfSomeoneElsesBookIsNotFound`. Testing: real SQLite, `apptest.Clock`, fixture with the listed awkward rows → Tasks 1–2. Docs and screenshots → Task 11. #566/#568/#579 → Task 9, #578 → Task 10, #567 → Task 11.
 - **Placeholders.** None: every code step has the code; every run step its command and expected result.
 - **Types.** `ImportBook`, `ImportError`, `ImportResult`, `CoverCandidate`, `ErrNoCover`, `exportPayload` and the test helpers are used with the same names and signatures wherever they appear.
