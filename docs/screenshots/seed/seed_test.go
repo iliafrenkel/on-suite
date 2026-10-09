@@ -218,6 +218,12 @@ func TestSeedFillsEveryApp(t *testing.T) {
 		}
 	}
 
+	// ... and a goal for this year, which the Stats page and the Reading
+	// shelf's card show.
+	if g, err := bst.Goal(ctx, demo.ID, now.Local().Year()); err != nil || g.Target != 24 {
+		t.Errorf("books goal = %+v, %v; want 24 books this year", g, err)
+	}
+
 	// Flash: decks with cards, a review history and a streak.
 	fs := flash.NewStore(handle)
 	decks, _ := fs.ListDecks(ctx, demo.ID)
