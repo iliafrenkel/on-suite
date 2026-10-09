@@ -155,7 +155,7 @@ A three-pane list+detail view, like ON Reader (sidebar, list, book), with its re
   - Quotes — cards with text, page and comment.
   - Reading history — every reading with dates, format and status; each
     editable and deletable.
-  - A ⋯ menu: Edit details, Change cover, Find cover (B5), Delete.
+  - A ⋯ menu: Edit details (which also changes the cover), Find cover (B5), Delete.
 
 ### Add book
 
@@ -257,8 +257,8 @@ A Books import page takes a Goodreads "Export Library" CSV.
 
 Follow PATTERNS.md's error-surfacing patterns.
 
-- OL search failures (timeout, 5xx, bad JSON) show inline in the dialog and
-  offer manual entry.
+- OL search failures (timeout, 5xx, bad JSON) show inline on the Add book page and
+  pre-fill the form with what was typed.
 - Cover fetch failures are logged; the book shows its spine.
 - Bad progress (negative, past the page count, percent over 100) and bad
   dates (finish before start) show an inline message.
