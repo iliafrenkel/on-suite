@@ -283,13 +283,14 @@ One PR each, in order.
 
 | Phase | Issue | Scope |
 |---|---|---|
-| B1 | #487 Library and shelves | App skeleton; books, covers, readings, tags tables; OL search and manual entry; cover fetch/upload/URL and spine; shelves and the split view; Start reading / Finish / DNF; tags; edit and delete; title/author filter |
+| B1a | #487 Library and shelves (part 1) | App skeleton; books, readings and tags tables; manual entry on an Add book page; generated spines; the three panes; Start reading / Finish / DNF; tags; edit and delete; title/author filter |
+| B1b | #487 Library and shelves (part 2) | Open Library search in an Add book dialog in front of the B1a form; covers (`books_covers`): fetch on save, upload, image URL |
 | B2 | #488 Reading progress and history | Progress input and history; format; re-reads and the reading history list; rating and review; series links |
 | B3 | #489 Notes and quotes | Dated notes; quotes; FTS search |
 | B4 | #490 Goals and stats | Yearly goal; stats page; goal card on the Reading shelf |
 | B5 | #491 Import and export | Goodreads import; cover backfill job and Find cover; JSON and Markdown export; admin card; user guide and screenshots |
 
-If B1's plan gets too large, OL search and covers split into their own PR.
+B1 was split into B1a and B1b while planning (2026-10-09).
 
 ## Out of scope
 
