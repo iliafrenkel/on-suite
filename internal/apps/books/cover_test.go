@@ -3,6 +3,7 @@ package books_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -142,5 +143,70 @@ func TestCreateKeepsOnlyRealOpenLibraryIDs(t *testing.T) {
 		if work != tt.work || edit != tt.edit {
 			t.Errorf("%s: stored %q / %q, want %q / %q", tt.nb.Title, work, edit, tt.work, tt.edit)
 		}
+	}
+}
+
+func TestUpdateWithCoverSavesBothTogether(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	id := addBook(t, f, f.alice.ID, onShelf("Piranesi", books.ShelfWant))
+	in := books.BookInput{Title: "Piranesi, edited"}
+	if err := f.store.UpdateWithCover(ctx, f.alice.ID, id, in,
+		books.CoverChange{ContentType: "image/png", Bytes: onePNG, Source: books.CoverUpload}); err != nil {
+		t.Fatal(err)
+	}
+	if b := getBook(t, f, f.alice.ID, id); b.Title != "Piranesi, edited" || b.CoverVersion == "" {
+		t.Errorf("after edit with cover: title %q, cover version %q", b.Title, b.CoverVersion)
+	}
+	if err := f.store.UpdateWithCover(ctx, f.alice.ID, id, in, books.CoverChange{Remove: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Cover(ctx, f.alice.ID, id); !errors.Is(err, books.ErrNotFound) {
+		t.Errorf("after remove: %v, want no cover", err)
+	}
+	var checked sql.NullString
+	if err := f.db.QueryRow(`SELECT cover_checked_at FROM books_books WHERE id = ?`, id).Scan(&checked); err != nil || !checked.Valid {
+		t.Errorf("cover_checked_at after remove = %v, %v; want set", checked, err)
+	}
+	// Nothing to change leaves the cover alone: set one, edit without.
+	if err := f.store.SetCover(ctx, f.alice.ID, id, "image/png", onePNG, books.CoverUpload); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.UpdateWithCover(ctx, f.alice.ID, id, books.BookInput{Title: "Again"}, books.CoverChange{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Cover(ctx, f.alice.ID, id); err != nil {
+		t.Errorf("an edit with no cover change lost the cover: %v", err)
+	}
+}
+
+func TestUpdateWithCoverIsAllOrNothing(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	id := addBook(t, f, f.alice.ID, onShelf("Piranesi", books.ShelfWant))
+	// Make the cover write fail the way a full disk or a constraint would.
+	if _, err := f.db.Exec(`CREATE TRIGGER fail_cover BEFORE INSERT ON books_covers
+		BEGIN SELECT RAISE(ABORT, 'cover write failed'); END`); err != nil {
+		t.Fatal(err)
+	}
+	err := f.store.UpdateWithCover(ctx, f.alice.ID, id, books.BookInput{Title: "Changed"},
+		books.CoverChange{ContentType: "image/png", Bytes: onePNG, Source: books.CoverUpload})
+	if err == nil {
+		t.Fatal("UpdateWithCover succeeded, want the cover failure")
+	}
+	if b := getBook(t, f, f.alice.ID, id); b.Title != "Piranesi" {
+		t.Errorf("title = %q after a failed cover write, want it unchanged", b.Title)
+	}
+
+	// Someone else's book: not found, and no cover either.
+	if _, err := f.db.Exec(`DROP TRIGGER fail_cover`); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.UpdateWithCover(ctx, f.bob.ID, id, books.BookInput{Title: "Mine"},
+		books.CoverChange{ContentType: "image/png", Bytes: onePNG, Source: books.CoverUpload}); !errors.Is(err, books.ErrNotFound) {
+		t.Errorf("Bob = %v, want ErrNotFound", err)
+	}
+	if _, err := f.store.Cover(ctx, f.alice.ID, id); !errors.Is(err, books.ErrNotFound) {
+		t.Errorf("Bob's attempt stored a cover: %v", err)
 	}
 }

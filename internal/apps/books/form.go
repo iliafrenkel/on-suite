@@ -294,7 +294,7 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 	c := ctxFrom(r.PostFormValue)
 	in, vals, errs := parseForm(r.PostFormValue)
 	errs = merge(errs, in.Normalize().Validate())
-	var change coverChange
+	var change CoverChange
 	if len(errs) == 0 { // don't fetch a pasted address for a form that is bouncing anyway
 		var msg string
 		change, msg = a.readCoverChange(r)
@@ -306,11 +306,7 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 		a.renderForm(w, r, http.StatusUnprocessableEntity, editBookForm(id, vals, errs, c, coverURL(b.ID, b.CoverVersion)))
 		return
 	}
-	if err := a.store.Update(r.Context(), uid, id, in); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	if err := a.applyCoverChange(r.Context(), uid, id, change); err != nil {
+	if err := a.store.UpdateWithCover(r.Context(), uid, id, in, change); err != nil {
 		a.fail(w, r, err)
 		return
 	}

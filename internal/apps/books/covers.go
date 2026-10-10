@@ -117,21 +117,12 @@ func (a *App) fetchCover(ctx context.Context, rawURL string) (string, []byte, er
 	return ct, data, nil
 }
 
-// coverChange is what the edit form asks of a cover: a new image (Source
-// set), removal, or nothing.
-type coverChange struct {
-	ContentType string
-	Bytes       []byte
-	Source      string
-	Remove      bool
-}
-
 var tooBigCover = "That image is larger than " + strconv.Itoa(MaxCoverBytes>>20) + " MB."
 
 // readCoverChange reads the edit form's cover fields. An uploaded file wins
 // over an image address, which wins over Remove. A message is for the
 // person, and means nothing should be saved.
-func (a *App) readCoverChange(r *http.Request) (coverChange, string) {
+func (a *App) readCoverChange(r *http.Request) (CoverChange, string) {
 	file, header, err := r.FormFile("cover_file")
 	switch {
 	case err == nil:
@@ -140,46 +131,35 @@ func (a *App) readCoverChange(r *http.Request) (coverChange, string) {
 			return readUploadedCover(file, header.Size)
 		}
 	case !errors.Is(err, http.ErrMissingFile) && !errors.Is(err, http.ErrNotMultipart):
-		return coverChange{}, "That upload could not be read."
+		return CoverChange{}, "That upload could not be read."
 	}
 	if raw := strings.TrimSpace(r.PostFormValue("cover_url")); raw != "" {
 		ct, data, err := a.fetchCover(r.Context(), raw)
 		if err != nil {
 			a.deps.Log.Info("books cover address failed", "error", err)
-			return coverChange{}, "Couldn't get a JPEG, PNG, GIF or WebP image from that address."
+			return CoverChange{}, "Couldn't get a JPEG, PNG, GIF or WebP image from that address."
 		}
-		return coverChange{ContentType: ct, Bytes: data, Source: CoverFromURL}, ""
+		return CoverChange{ContentType: ct, Bytes: data, Source: CoverFromURL}, ""
 	}
-	return coverChange{Remove: r.PostFormValue("remove_cover") == "1"}, ""
+	return CoverChange{Remove: r.PostFormValue("remove_cover") == "1"}, ""
 }
 
 // readUploadedCover checks an uploaded file by its bytes, not its name or
 // declared type.
-func readUploadedCover(f io.Reader, size int64) (coverChange, string) {
+func readUploadedCover(f io.Reader, size int64) (CoverChange, string) {
 	if size > MaxCoverBytes {
-		return coverChange{}, tooBigCover
+		return CoverChange{}, tooBigCover
 	}
 	data, err := io.ReadAll(io.LimitReader(f, MaxCoverBytes+1))
 	if err != nil {
-		return coverChange{}, "That upload could not be read."
+		return CoverChange{}, "That upload could not be read."
 	}
 	if len(data) > MaxCoverBytes {
-		return coverChange{}, tooBigCover
+		return CoverChange{}, tooBigCover
 	}
 	ct := http.DetectContentType(data)
 	if !coverType(ct) {
-		return coverChange{}, "That file isn't a JPEG, PNG, GIF or WebP image."
+		return CoverChange{}, "That file isn't a JPEG, PNG, GIF or WebP image."
 	}
-	return coverChange{ContentType: ct, Bytes: data, Source: CoverUpload}, ""
-}
-
-// applyCoverChange stores what readCoverChange read.
-func (a *App) applyCoverChange(ctx context.Context, userID, id int64, ch coverChange) error {
-	switch {
-	case ch.Source != "":
-		return a.store.SetCover(ctx, userID, id, ch.ContentType, ch.Bytes, ch.Source)
-	case ch.Remove:
-		return a.store.RemoveCover(ctx, userID, id)
-	}
-	return nil
+	return CoverChange{ContentType: ct, Bytes: data, Source: CoverUpload}, ""
 }

@@ -47,12 +47,19 @@ func coverVersion(fetchedAt string) string {
 	return strconv.FormatInt(t.UnixNano(), 36)
 }
 
+// CoverChange is what the edit form asks of a cover: a new image (Source
+// set), removal, or nothing.
+type CoverChange struct {
+	ContentType string
+	Bytes       []byte
+	Source      string
+	Remove      bool
+}
+
 // SetCover stores (or replaces) one of userID's books' cover. The caller
 // has already checked the bytes are a cover type and size.
 func (st *Store) SetCover(ctx context.Context, userID, id int64, contentType string, data []byte, source string) error {
-	switch source {
-	case CoverFromOL, CoverUpload, CoverFromURL:
-	default:
+	if !validCoverSource(source) {
 		return ErrInvalid
 	}
 	tx, err := st.db.BeginTx(ctx, nil)
@@ -63,6 +70,23 @@ func (st *Store) SetCover(ctx context.Context, userID, id int64, contentType str
 	if err := st.touch(ctx, tx, userID, id); err != nil {
 		return err
 	}
+	if err := st.setCoverTx(ctx, tx, id, contentType, data, source); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func validCoverSource(source string) bool {
+	switch source {
+	case CoverFromOL, CoverUpload, CoverFromURL:
+		return true
+	}
+	return false
+}
+
+// setCoverTx writes the cover row; the caller has checked the book is
+// userID's and the source is valid.
+func (st *Store) setCoverTx(ctx context.Context, tx *sql.Tx, id int64, contentType string, data []byte, source string) error {
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO books_covers (book_id, content_type, bytes, source, fetched_at)
 		VALUES (?, ?, ?, ?, ?)
@@ -71,7 +95,7 @@ func (st *Store) SetCover(ctx context.Context, userID, id int64, contentType str
 		id, contentType, data, source, formatTime(st.now())); err != nil {
 		return fmt.Errorf("books: set cover: %w", err)
 	}
-	return tx.Commit()
+	return nil
 }
 
 // Cover returns one of userID's books' cover; ErrNotFound when the book
@@ -104,6 +128,15 @@ func (st *Store) RemoveCover(ctx context.Context, userID, id int64) error {
 	if err := st.touch(ctx, tx, userID, id); err != nil {
 		return err
 	}
+	if err := st.removeCoverTx(ctx, tx, userID, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// removeCoverTx drops the cover row and marks the book checked; the caller
+// has checked the book is userID's.
+func (st *Store) removeCoverTx(ctx context.Context, tx *sql.Tx, userID, id int64) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM books_covers WHERE book_id = ?`, id); err != nil {
 		return fmt.Errorf("books: remove cover: %w", err)
 	}
@@ -112,5 +145,5 @@ func (st *Store) RemoveCover(ctx context.Context, userID, id int64) error {
 		formatTime(st.now()), id, userID); err != nil {
 		return fmt.Errorf("books: remove cover: %w", err)
 	}
-	return tx.Commit()
+	return nil
 }

@@ -18,7 +18,7 @@ const MaxCandidates = 10
 
 // coverTimeout bounds one image fetch: an Open Library cover (which usually
 // redirects twice, to archive.org storage) or a pasted image address.
-const coverTimeout = 10 * time.Second
+var coverTimeout = 10 * time.Second
 
 // maxJSONBytes bounds a search or work answer; ten trimmed results are a
 // few kilobytes.
