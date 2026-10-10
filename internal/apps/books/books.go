@@ -1,6 +1,7 @@
 package books
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -28,6 +29,9 @@ type App struct {
 	// thumbSem bounds concurrent thumbnail fetches: a results page asks for
 	// up to ten at once, and Open Library is a free service.
 	thumbSem chan struct{}
+	// pause waits between the cover backfill's requests (sleep; tests
+	// make it instant).
+	pause func(context.Context, time.Duration) error
 }
 
 // New returns the app for registration in cmd/onsuite.
@@ -69,6 +73,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	})
 	a.ol = &OpenLibrary{Web: a.web, Base: "https://openlibrary.org", Covers: "https://covers.openlibrary.org", Timeout: 5 * time.Second}
 	a.thumbSem = make(chan struct{}, 4)
+	a.pause = sleep
 	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("GET /b/{id}", a.book)
 	r.HandleFunc("GET /new", a.newForm)
@@ -93,9 +98,14 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /quotes/{id}/{qid}/delete", a.act(a.deleteQuote, false))
 	r.HandleFunc("POST /tags/{id}", a.act(a.setTags, false))
 	r.HandleFunc("POST /delete/{id}", a.act(a.remove, true))
+	r.HandleFunc("POST /find-cover/{id}", a.act(a.findCover, false))
 	r.HandleFunc("GET /stats", a.stats)
 	r.HandleFunc("POST /goal", a.setGoal)
 	r.HandleFunc("POST /goal/clear", a.clearGoal)
+	r.HandleFunc("GET /import", a.importPage)
+	r.RegisterBodyLimit("POST /import", importBodyMaxBytes)
+	r.HandleFunc("POST /import", a.importUpload)
+	r.HandleFunc("GET /export", a.download)
 	r.HandleFunc("GET /cover/{id}", a.cover)
 	r.HandleFunc("GET /olcover/{id}", a.olThumb)
 	r.HandleFunc("GET /books.js", a.script("books.js"))

@@ -32,6 +32,20 @@ func fakeOpenLibrary(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /search.json", func(w http.ResponseWriter, r *http.Request) {
+		// Find cover's search, by title (B5): "Piranesi" finds the usual
+		// answer, "Broken" fails, anything else finds nothing.
+		switch r.URL.Query().Get("title") {
+		case "":
+		case "Piranesi":
+			_, _ = w.Write([]byte(searchJSON))
+			return
+		case "Broken":
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		default:
+			_, _ = w.Write([]byte(`{"docs":[{"key":"/works/OL9W","title":"No cover"}]}`))
+			return
+		}
 		switch r.URL.Query().Get("q") {
 		case "broken":
 			http.Error(w, "down", http.StatusServiceUnavailable)
@@ -61,6 +75,18 @@ func fakeOpenLibrary(t *testing.T) *httptest.Server {
 	}
 	mux.HandleFunc("GET /b/id/10226290-S.jpg", png)
 	mux.HandleFunc("GET /b/id/10226290-M.jpg", png)
+	// Covers by ISBN (B5): one found, one down, one that isn't an image;
+	// any other ISBN is the mux's own 404, Open Library's "no cover".
+	mux.HandleFunc("GET /b/isbn/9781635575637-M.jpg", png)
+	mux.HandleFunc("GET /b/isbn/9780306406157-M.jpg", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	})
+	mux.HandleFunc("GET /b/isbn/9780140449136-M.jpg", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+	})
+	mux.HandleFunc("GET /b/isbn/9780547928227-M.jpg", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<html><body>not an image</body></html>"))
+	})
 	mux.HandleFunc("GET /b/id/666-M.jpg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
 		_, _ = w.Write([]byte("<html><body>not an image</body></html>"))

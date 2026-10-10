@@ -1,10 +1,12 @@
 package books
 
 import (
+	"context"
 	"database/sql"
 	"net"
 	"net/netip"
 	"strings"
+	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/webfetch"
 )
@@ -45,4 +47,10 @@ func SnippetPartsForTest(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// NoPauseForTest makes the cover backfill's pause between requests
+// instant, counting how often it is asked for.
+func (a *App) NoPauseForTest(count *int) {
+	a.pause = func(context.Context, time.Duration) error { *count++; return nil }
 }

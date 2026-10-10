@@ -4197,7 +4197,16 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-pills { display: flex; flex-wrap: wrap; gap: var(--s-1); margin: var(--s-2) 0 0; }
 .books-pill { padding: 0 var(--s-2); border-radius: 999px; background: var(--c-bg-subtle); color: var(--c-text-dim); font-size: var(--fs-xs); }
 .books-pill-shelf { background: var(--c-accent-bg); color: var(--c-accent); }
-.books-description { max-width: 38rem; margin-bottom: var(--s-4); color: var(--c-text-dim); white-space: pre-line; }
+.books-description { max-width: 38rem; margin-bottom: var(--s-4); color: var(--c-text-dim); }
+/* A long description is held to four lines until More is ticked (#566). */
+.books-description-text { margin: 0; white-space: pre-line; }
+.books-description-text.is-clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+.books-description-toggle:checked ~ .books-description-text { display: block; -webkit-line-clamp: none; overflow: visible; }
+.books-description-more { display: inline-block; margin: var(--s-1) 0 0; color: var(--c-accent); font-size: var(--fs-sm); cursor: pointer; }
+.books-less-label,
+.books-description-toggle:checked ~ .books-description-more .books-more-label { display: none; }
+.books-description-toggle:checked ~ .books-description-more .books-less-label { display: inline; }
+.books-description-toggle:focus-visible ~ .books-description-more { outline: var(--ring); }
 
 /* Narrow screens: Reader's drill-down, with Books' ids. The back control
  * is a <label> for the checkbox, so it works with no script. */
@@ -4292,6 +4301,8 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 /* Rating and review */
 .books-rating { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); margin-bottom: var(--s-3); }
 .books-rating-label { margin-right: var(--s-1); color: var(--c-text-dim); font-size: var(--fs-sm); }
+/* The five stars wrap as one, below the label, in a narrow pane (#579). */
+.books-star-row { display: inline-flex; flex-wrap: nowrap; gap: var(--s-1); }
 .books-star { display: inline-flex; padding: var(--s-1); border: 0; background: none; color: var(--c-text-faint); cursor: pointer; }
 .books-star:hover,
 .books-star.is-on { color: var(--c-accent); }
@@ -4420,3 +4431,17 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-goal-card-head { color: var(--c-text-dim); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; flex-basis: 100%; }
 .books-goal-card-text { font-weight: 600; }
 .books-goal-card .books-row-bar { flex: 1 1 100%; width: auto; }
+
+/* Import (B5): a page of its own, as Stats is, linked under Stats in the
+ * sidebar. */
+.books-side-link { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-1) var(--s-2); border-radius: var(--radius); color: var(--c-text); text-decoration: none; }
+.books-side-link:hover { background: var(--c-bg-subtle); }
+.books-import { max-width: var(--measure); }
+.books-import-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
+.books-import-head h1 { margin: 0; }
+.books-import-result { padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); }
+.books-import-result p { margin: 0 0 var(--s-2); }
+.books-import-result p:last-child { margin-bottom: 0; }
+.books-import-count { font-weight: 600; }
+.books-import-skipped { margin: 0 0 var(--s-2); padding-left: var(--s-4); overflow-wrap: anywhere; }
+.books-import-form input[type="file"] { max-width: 100%; }

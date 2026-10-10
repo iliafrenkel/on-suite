@@ -1,5 +1,6 @@
 // ON Books' script: the delete confirmation, resizable panes, keyboard
-// shortcuts and the open book's row highlight. Vanilla and
+// shortcuts, the open book's row highlight and the panes' scroll
+// positions across a swap. Vanilla and
 // CSP-clean; the sections mirror reader.js's (apps never share app
 // scripts).
 (function () {
@@ -158,6 +159,46 @@
 	// Back/forward restores <body> from htmx's history cache: new gutters,
 	// no afterSettle (#456).
 	document.addEventListener("htmx:historyRestore", initResizablePanes);
+
+	// --- Keep the panes where they were (#578) -------------------------------
+	//
+	// A change made in the book pane — a star, the review, the tags, the
+	// format, a reading — swaps the whole panes (#books-panes), and new
+	// panes start scrolled to the top: the control just used would jump
+	// out of sight. Remember where the book pane and the list were, and put
+	// them back when the same book, and the same list, are still showing.
+	// Smaller swap targets would do it too, but every one of those actions
+	// can move the shelf counts, the list and the book at once.
+	function listKey() {
+		var list = document.getElementById("books-list");
+		if (!list) return "";
+		return ["shelf", "tag", "q", "series"].map(function (k) {
+			return list.getAttribute("data-" + k) || "";
+		}).join("\u0000");
+	}
+
+	var keptScroll = null;
+	document.addEventListener("htmx:beforeSwap", function (e) {
+		keptScroll = null;
+		if (!e.detail.shouldSwap || !e.detail.target || e.detail.target.id !== "books-panes") return;
+		var book = document.getElementById("books-book");
+		var listPane = document.querySelector(".books-listpane");
+		keptScroll = {
+			bookId: (book && book.getAttribute("data-book-id")) || "",
+			book: book ? book.scrollTop : 0,
+			listKey: listKey(),
+			list: listPane ? listPane.scrollTop : 0,
+		};
+	});
+	document.addEventListener("htmx:afterSwap", function () {
+		if (!keptScroll) return;
+		var kept = keptScroll;
+		keptScroll = null;
+		var book = document.getElementById("books-book");
+		if (book && kept.bookId !== "" && book.getAttribute("data-book-id") === kept.bookId) book.scrollTop = kept.book;
+		var listPane = document.querySelector(".books-listpane");
+		if (listPane && listKey() === kept.listKey) listPane.scrollTop = kept.list;
+	});
 
 	// --- The open book's row ------------------------------------------------
 	//

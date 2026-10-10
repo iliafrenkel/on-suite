@@ -108,6 +108,17 @@ var shots = []shot{
 	{Name: "docs/user/images/focus-running.png", URL: "/focus/run/1", Height: 660, Setup: focusRunning},
 	{Name: "docs/user/images/focus-history.png", URL: "/focus/history", Height: 1000},
 
+	// docs/user/books.md
+	// Book 1 is Leviathan Wakes, on the Reading shelf in the seed. Nothing
+	// here imports a file or presses Find cover, so no request reaches
+	// Open Library and the library stays as seeded.
+	{Name: "docs/user/images/books-panes.png", URL: "/books/b/1?shelf=reading", Height: 760},
+	{Name: "docs/user/images/books-menu.png", URL: "/books/b/1?shelf=reading", Height: 420, Setup: `
+		document.querySelector('details.books-menu').open = true;`},
+	{Name: "docs/user/images/books-add.png", URL: "/books/new", Height: 720},
+	{Name: "docs/user/images/books-stats.png", URL: "/books/stats", Height: 980},
+	{Name: "docs/user/images/books-import.png", URL: "/books/import", Height: 560},
+
 	// docs/user/admin.md
 	// Look only: nothing here adds a user, resets a password or presses
 	// Run now, so the seeded accounts and job history stay as they are.
@@ -118,7 +129,7 @@ var shots = []shot{
 
 	// README.md — the hero and one thumbnail per app, light and dark, at the
 	// default 1280×800 (thumbnails show at about half width).
-	// The hero is the dashboard, cropped: it shows all six apps at a glance.
+	// The hero is the dashboard, cropped: it shows all seven apps at a glance.
 	{Name: "docs/images/hero-light.png", URL: "/", Height: 490},
 	{Name: "docs/images/hero-dark.png", URL: "/", Height: 490, Theme: "dark"},
 	{Name: "docs/images/app-paste-light.png", URL: "/paste/7"},
@@ -129,6 +140,8 @@ var shots = []shot{
 	{Name: "docs/images/app-reader-dark.png", URL: "/reader/item/10?scope=all&filter=all", Theme: "dark", Setup: readerScrollToActive},
 	{Name: "docs/images/app-later-light.png", URL: "/later/a/1"},
 	{Name: "docs/images/app-later-dark.png", URL: "/later/a/1", Theme: "dark"},
+	{Name: "docs/images/app-books-light.png", URL: "/books/b/1?shelf=reading"},
+	{Name: "docs/images/app-books-dark.png", URL: "/books/b/1?shelf=reading", Theme: "dark"},
 	{Name: "docs/images/app-flash-light.png", URL: "/flash/2/cards/"},
 	{Name: "docs/images/app-flash-dark.png", URL: "/flash/2/cards/", Theme: "dark"},
 	{Name: "docs/images/app-focus-light.png", URL: "/focus/run/1", Setup: focusRunning},

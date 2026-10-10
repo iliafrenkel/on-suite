@@ -4,6 +4,8 @@ ON Books is a private reading log: what you're reading, what you've read,
 what you want to read next and what you gave up on. No friends, no feed —
 just your own books.
 
+![ON Books: the shelves, the books you're reading, and one of them open](images/books-panes.png)
+
 ## Shelves
 
 Every book sits on one shelf:
@@ -36,6 +38,8 @@ If the book isn't there, or Open Library doesn't answer, fill the form in
 yourself. Only the title is required. An ISBN can be the 10- or 13-digit
 kind, with or without hyphens; ON Books keeps it as 13 digits.
 
+![The Add book page: an Open Library search above the book form](images/books-add.png)
+
 Then choose where the book goes:
 
 - **Want to read** — it waits on that shelf.
@@ -55,9 +59,21 @@ JPEG, PNG, GIF and WebP images up to 2 MB work. **Remove the cover** goes
 back to the spine. ON Books keeps its own copy of every cover, so they show
 even if the original disappears.
 
+A book without a cover offers **⋯ → Find cover**, which asks Open Library
+for one straight away: by its ISBN, or by its title and author when it has
+no ISBN or Open Library has no cover for it. If there's none to be had, ON
+Books says so, and you can add one yourself with **Edit details**.
+
+![The ⋯ menu of a book: Edit details, Find cover and Delete](images/books-menu.png)
+
+Books with an ISBN but no cover — books you imported, say — get theirs in
+the background, a few every few minutes, so a big import fills in over a
+few hours. A cover you remove stays removed.
+
 ## Reading a book
 
-Pick a book in the list to open it on the right.
+Pick a book in the list to open it on the right. A long description is
+cut short after a few lines; **More** shows the rest.
 
 - **Start reading** starts it today and moves it to Reading.
 - **Finish** asks for the day you finished — today, unless you change it —
@@ -158,6 +174,58 @@ Open a book and use the **⋯** menu: **Edit details** changes the title,
 author and the rest; **Delete** removes the book for good, with its
 readings, notes and quotes.
 
+## Importing from Goodreads
+
+**Import from Goodreads**, at the bottom of the sidebar, brings your
+Goodreads library over in one go. In Goodreads, open **My Books**, choose
+**Import and export** under Tools, and click **Export Library**. Download
+the file when it's ready, choose it on the import page and click
+**Import**. Files up to 10 MB work — a few thousand books.
+
+![The import page, with the steps and the upload box](images/books-import.png)
+
+Each book comes over with:
+
+- its shelf: *read* books are finished on the day you read them,
+  *currently-reading* books are being read since the day you added them,
+  and *to-read* books wait on Want to read. A book you read more than once
+  gets an earlier reading, without dates, for each time before.
+- your rating (a book you didn't rate has none), your review, and your
+  private notes, as a note dated the day you added the book;
+- the day you added it, the number of pages, the year it first came out
+  and its ISBN;
+- its series, when Goodreads puts one in the title — "Leviathan Wakes
+  (The Expanse, #1)" becomes Leviathan Wakes, The Expanse #1;
+- its format, when the binding says — a Kindle edition is an ebook, an
+  Audible one an audiobook, a paperback or hardcover paper;
+- your other Goodreads shelves, as tags. A shelf of your own that takes
+  the place of read or to-read, like *owned*, becomes a tag too, and the
+  book goes on Want to read.
+- a book on a shelf called *dnf*, *did-not-finish* or *abandoned* goes on
+  Did not finish instead, stopped on the day Goodreads says you read it,
+  if it says.
+
+A book that's already in your library is skipped: the same ISBN, or —
+when one of the two has no ISBN — the same title and author. So importing
+the same file twice adds nothing new. When it's done, the page says how
+many books came in, and which ones were skipped.
+
+If something in the file can't be read, nothing is imported, and the page
+says which line of the file is wrong.
+
+## Exporting your books
+
+**Export as Markdown**, at the bottom of the sidebar, downloads your whole
+library as one file, `books-export.md`: every book with its details and
+description, your readings, rating and review, notes and quotes, in
+alphabetical order.
+Markdown is plain text, so it opens in any text editor and outlives any
+app.
+
+ON Books is also part of the [complete export](admin.md#exporting-someones-data)
+an admin can make of everything you keep in ON Suite. Covers aren't in
+either.
+
 ## Reading goal and stats
 
 **Stats**, at the bottom of the sidebar, opens a page of numbers about your
@@ -186,6 +254,8 @@ For the year you get:
 - How many you read on paper, as ebooks and as audiobooks, and the
   longest and shortest book you finished.
 - A chart of the books you finished each month.
+
+![The Stats page: this year's goal, numbers and a chart of books finished by month](images/books-stats.png)
 
 Under **All time** are the same three numbers for everything you've read,
 and a chart of the books you finished each year. A book you added as read

@@ -92,8 +92,8 @@ func TestIndexOpensOnTheReadingShelf(t *testing.T) {
 		t.Errorf("rows = %v, want [Dune]", got)
 	}
 	current := doc.MustHave(`.books-side a[aria-current="page"]`)
-	if text := htmlassert.Text(current); !strings.HasPrefix(text, "Reading") || !strings.HasSuffix(text, "1") {
-		t.Errorf("current shelf link = %q, want Reading with count 1", text)
+	if text := htmlassert.Text(current); text != "Reading, 1 book" {
+		t.Errorf("current shelf link = %q, want Reading with count 1, read out as \"Reading, 1 book\" (#568)", text)
 	}
 	doc.MustHave(`a[href="/books/new"]`)
 	doc.MustHave(".books-book .empty")
