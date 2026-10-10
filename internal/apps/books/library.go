@@ -243,12 +243,47 @@ func (st *Store) Get(ctx context.Context, userID, id int64) (Book, error) {
 // Update replaces a book's details. Readings and tags are untouched. A
 // new ISBN clears cover_checked_at, so the backfill looks again.
 func (st *Store) Update(ctx context.Context, userID, id int64, in BookInput) error {
+	return st.updateBook(ctx, st.db, userID, id, in)
+}
+
+// UpdateWithCover is Update plus a cover change (a new image, a removal or
+// nothing) in one transaction: if the cover can't be written, the details
+// aren't saved either. The image is already in hand; nothing here fetches.
+func (st *Store) UpdateWithCover(ctx context.Context, userID, id int64, in BookInput, ch CoverChange) error {
+	if ch.Source != "" && !validCoverSource(ch.Source) {
+		return ErrInvalid
+	}
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("books: begin update: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := st.updateBook(ctx, tx, userID, id, in); err != nil {
+		return err
+	}
+	switch {
+	case ch.Source != "":
+		err = st.setCoverTx(ctx, tx, id, ch.ContentType, ch.Bytes, ch.Source)
+	case ch.Remove:
+		err = st.removeCoverTx(ctx, tx, userID, id)
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// execer is what *sql.DB and *sql.Tx share.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func (st *Store) updateBook(ctx context.Context, ex execer, userID, id int64, in BookInput) error {
 	in = in.Normalize()
 	if errs := in.Validate(); errs != nil {
 		return &ValidationError{Fields: errs}
 	}
-	res, err := st.db.ExecContext(ctx, `
-		UPDATE books_books
+	res, err := ex.ExecContext(ctx, `		UPDATE books_books
 		   SET title = ?, subtitle = ?, authors = ?, year = ?, pages = ?, isbn13 = ?,
 		       series_name = ?, series_number = ?, description = ?, updated_at = ?,
 		       cover_checked_at = CASE WHEN isbn13 IS ? THEN cover_checked_at END
