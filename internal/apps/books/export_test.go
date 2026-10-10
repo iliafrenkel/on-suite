@@ -54,3 +54,11 @@ func SnippetPartsForTest(s string) string {
 func (a *App) NoPauseForTest(count *int) {
 	a.pause = func(context.Context, time.Duration) error { *count++; return nil }
 }
+
+// OLIDForTest, CoverIDTextForTest and EditFormMaxBytes expose the form's
+// id cleaning and the edit form's body limit to the boundary tests.
+func OLIDForTest(s string, kind byte) string { return olID(s, kind) }
+
+func CoverIDTextForTest(s string) string { return coverIDText(s) }
+
+const EditFormMaxBytes = editFormMaxBytes
