@@ -2,6 +2,8 @@ package books
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -86,8 +88,14 @@ func (st *Store) closeReading(ctx context.Context, userID, id int64, day string,
 		if err := checkProgress(u, a.pages, at); err != nil {
 			return err
 		}
-		if err := insertProgress(ctx, tx, a.id, u, at, formatTime(st.now())); err != nil {
+		same, err := latestProgressIs(ctx, tx, a.id, u, at)
+		if err != nil {
 			return err
+		}
+		if !same { // the prefilled "Stopped at" repeats the last row: not new reading
+			if err := insertProgress(ctx, tx, a.id, u, at, formatTime(st.now())); err != nil {
+				return err
+			}
 		}
 	}
 	if rating != 0 {
@@ -100,6 +108,25 @@ func (st *Store) closeReading(ctx context.Context, userID, id int64, day string,
 		return fmt.Errorf("books: close reading: %w", err)
 	}
 	return tx.Commit()
+}
+
+// latestProgressIs reports whether the reading's newest progress row holds
+// value in unit u.
+func latestProgressIs(ctx context.Context, tx *sql.Tx, readingID int64, u Unit, value int) (bool, error) {
+	var page, percent sql.NullInt64
+	err := tx.QueryRowContext(ctx, `
+		SELECT page, percent FROM books_progress
+		 WHERE reading_id = ? ORDER BY recorded_at DESC, id DESC LIMIT 1`, readingID).Scan(&page, &percent)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("books: latest progress: %w", err)
+	}
+	if u == UnitPage {
+		return page.Valid && int(page.Int64) == value, nil
+	}
+	return percent.Valid && int(percent.Int64) == value, nil
 }
 
 // ShowDay formats a stored date for people: "2026-10-09" → "9 Oct 2026".

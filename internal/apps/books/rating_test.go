@@ -118,3 +118,39 @@ func TestSetReview(t *testing.T) {
 		t.Errorf("review after clearing = %q", b.Review)
 	}
 }
+
+func TestDNFAtTheLatestProgressAddsNoRow(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	count := func() int {
+		var n int
+		if err := f.db.QueryRow(`SELECT count(*) FROM books_progress`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	id := inProgress(t, f, "Infinite Jest", 1079)
+	if err := f.store.RecordProgress(ctx, f.alice.ID, id, 250); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.MarkDNF(ctx, f.alice.ID, id, "", 250); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 1 {
+		t.Errorf("progress rows after DNF at the same page = %d, want 1", n)
+	}
+	if b := getBook(t, f, f.alice.ID, id); b.Shelf != books.ShelfDNF || b.Progress.Value != 250 {
+		t.Errorf("after DNF: shelf %q, progress %+v; want dnf at 250", b.Shelf, b.Progress)
+	}
+
+	other := inProgress(t, f, "Emma", 500)
+	if err := f.store.RecordProgress(ctx, f.alice.ID, other, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.MarkDNF(ctx, f.alice.ID, other, "", 120); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 3 {
+		t.Errorf("progress rows after DNF at a different page = %d, want 3", n)
+	}
+}
