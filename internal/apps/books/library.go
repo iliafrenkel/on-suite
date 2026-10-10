@@ -283,7 +283,8 @@ func (st *Store) updateBook(ctx context.Context, ex execer, userID, id int64, in
 	if errs := in.Validate(); errs != nil {
 		return &ValidationError{Fields: errs}
 	}
-	res, err := ex.ExecContext(ctx, `		UPDATE books_books
+	res, err := ex.ExecContext(ctx, `
+		UPDATE books_books
 		   SET title = ?, subtitle = ?, authors = ?, year = ?, pages = ?, isbn13 = ?,
 		       series_name = ?, series_number = ?, description = ?, updated_at = ?,
 		       cover_checked_at = CASE WHEN isbn13 IS ? THEN cover_checked_at END

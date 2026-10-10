@@ -164,9 +164,10 @@ func TestSearchCleansNonPositiveNumbers(t *testing.T) {
 	}
 }
 
-// A cover fetch gives up when its context does, instead of hanging on a
-// slow Open Library (the client's own bound is coverTimeout, 10s).
-func TestCoverFetchGivesUpWhenTheServerHangs(t *testing.T) {
+// A cover fetch gives up at the client's own bound (coverTimeout), with no
+// help from the caller's context.
+func TestCoverFetchGivesUpAtItsOwnTimeout(t *testing.T) {
+	books.SetCoverTimeoutForTest(t, 150*time.Millisecond)
 	release := make(chan struct{})
 	srv := olServer(t, map[string]http.HandlerFunc{
 		"GET /b/id/1-M.jpg": func(w http.ResponseWriter, r *http.Request) {
@@ -177,14 +178,12 @@ func TestCoverFetchGivesUpWhenTheServerHangs(t *testing.T) {
 		},
 	})
 	defer close(release)
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
-	defer cancel()
 	start := time.Now()
-	if _, _, err := clientFor(srv).Cover(ctx, 1, "M"); err == nil {
+	if _, _, err := clientFor(srv).Cover(context.Background(), 1, "M"); err == nil {
 		t.Fatal("Cover from a hanging server succeeded, want an error")
 	}
 	if d := time.Since(start); d > 3*time.Second {
-		t.Errorf("Cover took %v to give up", d)
+		t.Errorf("Cover took %v to give up, want about the client's 150ms bound", d)
 	}
 }
 
@@ -261,6 +260,9 @@ func TestThumbnailsAreFetchedFourAtATime(t *testing.T) {
 	var inFlight, peak atomic.Int32
 	arrived := make(chan struct{}, requests)
 	release := make(chan struct{})
+	var once sync.Once
+	open := func() { once.Do(func() { close(release) }) }
+	defer open() // never leave handlers blocked, whichever way the test ends
 	s := olTestServer(t, map[string]http.HandlerFunc{
 		"GET /b/id/{id}": func(w http.ResponseWriter, r *http.Request) {
 			n := inFlight.Add(1)
@@ -280,11 +282,13 @@ func TestThumbnailsAreFetchedFourAtATime(t *testing.T) {
 		},
 	})
 	var wg sync.WaitGroup
+	codes := make(chan int, requests)
 	for i := 0; i < requests; i++ {
 		wg.Add(1)
-		go func() {
+		go func() { // no t.Fatal-capable helpers off the test goroutine
 			defer wg.Done()
-			get(t, s, s.Alice, fmt.Sprintf("/books/olcover/%d", i+1))
+			req := httptest.NewRequest("GET", fmt.Sprintf("/books/olcover/%d", i+1), nil)
+			codes <- s.Do(t, s.Alice, req).Code
 		}()
 	}
 	for i := 0; i < 4; i++ { // the first four get through
@@ -299,8 +303,14 @@ func TestThumbnailsAreFetchedFourAtATime(t *testing.T) {
 		t.Error("a fifth thumbnail reached Open Library while four were in flight")
 	case <-time.After(300 * time.Millisecond):
 	}
-	close(release)
+	open()
 	wg.Wait()
+	close(codes)
+	for code := range codes {
+		if code != http.StatusOK {
+			t.Errorf("a thumbnail answered %d, want 200", code)
+		}
+	}
 	if got := peak.Load(); got != 4 {
 		t.Errorf("peak concurrent upstream fetches = %d, want 4", got)
 	}

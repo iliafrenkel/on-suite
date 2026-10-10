@@ -154,3 +154,80 @@ func TestDNFAtTheLatestProgressAddsNoRow(t *testing.T) {
 		t.Errorf("progress rows after DNF at a different page = %d, want 3", n)
 	}
 }
+
+// The "Stopped at" repeat check works in the reading's own unit: for a
+// percent reading, the same percent adds no row and a different one does.
+func TestDNFAtTheLatestPercentAddsNoRow(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	rows := func() int {
+		var n int
+		if err := f.db.QueryRow(`SELECT count(*) FROM books_progress`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	for name, pages := range map[string]int{"no page count": 0, "audiobook": 300} {
+		t.Run(name, func(t *testing.T) {
+			before := rows()
+			same := inProgress(t, f, "Same "+name, pages)
+			if pages > 0 {
+				setFormat(t, f, same, "audio")
+			}
+			if err := f.store.RecordProgress(ctx, f.alice.ID, same, 40); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.store.MarkDNF(ctx, f.alice.ID, same, "", 40); err != nil {
+				t.Fatal(err)
+			}
+			if n := rows() - before; n != 1 {
+				t.Errorf("rows after DNF at the same percent = %d, want 1", n)
+			}
+			if b := getBook(t, f, f.alice.ID, same); b.Shelf != books.ShelfDNF || b.Progress.Unit != books.UnitPercent || b.Progress.Value != 40 {
+				t.Errorf("after DNF: shelf %q, progress %+v; want dnf at 40%%", b.Shelf, b.Progress)
+			}
+
+			before = rows()
+			other := inProgress(t, f, "Other "+name, pages)
+			if pages > 0 {
+				setFormat(t, f, other, "audio")
+			}
+			if err := f.store.RecordProgress(ctx, f.alice.ID, other, 40); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.store.MarkDNF(ctx, f.alice.ID, other, "", 55); err != nil {
+				t.Fatal(err)
+			}
+			if n := rows() - before; n != 2 {
+				t.Errorf("rows after DNF at a different percent = %d, want 2", n)
+			}
+			if b := getBook(t, f, f.alice.ID, other); b.Progress.Value != 55 {
+				t.Errorf("progress = %+v, want 55%%", b.Progress)
+			}
+		})
+	}
+}
+
+// An earlier row in another unit is not "the same": 50% recorded before the
+// book had a page count must not swallow a stop at page 50 now.
+func TestDNFAtTheSameNumberInAnotherUnitAddsARow(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	id := inProgress(t, f, "Emma", 0) // no pages yet: progress is a percent
+	if err := f.store.RecordProgress(ctx, f.alice.ID, id, 50); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.Update(ctx, f.alice.ID, id, books.BookInput{Title: "Emma", Pages: 500}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.MarkDNF(ctx, f.alice.ID, id, "", 50); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := f.db.QueryRow(`SELECT count(*) FROM books_progress`).Scan(&n); err != nil || n != 2 {
+		t.Errorf("progress rows = %d, %v; want 2 (the percent row and the new page row)", n, err)
+	}
+	if b := getBook(t, f, f.alice.ID, id); b.Progress.Unit != books.UnitPage || b.Progress.Value != 50 {
+		t.Errorf("progress = %+v, want page 50", b.Progress)
+	}
+}

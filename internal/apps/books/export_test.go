@@ -62,3 +62,15 @@ func OLIDForTest(s string, kind byte) string { return olID(s, kind) }
 func CoverIDTextForTest(s string) string { return coverIDText(s) }
 
 const EditFormMaxBytes = editFormMaxBytes
+
+// SetCoverTimeoutForTest shortens the bound on one cover fetch until the
+// test ends. Tests that use it must not run in parallel.
+func SetCoverTimeoutForTest(t interface {
+	Helper()
+	Cleanup(func())
+}, d time.Duration) {
+	t.Helper()
+	old := coverTimeout
+	coverTimeout = d
+	t.Cleanup(func() { coverTimeout = old })
+}
