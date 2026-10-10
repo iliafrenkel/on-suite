@@ -108,7 +108,7 @@ func TestBackfillFetchesMissingCoversByISBN(t *testing.T) {
 	}
 }
 
-func TestBackfillStopsWhenOpenLibraryFails(t *testing.T) {
+func TestBackfillReportsAFailedLookup(t *testing.T) {
 	s, a, _ := newBooksApp(t)
 	down := withISBN(t, s, s.Alice.User.ID, "Down", "9780306406157")
 	if err := runBackfill(t, a); err == nil {
@@ -116,6 +116,75 @@ func TestBackfillStopsWhenOpenLibraryFails(t *testing.T) {
 	}
 	if checkedAt(t, s, down) != "" {
 		t.Error("a failed lookup marked the book checked; it should be tried again")
+	}
+}
+
+func TestBackfillGoesPastOneBadBook(t *testing.T) {
+	s, a, _ := newBooksApp(t)
+	ctx := context.Background()
+	uid := s.Alice.User.ID
+	bad := withISBN(t, s, uid, "Forbidden", "9780140449136")
+	good := withISBN(t, s, uid, "Piranesi", "9781635575637")
+	miss := withISBN(t, s, uid, "Leviathan Wakes", "9780316129084")
+
+	if err := runBackfill(t, a); err == nil {
+		t.Error("run with a failed lookup = nil, want the failure on the jobs page")
+	}
+	if _, err := s.Store.Cover(ctx, uid, good); err != nil {
+		t.Errorf("the book after the failing one got no cover: %v", err)
+	}
+	if checkedAt(t, s, miss) == "" {
+		t.Error("the miss after the failing one wasn't marked checked")
+	}
+	if checkedAt(t, s, bad) != "" {
+		t.Error("the failing book was marked checked; it should be retried")
+	}
+}
+
+func TestBackfillStopsAfterThreeFailuresInARow(t *testing.T) {
+	s, a, _ := newBooksApp(t)
+	ctx := context.Background()
+	uid := s.Alice.User.ID
+	for i := 0; i < 3; i++ {
+		withISBN(t, s, uid, "Down", "9780306406157")
+	}
+	later := withISBN(t, s, uid, "Piranesi", "9781635575637")
+	if err := runBackfill(t, a); err == nil {
+		t.Fatal("run = nil, want the failures")
+	}
+	if _, err := s.Store.Cover(ctx, uid, later); err == nil {
+		t.Error("the run went on past three failures in a row")
+	}
+}
+
+func TestBackfillResetsTheFailureCountOnASuccess(t *testing.T) {
+	s, a, _ := newBooksApp(t)
+	ctx := context.Background()
+	uid := s.Alice.User.ID
+	for _, isbn := range []string{"9780306406157", "9780306406157", "9781635575637", "9780306406157", "9780306406157"} {
+		withISBN(t, s, uid, "Book", isbn)
+	}
+	last := withISBN(t, s, uid, "Piranesi", "9781635575637")
+	if err := runBackfill(t, a); err == nil {
+		t.Fatal("run = nil, want the failures")
+	}
+	if _, err := s.Store.Cover(ctx, uid, last); err != nil {
+		t.Errorf("two failures, a success, two failures stopped the run: %v", err)
+	}
+}
+
+func TestBackfillStopsWhenCancelled(t *testing.T) {
+	s, a, _ := newBooksApp(t)
+	uid := s.Alice.User.ID
+	first := withISBN(t, s, uid, "Piranesi", "9781635575637")
+	withISBN(t, s, uid, "Leviathan Wakes", "9780316129084")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := a.BackfillCovers(ctx, 25); err == nil {
+		t.Error("a cancelled run = nil, want its error")
+	}
+	if checkedAt(t, s, first) != "" {
+		t.Error("a cancelled run marked a book checked")
 	}
 }
 

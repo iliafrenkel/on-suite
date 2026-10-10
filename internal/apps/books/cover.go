@@ -108,8 +108,8 @@ func (st *Store) RemoveCover(ctx context.Context, userID, id int64) error {
 		return fmt.Errorf("books: remove cover: %w", err)
 	}
 	// A cover taken off by hand stays off: the backfill skips the book.
-	if _, err := tx.ExecContext(ctx, `UPDATE books_books SET cover_checked_at = ? WHERE id = ?`,
-		formatTime(st.now()), id); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE books_books SET cover_checked_at = ? WHERE id = ? AND user_id = ?`,
+		formatTime(st.now()), id, userID); err != nil {
 		return fmt.Errorf("books: remove cover: %w", err)
 	}
 	return tx.Commit()

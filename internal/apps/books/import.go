@@ -20,8 +20,9 @@ type ImportResult struct {
 // transaction, so it is all or nothing (spec "Import (B5)"). A row is
 // skipped when the library — or an earlier row — already has the book:
 // the same ISBN-13; or, when either of the two has no ISBN, the same
-// title and authors ignoring case, spaces and punctuation (decided 2026-10-10 while planning B5,
-// so a book typed in without an ISBN isn't imported a second time).
+// title and authors ignoring case, spaces and punctuation (decided
+// 2026-10-10 while planning B5, so a book typed in without an ISBN isn't
+// imported a second time).
 // Imported books reach books_search through its insert trigger, like any
 // other book.
 func (st *Store) Import(ctx context.Context, userID int64, rows []ImportBook) (ImportResult, error) {
@@ -117,9 +118,8 @@ func libraryKeys(ctx context.Context, tx *sql.Tx, userID int64) (keySet, error) 
 }
 
 // importBook writes one row: the book, its readings, its note and its
-// tags. Earlier
-// reads go in first, so the main reading is the latest and decides the
-// shelf (latestJoin breaks the created_at tie by id).
+// tags. Earlier reads go in first, so the main reading is the latest and
+// decides the shelf (latestJoin breaks the created_at tie by id).
 func importBook(ctx context.Context, tx *sql.Tx, userID int64, b ImportBook, now string) error {
 	added, changed := now, now
 	if b.AddedOn != "" {

@@ -81,6 +81,9 @@ func fakeOpenLibrary(t *testing.T) *httptest.Server {
 	mux.HandleFunc("GET /b/isbn/9780306406157-M.jpg", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "down", http.StatusServiceUnavailable)
 	})
+	mux.HandleFunc("GET /b/isbn/9780140449136-M.jpg", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+	})
 	mux.HandleFunc("GET /b/isbn/9780547928227-M.jpg", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("<html><body>not an image</body></html>"))
 	})

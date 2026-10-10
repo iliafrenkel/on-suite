@@ -20,6 +20,9 @@ const (
 	coverBackfillEvery = 5 * time.Minute
 	coverBackfillBatch = 25
 	coverBackfillPause = time.Second
+	// A run gives up after this many failed lookups in a row: Open
+	// Library is probably down, so the rest wait for the next run.
+	coverBackfillMaxFailures = 3
 )
 
 // ErrNoCover is Open Library having no cover for a book: a 404, or an
@@ -107,19 +110,22 @@ func (st *Store) MarkCoverChecked(ctx context.Context, userID, id int64) error {
 }
 
 // BackfillCovers looks for up to batch missing covers by ISBN, pausing
-// between requests. A miss marks the book checked; any other failure
-// stops the run and is its error — Open Library is down, so the rest can
-// wait for the next run. It returns how many covers it stored.
+// between requests. A miss marks the book checked. Any other failure is
+// logged and the run moves on, leaving that book unmarked for a later run,
+// so one bad book can't hold up the rest; after coverBackfillMaxFailures in
+// a row the run stops early. A success or a miss resets the count. It
+// returns how many covers it stored, and the failures joined as its error.
 func (a *App) BackfillCovers(ctx context.Context, batch int) (int, error) {
 	cs, err := a.store.CoverCandidates(ctx, batch)
 	if err != nil {
 		return 0, err
 	}
-	stored := 0
+	stored, inARow := 0, 0
+	var errs []error
 	for i, c := range cs {
 		if i > 0 {
 			if err := a.pause(ctx, coverBackfillPause); err != nil {
-				return stored, err
+				return stored, errors.Join(append(errs, err)...)
 			}
 		}
 		ct, data, err := a.ol.CoverByISBN(ctx, c.ISBN)
@@ -130,12 +136,23 @@ func (a *App) BackfillCovers(ctx context.Context, batch int) (int, error) {
 			if err = a.store.FillCover(ctx, c.UserID, c.ID, ct, data); err == nil {
 				stored++
 			}
+		default:
+			if ctx.Err() != nil {
+				return stored, errors.Join(append(errs, err)...)
+			}
+			a.deps.Log.Info("books cover backfill failed", "book", c.ID, "error", err)
+			errs = append(errs, fmt.Errorf("book %d: %w", c.ID, err))
+			if inARow++; inARow >= coverBackfillMaxFailures {
+				return stored, errors.Join(errs...)
+			}
+			continue
 		}
-		if err != nil {
-			return stored, err
+		if err != nil { // the database, not Open Library
+			return stored, errors.Join(append(errs, err)...)
 		}
+		inARow = 0
 	}
-	return stored, nil
+	return stored, errors.Join(errs...)
 }
 
 // sleep waits d, or until ctx is done: the backfill's pause between
