@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,7 +83,12 @@ func TestSchemaAllowsOneReadingInProgressPerBook(t *testing.T) {
 	if _, err := f.db.Exec(insert, id, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.db.Exec(insert, id, now); err == nil {
+	_, err = f.db.Exec(insert, id, now)
+	if err == nil {
 		t.Fatal("inserted a second reading in progress, want a unique-index failure")
+	}
+	// A unique violation, not some other failure (a bad column, a locked database).
+	if !strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		t.Errorf("error = %v, want a UNIQUE constraint failure", err)
 	}
 }
