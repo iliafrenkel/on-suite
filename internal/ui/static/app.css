@@ -4254,14 +4254,22 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-list-list .books-item-authors { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .books-list-list .books-item-meta { display: flex; flex-direction: column; align-items: flex-end; flex: 0 0 auto; max-width: 40%; text-align: right; }
 
-/* Phone: the sidebar is a drawer over the books */
+/* Phone: the sidebar is a drawer over the books. On a wider screen the
+   checkbox that drives it has nothing to do, so it leaves the tab order. */
+@media (min-width: 641px) {
+	.books-drawer-toggle { display: none; }
+}
 #books-drawer:focus-visible ~ .books-main .books-drawer-btn { outline: var(--ring); }
 @media (max-width: 640px) {
 	.books-home { --books-chrome: calc(8rem + var(--s-4) * 2); }
-	.books-home > .pane-gutter,
-	.books-heading { display: none; }
-	.books-side { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: min(18rem, 85%); transform: translateX(-105%); transition: transform 0.2s ease; box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2); }
-	.books-drawer-toggle:checked ~ .books-side { transform: none; }
+	.books-home > .pane-gutter { display: none; }
+	/* The drawer button names the list; the <h1> stays for screen readers
+	   (same properties as .visually-hidden). */
+	.books-heading { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+	/* visibility keeps the closed drawer's links out of the tab order; it
+	   flips after the slide-out ends, and at once when the drawer opens. */
+	.books-side { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: min(18rem, 85%); transform: translateX(-105%); visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s; box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2); }
+	.books-drawer-toggle:checked ~ .books-side { transform: none; visibility: visible; transition-delay: 0s; }
 	.books-drawer-toggle:checked ~ .books-drawer-dim { display: block; position: absolute; inset: 0; z-index: 2; background: rgba(0, 0, 0, 0.35); }
 	.books-drawer-btn { display: inline-flex; max-width: 100%; }
 	.books-drawer-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -4284,6 +4292,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-page-actions { display: flex; align-items: center; gap: var(--s-1); }
 .books-page-actions form { margin: 0; }
 .books-delete { color: var(--c-danger); }
+.books-delete:hover { color: var(--c-danger); background: var(--c-danger-bg); }
 .books-banner { margin: 0 0 var(--s-3); }
 
 /* Book */

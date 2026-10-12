@@ -291,6 +291,10 @@
 		if (!home && !page) return;
 		if (isTyping(e.target)) {
 			if (e.key !== "Escape") return;
+			if (e.target.id === "books-drawer") {
+				e.target.checked = false;
+				return;
+			}
 			if (e.target.id === "books-q" || e.target.id === "books-progress-input") {
 				e.target.blur();
 				return;

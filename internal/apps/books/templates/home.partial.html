@@ -48,7 +48,7 @@
 
 {{/* drawer-toggle is the phone drawer's checkbox; a sibling before the
      sidebar so the CSS reaches it with ~. Takes a bool: out of band. */}}
-{{define "drawer-toggle"}}<input type="checkbox" id="books-drawer" class="visually-hidden books-drawer-toggle" aria-label="Show the shelves"{{if .}} hx-swap-oob="true"{{end}}>{{end}}
+{{define "drawer-toggle"}}<input type="checkbox" id="books-drawer" class="visually-hidden books-drawer-toggle"{{if .}} hx-swap-oob="true"{{end}}>{{end}}
 
 {{/* toolbar-head is the list's name and count, and on a phone the button
      that opens the drawer, named after the list. Takes a dict: List (a
@@ -75,7 +75,7 @@
 	</select>
 	<noscript><button type="submit" class="toolbar-btn">Sort</button></noscript>
 	<button type="submit" id="books-reverse" class="toolbar-btn books-icon-btn" name="reversed" value="{{if .Prefs.Reversed}}0{{else}}1{{end}}"
-	        aria-pressed="{{if .Prefs.Reversed}}true{{else}}false{{end}}" aria-label="Reverse the order (now {{.Prefs.DirLabel}})" title="{{.Prefs.DirLabel}}"{{if .Prefs.SortFixed}} disabled{{end}}>{{if .Prefs.Reversed}}{{ticon "arrow-up"}}{{else}}{{ticon "arrow-down"}}{{end}}</button>
+	        aria-pressed="{{if .Prefs.Reversed}}true{{else}}false{{end}}" {{if .Prefs.SortFixed}}aria-label="Reverse the order (a series is in reading order)" title="A series is in reading order"{{else}}aria-label="Reverse the order (now {{.Prefs.DirLabel}})" title="{{.Prefs.DirLabel}}"{{end}}{{if .Prefs.SortFixed}} disabled{{end}}>{{if .Prefs.Reversed}}{{ticon "arrow-up"}}{{else}}{{ticon "arrow-down"}}{{end}}</button>
 	<span class="books-views" role="group" aria-label="View">
 		<button type="submit" id="books-view-grid" class="toolbar-btn books-icon-btn" name="view" value="grid" aria-label="Grid" title="{{if .Prefs.ViewFixed}}Search results show as a list{{else}}Grid{{end}}"
 		        aria-pressed="{{if eq .Prefs.View "grid"}}true{{else}}false{{end}}"{{if .Prefs.ViewFixed}} disabled{{end}}>{{ticon "grid"}}</button>

@@ -200,3 +200,55 @@ func TestTheSidebarHasTheLinksAndNoAddButton(t *testing.T) {
 		doc.MustHave(fmt.Sprintf(`.books-side-foot a[href="%s"]`, href))
 	}
 }
+
+func TestTheDrawerLabelsShareOneCheckbox(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/books/")
+	for _, sel := range []string{"label.books-drawer-btn", "label.books-drawer-dim"} {
+		if got := attr(t, doc, sel, "for"); got != "books-drawer" {
+			t.Errorf("%s for = %q, want books-drawer", sel, got)
+		}
+	}
+	if got := attr(t, doc, "input#books-drawer", "type"); got != "checkbox" {
+		t.Errorf("#books-drawer type = %q, want checkbox", got)
+	}
+	// The visible label names the checkbox (WCAG 2.5.3), so it carries no
+	// aria-label of its own.
+	if _, ok := htmlassert.Attr(doc.MustHave("input#books-drawer"), "aria-label"); ok {
+		t.Error("#books-drawer has an aria-label; its visible label should name it")
+	}
+}
+
+func TestIconOnlyButtonsHaveNames(t *testing.T) {
+	s := newServer(t)
+	id := add(t, s, s.Alice.User.ID, titled("Emma", "Jane Austen", books.ShelfReading))
+
+	doc := s.Get(t, s.Alice, "/books/")
+	for _, sel := range []string{"#books-reverse", "#books-view-grid", "#books-view-list"} {
+		if attr(t, doc, sel, "aria-label") == "" {
+			t.Errorf("%s has no aria-label", sel)
+		}
+	}
+	if got := attr(t, doc, `.books-toolbar a[href="/books/new"]`, "aria-label"); got != "Add book" {
+		t.Errorf("Add link aria-label = %q, want Add book", got)
+	}
+
+	doc = s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", id))
+	if got := attr(t, doc, ".books-edit-link", "aria-label"); got != "Edit details" {
+		t.Errorf("edit link aria-label = %q, want Edit details", got)
+	}
+	if got := attr(t, doc, ".books-delete", "aria-label"); got != "Delete book" {
+		t.Errorf("delete button aria-label = %q, want Delete book", got)
+	}
+}
+
+func TestAFixedSeriesOrderIsNotCalledReversible(t *testing.T) {
+	s := newServer(t)
+	doc := s.Get(t, s.Alice, "/books/?shelf=all&series=Dune")
+	if got := attr(t, doc, "#books-reverse", "title"); got != "A series is in reading order" {
+		t.Errorf("reverse title on a series = %q", got)
+	}
+	if got := attr(t, doc, "#books-reverse", "aria-label"); got != "Reverse the order (a series is in reading order)" {
+		t.Errorf("reverse aria-label on a series = %q", got)
+	}
+}
