@@ -70,7 +70,8 @@ func (a *App) lookUpCover(ctx context.Context, b Book) (string, []byte, error) {
 // with the new cover and a notice; finding none, or Open Library not
 // answering, with the reason by the cover, as a 422. Only the cover is
 // saved. The lookup uses the form's ISBN, title and author when the form
-// would save, the saved book's otherwise. A file chosen in the upload box
+// would save, the saved book's otherwise; a miss marks the book checked
+// only when that was the saved ISBN. A file chosen in the upload box
 // isn't kept: a browser can't refill one.
 func (a *App) findCover(w http.ResponseWriter, r *http.Request) {
 	uid, ok := a.userID(w, r)
@@ -98,9 +99,14 @@ func (a *App) findCover(w http.ResponseWriter, r *http.Request) {
 	var msg string
 	switch {
 	case errors.Is(err, ErrNoCover):
-		if err := a.store.MarkCoverChecked(ctx, uid, id); err != nil {
-			a.fail(w, r, err)
-			return
+		// The backfill looks up the saved ISBN. A miss on a typed one that
+		// is never saved (Cancel) says nothing about it, so only a lookup
+		// of the saved ISBN marks the book checked (#598).
+		if look.ISBN == b.ISBN {
+			if err := a.store.MarkCoverChecked(ctx, uid, id); err != nil {
+				a.fail(w, r, err)
+				return
+			}
 		}
 		msg = "Open Library has no cover for this book. You can upload one, or paste the address of one."
 	case err != nil:

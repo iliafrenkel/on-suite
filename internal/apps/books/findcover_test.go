@@ -179,6 +179,36 @@ func TestFindCoverLooksUpWhatTheFormSays(t *testing.T) {
 	}
 }
 
+// A miss marks the book checked only when the saved ISBN is the one looked
+// up: the backfill looks up the saved ISBN, so a miss on an ISBN that was
+// typed and never saved (the Edit page cancelled) mustn't stop it (#598).
+func TestFindCoverMarksCheckedOnlyForTheSavedISBN(t *testing.T) {
+	s, _, _ := newBooksApp(t)
+	uid := s.Alice.User.ID
+	find := func(id int64, isbn string) {
+		t.Helper()
+		rec := s.Post(t, s.Alice, fmt.Sprintf("/books/find-cover/%d", id), url.Values{"shelf": {"want"},
+			"title": {"Nothing like it"}, "isbn": {isbn}})
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("Find cover with no cover to find = %d, want 422", rec.Code)
+		}
+	}
+
+	// Saved with an ISBN that has a cover; the typed one has none.
+	typed := withISBN(t, s, uid, "Nothing like it", "9781635575637")
+	find(typed, "9780316129084")
+	if at := checkedAt(t, s, typed); at != "" {
+		t.Errorf("a miss on a typed, unsaved ISBN marked the book checked (%s): the backfill would skip the saved one", at)
+	}
+
+	// The typed ISBN is the saved one, written differently.
+	saved := withISBN(t, s, uid, "Nothing like it", "9780316129084")
+	find(saved, "978-0-316-12908-4")
+	if checkedAt(t, s, saved) == "" {
+		t.Error("a miss on the saved ISBN didn't mark the book checked")
+	}
+}
+
 // postEditForm posts Alice's Edit form as a browser does, multipart with
 // a file in the upload box, to path.
 func postEditForm(t *testing.T, s *server, path string, fields url.Values, file []byte) *httptest.ResponseRecorder {
