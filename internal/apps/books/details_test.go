@@ -62,9 +62,10 @@ func TestDetailsIconButtonsHaveNames(t *testing.T) {
 	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", fullBook(t, s)))
 	icons := doc.QueryAll(".books-icon-btn")
 	// The page bar's two, Save progress, Edit review, + / ✎ / 🗑 for the note
-	// and for the quote, and ✎ / 🗑 for each of the two readings.
-	if len(icons) != 14 {
-		t.Errorf("%d icon buttons, want 14", len(icons))
+	// and for the quote, the history's toggle, and ✎ / 🗑 for each of the two
+	// readings.
+	if len(icons) != 15 {
+		t.Errorf("%d icon buttons, want 15", len(icons))
 	}
 	for _, n := range icons {
 		label, _ := htmlassert.Attr(n, "aria-label")

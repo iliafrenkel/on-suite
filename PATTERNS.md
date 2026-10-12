@@ -186,9 +186,11 @@ canonical example's own comment, not here.
   with 🗑 a separate delete form beside it. Both are shown on `:hover`
   and `:focus-within`, and always under `(hover: none)`, and they're
   hidden with `opacity` so they stay in the tab order. `:has(> details[open])`
-  hides the entry's text while its form stands in. Canonical:
-  `internal/apps/books/templates/book.partial.html`'s `notes` and `take`
-  blocks, and the `.books-section` / `.books-entry` rules in
+  hides the entry's text while its form stands in. The same lifted summary
+  makes a collapsible section's toggle (a chevron) without putting the
+  heading inside `<summary>`, where some screen readers lose it. Canonical:
+  `internal/apps/books/templates/book.partial.html`'s `notes`, `take` and
+  `history` blocks, and the `.books-section` / `.books-entry` rules in
   `internal/ui/static/app.css`.
 
 - **Draggable, persisted, keyboard-accessible pane gutters** — reach for this

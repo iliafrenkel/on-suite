@@ -71,6 +71,14 @@ func TestTheBookPageListsEveryReading(t *testing.T) {
 		t.Errorf("history heading = %q", got)
 	}
 
+	// The heading is a plain heading, so heading navigation reaches it; the
+	// disclosure's toggle is a chevron lifted into its row (#603).
+	doc.MustNotHave("summary h2")
+	doc.MustHave("section.books-history-section h2#books-history-head")
+	if got := attr(t, doc, "details#books-history summary.books-section-action", "aria-label"); got != "Reading history" {
+		t.Errorf("history toggle aria-label = %q, want the section's name", got)
+	}
+
 	want0 := add(t, s, s.Alice.User.ID, titled("Emma", "", books.ShelfWant))
 	s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", want0)).MustNotHave(".books-history")
 }

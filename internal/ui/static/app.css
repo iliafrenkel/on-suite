@@ -4364,13 +4364,20 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-progress-note::before { content: "· "; }
 .books-progress-save { border-color: var(--c-border-firm); }
 .books-progress-form .books-field-error { flex-basis: 100%; }
+/* On a phone the note gets a line of its own, under the box, rather than
+ * wrapping so a line starts with its "·" (#603). */
+@media (max-width: 640px) {
+	.books-progress-note { order: 1; flex-basis: 100%; }
+	.books-progress-note::before { content: none; }
+	.books-progress-form .books-field-error { order: 2; }
+}
 /* Finish… and Did not finish… sit at the row's end. Their popovers are
  * anchored to the pair rather than to each button, so on a phone neither
  * runs off the left edge. */
 .books-reading-actions { position: relative; display: flex; flex-wrap: wrap; gap: var(--s-2); margin-left: auto; }
 .books-close > summary { display: inline-flex; list-style: none; cursor: pointer; }
 .books-close > summary::-webkit-details-marker { display: none; }
-.books-close-form { position: absolute; top: calc(100% + var(--s-1)); right: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-2); width: max-content; max-width: min(20rem, calc(100vw - 2rem)); padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); }
+.books-close-form { position: absolute; top: calc(100% + var(--s-1)); right: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-2); width: max-content; max-width: min(20rem, calc(100vw - 2rem)); padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); }
 .books-close-form label { margin: 0; flex-basis: 100%; }
 /* Progress bars: the Reading section's, the goal's and a tile's */
 .books-progress-bar,
@@ -4409,16 +4416,21 @@ main:has(.books-home) { max-width: none; padding: 0; }
 /* Entries: notes, quotes and readings. ✎ and 🗑 sit at an entry's top
  * right. They show on hover and on keyboard focus, and always on a touch
  * screen, which has no hover (spec "Sections"). They're hidden with
- * opacity, so they stay in the tab order. */
+ * opacity, so they stay in the tab order. On a touch screen they're 44px,
+ * the usual touch target (#603). The entry floats a box their size at its
+ * top right, so only the first line or two wraps around them, not the
+ * whole entry; an open form clears it and has the full width. */
 .books-entries { list-style: none; margin: 0; padding: 0; }
-.books-entry { position: relative; padding: var(--s-2) 4rem var(--s-2) 0; border-bottom: 1px solid var(--c-border); }
+.books-entry { --books-entry-icon: 1.75rem; position: relative; display: flow-root; padding: var(--s-2) 0; border-bottom: 1px solid var(--c-border); }
+.books-entry::before { content: ""; float: right; width: calc(2 * var(--books-entry-icon) + 0.25rem); height: var(--books-entry-icon); }
 .books-entry:last-child { border-bottom: 0; }
 .books-entry-edit > summary,
 .books-entry-delete { position: absolute; top: var(--s-2); margin: 0; opacity: 0; transition: opacity 0.15s ease; }
-.books-entry-edit > summary { right: 2rem; list-style: none; }
+.books-entry-edit > summary { right: calc(var(--books-entry-icon) + 0.25rem); list-style: none; }
 .books-entry-edit > summary::-webkit-details-marker { display: none; }
 .books-entry-delete { right: 0; }
-.books-entry-icon { justify-content: center; width: 1.75rem; height: 1.75rem; padding: 0; }
+.books-entry-icon { justify-content: center; width: var(--books-entry-icon); height: var(--books-entry-icon); padding: 0; }
+.books-entry-edit[open] > form { clear: right; }
 .books-entry-icon.is-danger { color: var(--c-danger); }
 .books-entry-icon.is-danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 .books-entry:hover > .books-entry-edit > summary,
@@ -4427,6 +4439,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-entry:focus-within > .books-entry-delete,
 .books-entry-edit[open] > summary { opacity: 1; }
 @media (hover: none) {
+	.books-entry { --books-entry-icon: 2.75rem; }
 	.books-entry-edit > summary,
 	.books-entry-delete { opacity: 1; }
 }
@@ -4447,14 +4460,16 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-quote-text { margin: 0 0 var(--s-1); padding-left: var(--s-3); border-left: 3px solid var(--c-accent); font-style: italic; white-space: pre-line; overflow-wrap: anywhere; }
 .books-quote-comment { margin-top: var(--s-1); }
 
-/* Reading history: a disclosure, collapsed until opened */
-.books-history-summary { list-style: none; cursor: pointer; }
-.books-history-summary::-webkit-details-marker { display: none; }
-.books-history-summary:focus-visible { outline: var(--ring); }
-.books-history-summary .books-section-head { margin: 0; }
-.books-history-summary .books-section-head::before { content: "▸ "; }
-.books-history[open] > .books-history-summary .books-section-head::before { content: "▾ "; }
-.books-history[open] > .books-entries { margin-top: var(--s-2); }
+/* Reading history: a disclosure, collapsed until opened. Its toggle is a
+ * chevron in the heading row (a lifted summary, PATTERNS.md), which turns
+ * over while it is open. */
+.books-history-section:not(:has(> .books-history[open])) > .books-section-head { margin-bottom: 0; }
+.books-history-toggle { cursor: pointer; }
+.books-history-toggle .toolbar-icon { transition: transform 0.15s ease; }
+.books-history[open] > .books-history-toggle .toolbar-icon { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+	.books-history-toggle .toolbar-icon { transition: none; }
+}
 .books-history-line { margin: 0; }
 .books-reading-edit-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-2); margin-top: var(--s-2); }
 .books-reading-edit-form label { margin: 0; flex-basis: 100%; }

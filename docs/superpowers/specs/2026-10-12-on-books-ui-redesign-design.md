@@ -170,7 +170,8 @@ Sections appear in this order:
    - **✎ / 🗑 icons** sit at the entry's top-right. They're visible on `:hover` and `:focus-within`, and always when `(hover: none)`.
    - **✎ turns the entry into its form in place.** 🗑 goes through the confirm dialog.
 5. **Quotes · n** works the same as Notes. Quotes keep their blockquote styling and the page under them.
-6. **Reading history · n** is a `<details>`, **collapsed by default**. Each reading has ✎ / 🗑 icons in the same pattern. ✎ opens today's date and format form in place.
+6. **Reading history · n** is a `<details>`, **collapsed by default**. Each reading has ✎ / 🗑 icons in the same pattern. ✎ opens today's date and format form in place. Its heading is a plain `<h2>`, and its toggle is a chevron lifted into the heading row like Notes' +, because a heading inside `<summary>` is lost to heading navigation in some screen readers (#603).
+   - On a touch screen (`(hover: none)`) the entries' ✎ / 🗑 are 44px, the usual touch target (#603).
 
 ### Swaps
 

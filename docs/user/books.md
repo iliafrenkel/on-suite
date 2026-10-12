@@ -157,9 +157,9 @@ asking. A page has to be one the book has — from 1 to its page count.
 
 ## Reading history
 
-At the bottom of a book is **Reading history**, folded away; click it to
-see every time you've read the book, newest first: when you started and
-finished, the format, and how it ended. ✎ changes a reading's dates and
+At the bottom of a book is **Reading history**, folded away; the arrow at
+its right shows every time you've read the book, newest first: when you
+started and finished, the format, and how it ended. ✎ changes a reading's dates and
 format. To fix a reading that ended the wrong way — marked as read when you
 gave up, say — delete it with 🗑; the book's shelf follows whichever reading
 is left.
