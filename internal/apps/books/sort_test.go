@@ -162,10 +162,75 @@ func TestSortEqualTitlesKeepAddedOrder(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(items) != 2 || items[0].ID != ids[0] || items[1].ID != ids[1] {
+			if len(items) != 2 {
+				t.Fatalf("%s (reversed %v): %d books, want 2", by, reversed, len(items))
+			}
+			if items[0].ID != ids[0] || items[1].ID != ids[1] {
 				t.Errorf("%s (reversed %v): ids = [%d %d], want added order [%d %d]",
 					by, reversed, items[0].ID, items[1].ID, ids[0], ids[1])
 			}
 		}
+	}
+}
+
+// reversedCopy is s back to front, leaving s alone.
+func reversedCopy(s []string) []string {
+	r := slices.Clone(s)
+	slices.Reverse(r)
+	return r
+}
+
+func TestDefaultSortReversedOnEveryShelf(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	uid := f.alice.ID
+	// Reading goes by the latest progress: A was started first, read last.
+	ra := addedInTurn(t, f, onShelf("Reading A", books.ShelfReading))
+	addedInTurn(t, f, onShelf("Reading B", books.ShelfReading))
+	if err := f.store.RecordProgress(ctx, uid, ra, 10); err != nil {
+		t.Fatal(err)
+	}
+	f.now = f.now.Add(time.Minute)
+	// Want to read goes by date added.
+	addedInTurn(t, f, onShelf("Want A", books.ShelfWant))
+	addedInTurn(t, f, onShelf("Want B", books.ShelfWant))
+	// Did not finish goes by the latest change: A was put down first, then
+	// tagged, which makes it the latest.
+	da := addedInTurn(t, f, onShelf("DNF A", books.ShelfReading))
+	db := addedInTurn(t, f, onShelf("DNF B", books.ShelfReading))
+	for _, id := range []int64{da, db} {
+		if err := f.store.MarkDNF(ctx, uid, id, "", 0); err != nil {
+			t.Fatal(err)
+		}
+		f.now = f.now.Add(time.Minute)
+	}
+	if err := f.store.SetTags(ctx, uid, da, []string{"x"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range []struct {
+		shelf books.Shelf
+		want  []string
+	}{
+		{books.ShelfReading, []string{"Reading A", "Reading B"}},
+		{books.ShelfWant, []string{"Want B", "Want A"}},
+		{books.ShelfDNF, []string{"DNF A", "DNF B"}},
+	} {
+		q := books.ListQuery{Shelf: tt.shelf}
+		if got := list(t, f, q); !slices.Equal(got, tt.want) {
+			t.Errorf("%s, Default = %v, want %v", tt.shelf, got, tt.want)
+		}
+		q.Reversed = true
+		if got, want := list(t, f, q), reversedCopy(tt.want); !slices.Equal(got, want) {
+			t.Errorf("%s, Default reversed = %v, want %v", tt.shelf, got, want)
+		}
+	}
+	// All goes by the latest change across the shelves.
+	all := list(t, f, books.ListQuery{Shelf: books.ShelfAll})
+	if len(all) != 6 || all[0] != "DNF A" {
+		t.Fatalf("All, Default = %v, want 6 books with DNF A (tagged last) first", all)
+	}
+	if got, want := list(t, f, books.ListQuery{Shelf: books.ShelfAll, Reversed: true}), reversedCopy(all); !slices.Equal(got, want) {
+		t.Errorf("All, Default reversed = %v, want %v", got, want)
 	}
 }

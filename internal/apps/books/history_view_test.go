@@ -49,7 +49,7 @@ func historyIDs(t *testing.T, s *server, id int64) []int64 {
 	return out
 }
 
-func TestTheBookPaneListsEveryReading(t *testing.T) {
+func TestTheBookPageListsEveryReading(t *testing.T) {
 	s := newServer(t)
 	id := readTwiceOverHTTP(t, s)
 	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", id))

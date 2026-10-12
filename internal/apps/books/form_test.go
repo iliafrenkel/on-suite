@@ -125,7 +125,7 @@ func TestEditingSomeoneElsesBookIsNotFound(t *testing.T) {
 	}
 }
 
-func TestBookPaneLinksToEdit(t *testing.T) {
+func TestBookPageLinksToEdit(t *testing.T) {
 	s := newServer(t)
 	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfWant))
 	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d?shelf=want", id))

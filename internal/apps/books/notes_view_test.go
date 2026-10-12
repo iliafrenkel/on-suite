@@ -48,7 +48,7 @@ func isOpen(doc *htmlassert.Doc, selector string) bool {
 	return ok
 }
 
-func TestTheBookPaneShowsNotesNewestFirst(t *testing.T) {
+func TestTheBookPageShowsNotesNewestFirst(t *testing.T) {
 	s := newServer(t)
 	ctx := context.Background()
 	uid := s.Alice.User.ID
@@ -167,7 +167,7 @@ func TestARefusedNoteComesBackInItsForm(t *testing.T) {
 	}
 }
 
-func TestEditingAndDeletingANoteInThePane(t *testing.T) {
+func TestEditingAndDeletingANoteInPlace(t *testing.T) {
 	s := newServer(t)
 	id := readBook(t, s, "Dune", 600)
 	nid, err := s.Store.AddNote(context.Background(), s.Alice.User.ID, id, books.NoteInput{Page: 5, Body: "Draft."})

@@ -257,7 +257,7 @@ type prefsView struct {
 	Sorts     []choice
 	Reversed  bool
 	DirLabel  string // the order now: "Newest first", "Oldest first", "A–Z", "Z–A"
-	View      View   // the saved view
+	View      View   // the view the switch shows as pressed: the saved one, or the list while a search shows it
 	SortFixed bool   // a series is in reading order: the sort is disabled
 	ViewFixed bool   // a search shows the list: the view switch is disabled
 }
@@ -267,6 +267,9 @@ func viewPrefs(p Prefs, c listCtx) prefsView {
 		SortFixed: c.Series != "", ViewFixed: c.Q != ""}
 	for _, s := range Sorts {
 		v.Sorts = append(v.Sorts, choice{Value: string(s), Label: s.Label(), Current: s == p.Sort})
+	}
+	if v.ViewFixed { // a search shows the list whatever is saved (#594)
+		v.View = ViewList
 	}
 	return v
 }

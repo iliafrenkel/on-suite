@@ -106,7 +106,7 @@ func TestThumbnailsAreProxied(t *testing.T) {
 	}
 }
 
-func TestCoversShowInTheListAndTheBookPane(t *testing.T) {
+func TestCoversShowInTheListAndOnTheBookPage(t *testing.T) {
 	s := newServer(t)
 	uid := s.Alice.User.ID
 	with := add(t, s, uid, titled("Piranesi", "", books.ShelfWant))

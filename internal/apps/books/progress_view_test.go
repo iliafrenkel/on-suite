@@ -172,7 +172,7 @@ func TestRowsShowProgressAndStars(t *testing.T) {
 		t.Errorf("first reading tile = %q, want Dune's page (the one with progress first)", got)
 	}
 	if n := len(doc.QueryAll("progress.books-item-cover-bar")); n != 1 {
-		t.Errorf("%d row bars, want 1: no bar before any progress", n)
+		t.Errorf("%d cover bars, want 1: no bar before any progress", n)
 	}
 	doc = s.Get(t, s.Alice, "/books/?shelf=read")
 	starsEl := doc.MustHave(".books-stars")

@@ -133,7 +133,7 @@ func TestARefusedQuoteComesBackInItsForm(t *testing.T) {
 	}
 }
 
-func TestEditingAndDeletingAQuoteInThePane(t *testing.T) {
+func TestEditingAndDeletingAQuoteInPlace(t *testing.T) {
 	s := newServer(t)
 	id := readBook(t, s, "Dune", 600)
 	qid, err := s.Store.AddQuote(context.Background(), s.Alice.User.ID, id, books.QuoteInput{Text: "Draft.", Comment: "Hm."})

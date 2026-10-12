@@ -136,7 +136,7 @@ func TestActionsOnSomeoneElsesBookAreNotFound(t *testing.T) {
 	}
 }
 
-func TestBookPaneOffersTheRightReadingActions(t *testing.T) {
+func TestBookPageOffersTheRightReadingActions(t *testing.T) {
 	s := newServer(t)
 	s.Clock.Set(time.Date(2026, 10, 9, 1, 0, 0, 0, time.UTC))
 	uid := s.Alice.User.ID
