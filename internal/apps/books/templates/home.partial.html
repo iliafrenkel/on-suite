@@ -39,7 +39,7 @@
 				       hx-replace-url="true">
 			</form>
 			{{template "prefs" (dict "Prefs" .Prefs "Shell" .Shell "OOB" false)}}
-			<a class="button primary books-add" href="/books/new">{{ticon "plus"}}Add book</a>
+			<a class="button primary books-add" href="/books/new" aria-label="Add book">{{ticon "plus"}}<span class="books-add-label">Add book</span></a>
 		</div>
 		{{template "list" .List}}
 	</section>

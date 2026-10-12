@@ -4169,9 +4169,30 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-heading { margin: 0 var(--s-2) 0 0; font-size: var(--fs-lg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .books-heading .books-count { font-weight: 400; }
 .books-filter { flex: 1 1 12rem; min-width: 0; margin: 0; }
-.books-filter input[type="search"] { width: 100%; }
+/* The search box takes the global text-input look: the global rule above
+ * covers text, url, number and select, not search. */
+.books-filter input[type="search"] {
+	width: 100%;
+	padding: var(--s-1) var(--s-2);
+	background: var(--c-bg);
+	color: var(--c-text);
+	border: 1px solid var(--c-border-firm);
+	border-radius: var(--radius);
+	font: inherit;
+	font-size: var(--fs-sm);
+	line-height: 1.4;
+}
 .books-prefs { display: flex; align-items: center; gap: var(--s-1); margin: 0; }
 .books-prefs select { width: auto; }
+/* One height for the toolbar's controls, about 30px: the sort select, the
+ * search box, Add book and the icon buttons share a padding and a type size. */
+.books-toolbar select,
+.books-prefs .books-icon-btn {
+	padding: var(--s-1) var(--s-2);
+	font-size: var(--fs-sm);
+	line-height: 1.4;
+}
+.books-toolbar .books-add { padding: var(--s-1) var(--s-3); font-size: var(--fs-sm); line-height: 1.4; }
 .books-views { display: inline-flex; border: 1px solid var(--c-border-firm); border-radius: var(--radius); overflow: hidden; }
 .books-views .toolbar-btn { border: 0; border-radius: 0; }
 .books-icon-btn[aria-pressed="true"] { background: var(--c-accent-bg); color: var(--c-accent); }
@@ -4247,6 +4268,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 	.books-toolbar { padding: var(--s-2) var(--s-3); }
 	.books-filter { order: 5; flex-basis: 100%; }
 	.books-list { padding: var(--s-3); }
+	.books-add-label { display: none; }
 	.books-list-grid .books-items { grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: var(--s-4) var(--s-3); }
 }
 @media (prefers-reduced-motion: reduce) {
