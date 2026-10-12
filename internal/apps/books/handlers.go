@@ -42,13 +42,13 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 	}
 }
 
-// index is the list.
+// index is the home page (UI redesign spec "Home page").
 func (a *App) index(w http.ResponseWriter, r *http.Request) {
 	uid, ok := a.userID(w, r)
 	if !ok {
 		return
 	}
-	a.renderPanes(w, r, uid, ctxFrom(r.FormValue))
+	a.renderHome(w, r, uid, ctxFrom(r.FormValue))
 }
 
 // book is a book's page, opened from list c (UI redesign spec "Book
@@ -65,35 +65,49 @@ func (a *App) book(w http.ResponseWriter, r *http.Request) {
 	a.renderBook(w, r, uid, id, ctxFrom(r.FormValue), bookOpts{})
 }
 
-// renderPanes draws the shelves and the list for c. An htmx request aimed
-// at #books-list gets list-swap (the list, with the sidebar and the
-// filter's fields out of band); anything else the whole page.
-func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, c listCtx) {
+// renderHome draws the home page for list c (UI redesign spec "Home
+// page"). An htmx request aimed at #books-list — a shelf, tag or series
+// link, the search box, the sort and view controls — gets list-swap: the
+// list, with the sidebar, the toolbar's heading and controls, the search's
+// hidden fields and the drawer's checkbox out of band. Anything else is
+// the whole page.
+func (a *App) renderHome(w http.ResponseWriter, r *http.Request, userID int64, c listCtx) {
 	ctx := r.Context()
 	counts, err := a.store.ShelfCounts(ctx, userID)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	tags, err := a.store.TagNames(ctx, userID)
+	tagNames, err := a.store.TagNames(ctx, userID)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	items, err := a.store.List(ctx, userID, ListQuery{Shelf: c.Shelf, Tag: c.Tag, Q: c.Q, Series: c.Series})
+	prefs, err := a.store.Prefs(ctx, userID)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	goal, err := a.shelfGoal(r, userID, c)
+	items, err := a.store.List(ctx, userID, ListQuery{Shelf: c.Shelf, Tag: c.Tag, Q: c.Q, Series: c.Series,
+		Sort: prefs.Sort, Reversed: prefs.Reversed})
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	byBook, err := a.store.TagsByBook(ctx, userID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	goal, err := a.sidebarGoal(r, userID)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	page := a.deps.Page(r, listHeading(c))
-	v := panesView{Title: page.Title, Shell: page.Shell, Ctx: c,
-		Sidebar: viewSidebar(c, counts, tags), List: viewList(items, c)}
-	v.List.Goal = goal
+	v := homeView{Title: page.Title, Shell: page.Shell, Ctx: c,
+		Sidebar: viewSidebar(c, counts, tagNames, goal), Prefs: viewPrefs(prefs, c),
+		List: viewList(items, byBook, c, prefs.View)}
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) && web.HTMXTarget(r) == "books-list" {
 		if err := a.deps.Render.Fragment(w, http.StatusOK, "books/index", "list-swap", v); err != nil {
 			a.deps.Errors.Internal(w, r, err)
@@ -183,14 +197,10 @@ func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int6
 	}
 }
 
-// shelfGoal is the goal card for list c: this year's goal at the top of
-// the Reading shelf, when one is set (spec "Stats (B4)"). Read-only — it
-// links to the Stats page, where the goal is set (decided 2026-10-09 while
-// planning B4). A tag or series list isn't the shelf, so it has none.
-func (a *App) shelfGoal(r *http.Request, userID int64, c listCtx) (*goalView, error) {
-	if c.Shelf != ShelfReading || c.Tag != "" || c.Series != "" {
-		return nil, nil
-	}
+// sidebarGoal is the sidebar's goal card: this year's goal, when one is
+// set (UI redesign spec "Sidebar"). Read-only — it links to the Stats
+// page, where the goal is set.
+func (a *App) sidebarGoal(r *http.Request, userID int64) (*goalView, error) {
 	today := a.store.now().Local()
 	g, err := a.store.Goal(r.Context(), userID, today.Year())
 	if err != nil || g.Target == 0 {

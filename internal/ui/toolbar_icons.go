@@ -137,6 +137,24 @@ var toolbarIcons = map[string]template.HTML{
 	"chevron-down": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<path d="M6 9l6 6 6-6"/>
 	</svg>`,
+	"arrow-down": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M12 5v14"/>
+		<path d="M19 12l-7 7-7-7"/>
+	</svg>`,
+	"arrow-up": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M12 19V5"/>
+		<path d="M5 12l7-7 7 7"/>
+	</svg>`,
+	"grid": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<rect x="4" y="4" width="7" height="7" rx="1"/>
+		<rect x="13" y="4" width="7" height="7" rx="1"/>
+		<rect x="4" y="13" width="7" height="7" rx="1"/>
+		<rect x="13" y="13" width="7" height="7" rx="1"/>
+	</svg>`,
+	"list": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M9 6h11M9 12h11M9 18h11"/>
+		<path d="M4 6h.01M4 12h.01M4 18h.01"/>
+	</svg>`,
 	"user": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<circle cx="12" cy="8" r="4"/>
 		<path d="M4 21a8 8 0 0 1 16 0"/>

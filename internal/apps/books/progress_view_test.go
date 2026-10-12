@@ -152,10 +152,10 @@ func TestRowsShowProgressAndStars(t *testing.T) {
 	}
 
 	doc := s.Get(t, s.Alice, "/books/?shelf=reading")
-	if got := htmlassert.Text(doc.MustHave(".books-row-note")); got != "25%" {
-		t.Errorf("first reading row = %q, want 25%% (the one with progress first)", got)
+	if got := htmlassert.Text(doc.MustHave(".books-item-status")); got != "Reading · p. 150 / 600" {
+		t.Errorf("first reading tile = %q, want Dune's page (the one with progress first)", got)
 	}
-	if n := len(doc.QueryAll("progress.books-row-bar")); n != 1 {
+	if n := len(doc.QueryAll("progress.books-item-cover-bar")); n != 1 {
 		t.Errorf("%d row bars, want 1: no bar before any progress", n)
 	}
 	doc = s.Get(t, s.Alice, "/books/?shelf=read")

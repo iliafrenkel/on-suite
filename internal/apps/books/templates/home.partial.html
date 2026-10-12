@@ -1,0 +1,164 @@
+{{/* ON Books' home page: the sidebar, and a grid or list of books with a
+     toolbar above it (UI redesign spec "Home page",
+     docs/superpowers/specs/2026-10-12-on-books-ui-redesign-design.md). On
+     a phone the sidebar is a drawer: #books-drawer, a checkbox the toolbar
+     button and the dim layer are labels for (PATTERNS.md, checkbox-driven
+     CSS state). Every block takes a homeView unless its comment says
+     otherwise. */}}
+
+{{/* The <title> and crumb ride along with every fragment that changes the
+     page, so the chrome follows it (#205). */}}
+{{define "shell-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{end}}
+
+{{/* list-swap answers anything aimed at #books-list: a shelf, tag or
+     series link, the search box, the sort and view controls. The sidebar,
+     the toolbar's heading and controls and the search's hidden fields come
+     along out of band, and the drawer's checkbox comes back unchecked,
+     which closes the drawer on a phone. The search box itself is never
+     swapped (PATTERNS.md, SyncSearch). */}}
+{{define "list-swap"}}{{template "shell-oob" .}}{{template "list" .List}}{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" true)}}{{template "toolbar-head" (dict "List" .List "OOB" true)}}{{template "prefs" (dict "Prefs" .Prefs "Shell" .Shell "OOB" true)}}{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" true)}}{{template "drawer-toggle" true}}{{end}}
+
+{{define "home"}}
+<div class="books-home" id="books-home">
+	{{template "drawer-toggle" false}}
+	{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" false)}}
+	<div class="pane-gutter" data-gutter-for="side" role="separator"
+	     aria-orientation="vertical" aria-label="Resize the shelves" tabindex="0"></div>
+	<label class="books-drawer-dim" for="books-drawer" aria-hidden="true"></label>
+	<section class="books-main" aria-label="Books">
+		<div class="books-toolbar">
+			{{template "toolbar-head" (dict "List" .List "OOB" false)}}
+			{{/* The search lives outside #books-list so a list swap never
+			     replaces the box being typed in (PATTERNS.md, SyncSearch). */}}
+			<form class="books-filter" method="get" action="/books/" role="search">
+				{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" false)}}
+				<label class="visually-hidden" for="books-q">Search your books</label>
+				<input type="search" id="books-q" name="q" value="{{.Ctx.Q}}" placeholder="Search books, notes and quotes…"
+				       hx-get="/books/" hx-target="#books-list" hx-swap="outerHTML"
+				       hx-include="closest form" hx-trigger="input changed delay:300ms, search"
+				       hx-replace-url="true">
+			</form>
+			{{template "prefs" (dict "Prefs" .Prefs "Shell" .Shell "OOB" false)}}
+			<a class="button primary books-add" href="/books/new">{{ticon "plus"}}Add book</a>
+		</div>
+		{{template "list" .List}}
+	</section>
+</div>
+{{end}}
+
+{{/* drawer-toggle is the phone drawer's checkbox; a sibling before the
+     sidebar so the CSS reaches it with ~. Takes a bool: out of band. */}}
+{{define "drawer-toggle"}}<input type="checkbox" id="books-drawer" class="visually-hidden books-drawer-toggle" aria-label="Show the shelves"{{if .}} hx-swap-oob="true"{{end}}>{{end}}
+
+{{/* toolbar-head is the list's name and count, and on a phone the button
+     that opens the drawer, named after the list. Takes a dict: List (a
+     listView), OOB. */}}
+{{define "toolbar-head"}}
+<div class="books-toolbar-head" id="books-toolbar-head"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	<label class="toolbar-btn books-drawer-btn" for="books-drawer">{{ticon "sidebar-toggle"}}<span class="books-drawer-label">{{.List.Heading}}</span>{{ticon "chevron-down"}}</label>
+	<h1 class="books-heading"><span class="books-heading-text">{{.List.Heading}}</span> <span class="books-count"><span class="visually-hidden">, </span>{{.List.Count}}<span class="visually-hidden"> {{if eq .List.Count 1}}book{{else}}books{{end}}</span></span></h1>
+</div>
+{{end}}
+
+{{/* prefs is the toolbar's sort and view controls, saved to the account
+     (spec "Preferences"). One form: the select posts on change, each button
+     posts its own name and value; without JavaScript the select has a Sort
+     button. Takes a dict: Prefs (a prefsView), Shell, OOB. */}}
+{{define "prefs"}}
+<form class="books-prefs" id="books-prefs" method="post" action="/books/prefs"
+      hx-post="/books/prefs" hx-trigger="change, submit" hx-target="#books-list" hx-swap="outerHTML"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+	{{template "ctx-fields" .Prefs.Ctx}}
+	<label class="visually-hidden" for="books-sort">Sort by</label>
+	<select id="books-sort" name="sort"{{if .Prefs.SortFixed}} disabled title="A series is in reading order"{{end}}>
+		{{range .Prefs.Sorts}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}
+	</select>
+	<noscript><button type="submit" class="toolbar-btn">Sort</button></noscript>
+	<button type="submit" id="books-reverse" class="toolbar-btn books-icon-btn" name="reversed" value="{{if .Prefs.Reversed}}0{{else}}1{{end}}"
+	        aria-pressed="{{if .Prefs.Reversed}}true{{else}}false{{end}}" aria-label="Reverse the order (now {{.Prefs.DirLabel}})" title="{{.Prefs.DirLabel}}"{{if .Prefs.SortFixed}} disabled{{end}}>{{if .Prefs.Reversed}}{{ticon "arrow-up"}}{{else}}{{ticon "arrow-down"}}{{end}}</button>
+	<span class="books-views" role="group" aria-label="View">
+		<button type="submit" id="books-view-grid" class="toolbar-btn books-icon-btn" name="view" value="grid" aria-label="Grid" title="{{if .Prefs.ViewFixed}}Search results show as a list{{else}}Grid{{end}}"
+		        aria-pressed="{{if eq .Prefs.View "grid"}}true{{else}}false{{end}}"{{if .Prefs.ViewFixed}} disabled{{end}}>{{ticon "grid"}}</button>
+		<button type="submit" id="books-view-list" class="toolbar-btn books-icon-btn" name="view" value="list" aria-label="List" title="{{if .Prefs.ViewFixed}}Search results show as a list{{else}}List{{end}}"
+		        aria-pressed="{{if eq .Prefs.View "list"}}true{{else}}false{{end}}"{{if .Prefs.ViewFixed}} disabled{{end}}>{{ticon "list"}}</button>
+	</span>
+</form>
+{{end}}
+
+{{/* filter-ctx is the shelf, tag and series the search box searches
+     within. */}}
+{{define "filter-ctx"}}<span id="books-filter-ctx"{{if .OOB}} hx-swap-oob="true"{{end}}><input type="hidden" name="shelf" value="{{.Ctx.Shelf}}">{{with .Ctx.Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Ctx.Series}}<input type="hidden" name="series" value="{{.}}">{{end}}</span>{{end}}
+
+{{/* ctx-fields is a listCtx as hidden fields, for POSTs. */}}
+{{define "ctx-fields"}}<input type="hidden" name="shelf" value="{{.Shelf}}">{{with .Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Q}}<input type="hidden" name="q" value="{{.}}">{{end}}{{with .Series}}<input type="hidden" name="series" value="{{.}}">{{end}}{{end}}
+
+{{/* sidebar: the shelves, the goal, the tags, and the links at its foot
+     (spec "Sidebar"). Takes a dict: Sidebar (a sidebarView), OOB. */}}
+{{define "sidebar"}}
+<nav class="books-side" id="books-side" aria-label="Shelves"{{if .OOB}} hx-swap-oob="true"{{end}}>
+	<ul class="books-shelves">
+		{{range .Sidebar.Shelves}}
+		<li><a class="books-shelf" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true"{{if .Current}} aria-current="page"{{end}}>{{.Label}}<span class="books-count">{{if .Count}}<span class="visually-hidden">, </span>{{.Count}}<span class="visually-hidden"> {{if eq .Count 1}}book{{else}}books{{end}}</span>{{end}}</span></a></li>
+		{{end}}
+	</ul>
+	{{with .Sidebar.Goal}}
+	<a class="books-goal-card" href="/books/stats">
+		<span class="books-goal-card-head">{{.Year}} goal</span>
+		<span class="books-goal-card-text">{{.Text}}{{with .Pace}} · {{.}}{{end}}</span>
+		<progress class="books-bar books-goal-bar" max="100" value="{{.Percent}}" aria-hidden="true"></progress>
+	</a>
+	{{end}}
+	{{with .Sidebar.Tags}}
+	<h2 class="books-side-head">Tags</h2>
+	<ul class="books-shelves">
+		{{range .}}
+		<li><a class="books-shelf" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a></li>
+		{{end}}
+	</ul>
+	{{end}}
+	<div class="books-side-foot">
+		<a class="books-side-link" href="/books/stats">{{ticon "stats"}}Stats</a>
+		<a class="books-side-link" href="/books/import">{{ticon "import"}}Import from Goodreads</a>
+		<a class="books-side-link" href="/books/export" download>{{ticon "export"}}Export as Markdown</a>
+	</div>
+</nav>
+{{end}}
+
+{{/* list takes a listView: tiles in a grid or rows in a list, one markup
+     laid out by the books-list-grid / books-list-list class. */}}
+{{define "list"}}
+<div class="books-list books-list-{{.View}}" id="books-list">
+	{{if .Items}}
+	<ul class="books-items">
+		{{range .Items}}{{template "item" .}}{{end}}
+	</ul>
+	{{else}}
+	<p class="empty">{{.Empty}}</p>
+	{{end}}
+</div>
+{{end}}
+
+{{/* item is one book: a plain link to its page (spec "Book tile", "Book
+     row"). The cover's bar shows in the grid, the meta bar in the list.
+     Takes an itemView. */}}
+{{define "item"}}
+<li class="books-item" data-book-id="{{.ID}}">
+	<a class="books-item-link" href="{{.URL}}">
+		<span class="books-item-cover">
+			{{if .Cover}}<img src="{{.Cover}}" alt="" width="96" height="144" loading="lazy">{{else}}<span class="books-item-spine swatch-c-{{.Spine}}" aria-hidden="true"><span class="books-item-spine-title">{{.Title}}</span><span class="books-item-initial">{{.Initial}}</span></span>{{end}}
+			{{if .Bar}}<progress class="books-bar books-item-cover-bar" max="100" value="{{.Percent}}" aria-hidden="true"></progress>{{end}}
+		</span>
+		<span class="books-item-text">
+			<span class="books-item-title">{{.Title}}</span>
+			{{with .Authors}}<span class="books-item-authors">{{.}}</span>{{end}}
+			{{with .Tags}}<span class="books-item-tags">{{range .}}<span class="books-pill">{{.}}</span>{{end}}{{with $.MoreTags}}<span class="books-pill">+{{.}}</span>{{end}}</span>{{end}}
+			{{with .Snippet}}<span class="books-item-snippet"><span class="books-snippet-in">{{.In}}</span> {{range .Parts}}{{if .Hit}}<mark>{{.Text}}</mark>{{else}}{{.Text}}{{end}}{{end}}</span>{{end}}
+		</span>
+		<span class="books-item-meta">
+			{{if .Stars}}<span class="books-stars" role="img" aria-label="Rated {{.Rating}} of 5">{{.Stars}}</span>{{else}}<span class="books-item-status books-status-{{.Kind}}">{{.Status}}</span>{{end}}
+			{{if .Bar}}<progress class="books-bar books-item-bar" max="100" value="{{.Percent}}" aria-hidden="true"></progress>{{end}}
+			<span class="books-item-date">{{.Date}}</span>
+		</span>
+	</a>
+</li>
+{{end}}

@@ -421,7 +421,7 @@ func TestTheHTMXPanesShowTheCoverOnlyToItsOwner(t *testing.T) {
 	}
 	// The list partial draws the mini cover too.
 	list := htmlassert.Parse(t, hx(t, s, "/books/?shelf=want", "books-list"))
-	if got := attr(t, list, "img.books-mini-cover", "src"); got != want {
+	if got := attr(t, list, ".books-item-cover img", "src"); got != want {
 		t.Errorf("list mini cover = %q, want %q", got, want)
 	}
 
@@ -436,7 +436,7 @@ func TestTheHTMXPanesShowTheCoverOnlyToItsOwner(t *testing.T) {
 		t.Error("Bob's response mentions Alice's book or its cover")
 	}
 	bobList := htmlassert.Parse(t, hx2(t, s, s.Bob, "/books/?shelf=want", "books-list"))
-	bobList.MustNotHave("img.books-mini-cover")
+	bobList.MustNotHave(".books-item-cover img")
 }
 
 // hx2 is hx for another user's session.

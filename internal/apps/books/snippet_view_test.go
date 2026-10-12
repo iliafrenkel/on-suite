@@ -21,13 +21,13 @@ func TestFilteredRowsSayWhereTheyMatched(t *testing.T) {
 	}
 
 	doc := s.Get(t, s.Alice, "/books/?shelf=all&q=spice")
-	if got := htmlassert.Text(doc.MustHave(".books-row-snippet")); got != "Quote: The <b>spice</b> must flow." {
+	if got := htmlassert.Text(doc.MustHave(".books-item-snippet")); got != "Quote: The <b>spice</b> must flow." {
 		t.Errorf("snippet = %q", got)
 	}
-	if got := htmlassert.Text(doc.MustHave(".books-row-snippet mark")); got != "spice" {
+	if got := htmlassert.Text(doc.MustHave(".books-item-snippet mark")); got != "spice" {
 		t.Errorf("highlight = %q", got)
 	}
-	doc.MustNotHave(".books-row-snippet b") // the quote's own markup is text
+	doc.MustNotHave(".books-item-snippet b") // the quote's own markup is text
 
 	doc = htmlassert.Parse(t, hx(t, s, "/books/?shelf=all&q=sandw", "books-list"))
 	if got := htmlassert.Text(doc.MustHave(".books-snippet-in")); got != "Note:" {
@@ -39,7 +39,7 @@ func TestFilteredRowsSayWhereTheyMatched(t *testing.T) {
 		if got := rowTitles(doc); len(got) != 1 {
 			t.Errorf("q=%s rows = %v, want Dune", q, got)
 		}
-		doc.MustNotHave(".books-row-snippet")
+		doc.MustNotHave(".books-item-snippet")
 	}
 }
 

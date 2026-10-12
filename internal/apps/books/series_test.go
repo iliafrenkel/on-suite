@@ -82,7 +82,7 @@ func TestTheSeriesLinkFiltersTheList(t *testing.T) {
 	if got := rowTitles(doc); !slices.Equal(got, []string{"Leviathan Wakes", "Caliban's War"}) {
 		t.Errorf("series rows = %v", got)
 	}
-	if got := htmlassert.Text(doc.MustHave(".books-list-head")); got != "Series “The Expanse”" {
+	if got := htmlassert.Text(doc.MustHave(".books-heading-text")); got != "Series “The Expanse”" {
 		t.Errorf("heading = %q", got)
 	}
 	doc.MustNotHave(`.books-side a[aria-current="page"]`)

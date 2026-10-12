@@ -50,10 +50,10 @@ func titled(title, authors string, shelf books.Shelf) books.NewBook {
 	return books.NewBook{BookInput: books.BookInput{Title: title, Authors: authors}, Shelf: shelf}
 }
 
-// rowTitles is the list pane's titles, top to bottom.
+// rowTitles is the home page's titles, in order.
 func rowTitles(doc *htmlassert.Doc) []string {
 	var out []string
-	for _, n := range doc.QueryAll(".books-row-title") {
+	for _, n := range doc.QueryAll(".books-item-title") {
 		out = append(out, htmlassert.Text(n))
 	}
 	return out
@@ -95,10 +95,13 @@ func TestIndexOpensOnTheReadingShelf(t *testing.T) {
 	if text := htmlassert.Text(current); text != "Reading, 1 book" {
 		t.Errorf("current shelf link = %q, want Reading with count 1, read out as \"Reading, 1 book\" (#568)", text)
 	}
-	doc.MustHave(`a[href="/books/new"]`)
-	doc.MustNotHave("#books-book") // a book has a page of its own now
-	if !isChecked(t, doc, "books-list-open") {
-		t.Error("phone drill-down: want the list showing")
+	doc.MustHave(`.books-toolbar a[href="/books/new"]`)
+	doc.MustNotHave("#books-book")
+	if isChecked(t, doc, "books-drawer") {
+		t.Error("the phone drawer starts closed")
+	}
+	if got := htmlassert.Text(doc.MustHave(".books-heading-text")); got != "Reading" {
+		t.Errorf("heading = %q, want Reading", got)
 	}
 }
 
@@ -140,7 +143,7 @@ func TestEmptyShelfSaysSo(t *testing.T) {
 	s := newServer(t)
 	doc := s.Get(t, s.Alice, "/books/?shelf=dnf")
 	doc.MustHave(".books-list .empty")
-	doc.MustNotHave(".books-row")
+	doc.MustNotHave(".books-item")
 }
 
 func TestBookPageShowsTheBook(t *testing.T) {
@@ -192,13 +195,13 @@ func TestHTMXListNavigationSwapsTheListOnly(t *testing.T) {
 	if got := rowTitles(doc); len(got) != 1 || got[0] != "Emma" {
 		t.Errorf("rows = %v, want [Emma]", got)
 	}
-	for _, id := range []string{"books-side", "books-filter-ctx", "books-list-open", "shell-crumb-tail"} {
+	for _, id := range []string{"books-side", "books-filter-ctx", "books-toolbar-head", "books-prefs", "books-drawer", "shell-crumb-tail"} {
 		if v, ok := htmlassert.Attr(doc.MustHave("#"+id), "hx-swap-oob"); !ok || v != "true" {
 			t.Errorf("#%s hx-swap-oob = %q, %v; want it swapped out of band", id, v, ok)
 		}
 	}
 	doc.MustNotHave("#books-book")
-	doc.MustNotHave("#books-panes")
+	doc.MustNotHave("#books-home")
 }
 
 func TestRowsOpenTheBookWithTheirList(t *testing.T) {

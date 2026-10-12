@@ -71,14 +71,15 @@ func (c listCtx) BookURL(id int64) string {
 	return "/books/b/" + strconv.FormatInt(id, 10) + "?" + c.Query()
 }
 
-// panesView is what the shelves and the list draw (UI1 Task 3; Task 4
-// replaces it with homeView). Title and Shell are for fragments, which
-// have no render.Page around them.
-type panesView struct {
+// homeView is everything the home page draws (UI redesign spec "Home
+// page"). Title and Shell are for fragments, which have no render.Page
+// around them.
+type homeView struct {
 	Title   string
 	Shell   render.Shell
 	Ctx     listCtx
 	Sidebar sidebarView
+	Prefs   prefsView
 	List    listView
 }
 
@@ -98,13 +99,14 @@ type tagLink struct {
 type sidebarView struct {
 	Shelves []shelfLink
 	Tags    []tagLink
+	Goal    *goalView // this year's goal, when one is set (spec "Sidebar")
 }
 
 // viewSidebar keeps the filter text on every link: the filter box sits
 // outside the list and keeps showing what was typed, so the lists it leads
 // to keep applying it. A tag or series list highlights no shelf.
-func viewSidebar(c listCtx, counts map[Shelf]int, tags []string) sidebarView {
-	var v sidebarView
+func viewSidebar(c listCtx, counts map[Shelf]int, tags []string, goal *goalView) sidebarView {
+	v := sidebarView{Goal: goal}
 	for _, s := range Shelves {
 		to := listCtx{Shelf: s, Q: c.Q}
 		v.Shelves = append(v.Shelves, shelfLink{Label: s.Label(), URL: to.ListURL(), Count: counts[s],
@@ -117,28 +119,41 @@ func viewSidebar(c listCtx, counts map[Shelf]int, tags []string) sidebarView {
 	return v
 }
 
-type rowView struct {
-	ID      int64
-	URL     string
-	Title   string
-	Byline  string // "Authors · Series #3"
-	Note    string // what the book's shelf says about it: "Started 3 Oct 2026", "20%"
-	Bar     bool   // a reading with progress: draw Percent as a bar before Note
-	Percent int
-	Rating  int    // 1–5 on a read book, 0 otherwise
-	Stars   string // Rating drawn: "★★★★☆"
-	Spine   string // swatch colour name
-	Initial string
-	Cover   string       // the stored cover; "" draws the mini spine
-	Snippet *snippetView // where a filtered row matched; nil when it shows already
+// itemView is one book on the home page: a tile in the grid, a row in
+// the list (UI redesign spec "Book tile", "Book row").
+type itemView struct {
+	ID       int64
+	URL      string
+	Title    string
+	Authors  string
+	Status   string // "Reading · 45%", "Want to read", "Read", "Did not finish"; "" when Stars says it
+	Kind     string // the status line's colour: the shelf, "reading", "want", "read" or "dnf"
+	Stars    string // a rated read book: "★★★★☆"
+	Rating   int
+	Bar      bool // a reading with progress: Percent as a bar
+	Percent  int
+	Date     string   // "Added 3 Oct 2026", or "Finished 2 Sep 2026" on the Read shelf
+	Tags     []string // the first few: 3 in the grid, 5 in the list
+	MoreTags int      // how many more, for the "+N" pill
+	Spine    string   // swatch colour name
+	Initial  string
+	Cover    string       // the stored cover; "" draws the spine
+	Snippet  *snippetView // where a searched book matched; nil when it shows already
 }
 
+// listView is the grid or the list. View is what it draws: the saved
+// view, or the list while searching, so snippets have room (spec
+// "Decisions at a glance").
 type listView struct {
+	View    View
 	Heading string
-	Rows    []rowView
+	Count   int
+	Items   []itemView
 	Empty   string
-	Goal    *goalView // this year's goal, at the top of the Reading shelf; nil for none
 }
+
+// tagsShown is how many tags a tile shows, and a row (spec "Book tile").
+var tagsShown = map[View]int{ViewGrid: 3, ViewList: 5}
 
 func listHeading(c listCtx) string {
 	switch {
@@ -150,25 +165,104 @@ func listHeading(c listCtx) string {
 	return c.Shelf.Label()
 }
 
-func viewList(items []ListItem, c listCtx) listView {
-	v := listView{Heading: listHeading(c)}
+// viewList draws items for list c in view, with each book's tags from
+// tags (TagsByBook).
+func viewList(items []ListItem, tags map[int64][]string, c listCtx, view View) listView {
+	if c.Q != "" {
+		view = ViewList
+	}
+	v := listView{View: view, Heading: listHeading(c), Count: len(items)}
 	for _, it := range items {
-		row := rowView{ID: it.ID, URL: c.BookURL(it.ID), Title: it.Title,
-			Byline: byline(it.Authors, seriesText(it.SeriesName, it.SeriesNumber)), Note: rowNote(it),
+		item := itemView{ID: it.ID, URL: c.BookURL(it.ID), Title: it.Title, Authors: it.Authors,
+			Status: itemStatus(it), Kind: string(it.Shelf), Date: itemDate(it, c),
 			Spine: SpineColor(it.Title), Initial: initial(it.Title), Cover: coverURL(it.ID, it.CoverVersion),
 			Snippet: newSnippet(it)}
-		switch it.Shelf {
-		case ShelfReading:
-			row.Bar, row.Percent = it.Progress.Set(), it.Progress.Percent(it.Pages)
-		case ShelfRead:
-			row.Rating, row.Stars = it.Rating, stars(it.Rating)
+		if it.Shelf == ShelfReading && it.Progress.Set() {
+			item.Bar, item.Percent = true, it.Progress.Percent(it.Pages)
 		}
-		v.Rows = append(v.Rows, row)
+		if it.Shelf == ShelfRead && it.Rating > 0 {
+			item.Status, item.Rating, item.Stars = "", it.Rating, stars(it.Rating)
+		}
+		item.Tags, item.MoreTags = firstTags(tags[it.ID], tagsShown[view])
+		v.Items = append(v.Items, item)
 	}
-	if len(v.Rows) == 0 {
+	if len(v.Items) == 0 {
 		v.Empty = emptyText(c)
 	}
 	return v
+}
+
+// itemStatus is a tile's status line (spec "Book tile"): how far through
+// a book being read is — in pages when that is how it is counted — or
+// which shelf it is on.
+func itemStatus(it ListItem) string {
+	switch it.Shelf {
+	case ShelfReading:
+		switch {
+		case !it.Progress.Set():
+			return "Reading"
+		case UnitFor(it.Format, it.Pages) == UnitPage:
+			return "Reading · p. " + strconv.Itoa(it.Progress.In(UnitPage, it.Pages)) + " / " + strconv.Itoa(it.Pages)
+		}
+		return "Reading · " + strconv.Itoa(it.Progress.Percent(it.Pages)) + "%"
+	case ShelfRead:
+		return "Read"
+	case ShelfDNF:
+		return "Did not finish"
+	}
+	return "Want to read"
+}
+
+// itemDate is a tile's date: when the book was finished on the Read
+// shelf, when it was added everywhere else (spec "Book tile").
+func itemDate(it ListItem, c listCtx) string {
+	if c.Shelf == ShelfRead && it.FinishedOn != "" {
+		return "Finished " + ShowDay(it.FinishedOn)
+	}
+	return "Added " + it.AddedAt.Local().Format("2 Jan 2006")
+}
+
+// firstTags is at most n of tags, and how many are left over.
+func firstTags(tags []string, n int) ([]string, int) {
+	if len(tags) <= n {
+		return tags, 0
+	}
+	return tags[:n], len(tags) - n
+}
+
+// prefsView is the toolbar's sort and view controls (spec "Toolbar").
+type prefsView struct {
+	Ctx       listCtx
+	Sorts     []choice
+	Reversed  bool
+	DirLabel  string // the order now: "Newest first", "Oldest first", "A–Z", "Z–A"
+	View      View   // the saved view
+	SortFixed bool   // a series is in reading order: the sort is disabled
+	ViewFixed bool   // a search shows the list: the view switch is disabled
+}
+
+func viewPrefs(p Prefs, c listCtx) prefsView {
+	v := prefsView{Ctx: c, Reversed: p.Reversed, DirLabel: dirLabel(p.Sort, p.Reversed), View: p.View,
+		SortFixed: c.Series != "", ViewFixed: c.Q != ""}
+	for _, s := range Sorts {
+		v.Sorts = append(v.Sorts, choice{Value: string(s), Label: s.Label(), Current: s == p.Sort})
+	}
+	return v
+}
+
+// dirLabel names the order a sort is in (spec "Sorting"): Title and
+// Author run A–Z, the rest newest first, unless reversed.
+func dirLabel(s Sort, reversed bool) string {
+	alpha := s == SortTitle || s == SortAuthor
+	switch {
+	case alpha && reversed:
+		return "Z–A"
+	case alpha:
+		return "A–Z"
+	case reversed:
+		return "Oldest first"
+	}
+	return "Newest first"
 }
 
 func byline(authors, series string) string {
@@ -198,29 +292,6 @@ func coverURL(id int64, version string) string {
 		return ""
 	}
 	return "/books/cover/" + strconv.FormatInt(id, 10) + "?v=" + version
-}
-
-// rowNote is the text on the right-hand side of a row (spec "Layout"):
-// how far through a book being read is, when a read book was finished.
-func rowNote(it ListItem) string {
-	switch it.Shelf {
-	case ShelfReading:
-		if it.Progress.Set() {
-			return strconv.Itoa(it.Progress.Percent(it.Pages)) + "%"
-		}
-		if it.StartedOn != "" {
-			return "Started " + ShowDay(it.StartedOn)
-		}
-		return "Reading"
-	case ShelfRead:
-		if it.FinishedOn != "" {
-			return "Finished " + ShowDay(it.FinishedOn)
-		}
-		return "Read"
-	case ShelfDNF:
-		return "Did not finish"
-	}
-	return "Added " + it.AddedAt.Local().Format("2 Jan 2006")
 }
 
 // stars draws a 1–5 rating as five stars, "" for none.

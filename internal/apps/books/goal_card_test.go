@@ -27,7 +27,7 @@ func TestReadingShelfShowsThisYearsGoal(t *testing.T) {
 		s.Get(t, s.Alice, "/books/"),
 		htmlassert.Parse(t, hx(t, s, "/books/?shelf=reading", "books-list")), // a shelf switch brings it too
 	} {
-		card := doc.MustHave("#books-list .books-goal-card")
+		card := doc.MustHave("#books-side .books-goal-card")
 		if href, _ := htmlassert.Attr(card, "href"); href != "/books/stats" {
 			t.Errorf("goal card links to %q, want the Stats page", href)
 		}
@@ -41,13 +41,13 @@ func TestReadingShelfShowsThisYearsGoal(t *testing.T) {
 	}
 }
 
-func TestGoalCardIsOnlyOnTheReadingShelf(t *testing.T) {
+func TestGoalCardIsInTheSidebarOfEveryList(t *testing.T) {
 	s := newServer(t)
 	s.Clock.Set(noon("2026-10-10"))
 	setGoal(t, s, s.Alice.User.ID, 2026, 30)
-	for _, path := range []string{"/books/?shelf=want", "/books/?shelf=read", "/books/?shelf=all",
-		"/books/?shelf=reading&tag=sf", "/books/?shelf=reading&series=Dune"} {
-		s.Get(t, s.Alice, path).MustNotHave(".books-goal-card")
+	for _, path := range []string{"/books/", "/books/?shelf=want", "/books/?shelf=read", "/books/?shelf=all",
+		"/books/?shelf=all&tag=sf", "/books/?shelf=all&series=Dune"} {
+		s.Get(t, s.Alice, path).MustHave("#books-side .books-goal-card")
 	}
 }
 
