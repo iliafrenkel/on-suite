@@ -76,6 +76,7 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	a.pause = sleep
 	r.HandleFunc("GET /{$}", a.index)
 	r.HandleFunc("GET /b/{id}", a.book)
+	r.HandleFunc("POST /prefs", a.setPrefs)
 	r.HandleFunc("GET /new", a.newForm)
 	r.HandleFunc("POST /new", a.create)
 	r.HandleFunc("GET /edit/{id}", a.editForm)

@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
 // View is how the home page lays its books out (UI redesign spec
@@ -89,4 +92,48 @@ func (st *Store) SetPrefs(ctx context.Context, userID int64, p Prefs) error {
 		return fmt.Errorf("books: save prefs: %w", err)
 	}
 	return nil
+}
+
+// setPrefs saves whichever of view, sort and reversed the toolbar's form
+// carries (UI redesign spec "Preferences"). The select always sends the
+// current sort, so only a different one changes it — and a new sort
+// starts in its natural direction. htmx gets the list back
+// (renderHome's list-swap); without JavaScript it is a redirect to the
+// list the form posted from. Anything the toolbar never sends is a 400.
+func (a *App) setPrefs(w http.ResponseWriter, r *http.Request) {
+	uid, ok := a.userID(w, r)
+	if !ok {
+		return
+	}
+	p, err := a.store.Prefs(r.Context(), uid)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if v := r.PostFormValue("view"); v != "" {
+		p.View = View(v)
+	}
+	if v := Sort(r.PostFormValue("sort")); v != "" && v != p.Sort {
+		p.Sort, p.Reversed = v, false
+	}
+	switch r.PostFormValue("reversed") {
+	case "":
+	case "1":
+		p.Reversed = true
+	case "0":
+		p.Reversed = false
+	default:
+		a.fail(w, r, ErrInvalid)
+		return
+	}
+	if err := a.store.SetPrefs(r.Context(), uid, p); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	c := ctxFrom(r.PostFormValue)
+	if web.IsHTMX(r) {
+		a.renderHome(w, r, uid, c)
+		return
+	}
+	http.Redirect(w, r, c.ListURL(), http.StatusSeeOther)
 }
