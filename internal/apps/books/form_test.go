@@ -180,3 +180,72 @@ func TestEditLeavesTheShelfAlone(t *testing.T) {
 		t.Errorf("shelf = %q, want reading unchanged", b.Shelf)
 	}
 }
+
+func TestAddAndEditHaveAPageBar(t *testing.T) {
+	s := newServer(t)
+	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfWant))
+
+	doc := s.Get(t, s.Alice, "/books/new?shelf=all&tag=sf")
+	back := doc.MustHave(".books-page-bar .books-back")
+	if href, _ := htmlassert.Attr(back, "href"); href != "/books/?shelf=all&tag=sf" {
+		t.Errorf("Add's back link = %q, want the list it came from", href)
+	}
+	if got := htmlassert.Text(back); got != "Tagged “sf”" {
+		t.Errorf("Add's back link text = %q, want the list's heading", got)
+	}
+	if got := attr(t, doc, ".books-form-actions a", "href"); got != "/books/?shelf=all&tag=sf" {
+		t.Errorf("Add's Cancel = %q, want the same place as the back link", got)
+	}
+	doc.MustNotHave(".books-page-actions") // no right-hand actions
+
+	doc = s.Get(t, s.Alice, fmt.Sprintf("/books/edit/%d?shelf=want&q=du", id))
+	back = doc.MustHave(".books-page-bar .books-back")
+	want := fmt.Sprintf("/books/b/%d?q=du&shelf=want", id)
+	if href, _ := htmlassert.Attr(back, "href"); href != want {
+		t.Errorf("Edit's back link = %q, want the book page %q", href, want)
+	}
+	if got := htmlassert.Text(back); got != "Dune" {
+		t.Errorf("Edit's back link text = %q, want the book's title", got)
+	}
+	if got := attr(t, doc, ".books-form-actions a", "href"); got != want {
+		t.Errorf("Edit's Cancel = %q, want %q", got, want)
+	}
+	doc.MustNotHave(".books-page-actions")
+}
+
+func TestAddKeepsItsListButNotItsSearch(t *testing.T) {
+	s, _ := newServerWithOL(t)
+	// The toolbar's Add link leaves the list's search behind.
+	doc := s.Get(t, s.Alice, "/books/?shelf=all&tag=sf&q=dune")
+	if got := attr(t, doc, "a#books-add", "href"); got != "/books/new?shelf=all&tag=sf" {
+		t.Errorf("Add link = %q, want the tag list without its search", got)
+	}
+	// The Open Library search and a pick keep the list.
+	doc = s.Get(t, s.Alice, "/books/new?shelf=all&tag=sf&q=piranesi")
+	if got := attr(t, doc, `.books-search-form input[name="tag"]`, "value"); got != "sf" {
+		t.Errorf("search form's tag = %q, want the list carried", got)
+	}
+	use, err := url.Parse(attr(t, doc, "a.books-result-use", "href"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q := use.Query(); q.Get("shelf") != "all" || q.Get("tag") != "sf" || q.Has("q") {
+		t.Errorf("Use this = %s, want the list's shelf and tag and no q", use)
+	}
+	doc = s.Get(t, s.Alice, use.String())
+	if got := attr(t, doc, ".books-back", "href"); got != "/books/?shelf=all&tag=sf" {
+		t.Errorf("back link after a pick = %q", got)
+	}
+	doc.MustNotHave(`form.books-form input[name="q"]`) // the list's search never posts with the book
+	if got := attr(t, doc, `form.books-form input[name="tag"]`, "value"); got != "sf" {
+		t.Errorf("Add form's tag field = %q, want the list carried", got)
+	}
+	// A refused add comes back to the same list.
+	rec := s.Post(t, s.Alice, "/books/new", url.Values{"title": {""}, "add_to": {"want"}, "shelf": {"all"}, "tag": {"sf"}})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("refused add = %d, want 422", rec.Code)
+	}
+	if got := attr(t, htmlassert.Parse(t, rec.Body.String()), ".books-back", "href"); got != "/books/?shelf=all&tag=sf" {
+		t.Errorf("back link after a refused add = %q", got)
+	}
+}

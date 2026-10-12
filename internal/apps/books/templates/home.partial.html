@@ -12,11 +12,11 @@
 
 {{/* list-swap answers anything aimed at #books-list: a shelf, tag or
      series link, the search box, the sort and view controls. The sidebar,
-     the toolbar's heading and controls and the search's hidden fields come
-     along out of band, and the drawer's checkbox comes back unchecked,
-     which closes the drawer on a phone. The search box itself is never
-     swapped (PATTERNS.md, SyncSearch). */}}
-{{define "list-swap"}}{{template "shell-oob" .}}{{template "list" .List}}{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" true)}}{{template "toolbar-head" (dict "List" .List "OOB" true)}}{{template "prefs" (dict "Prefs" .Prefs "Shell" .Shell "OOB" true)}}{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" true)}}{{template "drawer-toggle" true}}{{end}}
+     the toolbar's heading and controls, + Add book and the search's hidden
+     fields come along out of band, and the drawer's checkbox comes back
+     unchecked, which closes the drawer on a phone. The search box itself is
+     never swapped (PATTERNS.md, SyncSearch). */}}
+{{define "list-swap"}}{{template "shell-oob" .}}{{template "list" .List}}{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" true)}}{{template "toolbar-head" (dict "List" .List "OOB" true)}}{{template "prefs" (dict "Prefs" .Prefs "Shell" .Shell "OOB" true)}}{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" true)}}{{template "add-link" (dict "Ctx" .Ctx "OOB" true)}}{{template "drawer-toggle" true}}{{end}}
 
 {{define "home"}}
 <div class="books-home" id="books-home">
@@ -39,7 +39,7 @@
 				       hx-replace-url="true">
 			</form>
 			{{template "prefs" (dict "Prefs" .Prefs "Shell" .Shell "OOB" false)}}
-			<a class="button primary books-add" href="/books/new" aria-label="Add book">{{ticon "plus"}}<span class="books-add-label">Add book</span></a>
+			{{template "add-link" (dict "Ctx" .Ctx "OOB" false)}}
 		</div>
 		{{template "list" .List}}
 	</section>
@@ -49,6 +49,11 @@
 {{/* drawer-toggle is the phone drawer's checkbox; a sibling before the
      sidebar so the CSS reaches it with ~. Takes a bool: out of band. */}}
 {{define "drawer-toggle"}}<input type="checkbox" id="books-drawer" class="visually-hidden books-drawer-toggle"{{if .}} hx-swap-oob="true"{{end}}>{{end}}
+
+{{/* add-link is + Add book, carrying the list (but not its search), so
+     Add comes back to it (spec "Add and Edit pages"). It follows every
+     list swap out of band. Takes a dict: Ctx, OOB. */}}
+{{define "add-link"}}<a class="button primary books-add" id="books-add" href="{{.Ctx.AddURL}}" aria-label="Add book"{{if .OOB}} hx-swap-oob="true"{{end}}>{{ticon "plus"}}<span class="books-add-label">Add book</span></a>{{end}}
 
 {{/* toolbar-head is the list's name and count, and on a phone the button
      that opens the drawer, named after the list. Takes a dict: List (a

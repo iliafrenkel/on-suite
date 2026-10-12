@@ -45,10 +45,8 @@ func ctxFrom(get func(string) string) listCtx {
 		Series: strings.TrimSpace(get("series"))}
 }
 
-// Query is the context as a query string. Templates use the URL methods
-// below rather than this: a whole URL dropped into href is left alone by
-// html/template, a query string after a literal "?" gets percent-encoded.
-func (c listCtx) Query() string {
+// values is the context as query values.
+func (c listCtx) values() url.Values {
 	v := url.Values{}
 	v.Set("shelf", string(c.Shelf))
 	if c.Tag != "" {
@@ -60,8 +58,13 @@ func (c listCtx) Query() string {
 	if c.Series != "" {
 		v.Set("series", c.Series)
 	}
-	return v.Encode()
+	return v
 }
+
+// Query is the context as a query string. Templates use the URL methods
+// below rather than this: a whole URL dropped into href is left alone by
+// html/template, a query string after a literal "?" gets percent-encoded.
+func (c listCtx) Query() string { return c.values().Encode() }
 
 // ListURL is this list.
 func (c listCtx) ListURL() string { return "/books/?" + c.Query() }
@@ -69,6 +72,13 @@ func (c listCtx) ListURL() string { return "/books/?" + c.Query() }
 // BookURL is a book opened from this list.
 func (c listCtx) BookURL(id int64) string {
 	return "/books/b/" + strconv.FormatInt(id, 10) + "?" + c.Query()
+}
+
+// AddURL is the Add book page, coming back to this list afterwards — but
+// not to its search: on the Add page q is the Open Library search (UI
+// redesign spec "Add and Edit pages").
+func (c listCtx) AddURL() string {
+	return "/books/new?" + listCtx{Shelf: c.Shelf, Tag: c.Tag, Series: c.Series}.Query()
 }
 
 // homeView is everything the home page draws (UI redesign spec "Home

@@ -95,7 +95,7 @@ func TestIndexOpensOnTheReadingShelf(t *testing.T) {
 	if text := htmlassert.Text(current); text != "Reading, 1 book" {
 		t.Errorf("current shelf link = %q, want Reading with count 1, read out as \"Reading, 1 book\" (#568)", text)
 	}
-	doc.MustHave(`.books-toolbar a[href="/books/new"]`)
+	doc.MustHave(`.books-toolbar a[href="/books/new?shelf=reading"]`)
 	doc.MustNotHave("#books-book")
 	if isChecked(t, doc, "books-drawer") {
 		t.Error("the phone drawer starts closed")
@@ -195,13 +195,14 @@ func TestHTMXListNavigationSwapsTheListOnly(t *testing.T) {
 	if got := rowTitles(doc); len(got) != 1 || got[0] != "Emma" {
 		t.Errorf("rows = %v, want [Emma]", got)
 	}
-	for _, id := range []string{"books-side", "books-filter-ctx", "books-toolbar-head", "books-prefs", "books-drawer", "shell-crumb-tail"} {
+	for _, id := range []string{"books-side", "books-filter-ctx", "books-toolbar-head", "books-prefs", "books-add", "books-drawer", "shell-crumb-tail"} {
 		if v, ok := htmlassert.Attr(doc.MustHave("#"+id), "hx-swap-oob"); !ok || v != "true" {
 			t.Errorf("#%s hx-swap-oob = %q, %v; want it swapped out of band", id, v, ok)
 		}
 	}
 	doc.MustNotHave("#books-book")
 	doc.MustNotHave("#books-home")
+	doc.MustNotHave("#books-q") // the search box is never swapped (PATTERNS.md, SyncSearch; #594)
 }
 
 func TestRowsOpenTheBookWithTheirList(t *testing.T) {

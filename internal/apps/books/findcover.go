@@ -98,7 +98,7 @@ func (a *App) findCover(w http.ResponseWriter, r *http.Request) {
 		msg = "Open Library didn't answer. Try again in a minute."
 	}
 	if msg != "" {
-		v := editBookForm(id, valuesOf(b.BookInput), nil, c, coverURL(b.ID, b.CoverVersion))
+		v := editBookForm(b, valuesOf(b.BookInput), nil, c)
 		v.CoverNotice = msg
 		a.renderForm(w, r, http.StatusUnprocessableEntity, v)
 		return

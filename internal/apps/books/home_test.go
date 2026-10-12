@@ -194,8 +194,8 @@ func TestHomeListsInTheSavedOrder(t *testing.T) {
 func TestTheSidebarHasTheLinksAndNoAddButton(t *testing.T) {
 	s := newServer(t)
 	doc := s.Get(t, s.Alice, "/books/")
-	doc.MustNotHave(`.books-side a[href="/books/new"]`) // Add book is in the toolbar
-	doc.MustHave(`.books-toolbar a[href="/books/new"]`)
+	doc.MustNotHave(".books-side .books-add") // Add book is in the toolbar
+	doc.MustHave(`.books-toolbar a[href="/books/new?shelf=reading"]`)
 	for _, href := range []string{"/books/stats", "/books/import", "/books/export"} {
 		doc.MustHave(fmt.Sprintf(`.books-side-foot a[href="%s"]`, href))
 	}
@@ -229,7 +229,7 @@ func TestIconOnlyButtonsHaveNames(t *testing.T) {
 			t.Errorf("%s has no aria-label", sel)
 		}
 	}
-	if got := attr(t, doc, `.books-toolbar a[href="/books/new"]`, "aria-label"); got != "Add book" {
+	if got := attr(t, doc, "a#books-add", "aria-label"); got != "Add book" {
 		t.Errorf("Add link aria-label = %q, want Add book", got)
 	}
 
