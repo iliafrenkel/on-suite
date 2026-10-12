@@ -157,17 +157,13 @@ func TestSetTagsOverHTMX(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("htmx tags = %d, want 200", rec.Code)
 	}
-	if got, want := rec.Header().Get("HX-Replace-Url"), fmt.Sprintf("/books/b/%d?shelf=want", id); got != want {
-		t.Errorf("HX-Replace-Url = %q, want %q", got, want)
-	}
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustHave("#books-panes")
+	doc.MustHave("#books-book")
 	if got := attr(t, doc, "#books-tags-input", "value"); got != "sf, space" {
 		t.Errorf("tags box = %q, want the saved tags", got)
 	}
-	sidebar := strings.Join(texts(doc, ".books-side a"), "|")
-	if !strings.Contains(sidebar, "sf") || !strings.Contains(sidebar, "space") {
-		t.Errorf("sidebar = %q, want the new tags listed", sidebar)
+	if got := strings.Join(texts(doc, ".books-pills .books-pill"), "|"); got != "Want to read|sf|space" {
+		t.Errorf("pills = %q, want the shelf, then the new tags", got)
 	}
 	if tags, _ := s.Store.BookTags(context.Background(), s.Alice.User.ID, id); !slices.Equal(tags, []string{"sf", "space"}) {
 		t.Errorf("stored tags = %v", tags)

@@ -69,7 +69,7 @@ func TestReviewIsWrittenAndShown(t *testing.T) {
 		t.Fatalf("htmx review = %d, want 200", rec.Code)
 	}
 	doc = htmlassert.Parse(t, rec.Body.String())
-	doc.MustHave("#books-panes")
+	doc.MustHave("#books-book")
 	if got := htmlassert.Text(doc.MustHave(".books-review-text strong")); got != "sand" {
 		t.Errorf("bold = %q", got)
 	}

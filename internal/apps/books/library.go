@@ -335,43 +335,62 @@ type ListItem struct {
 	Snippet                                  string  // the match, between SnippetOpen/SnippetClose; "" for MatchBook
 }
 
-// ListQuery picks the books a list shows. Shelf "" or ShelfAll is every
-// shelf; Tag is one tag name; Q is full-text search over books_search —
-// title, subtitle, authors, series, review, notes, quotes and comments —
-// every word having to match, each as a prefix; Series is one
-// series' name, matched whole and ignoring case.
+// ListQuery picks the books a list shows and their order. Shelf "" or
+// ShelfAll is every shelf; Tag is one tag name; Q is full-text search over
+// books_search — title, subtitle, authors, series, review, notes, quotes
+// and comments — every word having to match, each as a prefix; Series is
+// one series' name, matched whole and ignoring case. Sort "" is
+// SortDefault; Reversed turns the sort's natural direction round (UI
+// redesign spec "Sorting"). A series is always in reading order.
 type ListQuery struct {
-	Shelf  Shelf
-	Tag    string
-	Q      string
-	Series string
+	Shelf    Shelf
+	Tag      string
+	Q        string
+	Series   string
+	Sort     Sort
+	Reversed bool
 }
 
-// listOrder is each list's sort (spec "Layout"): a series in reading order
-// (by number, as a number where it is one: "2.5" sits between 2 and 3);
-// otherwise by shelf — Reading by the latest progress (a reading with none
-// yet by when it started), Read by finish, Want to read by date added, DNF
-// and All by the latest change. NULL dates sort last.
+// listOrder is a list's SQL order (UI redesign spec "Sorting"). A series
+// is in reading order (by number, as a number where it is one: "2.5" sits
+// between 2 and 3), whatever the sort. Default is each shelf's own order:
+// Reading by the latest progress (a reading with none yet by when it
+// started), Read by finish, Want to read by date added, DNF and All by the
+// latest change. Date added is added_at. All of these are newest first,
+// oldest first when reversed, and an undated finish is last either way.
+// Title and Author are put in order in Go (sortItems), so here they are
+// only a stable base.
 func listOrder(q ListQuery) string {
 	if q.Series != "" {
 		// Unnumbered books sort after numbered ones; a non-numeric number
 		// casts to 0 and so sorts first among the numbered.
 		return `b.series_number = '', CAST(b.series_number AS REAL), b.series_number, b.title, b.id`
 	}
+	dir := "DESC"
+	if q.Reversed {
+		dir = "ASC"
+	}
+	switch q.Sort {
+	case SortAdded:
+		return `b.added_at ` + dir + `, b.id ` + dir
+	case SortTitle, SortAuthor:
+		return `b.id`
+	}
 	switch q.Shelf {
 	case ShelfReading:
-		return `COALESCE(p.recorded_at, r.created_at) DESC, r.id DESC`
+		return `COALESCE(p.recorded_at, r.created_at) ` + dir + `, r.id ` + dir
 	case ShelfRead:
-		return `r.finished_on DESC, r.id DESC`
+		return `r.finished_on IS NULL, r.finished_on ` + dir + `, r.id ` + dir
 	case ShelfWant:
-		return `b.added_at DESC, b.id DESC`
+		return `b.added_at ` + dir + `, b.id ` + dir
 	default:
-		return `b.updated_at DESC, b.id DESC`
+		return `b.updated_at ` + dir + `, b.id ` + dir
 	}
 }
 
-// List returns userID's books matching q, in the shelf's order — a search
-// keeps it too (decided 2026-10-09), so filtering never reshuffles a shelf.
+// List returns userID's books matching q, in q's order (listOrder,
+// sortItems) — a search keeps it too (decided 2026-10-09), so filtering
+// never reshuffles a list.
 func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListItem, error) {
 	where := []string{"b.user_id = ?"}
 	args := []any{userID}
@@ -435,6 +454,9 @@ func (st *Store) List(ctx context.Context, userID int64, q ListQuery) ([]ListIte
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("books: list: %w", err)
+	}
+	if q.Series == "" && (q.Sort == SortTitle || q.Sort == SortAuthor) {
+		sortItems(out, q.Sort, q.Reversed)
 	}
 	return out, nil
 }

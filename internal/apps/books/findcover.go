@@ -64,25 +64,48 @@ func (a *App) lookUpCover(ctx context.Context, b Book) (string, []byte, error) {
 	return ct, data, err
 }
 
-// findCover is the ⋯ menu's Find cover: the lookup, now. Finding none, or
-// Open Library not answering, is a Refusal — the banner over the panes,
-// as for any other action (spec "Errors").
-func (a *App) findCover(r *http.Request, userID, id int64) error {
-	ctx := r.Context()
-	b, err := a.store.Get(ctx, userID, id)
-	if err != nil {
-		return err
+// findCover is the Edit page's Find cover (UI redesign spec "Add and Edit
+// pages"): the lookup, now. Found, it is back to the Edit page, which
+// says so; finding none, or Open Library not answering, is the Edit page
+// again with the reason by the cover, as a 422.
+func (a *App) findCover(w http.ResponseWriter, r *http.Request) {
+	uid, ok := a.userID(w, r)
+	if !ok {
+		return
 	}
+	id, ok := a.pathID(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	b, err := a.store.Get(ctx, uid, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	c := ctxFrom(r.PostFormValue)
 	ct, data, err := a.lookUpCover(ctx, b)
+	var msg string
 	switch {
 	case errors.Is(err, ErrNoCover):
-		if err := a.store.MarkCoverChecked(ctx, userID, id); err != nil {
-			return err
+		if err := a.store.MarkCoverChecked(ctx, uid, id); err != nil {
+			a.fail(w, r, err)
+			return
 		}
-		return &Refusal{Msg: "Open Library has no cover for this book. You can add one with Edit details."}
+		msg = "Open Library has no cover for this book. You can upload one, or paste the address of one."
 	case err != nil:
 		a.deps.Log.Info("books find cover failed", "book", id, "error", err)
-		return &Refusal{Msg: "Open Library didn't answer. Try again in a minute."}
+		msg = "Open Library didn't answer. Try again in a minute."
 	}
-	return a.store.SetCover(ctx, userID, id, ct, data, CoverFromOL)
+	if msg != "" {
+		v := editBookForm(id, valuesOf(b.BookInput), nil, c, coverURL(b.ID, b.CoverVersion))
+		v.CoverNotice = msg
+		a.renderForm(w, r, http.StatusUnprocessableEntity, v)
+		return
+	}
+	if err := a.store.SetCover(ctx, uid, id, ct, data, CoverFromOL); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, c.EditURL(id)+"&found=1", http.StatusSeeOther)
 }

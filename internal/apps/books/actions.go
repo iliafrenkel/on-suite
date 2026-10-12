@@ -9,13 +9,14 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
-// change is one thing done to a book from the book pane.
+// change is one thing done to a book from the book page.
 type change func(r *http.Request, userID, id int64) error
 
-// act runs a change and answers with the panes. htmx gets the whole panes
-// (shelf counts, the list and the book can all move); without JavaScript
-// it is a redirect back to the book — or to the list, once the book is
-// gone. A Refusal is the banner over the panes rather than an error page.
+// act runs a change and answers with the book page: htmx gets its body
+// (book-swap), without JavaScript it is a redirect back to the book. Once
+// the book is gone (gone), its page is too: back to the list it was
+// opened from, by HX-Redirect for htmx (UI redesign spec "Swaps"). A
+// Refusal is the banner on the page rather than an error page.
 func (a *App) act(do change, gone bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		uid, ok := a.userID(w, r)
@@ -31,29 +32,27 @@ func (a *App) act(do change, gone bool) http.HandlerFunc {
 		var ref *Refusal
 		switch {
 		case errors.As(err, &ref):
-			a.renderPanes(w, r, uid, c, paneOpts{BookID: id, Banner: ref.Msg})
+			a.renderBook(w, r, uid, id, c, bookOpts{Banner: ref.Msg})
 			return
 		case err != nil:
 			a.fail(w, r, err)
 			return
 		}
-		open, target := id, c.BookURL(id)
-		if gone {
-			open, target = 0, c.ListURL()
+		switch {
+		case gone && web.IsHTMX(r):
+			w.Header().Set("HX-Redirect", c.ListURL())
+		case gone:
+			http.Redirect(w, r, c.ListURL(), http.StatusSeeOther)
+		case web.IsHTMX(r):
+			a.renderBook(w, r, uid, id, c, bookOpts{})
+		default:
+			http.Redirect(w, r, c.BookURL(id), http.StatusSeeOther)
 		}
-		if web.IsHTMX(r) {
-			// The form posted from the address bar's book; say where the panes
-			// now stand (the list, once the book is gone).
-			w.Header().Set("HX-Replace-Url", target)
-			a.renderPanes(w, r, uid, c, paneOpts{BookID: open})
-			return
-		}
-		http.Redirect(w, r, target, http.StatusSeeOther)
 	}
 }
 
 // progress records where the reading in progress stands. htmx aims it at
-// the progress box, so the answer is the box with the list out of band;
+// the progress box, so the answer is the box;
 // a value the store refuses comes back inside the box with what was typed
 // (spec "Errors"). Nothing typed is refused like any other bad value.
 func (a *App) progress(w http.ResponseWriter, r *http.Request) {
@@ -75,14 +74,14 @@ func (a *App) progress(w http.ResponseWriter, r *http.Request) {
 	var ref *Refusal
 	switch {
 	case errors.As(err, &ref):
-		a.renderPanes(w, r, uid, c, paneOpts{BookID: id, ProgressError: ref.Msg, ProgressInput: typed})
+		a.renderBook(w, r, uid, id, c, bookOpts{ProgressError: ref.Msg, ProgressInput: typed})
 		return
 	case err != nil:
 		a.fail(w, r, err)
 		return
 	}
 	if web.IsHTMX(r) {
-		a.renderPanes(w, r, uid, c, paneOpts{BookID: id})
+		a.renderBook(w, r, uid, id, c, bookOpts{})
 		return
 	}
 	http.Redirect(w, r, c.BookURL(id), http.StatusSeeOther)
@@ -179,7 +178,7 @@ func pageField(r *http.Request) int {
 type entrySave func(r *http.Request, userID, id int64) (entryDraft, error)
 
 // saveEntry answers a note or quote form. htmx aims it at the section, so
-// the answer is the section with the list out of band (renderPanes);
+// the answer is the section (renderBook);
 // without JavaScript it is a redirect back to the book. A refusal comes
 // back inside the form, opened, with what was typed — a 200 fragment for
 // htmx, a 422 page without.
@@ -199,14 +198,14 @@ func (a *App) saveEntry(save entrySave) http.HandlerFunc {
 		switch {
 		case errors.As(err, &ref):
 			d.Error = ref.Msg
-			a.renderPanes(w, r, uid, c, paneOpts{BookID: id, Draft: d})
+			a.renderBook(w, r, uid, id, c, bookOpts{Draft: d})
 			return
 		case err != nil:
 			a.fail(w, r, err)
 			return
 		}
 		if web.IsHTMX(r) {
-			a.renderPanes(w, r, uid, c, paneOpts{BookID: id})
+			a.renderBook(w, r, uid, id, c, bookOpts{})
 			return
 		}
 		http.Redirect(w, r, c.BookURL(id), http.StatusSeeOther)

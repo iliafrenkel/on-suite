@@ -1,157 +1,45 @@
-{{/* ON Books' three panes — shelves and tags, the list, the book — on ON
-     Reader's layout (internal/apps/reader/templates/panes.partial.html).
-     Apps never import each other, so these blocks are Books' own. Every
-     block here takes a panesView (or the part named in its comment). */}}
+{{/* ON Books' book page: a full-width page of its own with a page bar back
+     to the list it was opened from (UI redesign spec "Book details page",
+     docs/superpowers/specs/2026-10-12-on-books-ui-redesign-design.md). The
+     page blocks take a bookPageView; the sections below them take its Book
+     (a bookView), as their comments say. */}}
 
-{{/* The <title> and crumb ride along with every fragment, so the page
-     chrome follows the panes (#205). */}}
-{{define "shell-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{end}}
+{{/* book-swap answers a change that can move more than one section —
+     start, finish, did not finish, the format, the rating, the review, the
+     tags, a reading edited or deleted — and a refusal's banner: the page
+     body (target #books-book). */}}
+{{define "book-swap"}}{{template "book-body" .}}{{end}}
 
-{{/* panes-oob answers anything that changes a book: the whole panes. */}}
-{{define "panes-oob"}}{{template "shell-oob" .}}{{template "panes" .}}{{end}}
+{{/* progress-swap answers a progress update (target #books-progress). */}}
+{{define "progress-swap"}}{{template "progress" .Book}}{{end}}
 
-{{/* list-swap answers a shelf, tag or filter change (target #books-list).
-     The sidebar comes along out of band — its highlight and links follow
-     the list, and unlike Reader's tree it holds nothing worth keeping — as
-     do the filter's hidden fields and the phone drill-down boxes. The book
-     pane is left as it is; books.js moves the row highlight. */}}
-{{define "list-swap"}}{{template "shell-oob" .}}{{template "list" .List}}{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" true)}}{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" true)}}{{template "pane-toggle" (dict "ID" "books-list-open" "Label" "Shelves" "Checked" true "OOB" true)}}{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" false "OOB" true)}}{{end}}
+{{/* notes-swap and quotes-swap answer a note or a quote being added,
+     edited or deleted (targets #books-notes, #books-quotes). */}}
+{{define "notes-swap"}}{{template "notes" .Book}}{{end}}
+{{define "quotes-swap"}}{{template "quotes" .Book}}{{end}}
 
-{{/* progress-swap answers a progress update (target #books-progress):
-     the box, and the list out of band so the row's bar and the Reading
-     shelf's order follow (spec "Progress and finishing"). */}}
-{{define "progress-swap"}}{{template "progress" .Book}}{{template "list" .List}}{{end}}
-
-{{/* notes-swap answers a note being added, edited or deleted (target
-     #books-notes): the section, and the list out of band — the row's
-     snippet and its place on a shelf sorted by the latest change can both
-     move. */}}
-{{define "notes-swap"}}{{template "notes" .Book}}{{template "list" .List}}{{end}}
-
-{{/* quotes-swap is notes-swap for the quotes (target #books-quotes). */}}
-{{define "quotes-swap"}}{{template "quotes" .Book}}{{template "list" .List}}{{end}}
-
-{{/* book-swap answers opening a book (target #books-book). The checkbox
-     out of band is what makes a phone drill into the book. */}}
-{{define "book-swap"}}{{template "shell-oob" .}}{{template "book" .Book}}{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" true "OOB" true)}}{{end}}
-
-{{define "panes"}}
-<div class="books-panes" id="books-panes">
-	{{with .Error}}<p class="notice notice-error books-banner" role="alert">{{.}}</p>{{end}}
-	<div class="books-panes-row" id="books-panes-row">
-		{{/* The narrow-screen drill-down (Reader's technique): the list is
-		     always "open" over the sidebar, a book over the list. Siblings
-		     of the panes so the CSS reaches them with ~; the back labels in
-		     the panes uncheck them. */}}
-		{{template "pane-toggle" (dict "ID" "books-list-open" "Label" "Shelves" "Checked" true "OOB" false)}}
-		{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" .Book.Selected "OOB" false)}}
-		{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" false)}}
-		<div class="pane-gutter" data-gutter-for="side" role="separator"
-		     aria-orientation="vertical" aria-label="Resize the shelves" tabindex="0"></div>
-		<section class="books-listpane" aria-label="Books">
-			{{template "back" (dict "For" "books-list-open" "Label" "Shelves")}}
-			{{/* The filter lives outside #books-list so a list swap never
-			     replaces the box being typed in (PATTERNS.md, SyncSearch). */}}
-			<form class="books-filter" method="get" action="/books/" role="search">
-				{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" false)}}
-				<label class="visually-hidden" for="books-q">Search your books</label>
-				<input type="search" id="books-q" name="q" value="{{.Ctx.Q}}" placeholder="Search books, notes and quotes…"
-				       hx-get="/books/" hx-target="#books-list" hx-swap="outerHTML"
-				       hx-include="closest form" hx-trigger="input changed delay:300ms, search"
-				       hx-replace-url="true">
-			</form>
-			{{template "list" .List}}
-		</section>
-		<div class="pane-gutter" data-gutter-for="list" role="separator"
-		     aria-orientation="vertical" aria-label="Resize the book pane" tabindex="0"></div>
-		{{template "book" .Book}}
-	</div>
+{{define "book-page"}}
+<div class="books-page" id="books-page">
+	{{template "book-body" .}}
 	{{template "confirm"}}
 </div>
 {{end}}
 
-{{define "pane-toggle"}}<input type="checkbox" id="{{.ID}}" class="visually-hidden books-pane-toggle"{{if .Checked}} checked{{end}}{{if .OOB}} hx-swap-oob="true"{{end}} aria-label="{{.Label}}">{{end}}
-
-{{define "back"}}<label class="toolbar-btn books-back-btn" for="{{.For}}">{{ticon "arrow-left"}}{{.Label}}</label>{{end}}
-
-{{/* filter-ctx is the shelf, tag and series the filter box searches
-     within. */}}
-{{define "filter-ctx"}}<span id="books-filter-ctx"{{if .OOB}} hx-swap-oob="true"{{end}}><input type="hidden" name="shelf" value="{{.Ctx.Shelf}}">{{with .Ctx.Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Ctx.Series}}<input type="hidden" name="series" value="{{.}}">{{end}}</span>{{end}}
-
-{{/* ctx-fields is a listCtx as hidden fields, for POSTs. */}}
-{{define "ctx-fields"}}<input type="hidden" name="shelf" value="{{.Shelf}}">{{with .Tag}}<input type="hidden" name="tag" value="{{.}}">{{end}}{{with .Q}}<input type="hidden" name="q" value="{{.}}">{{end}}{{with .Series}}<input type="hidden" name="series" value="{{.}}">{{end}}{{end}}
-
-{{define "sidebar"}}
-<nav class="books-side" id="books-side" aria-label="Shelves"{{if .OOB}} hx-swap-oob="true"{{end}}>
-	<a class="button primary books-add" href="/books/new">{{ticon "plus"}}Add book</a>
-	<ul class="books-shelves">
-		{{range .Sidebar.Shelves}}
-		<li><a class="books-shelf" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true"{{if .Current}} aria-current="page"{{end}}>{{.Label}}<span class="books-count">{{if .Count}}<span class="visually-hidden">, </span>{{.Count}}<span class="visually-hidden"> {{if eq .Count 1}}book{{else}}books{{end}}</span>{{end}}</span></a></li>
-		{{end}}
-	</ul>
-	{{with .Sidebar.Tags}}
-	<h2 class="books-side-head">Tags</h2>
-	<ul class="books-shelves">
-		{{range .}}
-		<li><a class="books-shelf" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a></li>
-		{{end}}
-	</ul>
-	{{end}}
-	<a class="books-stats-link" href="/books/stats">{{ticon "stats"}}Stats</a>
-	<a class="books-side-link" href="/books/import">{{ticon "import"}}Import from Goodreads</a>
-	<a class="books-side-link" href="/books/export" download>{{ticon "export"}}Export as Markdown</a>
-</nav>
-{{end}}
-
-{{/* list takes a listView. */}}
-{{define "list"}}
-<div class="books-list" id="books-list" data-shelf="{{.Ctx.Shelf}}" data-tag="{{.Ctx.Tag}}" data-q="{{.Ctx.Q}}" data-series="{{.Ctx.Series}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
-	{{with .Goal}}
-	<a class="books-goal-card" href="/books/stats">
-		<span class="books-goal-card-head">{{.Year}} goal</span>
-		<span class="books-goal-card-text">{{.Text}}{{with .Pace}} · {{.}}{{end}}</span>
-		<progress class="books-row-bar" max="100" value="{{.Percent}}" aria-hidden="true"></progress>
-	</a>
-	{{end}}
-	<h2 class="books-list-head">{{.Heading}}</h2>
-	{{if .Rows}}
-	<ul class="books-rows">
-		{{range .Rows}}
-		<li class="books-row{{if .Active}} is-active{{end}}" data-book-id="{{.ID}}">
-			<a class="books-row-link" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-book" hx-swap="outerHTML" hx-push-url="true">
-				{{if .Cover}}<img class="books-mini-cover" src="{{.Cover}}" alt="" width="32" height="48" loading="lazy">{{else}}<span class="books-mini-spine swatch-c-{{.Spine}}" aria-hidden="true">{{.Initial}}</span>{{end}}
-				<span class="books-row-text">
-					<span class="books-row-title">{{.Title}}</span>
-					{{with .Byline}}<span class="books-row-byline">{{.}}</span>{{end}}
-					<span class="books-row-note">{{if .Bar}}<progress class="books-row-bar" max="100" value="{{.Percent}}" aria-hidden="true"></progress> {{end}}{{if .Stars}}<span class="books-stars" role="img" aria-label="Rated {{.Rating}} of 5">{{.Stars}}</span> {{end}}{{.Note}}</span>
-					{{with .Snippet}}<span class="books-row-snippet"><span class="books-snippet-in">{{.In}}</span> {{range .Parts}}{{if .Hit}}<mark>{{.Text}}</mark>{{else}}{{.Text}}{{end}}{{end}}</span>{{end}}
-				</span>
-			</a>
-		</li>
-		{{end}}
-	</ul>
-	{{else}}
-	<p class="empty">{{.Empty}}</p>
-	{{end}}
-</div>
-{{end}}
-
-{{/* book takes a bookView. */}}
-{{define "book"}}
-<section class="books-book" id="books-book" aria-label="Book"{{if .Selected}} data-book-id="{{.ID}}"{{end}}>
-{{if .Selected}}
-	{{template "back" (dict "For" "books-book-open" "Label" "Books")}}
+{{define "book-body"}}
+<article class="books-book" id="books-book" data-book-id="{{.Book.ID}}" aria-label="Book">
+	{{template "page-bar" .Book}}
+	{{with .Error}}<p class="notice notice-error books-banner" role="alert">{{.}}</p>{{end}}
+	{{with .Book}}
 	<header class="books-book-head">
 		{{if .Cover}}<img class="books-cover" src="{{.Cover}}" alt="Cover of {{.Title}}" width="96" height="144">{{else}}<div class="books-spine swatch-c-{{.Spine}}" aria-hidden="true"><span>{{.Title}}</span></div>{{end}}
 		<div class="books-book-titles">
 			<h1>{{.Title}}</h1>
 			{{with .Subtitle}}<p class="books-subtitle">{{.}}</p>{{end}}
 			{{with .Authors}}<p class="books-authors">{{.}}</p>{{end}}
-			{{with .Series}}<p class="books-series"><a href="{{$.SeriesURL}}" hx-get="{{$.SeriesURL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true">{{.}}</a></p>{{end}}
+			{{with .Series}}<p class="books-series"><a href="{{$.Book.SeriesURL}}">{{.}}</a></p>{{end}}
 			{{with .Facts}}<p class="books-facts">{{range $i, $f := .}}{{if $i}} · {{end}}{{$f}}{{end}}</p>{{end}}
 			<p class="books-pills"><span class="books-pill books-pill-shelf">{{.ShelfLabel}}</span>{{range .Tags}} <span class="books-pill">{{.}}</span>{{end}}</p>
 		</div>
-		{{template "book-menu" .}}
 	</header>
 	{{template "reading-box" .}}
 	{{template "rating" .}}
@@ -161,10 +49,27 @@
 	{{template "notes" .}}
 	{{template "quotes" .}}
 	{{template "history" .}}
-{{else}}
-	<p class="empty">Pick a book, or add one.</p>
+	{{end}}
+</article>
 {{end}}
-</section>
+
+{{/* page-bar is the way back to the list the book was opened from, and the
+     book's Edit and Delete as small icon buttons (spec "Page bar"). Delete
+     goes through the confirm dialog (books.js), then to the list
+     (HX-Redirect); without JavaScript it simply submits. Takes a bookView. */}}
+{{define "page-bar"}}
+<nav class="books-page-bar" aria-label="Book actions">
+	<a class="books-back" href="{{.Ctx.ListURL}}">{{ticon "arrow-left"}}{{.BackLabel}}</a>
+	<span class="books-page-actions">
+		<a class="toolbar-btn books-icon-btn books-edit-link" href="{{.Ctx.EditURL .ID}}" aria-label="Edit details" title="Edit details">{{ticon "edit"}}</a>
+		<form method="post" action="/books/delete/{{.ID}}">
+			{{template "post-ctx" .}}
+			<button type="submit" class="toolbar-btn books-icon-btn books-delete" aria-label="Delete book" title="Delete book"
+			        hx-post="/books/delete/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML"
+			        hx-confirm="Delete “{{.Title}}” for good? Its readings, notes and quotes go too.">{{ticon "trash"}}</button>
+		</form>
+	</span>
+</nav>
 {{end}}
 
 {{/* text-field is one labelled text input with its error. Pass a dict
@@ -180,31 +85,7 @@
 
 {{define "field-error"}}{{with .Error}}<p class="books-field-error" id="books-{{$.Name}}-error">{{.}}</p>{{end}}{{end}}
 
-{{/* book-menu is the book pane's ⋯ menu: a no-JS <details> disclosure
-     (PATTERNS.md). Find cover shows while the book has none (B5). Delete goes through the confirm dialog (books.js);
-     without JavaScript it simply submits. Takes a bookView. */}}
-{{define "book-menu"}}
-<details class="outline-menu books-menu">
-	<summary class="outline-menu-toggle quiet" aria-label="Book actions">{{ticon "more"}}</summary>
-	<div class="outline-menu-list outline-menu-list-end">
-		<a class="books-edit-link" href="{{.Ctx.EditURL .ID}}">Edit details</a>
-		{{if not .Cover}}
-		<form method="post" action="/books/find-cover/{{.ID}}">
-			{{template "post-ctx" .}}
-			<button type="submit" hx-post="/books/find-cover/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">Find cover</button>
-		</form>
-		{{end}}
-		<form method="post" action="/books/delete/{{.ID}}">
-			{{template "post-ctx" .}}
-			<button type="submit" class="outline-menu-delete"
-			        hx-post="/books/delete/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML"
-			        hx-confirm="Delete “{{.Title}}” for good? Its readings, notes and quotes go too.">Delete</button>
-		</form>
-	</div>
-</details>
-{{end}}
-
-{{/* post-ctx is what every book-pane POST carries: the CSRF token and the
+{{/* post-ctx is what every book-page POST carries: the CSRF token and the
      list context. Takes a bookView. */}}
 {{define "post-ctx"}}<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">{{template "ctx-fields" .Ctx}}{{end}}
 
@@ -223,7 +104,7 @@
 		{{template "close-reading" (dict "Book" . "Action" "dnf" "Label" "Did not finish" "DayLabel" "Stopped on" "Submit" "Put it down" "Primary" false)}}
 	</div>
 	{{else}}
-	<form method="post" action="/books/start/{{.ID}}" hx-post="/books/start/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+	<form method="post" action="/books/start/{{.ID}}" hx-post="/books/start/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
 		{{template "post-ctx" .}}
 		<button type="submit" class="primary books-start">{{.StartLabel}}</button>
 	</form>
@@ -238,7 +119,7 @@
 <details class="outline-menu books-format">
 	<summary class="books-pill books-format-pill" aria-label="Format: {{.FormatLabel}}">{{.FormatLabel}}</summary>
 	<form class="outline-menu-list outline-menu-list-end" method="post" action="/books/format/{{.ID}}"
-	      hx-post="/books/format/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+	      hx-post="/books/format/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
 		{{template "post-ctx" .}}
 		{{range .FormatChoices}}<button type="submit" name="format" value="{{.Value}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</button>{{end}}
 	</form>
@@ -246,7 +127,7 @@
 {{end}}
 
 {{/* progress is the progress box of a reading in progress: the input
-     saves on Enter — htmx swaps this box and the list (progress-swap);
+     saves on Enter — htmx swaps just this box (progress-swap);
      without JavaScript it posts and comes back. Takes a bookView. */}}
 {{define "progress"}}
 <div class="books-progress" id="books-progress">
@@ -274,7 +155,7 @@
 <details class="books-close">
 	<summary class="button{{if .Primary}} primary{{end}}">{{.Label}}</summary>
 	<form class="books-close-form" novalidate method="post" action="/books/{{.Action}}/{{.Book.ID}}"
-	      hx-post="/books/{{.Action}}/{{.Book.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+	      hx-post="/books/{{.Action}}/{{.Book.ID}}" hx-target="#books-book" hx-swap="outerHTML">
 		{{template "post-ctx" .Book}}
 		<label for="books-{{.Action}}-day">{{.DayLabel}}</label>
 		<input id="books-{{.Action}}-day" name="day" type="date" value="{{.Book.Today}}" max="{{.Book.Today}}"{{with .Book.MinDay}} min="{{.}}"{{end}}>
@@ -299,7 +180,7 @@
      (#579). Takes a bookView. */}}
 {{define "rating"}}
 <form class="books-rating" method="post" action="/books/rating/{{.ID}}"
-      hx-post="/books/rating/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+      hx-post="/books/rating/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
 	{{template "post-ctx" .}}
 	<span class="books-rating-label">{{if .Rating}}Your rating{{else}}Rate it{{end}}</span>
 	<span class="books-star-row">{{range .Stars}}<button type="submit" class="books-star{{if .On}} is-on{{end}}" name="rating" value="{{.Value}}" aria-label="{{.Label}}" title="{{.Label}}">{{if .On}}{{ticon "star-filled"}}{{else}}{{ticon "star-outline"}}{{end}}</button>{{end}}</span>
@@ -307,7 +188,7 @@
 {{end}}
 
 {{/* review is the book's review, rendered, and a no-JS <details> with a
-     textarea to write or edit it (decided 2026-10-09); htmx swaps the panes
+     textarea to write or edit it (decided 2026-10-09); htmx swaps the book
      on save. Takes a bookView. */}}
 {{define "review"}}
 <section class="books-review" aria-label="Review">
@@ -315,7 +196,7 @@
 	<details class="books-review-edit">
 		<summary class="button">{{if .Review}}Edit review{{else}}Write a review{{end}}</summary>
 		<form class="books-review-form" method="post" action="/books/review/{{.ID}}"
-		      hx-post="/books/review/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+		      hx-post="/books/review/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
 			{{template "post-ctx" .}}
 			<label for="books-review-input">Review</label>
 			<textarea id="books-review-input" name="review" rows="8">{{.Review}}</textarea>
@@ -342,7 +223,7 @@
 {{/* tags-form edits a book's tags in place. Takes a bookView. */}}
 {{define "tags-form"}}
 <form class="books-tags-form" method="post" action="/books/tags/{{.ID}}"
-      hx-post="/books/tags/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+      hx-post="/books/tags/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
 	{{template "post-ctx" .}}
 	<label for="books-tags-input">Tags</label>
 	<div class="books-tags-row">
@@ -479,7 +360,7 @@
 				<details class="books-reading-edit">
 					<summary class="button quiet">Edit</summary>
 					<form class="books-reading-edit-form" method="post" action="/books/readings/{{$.ID}}/{{.ID}}"
-					      hx-post="/books/readings/{{$.ID}}/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
+					      hx-post="/books/readings/{{$.ID}}/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
 						{{template "post-ctx" $}}
 						<label for="books-r{{.ID}}-started">Started on</label>
 						<input id="books-r{{.ID}}-started" name="started_on" type="date" value="{{.StartedOn}}" max="{{$.Today}}">
@@ -497,7 +378,7 @@
 				<form method="post" action="/books/readings/{{$.ID}}/{{.ID}}/delete">
 					{{template "post-ctx" $}}
 					<button type="submit" class="quiet"
-					        hx-post="/books/readings/{{$.ID}}/{{.ID}}/delete" hx-target="#books-panes" hx-swap="outerHTML"
+					        hx-post="/books/readings/{{$.ID}}/{{.ID}}/delete" hx-target="#books-book" hx-swap="outerHTML"
 					        hx-confirm="Delete this reading? Its progress goes with it.">Delete</button>
 				</form>
 			</div>
@@ -508,7 +389,7 @@
 {{end}}
 {{end}}
 
-{{/* confirm is the one dialog every hx-confirm in the panes goes through
+{{/* confirm is the one dialog every hx-confirm on the book page goes through
      (books.js), instead of window.confirm. */}}
 {{define "confirm"}}
 <dialog id="books-confirm-dialog" class="books-dialog">

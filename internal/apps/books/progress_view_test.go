@@ -69,7 +69,7 @@ func TestTheProgressBoxIsInTheUnitOfTheReading(t *testing.T) {
 	s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", want)).MustNotHave("#books-progress")
 }
 
-func TestProgressOverHTMXSwapsTheBoxAndTheList(t *testing.T) {
+func TestProgressOverHTMXSwapsTheBox(t *testing.T) {
 	s := newServer(t)
 	s.Clock.Set(time.Date(2026, 10, 9, 1, 0, 0, 0, time.UTC))
 	id := readingBook(t, s, "Dune", 600)
@@ -78,7 +78,7 @@ func TestProgressOverHTMXSwapsTheBoxAndTheList(t *testing.T) {
 		t.Fatalf("htmx progress = %d, want 200", rec.Code)
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustNotHave("#books-panes")
+	doc.MustNotHave("#books-book")
 	if v, _ := htmlassert.Attr(doc.MustHave("input#books-progress-input"), "value"); v != "120" {
 		t.Errorf("input value = %q, want 120", v)
 	}
@@ -88,17 +88,7 @@ func TestProgressOverHTMXSwapsTheBoxAndTheList(t *testing.T) {
 	if got := htmlassert.Text(doc.MustHave(".books-progress-note")); got != "20% · updated 9 Oct 2026" {
 		t.Errorf("note = %q", got)
 	}
-	list := doc.MustHave("#books-list")
-	if v, _ := htmlassert.Attr(list, "hx-swap-oob"); v != "true" {
-		t.Errorf("list hx-swap-oob = %q, want the list out of band", v)
-	}
-	if v, _ := htmlassert.Attr(doc.MustHave("progress.books-row-bar"), "value"); v != "20" {
-		t.Errorf("row bar = %q, want 20", v)
-	}
-	if got := htmlassert.Text(doc.MustHave(".books-row-note")); got != "20%" {
-		t.Errorf("row note = %q, want 20%%", got)
-	}
-	doc.MustHave("#books-list .is-active")
+	doc.MustNotHave("#books-list") // no list beside the book any more
 }
 
 func TestProgressWithoutJavaScriptComesBackToTheBook(t *testing.T) {
@@ -162,10 +152,10 @@ func TestRowsShowProgressAndStars(t *testing.T) {
 	}
 
 	doc := s.Get(t, s.Alice, "/books/?shelf=reading")
-	if got := htmlassert.Text(doc.MustHave(".books-row-note")); got != "25%" {
-		t.Errorf("first reading row = %q, want 25%% (the one with progress first)", got)
+	if got := htmlassert.Text(doc.MustHave(".books-item-status")); got != "Reading · p. 150 / 600" {
+		t.Errorf("first reading tile = %q, want Dune's page (the one with progress first)", got)
 	}
-	if n := len(doc.QueryAll("progress.books-row-bar")); n != 1 {
+	if n := len(doc.QueryAll("progress.books-item-cover-bar")); n != 1 {
 		t.Errorf("%d row bars, want 1: no bar before any progress", n)
 	}
 	doc = s.Get(t, s.Alice, "/books/?shelf=read")

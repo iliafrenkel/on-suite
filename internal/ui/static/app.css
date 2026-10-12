@@ -4127,63 +4127,173 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 }
 
 /* ---- ON Books ----------------------------------------------------------
- * Three panes — shelves, list, book — on ON Reader's layout: the same
- * height arithmetic, .pane-gutter dividers whose widths live in custom
- * properties on <html> (books.js), and two drill-down checkboxes for narrow
- * screens. Spec: docs/superpowers/specs/2026-10-09-on-books-design.md. */
-main:has(.books-panes) { max-width: none; padding: 0; }
+ * Two panes — the sidebar and a grid or list of books — and a book page of
+ * its own (UI redesign spec,
+ * docs/superpowers/specs/2026-10-12-on-books-ui-redesign-design.md). The
+ * sidebar keeps Reader's .pane-gutter, its width a custom property on
+ * <html> (books.js); up to 640px it is a drawer driven by #books-drawer
+ * (PATTERNS.md, checkbox-driven CSS state). */
+main:has(.books-home) { max-width: none; padding: 0; }
 
-.books-panes {
+.books-home {
 	--books-chrome: calc(4rem + var(--s-6) * 2);
+	position: relative;
 	display: flex;
-	flex-direction: column;
 	height: calc(100vh - var(--books-chrome));
 	height: calc(100dvh - var(--books-chrome));
 	min-height: 0;
 	overflow: hidden;
 }
-.books-banner { margin: var(--s-2) var(--s-3) 0; }
-.books-panes-row { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
-.books-side { flex: 0 0 var(--books-side-w, 14rem); }
-.books-listpane { flex: 0 0 var(--books-list-w, 22rem); display: flex; flex-direction: column; }
-.books-book { flex: 1 1 auto; }
-.books-side,
-.books-listpane,
-.books-book { min-width: 0; min-height: 0; overflow-y: auto; padding: var(--s-3); background: var(--c-bg); }
-.books-side,
-.books-listpane { border-right: 1px solid var(--c-border); }
+.books-side { flex: 0 0 var(--books-side-w, 14rem); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; padding: var(--s-3); background: var(--c-bg-subtle); border-right: 1px solid var(--c-border); }
+.books-main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; background: var(--c-bg); }
+.books-drawer-dim,
+.books-drawer-btn { display: none; }
 
 /* Sidebar */
-.books-add { display: flex; align-items: center; justify-content: center; gap: var(--s-1); margin-bottom: var(--s-3); }
-.books-shelves,
-.books-rows { list-style: none; margin: 0; padding: 0; }
+.books-shelves { list-style: none; margin: 0; padding: 0; }
 .books-shelf { display: flex; justify-content: space-between; gap: var(--s-2); padding: var(--s-1) var(--s-2); border-radius: var(--radius); color: var(--c-text); text-decoration: none; }
-.books-shelf:hover { background: var(--c-bg-subtle); }
+.books-shelf:hover { background: var(--c-bg-inset); }
 .books-shelf[aria-current="page"] { background: var(--c-accent-bg); color: var(--c-accent); font-weight: 600; }
 .books-count { color: var(--c-text-dim); font-size: var(--fs-sm); }
 .books-side-head { margin: var(--s-4) 0 var(--s-1); padding: 0 var(--s-2); font-size: var(--fs-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--c-text-dim); }
+.books-side-foot { margin-top: auto; padding-top: var(--s-3); border-top: 1px solid var(--c-border); }
+.books-goal-card { display: block; margin-top: var(--s-3); padding: var(--s-2) var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg); color: var(--c-text-dim); font-size: var(--fs-sm); text-decoration: none; }
+.books-goal-card:hover { border-color: var(--c-accent); }
+.books-goal-card-head { display: block; color: var(--c-text); font-weight: 600; }
+.books-goal-card-text { display: block; }
+.books-goal-bar { display: block; width: 100%; height: 4px; margin-top: var(--s-1); }
 
-/* List */
-.books-filter { margin-bottom: var(--s-3); }
-.books-filter input[type="search"] { width: 100%; }
-.books-list { flex: 1 1 auto; }
-.books-list-head { margin: 0 0 var(--s-2); font-size: var(--fs-base); }
-.books-row-link { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2); border-radius: var(--radius); color: var(--c-text); text-decoration: none; }
-.books-row-link:hover { background: var(--c-bg-subtle); }
-.books-row.is-active .books-row-link { background: var(--c-accent-bg); }
-.books-mini-spine { flex: 0 0 auto; display: grid; place-items: center; width: 2rem; height: 3rem; border-left: 4px solid var(--swatch); border-radius: 2px; background: var(--swatch-soft); color: var(--swatch); font-weight: 700; }
-.books-row-text { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
-.books-row-title { font-weight: 600; }
-.books-row-title,
-.books-row-byline,
-.books-row-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.books-row-byline,
-.books-row-note { color: var(--c-text-dim); font-size: var(--fs-sm); }
-/* A filtered row's third line: where the filter matched (B3), as ON Later
- * shows it, held to two lines. */
-.books-row-snippet { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--c-text-dim); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.books-row-snippet mark { background: var(--c-accent-attention-bg); color: inherit; border-radius: 2px; }
+/* Toolbar */
+.books-toolbar { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); padding: var(--s-2) var(--s-4); border-bottom: 1px solid var(--c-border); background: var(--c-bg); }
+.books-toolbar-head { display: flex; align-items: center; min-width: 0; }
+.books-heading { margin: 0 var(--s-2) 0 0; font-size: var(--fs-lg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.books-heading .books-count { font-weight: 400; }
+.books-filter { flex: 1 1 12rem; min-width: 0; margin: 0; }
+/* The search box takes the global text-input look: the global rule above
+ * covers text, url, number and select, not search. */
+.books-filter input[type="search"] {
+	width: 100%;
+	padding: var(--s-1) var(--s-2);
+	background: var(--c-bg);
+	color: var(--c-text);
+	border: 1px solid var(--c-border-firm);
+	border-radius: var(--radius);
+	font: inherit;
+	font-size: var(--fs-sm);
+	line-height: 1.4;
+}
+.books-prefs { display: flex; align-items: center; gap: var(--s-1); margin: 0; }
+.books-prefs select { width: auto; }
+/* One height for the toolbar's controls, about 30px: the sort select, the
+ * search box, Add book and the icon buttons share a padding and a type size. */
+.books-toolbar select,
+.books-prefs .books-icon-btn {
+	padding: var(--s-1) var(--s-2);
+	font-size: var(--fs-sm);
+	line-height: 1.4;
+}
+.books-toolbar .books-add { padding: var(--s-1) var(--s-3); font-size: var(--fs-sm); line-height: 1.4; }
+.books-views { display: inline-flex; border: 1px solid var(--c-border-firm); border-radius: var(--radius); overflow: hidden; }
+.books-views .toolbar-btn { border: 0; border-radius: 0; }
+.books-icon-btn[aria-pressed="true"] { background: var(--c-accent-bg); color: var(--c-accent); }
+.books-icon-btn:disabled { opacity: 0.5; cursor: default; }
+.books-add { display: inline-flex; align-items: center; gap: var(--s-1); white-space: nowrap; }
+
+/* Items: one markup, a tile in the grid or a row in the list */
+.books-list { padding: var(--s-4); }
+.books-items { list-style: none; margin: 0; padding: 0; }
+.books-item-link { color: var(--c-text); text-decoration: none; }
+.books-item-link:focus-visible { outline: var(--ring); outline-offset: 2px; border-radius: var(--radius); }
+.books-item-cover { position: relative; display: block; flex: 0 0 auto; }
+.books-item-cover img,
+.books-item-spine { display: block; width: 100%; height: auto; aspect-ratio: 2 / 3; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); object-fit: cover; }
+.books-item-spine { display: flex; align-items: flex-end; padding: var(--s-2); overflow: hidden; border-left: 6px solid var(--swatch); background: var(--swatch-soft); color: var(--c-text); font-size: var(--fs-xs); font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
+.books-item-initial { display: none; }
+.books-item-cover-bar { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 4px; border-radius: 0 0 3px 3px; }
+.books-item-title { font-weight: 600; }
+.books-item-authors { color: var(--c-text-dim); font-size: var(--fs-sm); }
+.books-item-tags { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.books-item-status { color: var(--c-text-dim); font-size: var(--fs-xs); font-weight: 600; }
+.books-status-reading { color: var(--c-accent); }
+.books-status-dnf { color: var(--c-accent-attention); }
+.books-item-date { color: var(--c-text-faint); font-size: var(--fs-xs); }
+.books-item-bar { display: block; width: 7rem; height: 4px; margin: var(--s-1) 0; }
+/* A searched row's third line: where the search matched (B3), held to
+ * two lines. */
+.books-item-snippet { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--c-text-dim); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.books-item-snippet mark { background: var(--c-accent-attention-bg); color: inherit; border-radius: 2px; }
 .books-snippet-in { color: var(--c-text-faint); }
+
+/* Grid: tiles. The text and meta spans step aside (display: contents) so
+ * the tile can order its lines as the mockup does. */
+.books-list-grid .books-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: var(--s-5) var(--s-4); }
+.books-list-grid .books-item-link { display: flex; flex-direction: column; gap: 2px; }
+.books-list-grid .books-item-text,
+.books-list-grid .books-item-meta { display: contents; }
+.books-list-grid .books-item-cover { margin-bottom: var(--s-1); }
+.books-list-grid .books-item-title { order: 1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 1.25; }
+.books-list-grid .books-item-authors { order: 2; }
+.books-list-grid .books-item-status,
+.books-list-grid .books-stars { order: 3; }
+.books-list-grid .books-item-tags { order: 4; margin-top: 2px; }
+.books-list-grid .books-item-date { order: 5; }
+.books-list-grid .books-item-bar,
+.books-list-grid .books-item-snippet { display: none; }
+.books-list-grid .books-item-link:hover .books-item-title { color: var(--c-accent); }
+
+/* List: rows */
+.books-list-list .books-item-link { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2); border-bottom: 1px solid var(--c-border); }
+.books-list-list .books-item-link:hover { background: var(--c-bg-subtle); }
+.books-list-list .books-item-cover { width: 2.5rem; }
+.books-list-list .books-item-spine { justify-content: center; align-items: center; padding: 0; border-left-width: 4px; }
+.books-list-list .books-item-spine-title,
+.books-list-list .books-item-cover-bar { display: none; }
+.books-list-list .books-item-initial { display: inline; color: var(--swatch); font-size: var(--fs-base); font-weight: 700; }
+.books-list-list .books-item-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.books-list-list .books-item-title,
+.books-list-list .books-item-authors { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.books-list-list .books-item-meta { display: flex; flex-direction: column; align-items: flex-end; flex: 0 0 auto; max-width: 40%; text-align: right; }
+
+/* Phone: the sidebar is a drawer over the books. On a wider screen the
+   checkbox that drives it has nothing to do, so it leaves the tab order. */
+@media (min-width: 641px) {
+	.books-drawer-toggle { display: none; }
+}
+#books-drawer:focus-visible ~ .books-main .books-drawer-btn { outline: var(--ring); }
+@media (max-width: 640px) {
+	.books-home { --books-chrome: calc(8rem + var(--s-4) * 2); }
+	.books-home > .pane-gutter { display: none; }
+	/* The drawer button names the list; the <h1> stays for screen readers
+	   (same properties as .visually-hidden). */
+	.books-heading { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+	/* visibility keeps the closed drawer's links out of the tab order; it
+	   flips after the slide-out ends, and at once when the drawer opens. */
+	.books-side { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: min(18rem, 85%); transform: translateX(-105%); visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s; box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2); }
+	.books-drawer-toggle:checked ~ .books-side { transform: none; visibility: visible; transition-delay: 0s; }
+	.books-drawer-toggle:checked ~ .books-drawer-dim { display: block; position: absolute; inset: 0; z-index: 2; background: rgba(0, 0, 0, 0.35); }
+	.books-drawer-btn { display: inline-flex; max-width: 100%; }
+	.books-drawer-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.books-toolbar { padding: var(--s-2) var(--s-3); }
+	.books-filter { order: 5; flex-basis: 100%; }
+	.books-list { padding: var(--s-3); }
+	.books-add-label { display: none; }
+	.books-list-grid .books-items { grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: var(--s-4) var(--s-3); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.books-side { transition: none; }
+}
+
+/* The book page: one centred column (spec "Book details page") */
+.books-page { max-width: 48rem; margin: 0 auto; }
+.books-book { padding-bottom: var(--s-6); }
+.books-page-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-4); padding: var(--s-2) 0; border-bottom: 1px solid var(--c-border); }
+.books-back { display: inline-flex; align-items: center; gap: var(--s-1); color: var(--c-accent); font-size: var(--fs-sm); text-decoration: none; }
+.books-back:hover { text-decoration: underline; }
+.books-page-actions { display: flex; align-items: center; gap: var(--s-1); }
+.books-page-actions form { margin: 0; }
+.books-delete { color: var(--c-danger); }
+.books-delete:hover { color: var(--c-danger); background: var(--c-danger-bg); }
+.books-banner { margin: 0 0 var(--s-3); }
 
 /* Book */
 .books-book-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4); margin-bottom: var(--s-4); }
@@ -4208,33 +4318,6 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-description-toggle:checked ~ .books-description-more .books-less-label { display: inline; }
 .books-description-toggle:focus-visible ~ .books-description-more { outline: var(--ring); }
 
-/* Narrow screens: Reader's drill-down, with Books' ids. The back control
- * is a <label> for the checkbox, so it works with no script. */
-.books-back-btn { display: none; margin-bottom: var(--s-2); }
-@media (min-width: 901px) {
-	.books-pane-toggle { display: none; }
-}
-#books-list-open:focus-visible ~ .books-listpane .books-back-btn,
-#books-book-open:focus-visible ~ .books-book .books-back-btn { outline: var(--ring); }
-@media (max-width: 900px) {
-	.books-panes-row > .pane-gutter { display: none; }
-	.books-side { flex: 0 0 12rem; }
-	.books-listpane { flex: 1 1 auto; }
-	.books-book { display: none; }
-	#books-book-open:checked ~ .books-listpane { display: none; }
-	#books-book-open:checked ~ .books-book { display: block; }
-	#books-book-open:checked ~ .books-book .books-back-btn { display: inline-flex; }
-}
-@media (max-width: 640px) {
-	.books-panes { --books-chrome: calc(8rem + var(--s-4) * 2); }
-	.books-side { flex: 1 1 100%; }
-	.books-listpane { display: none; }
-	#books-list-open:checked ~ .books-side { display: none; }
-	#books-list-open:checked ~ .books-listpane { display: flex; }
-	#books-list-open:checked ~ .books-listpane .books-back-btn { display: inline-flex; }
-	#books-book-open:checked ~ .books-listpane { display: none; }
-}
-
 /* Add / edit form */
 .books-form { max-width: var(--measure); padding: var(--s-4) 0; }
 .books-form fieldset { border: 0; padding: 0; margin-inline: 0; min-inline-size: 0; }
@@ -4246,18 +4329,6 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-finished { display: none; }
 .books-form:has(input[name="add_to"][value="read"]:checked) .books-finished { display: block; }
 .books-form-actions { display: flex; align-items: center; gap: var(--s-3); }
-.books-menu { margin-left: auto; }
-/* "Edit details" is a link among the menu's buttons; match their look. */
-.books-menu .outline-menu-list a {
-	display: block;
-	padding: var(--s-1) var(--s-2);
-	border-radius: var(--radius);
-	color: var(--c-text);
-	font-size: var(--fs-xs);
-	line-height: 1.5;
-	text-decoration: none;
-}
-.books-menu .outline-menu-list a:hover { background: var(--c-bg-inset); }
 /* Reading box, tags, confirm dialog */
 .books-reading { margin-bottom: var(--s-4); padding: var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); }
 .books-reading-status { margin: 0 0 var(--s-2); font-weight: 600; }
@@ -4286,15 +4357,14 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-progress-row input { width: 6rem; }
 .books-progress-of { color: var(--c-text-dim); font-size: var(--fs-sm); }
 .books-progress-bar,
-.books-row-bar { appearance: none; border: 0; border-radius: 999px; overflow: hidden; background: var(--c-bg-inset); }
+.books-bar { appearance: none; border: 0; border-radius: 999px; overflow: hidden; background: var(--c-bg-inset); }
 .books-progress-bar { display: block; width: 100%; max-width: 24rem; height: 6px; margin-top: var(--s-2); }
-.books-row-bar { display: inline-block; width: 3rem; height: 4px; vertical-align: middle; }
 .books-progress-bar::-webkit-progress-bar,
-.books-row-bar::-webkit-progress-bar { background: var(--c-bg-inset); }
+.books-bar::-webkit-progress-bar { background: var(--c-bg-inset); }
 .books-progress-bar::-webkit-progress-value,
-.books-row-bar::-webkit-progress-value { background: var(--c-accent); }
+.books-bar::-webkit-progress-value { background: var(--c-accent); }
 .books-progress-bar::-moz-progress-bar,
-.books-row-bar::-moz-progress-bar { background: var(--c-accent); }
+.books-bar::-moz-progress-bar { background: var(--c-accent); }
 .books-progress-note { margin: var(--s-1) 0 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
 .books-stars { color: var(--c-accent); letter-spacing: 0.05em; }
 
@@ -4369,7 +4439,6 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-picked p { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
 
 /* Covers: the same footprint as the spines they replace */
-.books-mini-cover { flex: 0 0 auto; display: block; width: 2rem; height: 3rem; object-fit: cover; border-radius: 2px; background: var(--c-bg-subtle); }
 .books-cover { flex: 0 0 auto; display: block; width: 6rem; height: auto; max-height: 9rem; object-fit: contain; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
 
 /* Edit page: the cover */
@@ -4379,8 +4448,6 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 
 /* Stats (B4): a page of its own, as Reader's is; tiles and charts mirror
  * ON Focus's History. */
-.books-stats-link { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-4); padding: var(--s-1) var(--s-2); border-radius: var(--radius); color: var(--c-text); text-decoration: none; }
-.books-stats-link:hover { background: var(--c-bg-subtle); }
 .books-stats { max-width: 48rem; }
 .books-stats-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
 .books-stats-head h1 { margin: 0; }
@@ -4423,14 +4490,6 @@ main:has(.books-panes) { max-width: none; padding: 0; }
 .books-goal-form label { margin: 0 0 var(--s-1); }
 .books-goal-row { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .books-goal-row input { width: 6rem; }
-
-/* The goal card at the top of the Reading shelf: read-only, a link to
- * the Stats page. */
-.books-goal-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); margin-bottom: var(--s-3); padding: var(--s-2) var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg-subtle); color: var(--c-text); text-decoration: none; }
-.books-goal-card:hover { border-color: var(--c-accent); }
-.books-goal-card-head { color: var(--c-text-dim); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; flex-basis: 100%; }
-.books-goal-card-text { font-weight: 600; }
-.books-goal-card .books-row-bar { flex: 1 1 100%; width: auto; }
 
 /* Import (B5): a page of its own, as Stats is, linked under Stats in the
  * sidebar. */
