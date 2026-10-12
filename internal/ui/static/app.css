@@ -4351,7 +4351,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
  * one outlined control. */
 .books-format-control { display: inline-flex; align-items: center; gap: var(--s-1); padding-left: var(--s-2); border: 1px solid var(--c-border-firm); border-radius: var(--radius); background: var(--c-bg); color: var(--c-text-dim); }
 .books-format-control:focus-within { outline: var(--ring); }
-.books-format-control select { width: auto; padding: var(--s-1) var(--s-2) var(--s-1) 0; border: 0; background: transparent; color: var(--c-text); font-size: var(--fs-sm); }
+.books-format-control select { width: auto; padding: var(--s-1) var(--s-2) var(--s-1) 0; border: 0; background: var(--c-bg); color: var(--c-text); font-size: var(--fs-sm); }
 .books-format-control select:focus { outline: none; }
 .books-format-save { padding: var(--s-1) var(--s-2); font-size: var(--fs-sm); }
 .books-progress { margin: 0; }
@@ -4458,6 +4458,11 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-history-line { margin: 0; }
 .books-reading-edit-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-2); margin-top: var(--s-2); }
 .books-reading-edit-form label { margin: 0; flex-basis: 100%; }
+.books-reading-edit-form select { width: auto; }
+/* The global input rule leaves out type="date", which would render as a
+ * white native box in dark mode. */
+.books-close-form input[type="date"],
+.books-reading-edit-form input[type="date"] { padding: var(--s-1) var(--s-2); background: var(--c-bg); color: var(--c-text); border: 1px solid var(--c-border-firm); border-radius: var(--radius); font: inherit; }
 
 /* The one confirm dialog */
 .books-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 1rem; border: var(--border); border-radius: var(--radius); color: var(--c-text); background: var(--c-bg); }
@@ -4467,6 +4472,8 @@ main:has(.books-home) { max-width: none; padding: 0; }
  * page"); the sections are one column at every width already. */
 @media (max-width: 640px) {
 	.books-book-head { flex-direction: column; }
+	/* In a column the 12rem basis would be a height. */
+	.books-book-titles { flex-basis: auto; }
 }
 
 /* Add book page: Open Library search */
