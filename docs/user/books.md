@@ -157,9 +157,9 @@ asking. A page has to be one the book has — from 1 to its page count.
 
 ## Reading history
 
-At the bottom of a book is **Reading history**, folded away; click it to
-see every time you've read the book, newest first: when you started and
-finished, the format, and how it ended. ✎ changes a reading's dates and
+At the bottom of a book is **Reading history**, folded away; the arrow at
+its right shows every time you've read the book, newest first: when you
+started and finished, the format, and how it ended. ✎ changes a reading's dates and
 format. To fix a reading that ended the wrong way — marked as read when you
 gave up, say — delete it with 🗑; the book's shelf follows whichever reading
 is left.
@@ -190,7 +190,7 @@ few hours. A cover you remove stays removed.
 ## Series
 
 If a book is part of a series, its series and number show under the
-author — "The Expanse #1 · 2 books". Click it to list the series in
+author — "Sherlock Holmes #1 · 2 books". Click it to list the series in
 order. Add a series name and number with ✎ on the book's page.
 
 ## Tags
@@ -339,7 +339,8 @@ On a book's page:
 - **e** — edit the book's details
 - **Esc** — close an open box (Finish…, Did not finish…, the review, or a
   note, quote or reading you're changing); with none open, go back to your
-  library
+  library. An open Reading history isn't a box: Esc goes back and leaves it
+  as it is
 
 ## On a phone
 

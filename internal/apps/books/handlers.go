@@ -166,9 +166,7 @@ func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int6
 	}
 	bv := viewBook(b, c, a.store.Today())
 	bv.History = viewHistory(rs)
-	// A history form posts open=history, so saving or deleting a reading
-	// doesn't fold the history away (it is collapsed by default).
-	bv.HistoryOpen = r.PostFormValue("open") == "history"
+	bv.HistoryOpen = historyOpen(r)
 	bv.Notes, bv.NewNote = viewNotes(ns, opts.Draft), formFor("note-new", opts.Draft, entryForm{})
 	bv.Quotes, bv.NewQuote = viewQuotes(qs, opts.Draft), formFor("quote-new", opts.Draft, entryForm{})
 	if opts.ProgressError != "" {
@@ -208,6 +206,14 @@ func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int6
 	if err := a.deps.Render.Page(w, status, "books/book", page); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
+}
+
+// historyOpen says the Reading history should start open (it is collapsed
+// by default): a history form posts open=history, so saving or deleting a
+// reading doesn't fold it away — with htmx in the post, without JavaScript
+// in the redirect's query (HistoryURL, #599).
+func historyOpen(r *http.Request) bool {
+	return r.FormValue("open") == "history"
 }
 
 // sidebarGoal is the sidebar's goal card: this year's goal, when one is

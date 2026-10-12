@@ -162,6 +162,31 @@ func TestEditSavesTags(t *testing.T) {
 	}
 }
 
+// A refused edit comes back with what was typed, tags included, and the
+// page bar still goes back to the book under its saved title.
+func TestARefusedEditKeepsTheTagsAndTheWayBack(t *testing.T) {
+	s := newServer(t)
+	nb := titled("Dune", "", books.ShelfWant)
+	nb.Tags = []string{"sf"}
+	id := add(t, s, s.Alice.User.ID, nb)
+	rec := s.Post(t, s.Alice, fmt.Sprintf("/books/edit/%d", id), url.Values{
+		"title": {""}, "shelf": {"want"}, "q": {"du"}, "tags": {"sf, desert"}})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("edit without a title = %d, want 422", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	if got := attr(t, doc, "input#books-tags", "value"); got != "sf, desert" {
+		t.Errorf("tags box = %q after the 422, want what was typed", got)
+	}
+	back := doc.MustHave(".books-page-bar .books-back")
+	if href, _ := htmlassert.Attr(back, "href"); href != fmt.Sprintf("/books/b/%d?q=du&shelf=want", id) {
+		t.Errorf("back link after the 422 = %q, want the book page", href)
+	}
+	if got := htmlassert.Text(back); got != "Dune" {
+		t.Errorf("back link text after the 422 = %q, want the saved title, not the empty box", got)
+	}
+}
+
 func TestEditLeavesTheShelfAlone(t *testing.T) {
 	s := newServer(t)
 	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfReading))
@@ -224,6 +249,12 @@ func TestAddKeepsItsListButNotItsSearch(t *testing.T) {
 	doc = s.Get(t, s.Alice, "/books/new?shelf=all&tag=sf&q=piranesi")
 	if got := attr(t, doc, `.books-search-form input[name="tag"]`, "value"); got != "sf" {
 		t.Errorf("search form's tag = %q, want the list carried", got)
+	}
+	// Its only q is its own box: a hidden one from the list would post two.
+	if qs := doc.QueryAll(`.books-search-form input[name="q"]`); len(qs) != 1 {
+		t.Errorf("search form has %d q fields, want only its search box", len(qs))
+	} else if id, _ := htmlassert.Attr(qs[0], "id"); id != "books-search-q" {
+		t.Errorf("search form's q is #%s, want the search box", id)
 	}
 	use, err := url.Parse(attr(t, doc, "a.books-result-use", "href"))
 	if err != nil {

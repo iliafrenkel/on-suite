@@ -211,26 +211,29 @@ func TestDefaultSortReversedOnEveryShelf(t *testing.T) {
 	for _, tt := range []struct {
 		shelf books.Shelf
 		want  []string
+		by    string // what the order rests on, for the failure message
 	}{
-		{books.ShelfReading, []string{"Reading A", "Reading B"}},
-		{books.ShelfWant, []string{"Want B", "Want A"}},
-		{books.ShelfDNF, []string{"DNF A", "DNF B"}},
+		{books.ShelfReading, []string{"Reading A", "Reading B"},
+			"the latest progress: RecordProgress bumps A's recorded_at"},
+		{books.ShelfWant, []string{"Want B", "Want A"}, "date added: B's created_at is later"},
+		{books.ShelfDNF, []string{"DNF A", "DNF B"},
+			"the latest change: SetTags bumps A's updated_at past B's MarkDNF"},
 	} {
 		q := books.ListQuery{Shelf: tt.shelf}
 		if got := list(t, f, q); !slices.Equal(got, tt.want) {
-			t.Errorf("%s, Default = %v, want %v", tt.shelf, got, tt.want)
+			t.Errorf("%s, Default = %v, want %v (by %s)", tt.shelf, got, tt.want, tt.by)
 		}
 		q.Reversed = true
 		if got, want := list(t, f, q), reversedCopy(tt.want); !slices.Equal(got, want) {
-			t.Errorf("%s, Default reversed = %v, want %v", tt.shelf, got, want)
+			t.Errorf("%s, Default reversed = %v, want %v (by %s)", tt.shelf, got, want, tt.by)
 		}
 	}
 	// All goes by the latest change across the shelves.
 	all := list(t, f, books.ListQuery{Shelf: books.ShelfAll})
 	if len(all) != 6 || all[0] != "DNF A" {
-		t.Fatalf("All, Default = %v, want 6 books with DNF A (tagged last) first", all)
+		t.Fatalf("All, Default = %v, want 6 books with DNF A first (SetTags bumped its updated_at last)", all)
 	}
 	if got, want := list(t, f, books.ListQuery{Shelf: books.ShelfAll, Reversed: true}), reversedCopy(all); !slices.Equal(got, want) {
-		t.Errorf("All, Default reversed = %v, want %v", got, want)
+		t.Errorf("All, Default reversed = %v, want %v (by updated_at)", got, want)
 	}
 }

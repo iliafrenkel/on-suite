@@ -13,7 +13,8 @@ import (
 type change func(r *http.Request, userID, id int64) error
 
 // act runs a change and answers with the book page: htmx gets its body
-// (book-swap), without JavaScript it is a redirect back to the book. Once
+// (book-swap), without JavaScript it is a redirect back to the book, with
+// its Reading history open when the change came from there. Once
 // the book is gone (gone), its page is too: back to the list it was
 // opened from, by HX-Redirect for htmx (UI redesign spec "Swaps"). A
 // Refusal is the banner on the page rather than an error page.
@@ -45,6 +46,8 @@ func (a *App) act(do change, gone bool) http.HandlerFunc {
 			http.Redirect(w, r, c.ListURL(), http.StatusSeeOther)
 		case web.IsHTMX(r):
 			a.renderBook(w, r, uid, id, c, bookOpts{})
+		case historyOpen(r):
+			http.Redirect(w, r, c.HistoryURL(id), http.StatusSeeOther)
 		default:
 			http.Redirect(w, r, c.BookURL(id), http.StatusSeeOther)
 		}

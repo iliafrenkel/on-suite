@@ -170,7 +170,8 @@ Sections appear in this order:
    - **✎ / 🗑 icons** sit at the entry's top-right. They're visible on `:hover` and `:focus-within`, and always when `(hover: none)`.
    - **✎ turns the entry into its form in place.** 🗑 goes through the confirm dialog.
 5. **Quotes · n** works the same as Notes. Quotes keep their blockquote styling and the page under them.
-6. **Reading history · n** is a `<details>`, **collapsed by default**. Each reading has ✎ / 🗑 icons in the same pattern. ✎ opens today's date and format form in place.
+6. **Reading history · n** is a `<details>`, **collapsed by default**. Each reading has ✎ / 🗑 icons in the same pattern. ✎ opens today's date and format form in place. Its heading is a plain `<h2>`, and its toggle is a chevron lifted into the heading row like Notes' +, because a heading inside `<summary>` is lost to heading navigation in some screen readers (#603).
+   - On a touch screen (`(hover: none)`) the entries' ✎ / 🗑 are 44px, the usual touch target (#603).
 
 ### Swaps
 
@@ -196,7 +197,7 @@ These are smaller than today's, because there's no list on the page any more:
   - `/` focuses search, and `a` goes to Add book.
 - **Details page:**
   - `p` focuses the progress box, `n` opens the add-note form, `q` the add-quote form, and `e` goes to Edit.
-  - `Esc` closes an open disclosure or popover first. With nothing open, it goes back to the list.
+  - `Esc` closes an open disclosure or popover first. With nothing open, it goes back to the list. The Reading history is a section, not a popup: Esc leaves it open and goes back to the list (decided 2026-10-12, #600).
 
 Keys are ignored while typing, as today.
 

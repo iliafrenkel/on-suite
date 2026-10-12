@@ -185,7 +185,7 @@
 		</select>
 		{{else}}
 		<label for="books-dnf-at">Stopped at {{if eq .Book.Progress.Unit "page"}}page{{else}}percent{{end}} (optional)</label>
-		<input id="books-dnf-at" name="at" type="number" inputmode="numeric" min="0" max="{{.Book.Progress.Max}}" value="{{.Book.Progress.Value}}">
+		<input id="books-dnf-at" name="at" type="number" inputmode="numeric" min="0" max="{{.Book.Progress.Max}}" value="{{.Book.Progress.Saved}}">
 		{{end}}
 		<button type="submit"{{if .Primary}} class="primary"{{end}}>{{.Submit}}</button>
 	</form>
@@ -208,8 +208,10 @@
      the no-JS <details> that writes it. It has one opener (decided
      2026-10-12): with a review, the ✎ in the heading (its summary, lifted
      there by CSS), and the form stands in for the review while it is open;
-     with none yet, the quiet "Write a review" under the stars. htmx swaps
-     just this section (take-swap). Takes a bookView. */}}
+     with none yet, the quiet "Write a review" under the stars. The box
+     stops at the store's limit (#597): a refusal is the page banner, which
+     redraws the stored review. htmx swaps just this section (take-swap).
+     Takes a bookView. */}}
 {{define "take"}}
 <section class="books-section books-take" id="books-take" aria-labelledby="books-take-head">
 	<h2 class="books-section-head" id="books-take-head">Your take</h2>
@@ -222,7 +224,7 @@
 		      hx-post="/books/review/{{.ID}}" hx-target="#books-take" hx-swap="outerHTML">
 			{{template "post-ctx" .}}
 			<label for="books-review-input">Review</label>
-			<textarea id="books-review-input" name="review" rows="8">{{.Review}}</textarea>
+			<textarea id="books-review-input" name="review" rows="8" maxlength="{{.ReviewMax}}">{{.Review}}</textarea>
 			<p class="books-hint">Markdown works: **bold**, *italic*, [a link](https://…). A blank line starts a new paragraph.</p>
 			<button type="submit" class="primary">Save review</button>
 		</form>
@@ -353,15 +355,20 @@
 {{end}}
 
 {{/* history is Reading history · n, newest first (spec "Sections"): a
-     <details>, collapsed unless the request came from one of its own forms
-     (HistoryOpen, from their open=history field). Each reading has ✎ (its
+     plain heading, then a <details> collapsed unless the request came from
+     one of its own forms (HistoryOpen, from their open=history field). Its
+     toggle is a chevron lifted into the heading row, like Notes' + — not
+     the heading itself, which a <summary> would hide from heading
+     navigation in some screen readers (#603). Each reading has ✎ (its
      dates and format, in place) and 🗑 (decided 2026-10-09: a reading's
      status isn't editable; deleting it is how a wrong one is put right).
      Left out for a book never started. Takes a bookView. */}}
 {{define "history"}}
 {{with .History}}
-<details class="books-section books-history" id="books-history"{{if $.HistoryOpen}} open{{end}}>
-	<summary class="books-history-summary"><h2 class="books-section-head" id="books-history-head">Reading history <span class="books-section-count">· {{len .}}</span></h2></summary>
+<section class="books-section books-history-section" aria-labelledby="books-history-head">
+	<h2 class="books-section-head" id="books-history-head">Reading history <span class="books-section-count">· {{len .}}</span></h2>
+	<details class="books-history" id="books-history"{{if $.HistoryOpen}} open{{end}}>
+	<summary class="toolbar-btn books-icon-btn books-section-action books-history-toggle" aria-label="Reading history" title="Reading history">{{ticon "chevron-down"}}</summary>
 	<ul class="books-entries">
 		{{range .}}
 		<li class="books-entry books-history-item">
@@ -395,7 +402,8 @@
 		</li>
 		{{end}}
 	</ul>
-</details>
+	</details>
+</section>
 {{end}}
 {{end}}
 

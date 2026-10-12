@@ -74,6 +74,14 @@ func (c listCtx) BookURL(id int64) string {
 	return "/books/b/" + strconv.FormatInt(id, 10) + "?" + c.Query()
 }
 
+// HistoryURL is a book opened from this list with its Reading history
+// open: where a history form goes back to without JavaScript (#599).
+func (c listCtx) HistoryURL(id int64) string {
+	v := c.values()
+	v.Set("open", "history")
+	return "/books/b/" + strconv.FormatInt(id, 10) + "?" + v.Encode()
+}
+
 // AddURL is the Add book page, coming back to this list afterwards — but
 // not to its search: on the Add page q is the Open Library search (UI
 // redesign spec "Add and Edit pages").
@@ -392,6 +400,7 @@ type bookView struct {
 	RatingChoices []choice     // the Finish step's rating select
 	Stars         []starButton // the rating buttons
 	Review        string       // Markdown, for the edit box
+	ReviewMax     int          // the edit box's maxlength: MaxReviewRunes (#597)
 	ReviewHTML    template.HTML
 	History       []historyView // every reading, newest first
 	HistoryOpen   bool          // the history disclosure starts open: the request came from inside it
@@ -472,7 +481,7 @@ func viewBook(b Book, c listCtx, today string) bookView {
 	v := bookView{ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
 		Description: b.Description, Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion),
 		ShelfLabel: b.Shelf.Label(), BackLabel: listHeading(c), Tags: tagLinks(b.Tags), Today: today, Pages: b.Pages,
-		Rating: b.Rating, Stars: starButtons(b.Rating), Review: b.Review, ReviewHTML: RenderReview(b.Review), Ctx: c}
+		Rating: b.Rating, Stars: starButtons(b.Rating), Review: b.Review, ReviewMax: MaxReviewRunes, ReviewHTML: RenderReview(b.Review), Ctx: c}
 	v.DescriptionLong = longDescription(b.Description)
 	if b.SeriesName != "" {
 		v.Series = seriesText(b.SeriesName, b.SeriesNumber)
@@ -641,10 +650,12 @@ func pageValue(page int) string {
 }
 
 // progressView is the progress box: an input in the reading's unit, a
-// bar and a note. Error and a typed Value come from a refused update.
+// bar and a note. Error and a typed Value come from a refused update;
+// Saved stays what is stored.
 type progressView struct {
 	Unit    Unit
 	Value   string // the input: the current progress in Unit ("" for none yet)
+	Saved   string // the saved progress, Value before a refused update: Did not finish…'s place (#600)
 	Max     int    // the book's pages, or 100 for percent
 	Percent int    // the bar
 	Note    string // "20% · updated 9 Oct 2026"; in percent just "updated 9 Oct 2026"
@@ -661,6 +672,7 @@ func viewProgress(b Book) progressView {
 	}
 	if b.Progress.Set() {
 		v.Value = strconv.Itoa(b.Progress.In(u, b.Pages))
+		v.Saved = v.Value
 		v.Note = "updated " + b.Progress.RecordedAt.Local().Format("2 Jan 2006")
 		if u == UnitPage { // in percent, the box itself says it
 			v.Note = strconv.Itoa(v.Percent) + "% · " + v.Note

@@ -71,6 +71,14 @@ func TestTheBookPageListsEveryReading(t *testing.T) {
 		t.Errorf("history heading = %q", got)
 	}
 
+	// The heading is a plain heading, so heading navigation reaches it; the
+	// disclosure's toggle is a chevron lifted into its row (#603).
+	doc.MustNotHave("summary h2")
+	doc.MustHave("section.books-history-section h2#books-history-head")
+	if got := attr(t, doc, "details#books-history summary.books-section-action", "aria-label"); got != "Reading history" {
+		t.Errorf("history toggle aria-label = %q, want the section's name", got)
+	}
+
 	want0 := add(t, s, s.Alice.User.ID, titled("Emma", "", books.ShelfWant))
 	s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", want0)).MustNotHave(".books-history")
 }
@@ -164,4 +172,37 @@ func TestEditingAReadingKeepsTheHistoryOpen(t *testing.T) {
 	if isOpen(htmlassert.Parse(t, rec.Body.String()), "details#books-history") {
 		t.Error("the history opened for a change made outside it")
 	}
+	rec = s.PostHX(t, s.Alice, path+"/delete", url.Values{"shelf": {"read"}, "open": {"history"}})
+	if !isOpen(htmlassert.Parse(t, rec.Body.String()), "details#books-history") {
+		t.Error("the history folded away after deleting one of its readings")
+	}
+	rec = s.PostHX(t, s.Alice, fmt.Sprintf("/books/format/%d", id), url.Values{"shelf": {"read"}, "format": {"paper"}})
+	if isOpen(htmlassert.Parse(t, rec.Body.String()), "details#books-history") {
+		t.Error("the history opened for a change made outside it")
+	}
+}
+
+// Without JavaScript a history form answers with a redirect, which carries
+// open=history so the page it lands on has the history open too (#599).
+func TestWithoutJavaScriptTheHistoryStaysOpen(t *testing.T) {
+	s := newServer(t)
+	id := readTwiceOverHTTP(t, s)
+	past := historyIDs(t, s, id)[1]
+	path := fmt.Sprintf("/books/readings/%d/%d", id, past)
+	back := fmt.Sprintf("/books/b/%d?open=history&shelf=read", id)
+	for _, post := range []struct {
+		path string
+		form url.Values
+	}{
+		{path, url.Values{"shelf": {"read"}, "open": {"history"},
+			"started_on": {"2026-09-20"}, "finished_on": {"2026-09-28"}, "format": {"paper"}}},
+		{path + "/delete", url.Values{"shelf": {"read"}, "open": {"history"}}},
+	} {
+		s.Submit(t, s.Alice, post.path, post.form, back)
+		if !isOpen(s.Get(t, s.Alice, back), "details#books-history") {
+			t.Errorf("after POST %s the history folded away", post.path)
+		}
+	}
+	s.Submit(t, s.Alice, fmt.Sprintf("/books/format/%d", id), url.Values{"shelf": {"read"}, "format": {"ebook"}},
+		fmt.Sprintf("/books/b/%d?shelf=read", id))
 }

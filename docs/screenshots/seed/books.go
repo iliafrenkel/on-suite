@@ -11,9 +11,10 @@ import (
 // two books on the go (one on paper, one an audiobook, each with a few
 // days of progress), three waiting, three finished and rated (one with a
 // review) and one put down part-way, with a few tags, two books of a
-// series, notes on two books and quotes from one, and a goal for this
-// year, so each shelf, the book pane, the search and the Stats page have
-// something to show. Quotes come only from a book long out of copyright.
+// series, notes and quotes on two books, and a goal for this year, so each
+// shelf, the book page, the search and the Stats page have something to
+// show. Quotes come only from books long out of copyright, so book 1, the
+// book page's screenshot, is one too (#602).
 // Dates are offsets from now, so nothing is ever in the future.
 func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time) error {
 	at := func(daysAgo int) time.Time { return now.AddDate(0, 0, -daysAgo) }
@@ -33,13 +34,17 @@ func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time
 		quotes   []books.QuoteInput // likewise
 	}
 	library := []seed{
-		{in: books.BookInput{Title: "Leviathan Wakes", Authors: "James S. A. Corey", Year: 2011, Pages: 592,
-			SeriesName: "The Expanse", SeriesNumber: "1",
-			Description: "A detective and a ship's officer find the same missing woman at the edge of the solar system."},
-			tags: []string{"sf", "space"}, started: 9, format: "paper", progress: []int{48, 120, 205, 260, 344}, finished: -1,
+		{in: books.BookInput{Title: "A Study in Scarlet", Authors: "Arthur Conan Doyle", Year: 1887, Pages: 176,
+			SeriesName: "Sherlock Holmes", SeriesNumber: "1",
+			Description: "Back from Afghanistan, Dr Watson takes rooms at 221B Baker Street with a strange young man, and is soon drawn into a murder in an empty house."},
+			tags: []string{"mystery", "classics"}, started: 9, format: "paper", progress: []int{14, 36, 58, 81, 104}, finished: -1,
 			notes: []books.NoteInput{
-				{Page: 120, Body: "Miller and Holden finally meet. The two voices work better together than apart."},
-				{Page: 260, Body: "The *protomolecule*. Didn't see that coming — the detective story was cover for something much bigger."},
+				{Page: 36, Body: "*Rache* on the wall: German for revenge, says Holmes, not an unfinished Rachel. Lestrade isn't pleased."},
+				{Page: 81, Body: "Part two leaves London for Utah without a word of warning. Strange, until it explains everything."},
+			},
+			quotes: []books.QuoteInput{
+				{Page: 46, Text: "There's the scarlet thread of murder running through the colourless skein of life, and our duty is to unravel it, and isolate it, and expose every inch of it.",
+					Comment: "Where the title comes from."},
 			}},
 		{in: books.BookInput{Title: "Piranesi", Authors: "Susanna Clarke", Year: 2020, Pages: 272},
 			tags: []string{"fantasy"}, started: 3, format: "audio", progress: []int{18, 41}, finished: -1},
@@ -47,8 +52,8 @@ func seedBooks(ctx context.Context, st *books.Store, userID int64, now time.Time
 			Year: 1974, Pages: 387}, tags: []string{"sf", "classics"}, started: -1, finished: -1},
 		{in: books.BookInput{Title: "Project Hail Mary", Authors: "Andy Weir", Year: 2021, Pages: 476},
 			tags: []string{"sf", "space"}, started: -1, finished: -1},
-		{in: books.BookInput{Title: "Caliban's War", Authors: "James S. A. Corey", Year: 2012, Pages: 595,
-			SeriesName: "The Expanse", SeriesNumber: "2"}, tags: []string{"sf", "space"}, started: -1, finished: -1},
+		{in: books.BookInput{Title: "The Sign of the Four", Authors: "Arthur Conan Doyle", Year: 1890, Pages: 160,
+			SeriesName: "Sherlock Holmes", SeriesNumber: "2"}, tags: []string{"mystery", "classics"}, started: -1, finished: -1},
 		{in: books.BookInput{Title: "A Wizard of Earthsea", Authors: "Ursula K. Le Guin", Year: 1968, Pages: 183,
 			SeriesName: "Earthsea", SeriesNumber: "1"}, tags: []string{"fantasy", "classics"},
 			started: 70, format: "ebook", finished: 56, rating: 5,
