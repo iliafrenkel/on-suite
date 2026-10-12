@@ -4,7 +4,7 @@ ON Books is a private reading log: what you're reading, what you've read,
 what you want to read next and what you gave up on. No friends, no feed —
 just your own books.
 
-![ON Books: the shelves, the books you're reading, and one of them open](images/books-panes.png)
+![ON Books: the shelves on the left and the books you're reading as a grid of covers](images/books-home.png)
 
 ## Shelves
 
@@ -22,9 +22,38 @@ You never move a book between shelves yourself: its shelf follows what you
 do with it. Start reading it and it moves to Reading; finish it and it moves
 to Read.
 
+## Your library
+
+The sidebar lists your shelves. Under them is this year's reading goal, if
+you've set one, and then your tags. At the bottom are **Stats**, **Import
+from Goodreads** and **Export as Markdown**.
+
+The books on the shelf you picked fill the rest of the page. Each one shows
+its cover, title and author, and how it's going: "Reading · 45%" for a book
+on the go, your stars for one you've read. Then a few of its tags, and the
+day you added it (on the Read shelf, the day you finished it). Click a book
+to open it.
+
+Above the books is a toolbar with the search box, the sort, the view and
+**+ Add book**:
+
+- **Grid or list.** The two buttons by **+ Add book** show the books as a
+  grid of covers or as a list. ON Books remembers your choice.
+- **Sort.** Choose **Default**, **Date added**, **Title** or **Author**.
+  The arrow next to it reverses the order. Default is each shelf's own
+  order: Reading puts the book you read most recently first, Read the one
+  you finished most recently, Want to read the one you added most recently,
+  and the others the one you changed most recently. **Title** ignores a
+  leading "The", "A" or "An", and **Author** goes by the first author's
+  surname. ON Books remembers your sort too. A series is always listed in
+  reading order.
+
+![The list view: a row for each book, with its progress or stars on the right](images/books-home-list.png)
+
 ## Adding a book
 
-Click **Add book** at the top of the sidebar.
+Click **+ Add book** in the toolbar. The arrow at the top of the page, and
+**Cancel**, take you back to the list you came from.
 
 The quickest way is to find the book on [Open Library](https://openlibrary.org),
 a free catalogue of books: type its title, its author or its ISBN into
@@ -48,37 +77,31 @@ Then choose where the book goes:
 
 You can add tags at the same time, separated by commas.
 
-## Covers
+## A book
 
-A book added from Open Library brings its cover. A book without one shows
-a coloured spine with its title instead.
+A book has a page of its own. The arrow at the top left takes you back to
+the list you opened it from. At the top right, ✎ edits the book's details
+and 🗑 deletes it.
 
-To change a cover, open the book, choose **⋯ → Edit details**, and under
-**Cover** either upload an image or paste the address of one on the web.
-JPEG, PNG, GIF and WebP images up to 2 MB work. **Remove the cover** goes
-back to the spine. ON Books keeps its own copy of every cover, so they show
-even if the original disappears.
+Under the title are the book's shelf and its tags. Click a tag to see every
+book with it. Then come the book's sections: **Reading**, **Your take**,
+**About** (its description), **Notes**, **Quotes** and **Reading history**.
+A long description is cut short after a few lines; **More** shows the rest.
 
-A book without a cover offers **⋯ → Find cover**, which asks Open Library
-for one straight away: by its ISBN, or by its title and author when it has
-no ISBN or Open Library has no cover for it. If there's none to be had, ON
-Books says so, and you can add one yourself with **Edit details**.
+The rule is simple. The facts about a book — its title, author, series,
+cover, tags and description — are changed with ✎, on the Edit page.
+Everything about your reading of it is changed right on its page.
 
-![The ⋯ menu of a book: Edit details, Find cover and Delete](images/books-menu.png)
-
-Books with an ISBN but no cover — books you imported, say — get theirs in
-the background, a few every few minutes, so a big import fills in over a
-few hours. A cover you remove stays removed.
+![A book's page: its title and tags, then Reading, Your take, About and Notes](images/books-book.png)
 
 ## Reading a book
 
-Pick a book in the list to open it on the right. A long description is
-cut short after a few lines; **More** shows the rest.
+The **Reading** section starts and finishes your readings:
 
 - **Start reading** starts it today and moves it to Reading.
-- **Finish** asks for the day you finished — today, unless you change it —
-  and, if you like, a rating; then it moves the book to Read.
-- **Did not finish** asks for the day you stopped and, if you like, the
+- **Finish…** asks for the day you finished — today, unless you change
+  it — and, if you like, a rating; then it moves the book to Read.
+- **Did not finish…** asks for the day you stopped and, if you like, the
   page you got to, and moves the book to Did not finish.
 
 A finished book offers **Read again**, and a book you put down offers
@@ -89,90 +112,116 @@ button; finish it or put it down first.
 ### Progress
 
 While you're reading a book, type the page you're on into the **Page** box
-and press Enter. The bar under it, and the book's row in the list, show how
-far through you are. Books on the Reading shelf are listed with the one you
-read most recently at the top.
+and press Enter, or click ✓. The thin bar above it, and the book's cover on
+the Reading shelf, show how far through you are.
 
 For an audiobook — or a book with no page count — the box asks for a
 percentage instead. Reaching the last page doesn't finish the book: click
-**Finish** when you're done.
+**Finish…** when you're done.
 
 ON Books keeps every update you make. You only see the latest, but they're
 what [your stats](#reading-goal-and-stats) count pages from.
 
 ### Format
 
-The pill next to "Reading since…" says how you're reading the book: on
-paper, as an ebook, or as an audiobook. Click it to change it. A new
-reading starts with the format of the one before.
+The menu next to "Since…" says how you're reading the book: on paper, as an
+ebook, or as an audiobook. Pick another to change it. A new reading starts
+with the format of the one before.
 
 ## Rating and review
 
-Click a star under the reading box to rate a book from one to five; click
-the same star again to clear it. You can also rate a book as you finish it.
-The Read shelf shows each book's stars and the day you finished it.
+Click a star in **Your take** to rate a book from one to five; click the
+same star again to clear it. You can also rate a book as you finish it. The
+Read shelf shows each book's stars and the day you finished it.
 
 **Write a review** opens a box for what you thought. You can use a little
 Markdown: `**bold**`, `*italic*`, `[a link](https://example.com)`, and a
-blank line to start a new paragraph. **Save review** keeps it; **Edit
-review** changes it later. A book has one rating and one review, however
-many times you read it.
+blank line to start a new paragraph. **Save review** keeps it. Once there's
+a review, ✎ at the right of Your take changes it. A book has one rating and
+one review, however many times you read it.
 
 ## Notes and quotes
 
-Your notes on the book come after its Tags box, newest first, each with the
-day you wrote it. **+ Add note** opens a box for one; give it a page if you
-like, and it shows as "p. 112". Notes take the same little Markdown as
-reviews.
+**+** at the right of **Notes** opens a box for a note. Give it a page if
+you like, and it shows as "p. 112". Notes take the same little Markdown as
+reviews, and the newest comes first, with the day you wrote it.
 
-**Quotes** are passages you want to keep. **+ Add quote** opens a box for
-the words, an optional comment and an optional page. A quote keeps its
-line breaks exactly as you typed them, so poetry stays poetry; the comment
-takes Markdown.
+**Quotes** are passages you want to keep. **+** at the right of Quotes opens
+a box for the words, an optional comment and an optional page. A quote
+keeps its line breaks exactly as you typed them, so poetry stays poetry;
+the comment takes Markdown.
 
-**Edit** on a note or quote changes it in place; **Delete** removes it,
-after asking. A page has to be one the book has — from 1 to its page
-count.
+Point at a note or quote to see ✎ and 🗑 at its top right. On a phone or
+tablet they're always there. ✎ changes it in place; 🗑 removes it, after
+asking. A page has to be one the book has — from 1 to its page count.
 
 ## Reading history
 
-At the bottom of a book is every time you've read it, newest first: when
-you started and finished, the format, and how it ended. **Edit** changes a
-reading's dates and format. To fix a reading that ended the wrong way —
-marked as read when you gave up, say — **Delete** it; the book's shelf
-follows whichever reading is left.
+At the bottom of a book is **Reading history**, folded away; click it to
+see every time you've read the book, newest first: when you started and
+finished, the format, and how it ended. ✎ changes a reading's dates and
+format. To fix a reading that ended the wrong way — marked as read when you
+gave up, say — delete it with 🗑; the book's shelf follows whichever reading
+is left.
+
+## Covers
+
+A book added from Open Library brings its cover. A book without one shows
+a coloured spine with its title instead.
+
+To change a cover, open the book, click ✎, and under **Cover** either
+upload an image or paste the address of one on the web. JPEG, PNG, GIF and
+WebP images up to 2 MB work. **Remove the cover** goes back to the spine.
+ON Books keeps its own copy of every cover, so they show even if the
+original disappears.
+
+A book without a cover offers **Find a cover on Open Library** under
+**Cover** on the Edit page. It asks Open Library for one straight away: by
+the ISBN, or by the title and author when there's no ISBN or Open Library
+has no cover for it. It uses what's in the form, even if you haven't saved
+it yet. The cover is saved as soon as it's found; anything else you've
+changed stays in the form, waiting for **Save**. If there's no cover to be
+had, ON Books says so, and you can add one yourself.
+
+Books with an ISBN but no cover — books you imported, say — get theirs in
+the background, a few every few minutes, so a big import fills in over a
+few hours. A cover you remove stays removed.
 
 ## Series
 
 If a book is part of a series, its series and number show under the
 author — "The Expanse #1 · 2 books". Click it to list the series in
-order. Add a series name and number with **⋯ → Edit details**.
+order. Add a series name and number with ✎ on the book's page.
 
 ## Tags
 
-Tags are your own labels — *sf*, *book club*, *favourites*. Edit them in the
-**Tags** box under a book's description and click **Save tags**. Your tags are
-listed under the shelves; click one to see every book with it. A tag nobody
+Tags are your own labels — *sf*, *book club*, *favourites*. Add them as you
+add a book, or change them with ✎ on the book's page: the **Tags** box
+takes them separated by commas. Your tags are listed in the sidebar; click
+one, or a tag on a book's page, to see every book with it. A tag nobody
 uses any more disappears.
 
 ## Finding a book
 
-Type in the box above the list to search your books: their titles,
+Type in the search box above your books to search them: their titles,
 subtitles, authors and series, and everything you've written about them —
 reviews, notes, quotes and quote comments. Every word you type has to
-match, and the list narrows while you're still typing a word. When a book
-matched inside a review, note or quote, its row gets a third line showing
-where, with the matching words highlighted — "Quote: The spice must
-flow."
+match, and the list narrows while you're still typing a word.
+
+While you're searching, the books show as a list, whichever view you
+picked, so there's room to show where each one matched. When a book
+matched inside a review, note or quote, its row gets a line showing where,
+with the matching words highlighted — "Quote: The spice must flow."
+Clear the box to get your view back.
 
 The search stays within the shelf, tag or series you're looking at, and
-stays as you switch shelves; clear the box to see everything again.
+stays as you switch shelves.
 
 ## Editing and deleting
 
-Open a book and use the **⋯** menu: **Edit details** changes the title,
-author and the rest; **Delete** removes the book for good, with its
-readings, notes and quotes.
+On a book's page, ✎ at the top right changes its details: the title,
+author and the rest, its cover and its tags. 🗑 removes the book for good,
+with its readings, notes and quotes, after asking.
 
 ## Importing from Goodreads
 
@@ -270,23 +319,31 @@ year and click **Set goal**. The page then shows how you're doing — "12 of
 expect to have read half your goal. **Change goal** and **Remove goal** do
 what they say. You can set a goal for next year ahead of time, too.
 
-While this year has a goal, it also shows at the top of the Reading shelf.
-Click it to go to your stats.
+While this year has a goal, a small card in the sidebar shows how you're
+doing. Click it to go to your stats.
 
 ## Keyboard shortcuts
 
-- **j** / **k** — open the next / previous book in the list
-- **/** — jump to the filter box
+In your library:
+
+- **j** / **k** — move to the next / previous book
+- **Enter** or **o** — open it
+- **/** — jump to the search box
 - **a** — add a book
-- **p** — jump to the progress box of the book you're reading
-- **n** — add a note to the open book
-- **q** — add a quote to the open book
-- **Esc** — close an open box in the book (Finish, Did not finish, a
-  menu, the review, a note or quote), or leave the filter or the
-  progress box
+
+On a book's page:
+
+- **p** — jump to the progress box
+- **n** — add a note
+- **q** — add a quote
+- **e** — edit the book's details
+- **Esc** — close an open box (Finish…, Did not finish…, the review, or a
+  note, quote or reading you're changing); with none open, go back to your
+  library
 
 ## On a phone
 
-On a narrow screen ON Books shows one pane at a time: the list, then the
-book. Use the back button at the top to go from a book to the list, and from
-the list to the shelves.
+On a narrow screen the sidebar folds away. The button at the top left,
+named after the shelf you're on, slides it in; pick a shelf or tag, tap
+beside it or press Esc to close it again. A book's page is the same single
+column as on a computer, with the cover above the title.
