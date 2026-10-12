@@ -176,6 +176,21 @@ canonical example's own comment, not here.
   (`.reader-mark-all-menu`) in
   `internal/apps/reader/templates/panes.partial.html`.
 
+- **A section's one action as its own disclosure's lifted summary** —
+  reach for this when a section heading needs a single action (+ add, ✎
+  edit) that opens a form in the section, without JavaScript: put the
+  `<details>` right after the heading and give its `<summary>`
+  `position: absolute` in the heading row (the section is
+  `position: relative`), so the closed disclosure takes no room and the
+  open form flows under the heading. Entries use the same trick for ✎,
+  with 🗑 a separate delete form beside it. Both are shown on `:hover`
+  and `:focus-within`, and always under `(hover: none)`, and they're
+  hidden with `opacity` so they stay in the tab order. `:has(> details[open])`
+  hides the entry's text while its form stands in. Canonical:
+  `internal/apps/books/templates/book.partial.html`'s `notes` and `take`
+  blocks, and the `.books-section` / `.books-entry` rules in
+  `internal/ui/static/app.css`.
+
 - **Draggable, persisted, keyboard-accessible pane gutters** — reach for this
   for any multi-pane layout that wants real resize-by-drag: a flex row with
   `role="separator"` gutter elements between panes, widths held as CSS custom
