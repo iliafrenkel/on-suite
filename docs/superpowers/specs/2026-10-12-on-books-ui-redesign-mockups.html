@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ON Books UI redesign — mockups</title>
+<!--
+  Visual reference for docs/superpowers/specs/2026-10-12-on-books-ui-redesign-design.md.
+  These are the mockups agreed during brainstorming on 2026-10-12. They show
+  layout and hierarchy; colours, glyphs and covers are illustrative — the spec
+  and app.css tokens (--c-*, swatch-c-*, ticon icons) are authoritative.
+  Documentation only, never served by the app, so its inline styles are not
+  subject to the app's CSP.
+-->
+<style>
+body{margin:0;padding:24px;background:#f7f3ec;font-family:Inter,system-ui,sans-serif;color:#3a2f26}
+h1.part{font-size:20px;margin:40px 0 4px;border-top:2px solid #c9b49a;padding-top:16px}
+h2{font-size:17px;margin:8px 0 4px}.subtitle{color:#6b5d4f;margin:0 0 12px}
+.mockup{border:1px solid #e3d3bf;border-radius:8px;background:#fff;overflow:hidden}
+.mockup-header{font-size:12px;font-weight:600;padding:6px 12px;background:#f2e9db;border-bottom:1px solid #e3d3bf}
+.mockup-body{padding:12px}
+.option{border:1px solid #e3d3bf;border-radius:8px;padding:10px;background:#fff}
+.letter{font-weight:700;margin-bottom:6px}
+section{max-width:1100px;margin:0 auto}
+
+#m-home .bk{--bg:#fefefe;--sub:#f2e9db;--inset:#efe0cf;--bd:#e3d3bf;--bdf:#c9b49a;--tx:#3a2f26;--dim:#6b5d4f;--faint:#756758;--ac:#2f6f6a;--acbg:#d9e8e6;--att:#a84c1b;--attbg:#f7e4d5;
+  font-family:Inter,system-ui,sans-serif;font-size:14px;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;overflow:hidden;display:flex;min-height:520px;text-align:left}
+#m-home .bk *{box-sizing:border-box}
+#m-home .bk-side{width:200px;flex:none;background:var(--sub);padding:14px 10px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--bd)}
+#m-home .bk-side a{display:flex;justify-content:space-between;padding:5px 8px;border-radius:6px;color:var(--tx);text-decoration:none;font-size:13px}
+#m-home .bk-side a.on{background:var(--acbg);color:var(--ac);font-weight:600}
+#m-home .bk-side .n{color:var(--faint);font-size:12px}
+#m-home .bk-side h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);margin:14px 8px 4px}
+#m-home .bk-side .foot{margin-top:auto;border-top:1px solid var(--bd);padding-top:8px}
+#m-home .bk-side .foot a{color:var(--dim)}
+#m-home .goal{margin:10px 4px 4px;padding:8px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);font-size:12px;color:var(--dim)}
+#m-home .goal b{color:var(--tx)}
+#m-home .bar{height:4px;border-radius:2px;background:var(--inset);overflow:hidden;margin-top:5px}
+#m-home .bar i{display:block;height:100%;background:var(--ac)}
+#m-home .bk-main{flex:1;min-width:0;display:flex;flex-direction:column}
+#m-home .tb{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--bd)}
+#m-home .tb h3{margin:0 8px 0 0;font-size:16px;white-space:nowrap}
+#m-home .tb h3 span{color:var(--faint);font-weight:400;font-size:13px}
+#m-home .srch{flex:1;min-width:120px;border:1px solid var(--bdf);border-radius:6px;padding:6px 10px;color:var(--faint);font-size:13px;background:var(--bg)}
+#m-home .sel{border:1px solid var(--bdf);border-radius:6px;padding:5px 8px;font-size:13px;white-space:nowrap;background:var(--bg)}
+#m-home .ib{border:1px solid var(--bdf);border-radius:6px;padding:5px 8px;font-size:13px;background:var(--bg);line-height:1}
+#m-home .seg{display:inline-flex;border:1px solid var(--bdf);border-radius:6px;overflow:hidden}
+#m-home .seg span{padding:5px 8px;font-size:13px;line-height:1}
+#m-home .seg span.on{background:var(--acbg);color:var(--ac)}
+#m-home .add{background:var(--ac);color:#fff;border-radius:6px;padding:6px 10px;font-size:13px;white-space:nowrap}
+#m-home .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:18px 14px;padding:14px}
+#m-home .tile{display:flex;flex-direction:column;gap:3px;font-size:12px}
+#m-home .cv{aspect-ratio:2/3;border-radius:4px;box-shadow:0 1px 3px rgba(58,47,38,.25);display:flex;align-items:flex-end;padding:8px;color:#fff;font-weight:600;font-size:12px;line-height:1.2;margin-bottom:4px;position:relative}
+#m-home .cv .pb{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.4)}
+#m-home .cv .pb i{display:block;height:100%;background:#fff}
+#m-home .tt{font-weight:600;font-size:13px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#m-home .au{color:var(--dim)}
+#m-home .meta{color:var(--faint);font-size:11px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#m-home .st{font-size:11px;font-weight:600}
+#m-home .st.r{color:var(--ac)}
+#m-home .st.w{color:var(--dim)}
+#m-home .st.d{color:var(--att)}
+#m-home .stars{color:var(--att);letter-spacing:1px;font-size:11px}
+#m-home .tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
+#m-home .tag{background:var(--sub);border:1px solid var(--bd);border-radius:10px;padding:0 6px;font-size:10.5px;color:var(--dim)}
+#m-home .list{padding:4px 14px}
+#m-home .row{display:flex;gap:12px;align-items:center;padding:9px 4px;border-bottom:1px solid var(--bd)}
+#m-home .row .cv{width:38px;flex:none;margin:0;padding:0;font-size:0}
+#m-home .row .main{flex:1;min-width:0}
+#m-home .row .tt{-webkit-line-clamp:1}
+#m-home .row .right{width:170px;flex:none;text-align:right;font-size:12px}
+#m-home .row .right .bar{margin-left:auto;width:110px}
+#m-home .c1{background:linear-gradient(160deg,#3b5a7a,#1f3247)}
+#m-home .c2{background:linear-gradient(160deg,#8c4a2f,#4f2616)}
+#m-home .c3{background:linear-gradient(160deg,#2f6f6a,#183d3a)}
+#m-home .c4{background:linear-gradient(160deg,#6b5d4f,#3a2f26)}
+#m-home .c5{background:linear-gradient(160deg,#a84c1b,#6a2b0b)}
+#m-home .c6{background:linear-gradient(160deg,#5b4a7a,#2e2347)}
+#m-home .c7{background:linear-gradient(160deg,#7a6b3b,#463b17)}
+#m-home .c8{background:linear-gradient(160deg,#4a6b4a,#223a22)}
+#m-home .q{margin:22px 0 6px}
+#m-details .bk{--bg:#fefefe;--sub:#f2e9db;--inset:#efe0cf;--bd:#e3d3bf;--bdf:#c9b49a;--tx:#3a2f26;--dim:#6b5d4f;--faint:#756758;--ac:#2f6f6a;--acbg:#d9e8e6;--att:#a84c1b;--attbg:#f7e4d5;
+  font-family:Inter,system-ui,sans-serif;font-size:14px;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;overflow:hidden;text-align:left}
+#m-details .bk *{box-sizing:border-box}
+#m-details .pbar{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--bd)}
+#m-details .back{color:var(--ac);font-size:13px}
+#m-details .icons{display:flex;gap:4px}
+#m-details .ico{width:30px;height:30px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px;border:1px solid transparent}
+#m-details .ico:hover,#m-details .ico.h{border-color:var(--bd);background:var(--sub)}
+#m-details .ico.del{color:#a51d2d}
+#m-details .page{max-width:760px;margin:0 auto;padding:20px 16px 28px}
+#m-details .hd{display:flex;gap:20px}
+#m-details .cv{width:112px;flex:none;aspect-ratio:2/3;border-radius:4px;box-shadow:0 2px 6px rgba(58,47,38,.3);background:linear-gradient(160deg,#a84c1b,#6a2b0b);color:#fff;font-weight:600;display:flex;align-items:flex-end;padding:8px;font-size:13px}
+#m-details .hd h1{font-size:24px;margin:0 0 2px;line-height:1.2}
+#m-details .sub{color:var(--dim);margin:0 0 6px}
+#m-details .au{font-size:15px;margin:0 0 4px}
+#m-details .ser{color:var(--ac);font-size:13px;margin:0 0 4px}
+#m-details .facts{color:var(--faint);font-size:12.5px;margin:0 0 8px}
+#m-details .pills{display:flex;gap:5px;flex-wrap:wrap}
+#m-details .pill{background:var(--sub);border:1px solid var(--bd);border-radius:10px;padding:1px 8px;font-size:11.5px;color:var(--dim)}
+#m-details .pill.sh{background:var(--acbg);border-color:transparent;color:var(--ac);font-weight:600}
+#m-details .sec{border-top:1px solid var(--bd);margin-top:20px;padding-top:14px}
+#m-details .sh2{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+#m-details .sh2 h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0;font-weight:600}
+#m-details .sh2 h2 span{font-weight:400}
+#m-details .plus{width:26px;height:26px;border-radius:50%;border:1px solid var(--bdf);display:inline-flex;align-items:center;justify-content:center;color:var(--ac);font-size:16px;line-height:1}
+#m-details .rd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px}
+#m-details .fmt{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--bdf);border-radius:6px;padding:3px 8px;font-size:13px;background:var(--bg)}
+#m-details .fmt .chev{color:var(--faint);font-size:10px}
+#m-details .bar{height:6px;border-radius:3px;background:var(--inset);overflow:hidden;margin:10px 0 8px}
+#m-details .bar i{display:block;height:100%;background:var(--ac)}
+#m-details .prow{display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
+#m-details .num{width:58px;border:1px solid var(--bdf);border-radius:6px;padding:3px 6px;font-size:13px;text-align:right}
+#m-details .dim{color:var(--faint)}
+#m-details .sp{flex:1}
+#m-details .btn{border:1px solid var(--bdf);border-radius:6px;padding:4px 10px;font-size:12.5px;background:var(--bg);white-space:nowrap}
+#m-details .btn.pr{background:var(--ac);color:#fff;border-color:var(--ac)}
+#m-details .stars{color:var(--att);font-size:18px;letter-spacing:2px}
+#m-details .review{margin:6px 0 0;line-height:1.55}
+#m-details .desc{line-height:1.55;color:var(--dim);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+#m-details .more{color:var(--ac);font-size:13px}
+#m-details .ent{position:relative;padding:10px 64px 10px 0;border-bottom:1px solid var(--sub)}
+#m-details .ent:last-child{border-bottom:0}
+#m-details .meta{font-size:11.5px;color:var(--faint);margin-bottom:3px}
+#m-details .ent .acts{position:absolute;right:0;top:8px;display:flex;gap:2px;opacity:0}
+#m-details .ent:hover .acts,#m-details .ent.h .acts{opacity:1}
+#m-details .ent .acts .ico{width:26px;height:26px;font-size:12.5px}
+#m-details .qt{border-left:3px solid var(--bdf);padding-left:12px;font-family:Georgia,serif;font-style:italic;line-height:1.5}
+#m-details .hist summary{list-style:none;cursor:pointer}
+#m-details .hrow{display:flex;gap:10px;font-size:13px;padding:5px 0;color:var(--dim)}
+#m-details .rail .card{border:1px solid var(--bd);border-radius:8px;padding:12px;margin-bottom:14px;background:var(--bg)}
+#m-details .rail .sh2{margin-bottom:6px}
+#m-details .note{font-size:12px;color:var(--faint);margin-top:6px}
+#m-mobile-home .ph{--bg:#fefefe;--sub:#f2e9db;--inset:#efe0cf;--bd:#e3d3bf;--bdf:#c9b49a;--tx:#3a2f26;--dim:#6b5d4f;--faint:#756758;--ac:#2f6f6a;--acbg:#d9e8e6;--att:#a84c1b;
+  width:250px;height:500px;border:8px solid #3a2f26;border-radius:26px;overflow:hidden;position:relative;font-family:Inter,system-ui,sans-serif;font-size:12px;color:var(--tx);background:var(--bg);text-align:left;margin:0 auto}
+#m-mobile-home .ph *{box-sizing:border-box}
+#m-mobile-home .shell{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--bd);font-weight:600;font-size:12.5px}
+#m-mobile-home .tb{padding:8px 10px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--bd)}
+#m-mobile-home .r{display:flex;gap:5px;align-items:center}
+#m-mobile-home .srch{flex:1;border:1px solid var(--bdf);border-radius:6px;padding:5px 8px;color:var(--faint);font-size:11.5px}
+#m-mobile-home .b{border:1px solid var(--bdf);border-radius:6px;padding:4px 7px;font-size:11.5px;white-space:nowrap;line-height:1.1}
+#m-mobile-home .b.on{background:var(--acbg);color:var(--ac);border-color:transparent;font-weight:600}
+#m-mobile-home .b.pr{background:var(--ac);color:#fff;border-color:var(--ac)}
+#m-mobile-home .sp{flex:1}
+#m-mobile-home .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}
+#m-mobile-home .cv{aspect-ratio:2/3;border-radius:3px;margin-bottom:3px}
+#m-mobile-home .tt{font-weight:600;font-size:11.5px}
+#m-mobile-home .au{color:var(--dim);font-size:10.5px}
+#m-mobile-home .chips{display:flex;gap:5px;overflow:hidden;white-space:nowrap}
+#m-mobile-home .chip{border:1px solid var(--bd);border-radius:12px;padding:3px 9px;font-size:11px;background:var(--sub)}
+#m-mobile-home .chip.on{background:var(--acbg);color:var(--ac);border-color:transparent;font-weight:600}
+#m-mobile-home .drawer{position:absolute;top:0;bottom:0;left:0;width:78%;background:var(--sub);border-right:1px solid var(--bd);box-shadow:4px 0 16px rgba(0,0,0,.2);padding:12px 8px;display:flex;flex-direction:column;gap:2px}
+#m-mobile-home .drawer a{display:flex;justify-content:space-between;padding:5px 8px;border-radius:6px}
+#m-mobile-home .drawer a.on{background:var(--acbg);color:var(--ac);font-weight:600}
+#m-mobile-home .drawer h4{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);margin:10px 8px 2px}
+#m-mobile-home .dim{position:absolute;inset:0;background:rgba(58,47,38,.35)}
+#m-mobile-home .c1{background:linear-gradient(160deg,#3b5a7a,#1f3247)}
+#m-mobile-home .c2{background:linear-gradient(160deg,#8c4a2f,#4f2616)}
+#m-mobile-home .c3{background:linear-gradient(160deg,#2f6f6a,#183d3a)}
+#m-mobile-home .c4{background:linear-gradient(160deg,#6b5d4f,#3a2f26)}
+#m-mobile-home .trio{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+#m-mobile-home .cap{font-size:13px;margin-top:8px;text-align:left}
+</style>
+</head>
+<body>
+<section id="m-home"><h1 class="part">1. Books home: grid and list (approved: grid A, list B)</h1>
+
+<h2>Books home: two panes, grid or list</h2>
+<p class="subtitle">"All books" view, sorted by date added, newest first. Covers are stand-ins. The view toggle (▦ / ☰) is saved per account.</p>
+
+<div class="mockup">
+<div class="mockup-header">A. Grid view</div>
+<div class="mockup-body" style="padding:0">
+<div class="bk">
+  <nav class="bk-side">
+    <a class="on">All books <span class="n">128</span></a>
+    <a>Reading <span class="n">2</span></a>
+    <a>Want to read <span class="n">41</span></a>
+    <a>Read <span class="n">80</span></a>
+    <a>Did not finish <span class="n">5</span></a>
+    <div class="goal"><b>2026 goal</b> · 18 of 30<div class="bar"><i style="width:60%"></i></div><div style="margin-top:4px">2 books ahead</div></div>
+    <h4>Tags</h4>
+    <a>sf</a><a>hugo</a><a>space opera</a><a>fantasy</a><a>non-fiction</a>
+    <div class="foot"><a>📊 Stats</a><a>⇩ Import</a><a>⇧ Export</a></div>
+  </nav>
+  <div class="bk-main">
+    <div class="tb">
+      <h3>All books <span>128</span></h3>
+      <div class="srch">🔍 Search books, notes and quotes…</div>
+      <span class="sel">Date added ▾</span><span class="ib" title="Newest first">↓</span>
+      <span class="seg"><span class="on">▦</span><span>☰</span></span>
+      <span class="add">+ Add book</span>
+    </div>
+    <div class="grid">
+      <div class="tile"><div class="cv c1">Children of Time<div class="pb"><i style="width:45%"></i></div></div><div class="tt">Children of Time</div><div class="au">Adrian Tchaikovsky</div><div class="meta"><span class="st r">Reading · 45%</span></div><div class="tags"><span class="tag">sf</span><span class="tag">evolution</span></div><div class="meta">Added 3 Oct</div></div>
+      <div class="tile"><div class="cv c2">Piranesi</div><div class="tt">Piranesi</div><div class="au">Susanna Clarke</div><div class="meta"><span class="st w">Want to read</span></div><div class="tags"><span class="tag">fantasy</span></div><div class="meta">Added 29 Sep</div></div>
+      <div class="tile"><div class="cv c3">Project Hail Mary</div><div class="tt">Project Hail Mary</div><div class="au">Andy Weir</div><div class="meta"><span class="stars">★★★★★</span></div><div class="tags"><span class="tag">sf</span><span class="tag">space</span><span class="tag">favourites</span><span class="tag">+2</span></div><div class="meta">Added 14 Sep</div></div>
+      <div class="tile"><div class="cv c4">The Left Hand of Darkness</div><div class="tt">The Left Hand of Darkness</div><div class="au">Ursula K. Le Guin</div><div class="meta"><span class="stars">★★★★☆</span></div><div class="tags"><span class="tag">sf</span><span class="tag">hugo</span><span class="tag">classics</span></div><div class="meta">Added 2 Sep</div></div>
+      <div class="tile"><div class="cv c5">Hyperion</div><div class="tt">Hyperion</div><div class="au">Dan Simmons</div><div class="meta"><span class="st r">Reading · p. 212 / 482</span></div><div class="tags"><span class="tag">sf</span><span class="tag">hugo</span></div><div class="meta">Added 28 Aug</div></div>
+      <div class="tile"><div class="cv c6">A Memory Called Empire</div><div class="tt">A Memory Called Empire</div><div class="au">Arkady Martine</div><div class="meta"><span class="st d">Did not finish</span></div><div class="tags"><span class="tag">space opera</span></div><div class="meta">Added 20 Aug</div></div>
+      <div class="tile"><div class="cv c7">Exhalation</div><div class="tt">Exhalation</div><div class="au">Ted Chiang</div><div class="meta"><span class="stars">★★★★★</span></div><div class="tags"><span class="tag">short stories</span></div><div class="meta">Added 11 Aug</div></div>
+      <div class="tile"><div class="cv c8">The Dispossessed</div><div class="tt">The Dispossessed</div><div class="au">Ursula K. Le Guin</div><div class="meta"><span class="st w">Want to read</span></div><div class="tags"><span class="tag">sf</span><span class="tag">classics</span></div><div class="meta">Added 1 Aug</div></div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<div class="mockup" style="margin-top:24px">
+<div class="mockup-header">B. List view (same toolbar, ☰ selected)</div>
+<div class="mockup-body" style="padding:0">
+<div class="bk" style="min-height:0">
+  <div class="bk-main">
+    <div class="list">
+      <div class="row"><div class="cv c1"></div><div class="main"><div class="tt">Children of Time</div><div class="au">Adrian Tchaikovsky</div><div class="tags"><span class="tag">sf</span><span class="tag">evolution</span></div></div><div class="right"><div class="st r">Reading · 45%</div><div class="bar"><i style="width:45%"></i></div><div class="meta" style="justify-content:flex-end;margin-top:4px">Added 3 Oct</div></div></div>
+      <div class="row"><div class="cv c2"></div><div class="main"><div class="tt">Piranesi</div><div class="au">Susanna Clarke</div><div class="tags"><span class="tag">fantasy</span></div></div><div class="right"><div class="st w">Want to read</div><div class="meta" style="justify-content:flex-end;margin-top:4px">Added 29 Sep</div></div></div>
+      <div class="row"><div class="cv c3"></div><div class="main"><div class="tt">Project Hail Mary</div><div class="au">Andy Weir</div><div class="tags"><span class="tag">sf</span><span class="tag">space</span><span class="tag">favourites</span><span class="tag">audiobook</span><span class="tag">2026</span></div></div><div class="right"><div class="stars">★★★★★</div><div class="meta" style="justify-content:flex-end;margin-top:4px">Added 14 Sep</div></div></div>
+      <div class="row"><div class="cv c5"></div><div class="main"><div class="tt">Hyperion</div><div class="au">Dan Simmons</div><div class="tags"><span class="tag">sf</span><span class="tag">hugo</span></div></div><div class="right"><div class="st r">Reading · p. 212 / 482</div><div class="bar"><i style="width:44%"></i></div><div class="meta" style="justify-content:flex-end;margin-top:4px">Added 28 Aug</div></div></div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<h3 class="q">Notes</h3>
+<ul style="text-align:left;line-height:1.7">
+  <li><b>Status line</b>: "Reading · 45%" / "Want to read" / "Did not finish" / stars for Read. Reading books also get a thin bar on the cover.</li>
+  <li><b>Tags</b>: up to 3 + "+N" in the grid, up to 5 in the list.</li>
+  <li><b>Goal card</b> moved into the sidebar under the shelves. Stats / Import / Export sit at the sidebar's foot.</li>
+  <li><b>+ Add book</b> moved to the toolbar. The heading ("All books 128") is in the toolbar too.</li>
+  <li><b>Sort</b>: a dropdown (Date added / Title / Author) plus a direction toggle.</li>
+</ul>
+</section>
+<section id="m-details"><h1 class="part">2. Book details (approved: A, single column, on every screen size)</h1>
+
+<h2>Book details page</h2>
+<p class="subtitle">Full width with a page bar. Facts about the book are changed on Edit. Everything about your reading of it is changed here, in place. Hover a note or quote to see its ✎ / 🗑 icons; they're always visible on touch screens. The first note below shows the hover state.</p>
+
+<div class="mockup">
+<div class="mockup-header">A. Single column (sections stacked, ~760px wide, centred)</div>
+<div class="mockup-body" style="padding:0">
+<div class="bk">
+  <div class="pbar"><span class="back">← All books</span><span class="icons"><span class="ico" title="Edit details">✎</span><span class="ico del" title="Delete">🗑</span></span></div>
+  <div class="page">
+    <header class="hd">
+      <div class="cv">Hyperion</div>
+      <div>
+        <h1>Hyperion</h1>
+        <p class="au">Dan Simmons</p>
+        <p class="ser">Hyperion Cantos · #1</p>
+        <p class="facts">482 pages · 1989 · Bantam</p>
+        <div class="pills"><span class="pill sh">Reading</span><span class="pill">sf</span><span class="pill">hugo</span><span class="pill">space opera</span></div>
+      </div>
+    </header>
+
+    <section class="sec">
+      <div class="sh2"><h2>Reading</h2></div>
+      <div class="rd">Since 28 Aug <span class="fmt">📖 Paperback <span class="chev">▼</span></span></div>
+      <div class="bar"><i style="width:44%"></i></div>
+      <div class="prow">Page <span class="num">212</span> <span class="dim">of 482 · 44% · updated yesterday</span><span class="sp"></span><span class="btn pr">Finish…</span><span class="btn">Did not finish…</span></div>
+    </section>
+
+    <section class="sec">
+      <div class="sh2"><h2>Your take</h2><span class="ico" title="Edit review" style="width:26px;height:26px">✎</span></div>
+      <div class="stars">★★★★☆</div>
+      <p class="review">The Canterbury Tales structure works far better than it should. The Scholar's tale is the best thing in it.</p>
+    </section>
+
+    <section class="sec">
+      <div class="sh2"><h2>About</h2></div>
+      <p class="desc">On the world called Hyperion, beyond the reach of galactic law, waits a creature called the Shrike. There are those who worship it. There are those who fear it. And there are those who have vowed to destroy it. In the Valley of the Time Tombs, where huge, brooding structures move backward through time, the Shrike waits for them all.</p>
+      <span class="more">More</span>
+    </section>
+
+    <section class="sec">
+      <div class="sh2"><h2>Notes <span>· 2</span></h2><span class="plus" title="Add a note">+</span></div>
+      <div class="ent h"><div class="meta">10 Oct · p. 198</div>The Consul's tale reframes everything before it.<div class="acts"><span class="ico h">✎</span><span class="ico del">🗑</span></div></div>
+      <div class="ent"><div class="meta">2 Sep · p. 64</div>The Shrike is only described through others so far. Effective.<div class="acts"><span class="ico">✎</span><span class="ico del">🗑</span></div></div>
+    </section>
+
+    <section class="sec">
+      <div class="sh2"><h2>Quotes <span>· 1</span></h2><span class="plus" title="Add a quote">+</span></div>
+      <div class="ent"><div class="qt">"Words are the only bullets in truth's bandolier."</div><div class="meta" style="margin-top:4px">p. 151</div><div class="acts"><span class="ico">✎</span><span class="ico del">🗑</span></div></div>
+    </section>
+
+    <section class="sec hist">
+      <div class="sh2"><h2>▸ Reading history <span>· 2</span></h2></div>
+    </section>
+  </div>
+</div>
+</div></div>
+
+<h3 style="margin:22px 0 6px">Notes</h3>
+<ul style="text-align:left;line-height:1.7">
+  <li><b>Page bar</b>: "← All books" returns to the exact shelf, tag, sort and search you came from. ✎ goes to the Edit page; 🗑 opens the confirm dialog.</li>
+  <li><b>Reading</b>: the format is a real dropdown (📖 Paperback ▼). Progress is a small number box that saves on Enter. "Finish…" and "Did not finish…" open small popovers with the date, plus a rating or stopping point.</li>
+  <li><b>Header pills</b> are read-only now. Tags are edited on the Edit page.</li>
+  <li><b>+</b> opens the add form inline at the top of its section. ✎ on an entry turns it into its form in place.</li>
+  <li><b>Reading history</b> starts collapsed.</li>
+</ul>
+</section>
+<section id="m-mobile-home"><h1 class="part">3. Books home on a phone (approved: A, the drawer)</h1>
+
+<h2>Books home on a phone: where do the shelves and tags go?</h2>
+<p class="subtitle">On a desktop, the sidebar stays as you approved. These show the narrow-screen version.</p>
+
+<div class="options trio" style="display:grid">
+  <div class="option" data-choice="drawer"  style="display:block">
+    <div class="letter">A</div>
+    <div class="ph">
+      <div class="shell"><span>☰ ON Suite › Books</span></div>
+      <div class="tb"><div class="r"><span class="b">⚲ Reading ▾</span><span class="srch">Search…</span></div><div class="r"><span class="b">Default ▾</span><span class="b">↓</span><span class="sp"></span><span class="b on">▦</span><span class="b">☰</span><span class="b pr">+</span></div></div>
+      <div class="grid"><div><div class="cv c1"></div><div class="tt">Children of Time</div><div class="au">Tchaikovsky</div></div><div><div class="cv c2"></div><div class="tt">Hyperion</div><div class="au">Dan Simmons</div></div></div>
+      <div class="dim"></div>
+      <div class="drawer">
+        <a>All books <span>128</span></a><a class="on">Reading <span>2</span></a><a>Want to read <span>41</span></a><a>Read <span>80</span></a><a>Did not finish <span>5</span></a>
+        <h4>Tags</h4><a>sf</a><a>hugo</a><a>fantasy</a>
+        <h4>&nbsp;</h4><a>📊 Stats</a><a>⇩ Import</a><a>⇧ Export</a>
+      </div>
+    </div>
+    <div class="cap"><b>Drawer.</b> The toolbar's first button shows the current shelf ("⚲ Reading ▾"). Tapping it slides out the whole sidebar (shelves, tags, goal, links) over the grid. The phone gets the same sidebar as the desktop, just tucked away.</div>
+  </div>
+
+  <div class="option" data-choice="chips"  style="display:block">
+    <div class="letter">B</div>
+    <div class="ph">
+      <div class="shell"><span>☰ ON Suite › Books</span></div>
+      <div class="tb"><div class="chips"><span class="chip">All</span><span class="chip on">Reading 2</span><span class="chip">Want 41</span><span class="chip">Read 80</span><span class="chip">DNF</span></div><div class="r"><span class="srch">Search…</span><span class="b">Tags ▾</span></div><div class="r"><span class="b">Default ▾</span><span class="b">↓</span><span class="sp"></span><span class="b on">▦</span><span class="b">☰</span><span class="b pr">+</span></div></div>
+      <div class="grid"><div><div class="cv c1"></div><div class="tt">Children of Time</div><div class="au">Tchaikovsky</div></div><div><div class="cv c2"></div><div class="tt">Hyperion</div><div class="au">Dan Simmons</div></div></div>
+    </div>
+    <div class="cap"><b>Chips.</b> The shelves become a scrollable chip row and tags go in a dropdown. One tap changes shelf, but there are three toolbar rows. Stats, Import and Export would need another home (the ⋯ in the shell?).</div>
+  </div>
+
+  <div class="option" data-choice="drill"  style="display:block">
+    <div class="letter">C</div>
+    <div class="ph">
+      <div class="shell"><span>☰ ON Suite › Books</span></div>
+      <div style="background:var(--sub);height:100%;padding:12px 8px" class="drawer-like">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <a style="display:flex;justify-content:space-between;padding:6px 8px">All books <span>128</span></a><a style="display:flex;justify-content:space-between;padding:6px 8px">Reading <span>2</span></a><a style="display:flex;justify-content:space-between;padding:6px 8px">Want to read <span>41</span></a><a style="display:flex;justify-content:space-between;padding:6px 8px">Read <span>80</span></a><a style="display:flex;justify-content:space-between;padding:6px 8px">Did not finish <span>5</span></a>
+          <div style="font-size:10px;text-transform:uppercase;color:#756758;margin:10px 8px 2px">Tags</div><a style="padding:6px 8px">sf</a><a style="padding:6px 8px">hugo</a>
+        </div>
+      </div>
+    </div>
+    <div class="cap"><b>Drill-down (today's approach).</b> Shelves fill the screen first; tap one to get its grid, with "← Shelves" to go back. It's familiar, but always one extra step before you see any books.</div>
+  </div>
+</div>
+
+
+</section>
+</body>
+</html>
