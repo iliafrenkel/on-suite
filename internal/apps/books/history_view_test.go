@@ -165,3 +165,28 @@ func TestEditingAReadingKeepsTheHistoryOpen(t *testing.T) {
 		t.Error("the history opened for a change made outside it")
 	}
 }
+
+// Without JavaScript a history form answers with a redirect, which carries
+// open=history so the page it lands on has the history open too (#599).
+func TestWithoutJavaScriptTheHistoryStaysOpen(t *testing.T) {
+	s := newServer(t)
+	id := readTwiceOverHTTP(t, s)
+	past := historyIDs(t, s, id)[1]
+	path := fmt.Sprintf("/books/readings/%d/%d", id, past)
+	back := fmt.Sprintf("/books/b/%d?open=history&shelf=read", id)
+	for _, post := range []struct {
+		path string
+		form url.Values
+	}{
+		{path, url.Values{"shelf": {"read"}, "open": {"history"},
+			"started_on": {"2026-09-20"}, "finished_on": {"2026-09-28"}, "format": {"paper"}}},
+		{path + "/delete", url.Values{"shelf": {"read"}, "open": {"history"}}},
+	} {
+		s.Submit(t, s.Alice, post.path, post.form, back)
+		if !isOpen(s.Get(t, s.Alice, back), "details#books-history") {
+			t.Errorf("after POST %s the history folded away", post.path)
+		}
+	}
+	s.Submit(t, s.Alice, fmt.Sprintf("/books/format/%d", id), url.Values{"shelf": {"read"}, "format": {"ebook"}},
+		fmt.Sprintf("/books/b/%d?shelf=read", id))
+}

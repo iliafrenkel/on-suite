@@ -74,6 +74,14 @@ func (c listCtx) BookURL(id int64) string {
 	return "/books/b/" + strconv.FormatInt(id, 10) + "?" + c.Query()
 }
 
+// HistoryURL is a book opened from this list with its Reading history
+// open: where a history form goes back to without JavaScript (#599).
+func (c listCtx) HistoryURL(id int64) string {
+	v := c.values()
+	v.Set("open", "history")
+	return "/books/b/" + strconv.FormatInt(id, 10) + "?" + v.Encode()
+}
+
 // AddURL is the Add book page, coming back to this list afterwards — but
 // not to its search: on the Add page q is the Open Library search (UI
 // redesign spec "Add and Edit pages").
