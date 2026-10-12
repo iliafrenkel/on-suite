@@ -64,8 +64,8 @@ func (a *App) lookUpCover(ctx context.Context, b Book) (string, []byte, error) {
 	return ct, data, err
 }
 
-// findCover is the ⋯ menu's Find cover: the lookup, now. Finding none, or
-// Open Library not answering, is a Refusal — the banner over the panes,
+// findCover is Find cover: the lookup, now. Finding none, or
+// Open Library not answering, is a Refusal — the banner on the book page,
 // as for any other action (spec "Errors").
 func (a *App) findCover(r *http.Request, userID, id int64) error {
 	ctx := r.Context()

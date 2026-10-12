@@ -74,8 +74,8 @@ func TestTheSeriesLinkFiltersTheList(t *testing.T) {
 	if want := "/books/?series=The+Expanse&shelf=all"; href != want {
 		t.Errorf("series link href = %q, want %q", href, want)
 	}
-	if v, _ := htmlassert.Attr(link, "hx-target"); v != "#books-list" {
-		t.Errorf("series link hx-target = %q, want the list", v)
+	if _, ok := htmlassert.Attr(link, "hx-get"); ok {
+		t.Error("the series link is a plain link: the book page has no list to swap")
 	}
 
 	doc = htmlassert.Parse(t, hx(t, s, href, "books-list"))
@@ -86,9 +86,6 @@ func TestTheSeriesLinkFiltersTheList(t *testing.T) {
 		t.Errorf("heading = %q", got)
 	}
 	doc.MustNotHave(`.books-side a[aria-current="page"]`)
-	if v, _ := htmlassert.Attr(doc.MustHave("#books-list"), "data-series"); v != "The Expanse" {
-		t.Errorf("data-series = %q", v)
-	}
 	if v, _ := htmlassert.Attr(doc.MustHave(`#books-filter-ctx input[name="series"]`), "value"); v != "The Expanse" {
 		t.Errorf("the filter's series field = %q", v)
 	}

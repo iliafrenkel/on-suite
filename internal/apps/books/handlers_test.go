@@ -96,9 +96,9 @@ func TestIndexOpensOnTheReadingShelf(t *testing.T) {
 		t.Errorf("current shelf link = %q, want Reading with count 1, read out as \"Reading, 1 book\" (#568)", text)
 	}
 	doc.MustHave(`a[href="/books/new"]`)
-	doc.MustHave(".books-book .empty")
-	if !isChecked(t, doc, "books-list-open") || isChecked(t, doc, "books-book-open") {
-		t.Error("phone drill-down: want the list showing and no book open")
+	doc.MustNotHave("#books-book") // a book has a page of its own now
+	if !isChecked(t, doc, "books-list-open") {
+		t.Error("phone drill-down: want the list showing")
 	}
 }
 
@@ -143,7 +143,7 @@ func TestEmptyShelfSaysSo(t *testing.T) {
 	doc.MustNotHave(".books-row")
 }
 
-func TestBookPaneShowsTheBook(t *testing.T) {
+func TestBookPageShowsTheBook(t *testing.T) {
 	s := newServer(t)
 	s.Clock.Set(time.Date(2026, 10, 9, 1, 0, 0, 0, time.UTC))
 	nb := titled("Leviathan Wakes", "James S. A. Corey", books.ShelfReading)
@@ -165,10 +165,10 @@ func TestBookPaneShowsTheBook(t *testing.T) {
 	if v, _ := htmlassert.Attr(book, "data-book-id"); v != fmt.Sprint(id) {
 		t.Errorf("data-book-id = %q, want %d", v, id)
 	}
-	if !isChecked(t, doc, "books-book-open") {
-		t.Error("books-book-open not checked with a book open")
-	}
-	doc.MustHave(".books-rows .is-active")
+	doc.MustNotHave("#books-list") // full width: no list beside it (spec "Book details page")
+	doc.MustNotHave(".books-menu") // Edit and Delete are in the page bar now
+	doc.MustHave(".books-page-bar button[hx-confirm]")
+	doc.MustHave("#books-confirm-dialog")
 	if title := htmlassert.Text(doc.MustHave("title")); !strings.HasPrefix(title, "Leviathan Wakes") {
 		t.Errorf("<title> = %q, want the book's title first", title)
 	}
@@ -192,7 +192,7 @@ func TestHTMXListNavigationSwapsTheListOnly(t *testing.T) {
 	if got := rowTitles(doc); len(got) != 1 || got[0] != "Emma" {
 		t.Errorf("rows = %v, want [Emma]", got)
 	}
-	for _, id := range []string{"books-side", "books-filter-ctx", "books-list-open", "books-book-open", "shell-crumb-tail"} {
+	for _, id := range []string{"books-side", "books-filter-ctx", "books-list-open", "shell-crumb-tail"} {
 		if v, ok := htmlassert.Attr(doc.MustHave("#"+id), "hx-swap-oob"); !ok || v != "true" {
 			t.Errorf("#%s hx-swap-oob = %q, %v; want it swapped out of band", id, v, ok)
 		}
@@ -201,28 +201,30 @@ func TestHTMXListNavigationSwapsTheListOnly(t *testing.T) {
 	doc.MustNotHave("#books-panes")
 }
 
-func TestListCarriesItsContextForTheBookPane(t *testing.T) {
+func TestRowsOpenTheBookWithTheirList(t *testing.T) {
 	s := newServer(t)
-	add(t, s, s.Alice.User.ID, titled("Emma", "", books.ShelfWant))
-	doc := htmlassert.Parse(t, hx(t, s, "/books/?shelf=all&tag=sf&q=em", "books-list"))
-	list := doc.MustHave("#books-list")
-	for name, want := range map[string]string{"data-shelf": "all", "data-tag": "sf", "data-q": "em"} {
-		if got, _ := htmlassert.Attr(list, name); got != want {
-			t.Errorf("%s = %q, want %q", name, got, want)
-		}
+	id := add(t, s, s.Alice.User.ID, titled("Emma", "", books.ShelfWant))
+	doc := htmlassert.Parse(t, hx(t, s, "/books/?shelf=all&q=em", "books-list"))
+	link := doc.MustHave(fmt.Sprintf(`a[href="/books/b/%d?q=em&shelf=all"]`, id))
+	if _, ok := htmlassert.Attr(link, "hx-get"); ok {
+		t.Error("a book opens with a plain link: it has a page of its own")
 	}
 }
 
-func TestHTMXBookOpenSwapsTheBookOnly(t *testing.T) {
+func TestBookPageGoesBackToItsList(t *testing.T) {
 	s := newServer(t)
 	id := add(t, s, s.Alice.User.ID, titled("Emma", "", books.ShelfWant))
-	doc := htmlassert.Parse(t, hx(t, s, fmt.Sprintf("/books/b/%d?shelf=want", id), "books-book"))
-	doc.MustHave("#books-book h1")
-	if !isChecked(t, doc, "books-book-open") {
-		t.Error("book-swap did not check books-book-open out of band")
+	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d?shelf=all&tag=sf&q=le+guin", id))
+	back := doc.MustHave(".books-back")
+	if href, _ := htmlassert.Attr(back, "href"); href != "/books/?q=le+guin&shelf=all&tag=sf" {
+		t.Errorf("back link = %q, want the tagged, searched list it came from", href)
 	}
-	doc.MustNotHave("#books-list")
-	doc.MustNotHave("#books-side")
+	if got := htmlassert.Text(back); got != "Tagged “sf”" {
+		t.Errorf("back link text = %q, want the list's name", got)
+	}
+	if href := attr(t, doc, ".books-edit-link", "href"); href != fmt.Sprintf("/books/edit/%d?q=le+guin&shelf=all&tag=sf", id) {
+		t.Errorf("edit link = %q, want the same list context", href)
+	}
 }
 
 func httptestGet(path string) *http.Request { return httptest.NewRequest("GET", path, nil) }

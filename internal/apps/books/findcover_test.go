@@ -21,29 +21,6 @@ func findCover(t *testing.T, s *server, id int64) *htmlassert.Doc {
 	return htmlassert.Parse(t, rec.Body.String())
 }
 
-func TestFindCoverIsInTheMenuOfABookWithout(t *testing.T) {
-	s := newServer(t)
-	uid := s.Alice.User.ID
-	id := add(t, s, uid, titled("Piranesi", "", books.ShelfWant))
-	path := fmt.Sprintf("/books/b/%d?shelf=want", id)
-	doc := s.Get(t, s.Alice, path)
-	btn := doc.MustHave(".books-menu button[hx-post]")
-	if got, _ := htmlassert.Attr(btn, "hx-post"); got != fmt.Sprintf("/books/find-cover/%d", id) {
-		t.Errorf("first menu button posts to %q, want Find cover", got)
-	}
-	if got := attr(t, doc, ".books-menu form", "action"); got != fmt.Sprintf("/books/find-cover/%d", id) {
-		t.Errorf("its form posts to %q without JavaScript", got)
-	}
-	if err := s.Store.SetCover(context.Background(), uid, id, "image/png", onePNG, books.CoverUpload); err != nil {
-		t.Fatal(err)
-	}
-	for _, text := range texts(s.Get(t, s.Alice, path), ".books-menu button") {
-		if text == "Find cover" {
-			t.Error("a book with a cover still offers Find cover")
-		}
-	}
-}
-
 func TestFindCoverByISBNThenByTitle(t *testing.T) {
 	s, _, _ := newBooksApp(t)
 	uid := s.Alice.User.ID

@@ -71,16 +71,15 @@ func (c listCtx) BookURL(id int64) string {
 	return "/books/b/" + strconv.FormatInt(id, 10) + "?" + c.Query()
 }
 
-// panesView is everything the three panes draw. Title and Shell are for
-// fragments, which have no render.Page around them.
+// panesView is what the shelves and the list draw (UI1 Task 3; Task 4
+// replaces it with homeView). Title and Shell are for fragments, which
+// have no render.Page around them.
 type panesView struct {
 	Title   string
 	Shell   render.Shell
 	Ctx     listCtx
-	Error   string // the banner, for a refused action
 	Sidebar sidebarView
 	List    listView
-	Book    bookView
 }
 
 type shelfLink struct {
@@ -132,15 +131,12 @@ type rowView struct {
 	Initial string
 	Cover   string       // the stored cover; "" draws the mini spine
 	Snippet *snippetView // where a filtered row matched; nil when it shows already
-	Active  bool
 }
 
 type listView struct {
-	Ctx     listCtx // the list's own context, for books.js to sync the book pane
 	Heading string
 	Rows    []rowView
 	Empty   string
-	OOB     bool      // swapped out of band, alongside a progress update
 	Goal    *goalView // this year's goal, at the top of the Reading shelf; nil for none
 }
 
@@ -154,13 +150,13 @@ func listHeading(c listCtx) string {
 	return c.Shelf.Label()
 }
 
-func viewList(items []ListItem, c listCtx, openID int64) listView {
-	v := listView{Ctx: c, Heading: listHeading(c)}
+func viewList(items []ListItem, c listCtx) listView {
+	v := listView{Heading: listHeading(c)}
 	for _, it := range items {
 		row := rowView{ID: it.ID, URL: c.BookURL(it.ID), Title: it.Title,
 			Byline: byline(it.Authors, seriesText(it.SeriesName, it.SeriesNumber)), Note: rowNote(it),
 			Spine: SpineColor(it.Title), Initial: initial(it.Title), Cover: coverURL(it.ID, it.CoverVersion),
-			Snippet: newSnippet(it), Active: it.ID == openID}
+			Snippet: newSnippet(it)}
 		switch it.Shelf {
 		case ShelfReading:
 			row.Bar, row.Percent = it.Progress.Set(), it.Progress.Percent(it.Pages)
@@ -275,9 +271,8 @@ func emptyText(c listCtx) string {
 	return "No books yet. Click Add book to start."
 }
 
-// bookView is the book pane. Selected is false when no book is open.
+// bookView is the book page's book (UI redesign spec "Book details page").
 type bookView struct {
-	Selected                         bool
 	ID                               int64
 	Title, Subtitle, Authors, Series string   // Series: "The Expanse #3 · 9 books"
 	SeriesURL                        string   // the list of the book's series
@@ -287,6 +282,7 @@ type bookView struct {
 	Spine                            string
 	Cover                            string // the stored cover; "" draws the spine
 	ShelfLabel                       string
+	BackLabel                        string // the page bar's way back: the list's name, "Reading", "Tagged “sf”"
 	Tags                             []string
 	TagsValue                        string // the tags box: "classics, sf"
 	// The reading box.
@@ -311,6 +307,16 @@ type bookView struct {
 	NewQuote      entryForm     // the "+ Add quote" form
 	Ctx           listCtx
 	Shell         render.Shell
+}
+
+// bookPageView is the book page (UI redesign spec "Book details page").
+// Title and Shell are for fragments, which have no render.Page around
+// them; Error is a refusal's banner.
+type bookPageView struct {
+	Title string
+	Shell render.Shell
+	Error string
+	Book  bookView
 }
 
 // choice is one option of a menu or select.
@@ -364,9 +370,9 @@ func ratingChoices(current int) []choice {
 
 // viewBook draws a book; today bounds the reading box's date fields.
 func viewBook(b Book, c listCtx, today string) bookView {
-	v := bookView{Selected: true, ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
+	v := bookView{ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
 		Description: b.Description, Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion),
-		ShelfLabel: b.Shelf.Label(), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Pages: b.Pages,
+		ShelfLabel: b.Shelf.Label(), BackLabel: listHeading(c), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Pages: b.Pages,
 		Rating: b.Rating, Stars: starButtons(b.Rating), Review: b.Review, ReviewHTML: RenderReview(b.Review), Ctx: c}
 	v.DescriptionLong = longDescription(b.Description)
 	if b.SeriesName != "" {

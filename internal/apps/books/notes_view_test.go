@@ -102,10 +102,8 @@ func TestAddingANote(t *testing.T) {
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
 	doc.MustHave("section#books-notes")
-	if v, _ := htmlassert.Attr(doc.MustHave("#books-list"), "hx-swap-oob"); v != "true" {
-		t.Errorf("list hx-swap-oob = %q, want the list out of band", v)
-	}
-	doc.MustNotHave("#books-panes")
+	doc.MustNotHave("#books-list")
+	doc.MustNotHave("#books-book")
 	if got := strings.Join(texts(doc, ".books-entry-text"), "|"); got != "With htmx.|Without JavaScript." {
 		t.Errorf("notes = %q", got)
 	}

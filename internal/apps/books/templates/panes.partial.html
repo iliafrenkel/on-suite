@@ -1,50 +1,21 @@
-{{/* ON Books' three panes — shelves and tags, the list, the book — on ON
-     Reader's layout (internal/apps/reader/templates/panes.partial.html).
-     Apps never import each other, so these blocks are Books' own. Every
-     block here takes a panesView (or the part named in its comment). */}}
+{{/* ON Books' shelves and list, as two panes now that a book has a page of
+     its own (UI redesign, UI1 Task 3). Task 4 replaces these with the home
+     page. Every block here takes a panesView (or the part named in its
+     comment). */}}
 
 {{/* The <title> and crumb ride along with every fragment, so the page
-     chrome follows the panes (#205). */}}
+     chrome follows the list (#205). */}}
 {{define "shell-oob"}}<title>{{if .Title}}{{.Title}} · {{end}}ON Suite</title><span id="shell-crumb-tail" hx-swap-oob="true">{{template "shell-crumb-tail" (dict "Title" .Title "Shell" .Shell)}}</span>{{end}}
 
-{{/* panes-oob answers anything that changes a book: the whole panes. */}}
-{{define "panes-oob"}}{{template "shell-oob" .}}{{template "panes" .}}{{end}}
-
-{{/* list-swap answers a shelf, tag or filter change (target #books-list).
-     The sidebar comes along out of band — its highlight and links follow
-     the list, and unlike Reader's tree it holds nothing worth keeping — as
-     do the filter's hidden fields and the phone drill-down boxes. The book
-     pane is left as it is; books.js moves the row highlight. */}}
-{{define "list-swap"}}{{template "shell-oob" .}}{{template "list" .List}}{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" true)}}{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" true)}}{{template "pane-toggle" (dict "ID" "books-list-open" "Label" "Shelves" "Checked" true "OOB" true)}}{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" false "OOB" true)}}{{end}}
-
-{{/* progress-swap answers a progress update (target #books-progress):
-     the box, and the list out of band so the row's bar and the Reading
-     shelf's order follow (spec "Progress and finishing"). */}}
-{{define "progress-swap"}}{{template "progress" .Book}}{{template "list" .List}}{{end}}
-
-{{/* notes-swap answers a note being added, edited or deleted (target
-     #books-notes): the section, and the list out of band — the row's
-     snippet and its place on a shelf sorted by the latest change can both
-     move. */}}
-{{define "notes-swap"}}{{template "notes" .Book}}{{template "list" .List}}{{end}}
-
-{{/* quotes-swap is notes-swap for the quotes (target #books-quotes). */}}
-{{define "quotes-swap"}}{{template "quotes" .Book}}{{template "list" .List}}{{end}}
-
-{{/* book-swap answers opening a book (target #books-book). The checkbox
-     out of band is what makes a phone drill into the book. */}}
-{{define "book-swap"}}{{template "shell-oob" .}}{{template "book" .Book}}{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" true "OOB" true)}}{{end}}
+{{/* list-swap answers a shelf, tag or filter change (target #books-list):
+     the list, with the sidebar, the filter's hidden fields and the phone
+     drill-down box out of band. */}}
+{{define "list-swap"}}{{template "shell-oob" .}}{{template "list" .List}}{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" true)}}{{template "filter-ctx" (dict "Ctx" .Ctx "OOB" true)}}{{template "pane-toggle" (dict "ID" "books-list-open" "Label" "Shelves" "Checked" true "OOB" true)}}{{end}}
 
 {{define "panes"}}
 <div class="books-panes" id="books-panes">
-	{{with .Error}}<p class="notice notice-error books-banner" role="alert">{{.}}</p>{{end}}
 	<div class="books-panes-row" id="books-panes-row">
-		{{/* The narrow-screen drill-down (Reader's technique): the list is
-		     always "open" over the sidebar, a book over the list. Siblings
-		     of the panes so the CSS reaches them with ~; the back labels in
-		     the panes uncheck them. */}}
 		{{template "pane-toggle" (dict "ID" "books-list-open" "Label" "Shelves" "Checked" true "OOB" false)}}
-		{{template "pane-toggle" (dict "ID" "books-book-open" "Label" "Books" "Checked" .Book.Selected "OOB" false)}}
 		{{template "sidebar" (dict "Sidebar" .Sidebar "OOB" false)}}
 		<div class="pane-gutter" data-gutter-for="side" role="separator"
 		     aria-orientation="vertical" aria-label="Resize the shelves" tabindex="0"></div>
@@ -62,11 +33,7 @@
 			</form>
 			{{template "list" .List}}
 		</section>
-		<div class="pane-gutter" data-gutter-for="list" role="separator"
-		     aria-orientation="vertical" aria-label="Resize the book pane" tabindex="0"></div>
-		{{template "book" .Book}}
 	</div>
-	{{template "confirm"}}
 </div>
 {{end}}
 
@@ -103,9 +70,9 @@
 </nav>
 {{end}}
 
-{{/* list takes a listView. */}}
+{{/* list takes a listView. A row is a plain link to the book's page. */}}
 {{define "list"}}
-<div class="books-list" id="books-list" data-shelf="{{.Ctx.Shelf}}" data-tag="{{.Ctx.Tag}}" data-q="{{.Ctx.Q}}" data-series="{{.Ctx.Series}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
+<div class="books-list" id="books-list">
 	{{with .Goal}}
 	<a class="books-goal-card" href="/books/stats">
 		<span class="books-goal-card-head">{{.Year}} goal</span>
@@ -117,8 +84,8 @@
 	{{if .Rows}}
 	<ul class="books-rows">
 		{{range .Rows}}
-		<li class="books-row{{if .Active}} is-active{{end}}" data-book-id="{{.ID}}">
-			<a class="books-row-link" href="{{.URL}}" hx-get="{{.URL}}" hx-target="#books-book" hx-swap="outerHTML" hx-push-url="true">
+		<li class="books-row" data-book-id="{{.ID}}">
+			<a class="books-row-link" href="{{.URL}}">
 				{{if .Cover}}<img class="books-mini-cover" src="{{.Cover}}" alt="" width="32" height="48" loading="lazy">{{else}}<span class="books-mini-spine swatch-c-{{.Spine}}" aria-hidden="true">{{.Initial}}</span>{{end}}
 				<span class="books-row-text">
 					<span class="books-row-title">{{.Title}}</span>
@@ -134,388 +101,4 @@
 	<p class="empty">{{.Empty}}</p>
 	{{end}}
 </div>
-{{end}}
-
-{{/* book takes a bookView. */}}
-{{define "book"}}
-<section class="books-book" id="books-book" aria-label="Book"{{if .Selected}} data-book-id="{{.ID}}"{{end}}>
-{{if .Selected}}
-	{{template "back" (dict "For" "books-book-open" "Label" "Books")}}
-	<header class="books-book-head">
-		{{if .Cover}}<img class="books-cover" src="{{.Cover}}" alt="Cover of {{.Title}}" width="96" height="144">{{else}}<div class="books-spine swatch-c-{{.Spine}}" aria-hidden="true"><span>{{.Title}}</span></div>{{end}}
-		<div class="books-book-titles">
-			<h1>{{.Title}}</h1>
-			{{with .Subtitle}}<p class="books-subtitle">{{.}}</p>{{end}}
-			{{with .Authors}}<p class="books-authors">{{.}}</p>{{end}}
-			{{with .Series}}<p class="books-series"><a href="{{$.SeriesURL}}" hx-get="{{$.SeriesURL}}" hx-target="#books-list" hx-swap="outerHTML" hx-push-url="true">{{.}}</a></p>{{end}}
-			{{with .Facts}}<p class="books-facts">{{range $i, $f := .}}{{if $i}} · {{end}}{{$f}}{{end}}</p>{{end}}
-			<p class="books-pills"><span class="books-pill books-pill-shelf">{{.ShelfLabel}}</span>{{range .Tags}} <span class="books-pill">{{.}}</span>{{end}}</p>
-		</div>
-		{{template "book-menu" .}}
-	</header>
-	{{template "reading-box" .}}
-	{{template "rating" .}}
-	{{template "review" .}}
-	{{template "description" .}}
-	{{template "tags-form" .}}
-	{{template "notes" .}}
-	{{template "quotes" .}}
-	{{template "history" .}}
-{{else}}
-	<p class="empty">Pick a book, or add one.</p>
-{{end}}
-</section>
-{{end}}
-
-{{/* text-field is one labelled text input with its error. Pass a dict
-     with Name, Label, Value, Error and optionally Placeholder and Mode
-     (inputmode). */}}
-{{define "text-field"}}
-<div class="field">
-	<label for="books-{{.Name}}">{{.Label}}</label>
-	<input id="books-{{.Name}}" name="{{.Name}}" type="text"{{with .Mode}} inputmode="{{.}}"{{end}}{{with .Placeholder}} placeholder="{{.}}"{{end}} value="{{.Value}}"{{if .Error}} aria-invalid="true" aria-describedby="books-{{.Name}}-error"{{end}}>
-	{{template "field-error" .}}
-</div>
-{{end}}
-
-{{define "field-error"}}{{with .Error}}<p class="books-field-error" id="books-{{$.Name}}-error">{{.}}</p>{{end}}{{end}}
-
-{{/* book-menu is the book pane's ⋯ menu: a no-JS <details> disclosure
-     (PATTERNS.md). Find cover shows while the book has none (B5). Delete goes through the confirm dialog (books.js);
-     without JavaScript it simply submits. Takes a bookView. */}}
-{{define "book-menu"}}
-<details class="outline-menu books-menu">
-	<summary class="outline-menu-toggle quiet" aria-label="Book actions">{{ticon "more"}}</summary>
-	<div class="outline-menu-list outline-menu-list-end">
-		<a class="books-edit-link" href="{{.Ctx.EditURL .ID}}">Edit details</a>
-		{{if not .Cover}}
-		<form method="post" action="/books/find-cover/{{.ID}}">
-			{{template "post-ctx" .}}
-			<button type="submit" hx-post="/books/find-cover/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">Find cover</button>
-		</form>
-		{{end}}
-		<form method="post" action="/books/delete/{{.ID}}">
-			{{template "post-ctx" .}}
-			<button type="submit" class="outline-menu-delete"
-			        hx-post="/books/delete/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML"
-			        hx-confirm="Delete “{{.Title}}” for good? Its readings, notes and quotes go too.">Delete</button>
-		</form>
-	</div>
-</details>
-{{end}}
-
-{{/* post-ctx is what every book-pane POST carries: the CSRF token and the
-     list context. Takes a bookView. */}}
-{{define "post-ctx"}}<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">{{template "ctx-fields" .Ctx}}{{end}}
-
-{{/* reading-box is the current reading: Finish / Did not finish while one
-     is in progress, otherwise a button to start one. Takes a bookView. */}}
-{{define "reading-box"}}
-<div class="books-reading">
-	{{if .Reading}}
-	<div class="books-reading-head">
-		<p class="books-reading-status">Reading{{with .StartedOn}} since {{.}}{{end}}</p>
-		{{template "format-menu" .}}
-	</div>
-	{{template "progress" .}}
-	<div class="books-reading-actions">
-		{{template "close-reading" (dict "Book" . "Action" "finish" "Label" "Finish" "DayLabel" "Finished on" "Submit" "Mark as read" "Primary" true)}}
-		{{template "close-reading" (dict "Book" . "Action" "dnf" "Label" "Did not finish" "DayLabel" "Stopped on" "Submit" "Put it down" "Primary" false)}}
-	</div>
-	{{else}}
-	<form method="post" action="/books/start/{{.ID}}" hx-post="/books/start/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
-		{{template "post-ctx" .}}
-		<button type="submit" class="primary books-start">{{.StartLabel}}</button>
-	</form>
-	{{end}}
-</div>
-{{end}}
-
-{{/* format-menu sets the format of the reading in progress: a no-JS
-     <details> disclosure (PATTERNS.md) whose summary is the format pill.
-     Takes a bookView. */}}
-{{define "format-menu"}}
-<details class="outline-menu books-format">
-	<summary class="books-pill books-format-pill" aria-label="Format: {{.FormatLabel}}">{{.FormatLabel}}</summary>
-	<form class="outline-menu-list outline-menu-list-end" method="post" action="/books/format/{{.ID}}"
-	      hx-post="/books/format/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
-		{{template "post-ctx" .}}
-		{{range .FormatChoices}}<button type="submit" name="format" value="{{.Value}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</button>{{end}}
-	</form>
-</details>
-{{end}}
-
-{{/* progress is the progress box of a reading in progress: the input
-     saves on Enter — htmx swaps this box and the list (progress-swap);
-     without JavaScript it posts and comes back. Takes a bookView. */}}
-{{define "progress"}}
-<div class="books-progress" id="books-progress">
-	<form class="books-progress-form" novalidate method="post" action="/books/progress/{{.ID}}"
-	      hx-post="/books/progress/{{.ID}}" hx-target="#books-progress" hx-swap="outerHTML">
-		{{template "post-ctx" .}}
-		<label for="books-progress-input">{{if eq .Progress.Unit "page"}}Page{{else}}Percent read{{end}}</label>
-		<div class="books-progress-row">
-			<input id="books-progress-input" name="at" type="number" inputmode="numeric" min="0" max="{{.Progress.Max}}" value="{{.Progress.Value}}" required{{if .Progress.Error}} aria-invalid="true" aria-describedby="books-progress-error"{{end}}>
-			<span class="books-progress-of">{{if eq .Progress.Unit "page"}}of {{.Progress.Max}}{{else}}%{{end}}</span>
-			<button type="submit">Save</button>
-		</div>
-		{{with .Progress.Error}}<p class="books-field-error" id="books-progress-error" role="alert">{{.}}</p>{{end}}
-	</form>
-	<progress class="books-progress-bar" max="100" value="{{.Progress.Percent}}" aria-label="Progress">{{.Progress.Percent}}%</progress>
-	<p class="books-progress-note">{{.Progress.Note}}</p>
-</div>
-{{end}}
-
-{{/* close-reading is Finish or Did not finish: a no-JS <details>
-     disclosure (PATTERNS.md) holding the date — today unless changed, never
-     before the start — then an optional rating (Finish) or the place it
-     stopped (Did not finish), and the button that sends it. */}}
-{{define "close-reading"}}
-<details class="books-close">
-	<summary class="button{{if .Primary}} primary{{end}}">{{.Label}}</summary>
-	<form class="books-close-form" novalidate method="post" action="/books/{{.Action}}/{{.Book.ID}}"
-	      hx-post="/books/{{.Action}}/{{.Book.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
-		{{template "post-ctx" .Book}}
-		<label for="books-{{.Action}}-day">{{.DayLabel}}</label>
-		<input id="books-{{.Action}}-day" name="day" type="date" value="{{.Book.Today}}" max="{{.Book.Today}}"{{with .Book.MinDay}} min="{{.}}"{{end}}>
-		{{if eq .Action "finish"}}
-		<label for="books-finish-rating">Rating (optional)</label>
-		<select id="books-finish-rating" name="rating">
-			<option value="">No rating</option>
-			{{range .Book.RatingChoices}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}
-		</select>
-		{{else}}
-		<label for="books-dnf-at">Stopped at {{if eq .Book.Progress.Unit "page"}}page{{else}}percent{{end}} (optional)</label>
-		<input id="books-dnf-at" name="at" type="number" inputmode="numeric" min="0" max="{{.Book.Progress.Max}}" value="{{.Book.Progress.Value}}">
-		{{end}}
-		<button type="submit"{{if .Primary}} class="primary"{{end}}>{{.Submit}}</button>
-	</form>
-</details>
-{{end}}
-
-{{/* rating is the book's stars (spec "Book pane"): five submit buttons,
-     so it works without JavaScript; the current rating's own star clears
-     it. The stars wrap together, never one by one, in a narrow pane
-     (#579). Takes a bookView. */}}
-{{define "rating"}}
-<form class="books-rating" method="post" action="/books/rating/{{.ID}}"
-      hx-post="/books/rating/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
-	{{template "post-ctx" .}}
-	<span class="books-rating-label">{{if .Rating}}Your rating{{else}}Rate it{{end}}</span>
-	<span class="books-star-row">{{range .Stars}}<button type="submit" class="books-star{{if .On}} is-on{{end}}" name="rating" value="{{.Value}}" aria-label="{{.Label}}" title="{{.Label}}">{{if .On}}{{ticon "star-filled"}}{{else}}{{ticon "star-outline"}}{{end}}</button>{{end}}</span>
-</form>
-{{end}}
-
-{{/* review is the book's review, rendered, and a no-JS <details> with a
-     textarea to write or edit it (decided 2026-10-09); htmx swaps the panes
-     on save. Takes a bookView. */}}
-{{define "review"}}
-<section class="books-review" aria-label="Review">
-	{{with .ReviewHTML}}<div class="books-review-text">{{.}}</div>{{end}}
-	<details class="books-review-edit">
-		<summary class="button">{{if .Review}}Edit review{{else}}Write a review{{end}}</summary>
-		<form class="books-review-form" method="post" action="/books/review/{{.ID}}"
-		      hx-post="/books/review/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
-			{{template "post-ctx" .}}
-			<label for="books-review-input">Review</label>
-			<textarea id="books-review-input" name="review" rows="8">{{.Review}}</textarea>
-			<p class="books-hint">Markdown works: **bold**, *italic*, [a link](https://…). A blank line starts a new paragraph.</p>
-			<button type="submit" class="primary">Save review</button>
-		</form>
-	</details>
-</section>
-{{end}}
-
-{{/* description is the Open Library description, held to four lines
-     when it is long, with a More / Less toggle (#566): the checkbox
-     technique (PATTERNS.md), so it needs no JavaScript. Takes a bookView. */}}
-{{define "description"}}
-{{with .Description}}
-<div class="books-description">
-	{{if $.DescriptionLong}}<input type="checkbox" id="books-description-more" class="visually-hidden books-description-toggle">{{end}}
-	<p class="books-description-text{{if $.DescriptionLong}} is-clamped{{end}}">{{.}}</p>
-	{{if $.DescriptionLong}}<label class="books-description-more" for="books-description-more"><span class="books-more-label">More</span><span class="books-less-label">Less</span></label>{{end}}
-</div>
-{{end}}
-{{end}}
-
-{{/* tags-form edits a book's tags in place. Takes a bookView. */}}
-{{define "tags-form"}}
-<form class="books-tags-form" method="post" action="/books/tags/{{.ID}}"
-      hx-post="/books/tags/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
-	{{template "post-ctx" .}}
-	<label for="books-tags-input">Tags</label>
-	<div class="books-tags-row">
-		<input id="books-tags-input" name="tags" type="text" value="{{.TagsValue}}" placeholder="sf, favourites" autocomplete="off">
-		<button type="submit">Save tags</button>
-	</div>
-</form>
-{{end}}
-
-{{/* notes is the book's notes, newest first (spec "Book pane"): a
-     "+ Add note" disclosure, then each note with its date and page, an
-     Edit disclosure and Delete (decided 2026-10-09). Every form works
-     without JavaScript; htmx swaps just this section (notes-swap). Takes a
-     bookView. */}}
-{{define "notes"}}
-<section class="books-notes" id="books-notes" aria-labelledby="books-notes-head">
-	<h2 class="books-section-head" id="books-notes-head">Notes</h2>
-	<details class="books-entry-add" id="books-note-new"{{if .NewNote.Open}} open{{end}}>
-		<summary class="button">+ Add note</summary>
-		{{template "note-form" (dict "Book" . "Key" "new" "Action" (printf "/books/notes/%d" .ID) "Form" .NewNote "Submit" "Add note")}}
-	</details>
-	{{with .Notes}}
-	<ul class="books-entries">
-		{{range .}}
-		<li class="books-note">
-			<p class="books-entry-meta">{{.Date}}{{with .Page}} · {{.}}{{end}}</p>
-			<div class="books-entry-text">{{.HTML}}</div>
-			<div class="books-entry-actions">
-				<details class="books-entry-edit"{{if .Form.Open}} open{{end}}>
-					<summary class="button quiet">Edit</summary>
-					{{template "note-form" (dict "Book" $ "Key" .ID "Action" (printf "/books/notes/%d/%d" $.ID .ID) "Form" .Form "Submit" "Save note")}}
-				</details>
-				<form method="post" action="/books/notes/{{$.ID}}/{{.ID}}/delete">
-					{{template "post-ctx" $}}
-					<button type="submit" class="quiet"
-					        hx-post="/books/notes/{{$.ID}}/{{.ID}}/delete" hx-target="#books-notes" hx-swap="outerHTML"
-					        hx-confirm="Delete this note?">Delete</button>
-				</form>
-			</div>
-		</li>
-		{{end}}
-	</ul>
-	{{end}}
-</section>
-{{end}}
-
-{{/* note-form adds or edits a note. Pass a dict with Book (a bookView),
-     Key ("new" or the note's id, for element ids), Action, Form (an
-     entryForm) and Submit. novalidate, so the store's message shows rather
-     than the browser's. */}}
-{{define "note-form"}}
-<form class="books-entry-form" novalidate method="post" action="{{.Action}}"
-      hx-post="{{.Action}}" hx-target="#books-notes" hx-swap="outerHTML">
-	{{template "post-ctx" .Book}}
-	<label for="books-note-{{.Key}}-body">Note</label>
-	<textarea id="books-note-{{.Key}}-body" name="body" rows="4"{{if .Form.Error}} aria-describedby="books-note-{{.Key}}-error"{{end}}>{{.Form.Body}}</textarea>
-	<p class="books-hint">Markdown works: **bold**, *italic*, [a link](https://…).</p>
-	<label for="books-note-{{.Key}}-page">Page (optional)</label>
-	<input id="books-note-{{.Key}}-page" name="page" type="number" inputmode="numeric" min="1"{{with .Book.Pages}} max="{{.}}"{{end}} value="{{.Form.Page}}"{{if .Form.Error}} aria-describedby="books-note-{{.Key}}-error"{{end}}>
-	{{with .Form.Error}}<p class="books-field-error" id="books-note-{{$.Key}}-error" role="alert">{{.}}</p>{{end}}
-	<button type="submit" class="primary">{{.Submit}}</button>
-</form>
-{{end}}
-
-{{/* quotes is the book's quotes as cards, newest first (spec "Book
-     pane"): a "+ Add quote" disclosure, then each quote — its text with
-     its line breaks, its page and its comment — with an Edit disclosure
-     and Delete, as the notes have. htmx swaps just this section
-     (quotes-swap). Takes a bookView. */}}
-{{define "quotes"}}
-<section class="books-quotes" id="books-quotes" aria-labelledby="books-quotes-head">
-	<h2 class="books-section-head" id="books-quotes-head">Quotes</h2>
-	<details class="books-entry-add" id="books-quote-new"{{if .NewQuote.Open}} open{{end}}>
-		<summary class="button">+ Add quote</summary>
-		{{template "quote-form" (dict "Book" . "Key" "new" "Action" (printf "/books/quotes/%d" .ID) "Form" .NewQuote "Submit" "Add quote")}}
-	</details>
-	{{with .Quotes}}
-	<ul class="books-entries">
-		{{range .}}
-		<li class="books-quote">
-			<blockquote class="books-quote-text">{{.Text}}</blockquote>
-			{{with .Page}}<p class="books-entry-meta">{{.}}</p>{{end}}
-			{{with .CommentHTML}}<div class="books-entry-text books-quote-comment">{{.}}</div>{{end}}
-			<div class="books-entry-actions">
-				<details class="books-entry-edit"{{if .Form.Open}} open{{end}}>
-					<summary class="button quiet">Edit</summary>
-					{{template "quote-form" (dict "Book" $ "Key" .ID "Action" (printf "/books/quotes/%d/%d" $.ID .ID) "Form" .Form "Submit" "Save quote")}}
-				</details>
-				<form method="post" action="/books/quotes/{{$.ID}}/{{.ID}}/delete">
-					{{template "post-ctx" $}}
-					<button type="submit" class="quiet"
-					        hx-post="/books/quotes/{{$.ID}}/{{.ID}}/delete" hx-target="#books-quotes" hx-swap="outerHTML"
-					        hx-confirm="Delete this quote?">Delete</button>
-				</form>
-			</div>
-		</li>
-		{{end}}
-	</ul>
-	{{end}}
-</section>
-{{end}}
-
-{{/* quote-form adds or edits a quote: its text, an optional comment and
-     an optional page. Pass a dict as for note-form. */}}
-{{define "quote-form"}}
-<form class="books-entry-form" novalidate method="post" action="{{.Action}}"
-      hx-post="{{.Action}}" hx-target="#books-quotes" hx-swap="outerHTML">
-	{{template "post-ctx" .Book}}
-	<label for="books-quote-{{.Key}}-text">Quote</label>
-	<textarea id="books-quote-{{.Key}}-text" name="text" rows="4"{{if .Form.Error}} aria-describedby="books-quote-{{.Key}}-error"{{end}}>{{.Form.Body}}</textarea>
-	<label for="books-quote-{{.Key}}-comment">Comment (optional)</label>
-	<textarea id="books-quote-{{.Key}}-comment" name="comment" rows="2"{{if .Form.Error}} aria-describedby="books-quote-{{.Key}}-error"{{end}}>{{.Form.Comment}}</textarea>
-	<p class="books-hint">The quote is kept as typed, line breaks and all. Markdown works in the comment.</p>
-	<label for="books-quote-{{.Key}}-page">Page (optional)</label>
-	<input id="books-quote-{{.Key}}-page" name="page" type="number" inputmode="numeric" min="1"{{with .Book.Pages}} max="{{.}}"{{end}} value="{{.Form.Page}}"{{if .Form.Error}} aria-describedby="books-quote-{{.Key}}-error"{{end}}>
-	{{with .Form.Error}}<p class="books-field-error" id="books-quote-{{$.Key}}-error" role="alert">{{.}}</p>{{end}}
-	<button type="submit" class="primary">{{.Submit}}</button>
-</form>
-{{end}}
-
-{{/* history is every reading of the book, newest first (spec "Book
-     pane"), each with a no-JS <details> to change its dates and format,
-     and Delete (decided 2026-10-09: a reading's status isn't editable;
-     deleting it is how a wrong one is put right). Takes a bookView. */}}
-{{define "history"}}
-{{with .History}}
-<section class="books-history" aria-labelledby="books-history-head">
-	<h2 class="books-section-head" id="books-history-head">Reading history</h2>
-	<ul class="books-history-list">
-		{{range .}}
-		<li class="books-history-item">
-			<p class="books-history-line"><span class="books-pill">{{.Status}}</span> {{.Dates}}{{with .Format}} · {{.}}{{end}}</p>
-			<div class="books-history-actions">
-				<details class="books-reading-edit">
-					<summary class="button quiet">Edit</summary>
-					<form class="books-reading-edit-form" method="post" action="/books/readings/{{$.ID}}/{{.ID}}"
-					      hx-post="/books/readings/{{$.ID}}/{{.ID}}" hx-target="#books-panes" hx-swap="outerHTML">
-						{{template "post-ctx" $}}
-						<label for="books-r{{.ID}}-started">Started on</label>
-						<input id="books-r{{.ID}}-started" name="started_on" type="date" value="{{.StartedOn}}" max="{{$.Today}}">
-						{{if not .InProgress}}
-						<label for="books-r{{.ID}}-finished">{{.FinishLabel}}</label>
-						<input id="books-r{{.ID}}-finished" name="finished_on" type="date" value="{{.FinishedOn}}" max="{{$.Today}}">
-						{{end}}
-						<label for="books-r{{.ID}}-format">Format</label>
-						<select id="books-r{{.ID}}-format" name="format">
-							{{range .Formats}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}
-						</select>
-						<button type="submit" class="primary">Save</button>
-					</form>
-				</details>
-				<form method="post" action="/books/readings/{{$.ID}}/{{.ID}}/delete">
-					{{template "post-ctx" $}}
-					<button type="submit" class="quiet"
-					        hx-post="/books/readings/{{$.ID}}/{{.ID}}/delete" hx-target="#books-panes" hx-swap="outerHTML"
-					        hx-confirm="Delete this reading? Its progress goes with it.">Delete</button>
-				</form>
-			</div>
-		</li>
-		{{end}}
-	</ul>
-</section>
-{{end}}
-{{end}}
-
-{{/* confirm is the one dialog every hx-confirm in the panes goes through
-     (books.js), instead of window.confirm. */}}
-{{define "confirm"}}
-<dialog id="books-confirm-dialog" class="books-dialog">
-	<p id="books-confirm-message"></p>
-	<div class="dialog-actions">
-		<button type="button" id="books-confirm-ok" class="danger">Delete</button>
-		<button type="button" class="books-dialog-cancel">Cancel</button>
-	</div>
-</dialog>
 {{end}}

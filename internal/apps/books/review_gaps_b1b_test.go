@@ -411,10 +411,12 @@ func TestTheHTMXPanesShowTheCoverOnlyToItsOwner(t *testing.T) {
 	want := fmt.Sprintf("/books/cover/%d?v=%s", id, c.Version)
 	path := fmt.Sprintf("/books/b/%d?shelf=want", id)
 
-	for _, target := range []string{"books-book", "books-panes"} {
-		doc := htmlassert.Parse(t, hx(t, s, path, target))
+	for name, doc := range map[string]*htmlassert.Doc{
+		"page": s.Get(t, s.Alice, path),
+		"htmx": htmlassert.Parse(t, hx(t, s, path, "books-book")),
+	} {
 		if got := attr(t, doc, "img.books-cover", "src"); got != want {
-			t.Errorf("target %s: cover src = %q, want %q", target, got, want)
+			t.Errorf("%s: cover src = %q, want %q", name, got, want)
 		}
 	}
 	// The list partial draws the mini cover too.

@@ -42,16 +42,17 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 	}
 }
 
-// index is a list with no book open.
+// index is the list.
 func (a *App) index(w http.ResponseWriter, r *http.Request) {
 	uid, ok := a.userID(w, r)
 	if !ok {
 		return
 	}
-	a.renderPanes(w, r, uid, ctxFrom(r.FormValue), paneOpts{})
+	a.renderPanes(w, r, uid, ctxFrom(r.FormValue))
 }
 
-// book is a list with one book open.
+// book is a book's page, opened from list c (UI redesign spec "Book
+// details page").
 func (a *App) book(w http.ResponseWriter, r *http.Request) {
 	uid, ok := a.userID(w, r)
 	if !ok {
@@ -61,33 +62,13 @@ func (a *App) book(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.renderPanes(w, r, uid, ctxFrom(r.FormValue), paneOpts{BookID: id})
+	a.renderBook(w, r, uid, id, ctxFrom(r.FormValue), bookOpts{})
 }
 
-// paneOpts is what a render shows besides list c: the open book (0: none)
-// and a refusal — in the banner, or for a progress update inside the
-// progress box, or for a note or quote inside its form, with what was
-// typed (spec "Errors": an inline message).
-type paneOpts struct {
-	BookID        int64
-	Banner        string
-	ProgressError string
-	ProgressInput string
-	Draft         entryDraft
-}
-
-// renderPanes draws the panes for list c as opts says. A normal request
-// gets the whole page — 422 when there is a refusal, so a refused form post
-// without JavaScript isn't a 200. An htmx request gets the block for what
-// it targeted, as Reader's renderPanes does (#453): #books-list → list-swap
-// (the list and its out-of-band companions, the book pane untouched),
-// #books-book → book-swap, #books-progress → progress-swap (the box, and
-// the list out of band), #books-notes → notes-swap and #books-quotes →
-// quotes-swap (the same for the notes and the quotes), anything else
-// (#books-panes) → the whole panes.
-// Fragments are always 200: htmx's default responseHandling only swaps
-// 2xx/3xx.
-func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, c listCtx, opts paneOpts) {
+// renderPanes draws the shelves and the list for c. An htmx request aimed
+// at #books-list gets list-swap (the list, with the sidebar and the
+// filter's fields out of band); anything else the whole page.
+func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, c listCtx) {
 	ctx := r.Context()
 	counts, err := a.store.ShelfCounts(ctx, userID)
 	if err != nil {
@@ -109,62 +90,85 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		a.fail(w, r, err)
 		return
 	}
-	title := listHeading(c)
-	var bv bookView
-	if opts.BookID != 0 {
-		b, err := a.store.Get(ctx, userID, opts.BookID)
-		if err != nil {
-			a.fail(w, r, err)
-			return
-		}
-		rs, err := a.store.Readings(ctx, userID, opts.BookID)
-		if err != nil {
-			a.fail(w, r, err)
-			return
-		}
-		ns, err := a.store.Notes(ctx, userID, opts.BookID)
-		if err != nil {
-			a.fail(w, r, err)
-			return
-		}
-		qs, err := a.store.Quotes(ctx, userID, opts.BookID)
-		if err != nil {
-			a.fail(w, r, err)
-			return
-		}
-		bv = viewBook(b, c, a.store.Today())
-		bv.History = viewHistory(rs)
-		bv.Notes, bv.NewNote = viewNotes(ns, opts.Draft), formFor("note-new", opts.Draft, entryForm{})
-		bv.Quotes, bv.NewQuote = viewQuotes(qs, opts.Draft), formFor("quote-new", opts.Draft, entryForm{})
-		title = b.Title
-		if opts.ProgressError != "" {
-			bv.Progress.Error, bv.Progress.Value = opts.ProgressError, opts.ProgressInput
-		}
-	}
-	page := a.deps.Page(r, title)
-	bv.Shell = page.Shell
-	v := panesView{Title: page.Title, Shell: page.Shell, Ctx: c, Error: opts.Banner,
-		Sidebar: viewSidebar(c, counts, tags), List: viewList(items, c, opts.BookID), Book: bv}
+	page := a.deps.Page(r, listHeading(c))
+	v := panesView{Title: page.Title, Shell: page.Shell, Ctx: c,
+		Sidebar: viewSidebar(c, counts, tags), List: viewList(items, c)}
 	v.List.Goal = goal
+	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) && web.HTMXTarget(r) == "books-list" {
+		if err := a.deps.Render.Fragment(w, http.StatusOK, "books/index", "list-swap", v); err != nil {
+			a.deps.Errors.Internal(w, r, err)
+		}
+		return
+	}
+	page.Data = v
+	if err := a.deps.Render.Page(w, http.StatusOK, "books/index", page); err != nil {
+		a.deps.Errors.Internal(w, r, err)
+	}
+}
+
+// bookOpts is what a book page shows besides the book: a refusal — in the
+// banner, or for a progress update inside the progress box, or for a note
+// or quote inside its form, with what was typed (spec "Errors": an inline
+// message).
+type bookOpts struct {
+	Banner        string
+	ProgressError string
+	ProgressInput string
+	Draft         entryDraft
+}
+
+// renderBook draws book id's page, opened from list c (UI redesign spec
+// "Book details page"). A normal request gets the whole page — 422 when
+// there is a refusal, so a refused form post without JavaScript isn't a
+// 200. An htmx request gets the block for what it targeted:
+// #books-progress → progress-swap, #books-notes → notes-swap,
+// #books-quotes → quotes-swap, anything else → book-swap (#books-book).
+// There is no list on the page, so none of them carries one. Fragments are
+// always 200: htmx's default responseHandling only swaps 2xx/3xx.
+func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int64, c listCtx, opts bookOpts) {
+	ctx := r.Context()
+	b, err := a.store.Get(ctx, userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	rs, err := a.store.Readings(ctx, userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	ns, err := a.store.Notes(ctx, userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	qs, err := a.store.Quotes(ctx, userID, id)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	bv := viewBook(b, c, a.store.Today())
+	bv.History = viewHistory(rs)
+	bv.Notes, bv.NewNote = viewNotes(ns, opts.Draft), formFor("note-new", opts.Draft, entryForm{})
+	bv.Quotes, bv.NewQuote = viewQuotes(qs, opts.Draft), formFor("quote-new", opts.Draft, entryForm{})
+	if opts.ProgressError != "" {
+		bv.Progress.Error, bv.Progress.Value = opts.ProgressError, opts.ProgressInput
+	}
+	page := a.deps.Page(r, b.Title)
+	bv.Shell = page.Shell
+	v := bookPageView{Title: page.Title, Shell: page.Shell, Error: opts.Banner, Book: bv}
 
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
-		block := "panes-oob"
+		block := "book-swap"
 		switch web.HTMXTarget(r) {
-		case "books-list":
-			block = "list-swap"
-		case "books-book":
-			block = "book-swap"
 		case "books-progress":
 			block = "progress-swap"
-			v.List.OOB = true
 		case "books-notes":
 			block = "notes-swap"
-			v.List.OOB = true
 		case "books-quotes":
 			block = "quotes-swap"
-			v.List.OOB = true
 		}
-		if err := a.deps.Render.Fragment(w, http.StatusOK, "books/index", block, v); err != nil {
+		if err := a.deps.Render.Fragment(w, http.StatusOK, "books/book", block, v); err != nil {
 			a.deps.Errors.Internal(w, r, err)
 		}
 		return
@@ -174,7 +178,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		status = http.StatusUnprocessableEntity
 	}
 	page.Data = v
-	if err := a.deps.Render.Page(w, status, "books/index", page); err != nil {
+	if err := a.deps.Render.Page(w, status, "books/book", page); err != nil {
 		a.deps.Errors.Internal(w, r, err)
 	}
 }

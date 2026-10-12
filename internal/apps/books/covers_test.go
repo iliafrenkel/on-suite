@@ -117,15 +117,16 @@ func TestCoversShowInTheListAndTheBookPane(t *testing.T) {
 	c, _ := s.Store.Cover(context.Background(), uid, with)
 	want := fmt.Sprintf("/books/cover/%d?v=%s", with, c.Version)
 
+	list := s.Get(t, s.Alice, "/books/?shelf=want")
 	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d?shelf=want", with))
-	minis := doc.QueryAll("img.books-mini-cover")
+	minis := list.QueryAll("img.books-mini-cover")
 	if len(minis) != 1 {
 		t.Fatalf("%d mini covers, want 1 (Emma has none)", len(minis))
 	}
 	if src, _ := htmlassert.Attr(minis[0], "src"); src != want {
 		t.Errorf("mini cover src = %q, want %q", src, want)
 	}
-	if n := len(doc.QueryAll(".books-mini-spine")); n != 1 {
+	if n := len(list.QueryAll(".books-mini-spine")); n != 1 {
 		t.Errorf("%d mini spines, want 1 for the book without a cover", n)
 	}
 	big := doc.MustHave("img.books-cover")
