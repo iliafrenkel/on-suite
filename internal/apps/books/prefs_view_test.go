@@ -97,7 +97,10 @@ func TestSearchingPressesTheListButton(t *testing.T) {
 	if got := attr(t, doc, "#books-view-grid", "aria-pressed"); got != "false" {
 		t.Errorf("grid button aria-pressed while searching = %q, want false", got)
 	}
-	if p := prefsOf(t, s); p.View != books.ViewGrid {
-		t.Errorf("saved view = %q after searching, want grid unchanged", p.View)
+	// The search only overrides what shows: without it the saved grid is
+	// pressed again.
+	doc = s.Get(t, s.Alice, "/books/?shelf=all")
+	if got := attr(t, doc, "#books-view-grid", "aria-pressed"); got != "true" {
+		t.Errorf("grid button aria-pressed after the search = %q, want true: the saved view is back", got)
 	}
 }

@@ -72,11 +72,18 @@ func TestARefusedFinishShowsTheBanner(t *testing.T) {
 	path := fmt.Sprintf("/books/finish/%d", id)
 	form := func() url.Values { return url.Values{"shelf": {"reading"}, "day": {"2026-09-01"}} }
 
-	rec := s.PostHX(t, s.Alice, path, form())
+	// The Finish… form aims at #books-book already, where the banner goes,
+	// so the answer needs no retargeting.
+	rec := postHXTo(t, s, path, "books-book", form())
 	if rec.Code != http.StatusOK {
 		t.Fatalf("htmx refused finish = %d, want 200 so htmx swaps it", rec.Code)
 	}
-	banner := htmlassert.Text(htmlassert.Parse(t, rec.Body.String()).MustHave(".books-banner"))
+	for _, h := range []string{"HX-Retarget", "HX-Reswap"} {
+		if got := rec.Header().Get(h); got != "" {
+			t.Errorf("%s = %q, want none: the request already targets #books-book", h, got)
+		}
+	}
+	banner := htmlassert.Text(htmlassert.Parse(t, rec.Body.String()).MustHave("#books-book .books-banner"))
 	if !strings.Contains(banner, "before you started") {
 		t.Errorf("banner = %q", banner)
 	}

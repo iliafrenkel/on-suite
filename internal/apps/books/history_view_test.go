@@ -164,6 +164,14 @@ func TestEditingAReadingKeepsTheHistoryOpen(t *testing.T) {
 	if isOpen(htmlassert.Parse(t, rec.Body.String()), "details#books-history") {
 		t.Error("the history opened for a change made outside it")
 	}
+	rec = s.PostHX(t, s.Alice, path+"/delete", url.Values{"shelf": {"read"}, "open": {"history"}})
+	if !isOpen(htmlassert.Parse(t, rec.Body.String()), "details#books-history") {
+		t.Error("the history folded away after deleting one of its readings")
+	}
+	rec = s.PostHX(t, s.Alice, fmt.Sprintf("/books/format/%d", id), url.Values{"shelf": {"read"}, "format": {"paper"}})
+	if isOpen(htmlassert.Parse(t, rec.Body.String()), "details#books-history") {
+		t.Error("the history opened for a change made outside it")
+	}
 }
 
 // Without JavaScript a history form answers with a redirect, which carries

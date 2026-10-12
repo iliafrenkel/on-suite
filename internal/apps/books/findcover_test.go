@@ -163,19 +163,34 @@ func TestFindCoverKeepsWhatWasTyped(t *testing.T) {
 
 func TestFindCoverLooksUpWhatTheFormSays(t *testing.T) {
 	s, _, _ := newBooksApp(t)
+	uid := s.Alice.User.ID
+	find := func(id int64, form url.Values) int {
+		t.Helper()
+		form.Set("shelf", "want")
+		return s.Post(t, s.Alice, fmt.Sprintf("/books/find-cover/%d", id), form).Code
+	}
+
 	// Saved without an ISBN, under a title Open Library has nothing for;
 	// the ISBN typed into the form has a cover.
-	id := add(t, s, s.Alice.User.ID, titled("Nothing like it", "", books.ShelfWant))
-	rec := s.Post(t, s.Alice, fmt.Sprintf("/books/find-cover/%d", id), url.Values{"shelf": {"want"},
-		"title": {"Nothing like it"}, "isbn": {"9781635575637"}})
-	if rec.Code != http.StatusOK {
-		t.Errorf("Find cover with a typed ISBN = %d, want 200: it looks up what the form says", rec.Code)
+	nothing := add(t, s, uid, titled("Nothing like it", "", books.ShelfWant))
+	if code := find(nothing, url.Values{"title": {"Nothing like it"}, "isbn": {"9781635575637"}}); code != http.StatusOK {
+		t.Errorf("Find cover with a typed ISBN = %d, want 200: it looks up the typed ISBN", code)
 	}
+
+	// Saved without its author, which Open Library needs for this title;
+	// the author is typed into the form.
+	wind := add(t, s, uid, titled("The Name of the Wind", "", books.ShelfWant))
+	if code := find(wind, url.Values{"title": {"The Name of the Wind"}}); code != http.StatusUnprocessableEntity {
+		t.Fatalf("Find cover without the author = %d, want 422 (the fake needs the author)", code)
+	}
+	if code := find(wind, url.Values{"title": {"The Name of the Wind"}, "authors": {"Patrick Rothfuss"}}); code != http.StatusOK {
+		t.Errorf("Find cover with a typed author = %d, want 200: it looks up the typed author", code)
+	}
+
 	// A form that wouldn't save (no title) falls back to the saved book.
-	rec = s.Post(t, s.Alice, fmt.Sprintf("/books/find-cover/%d", add(t, s, s.Alice.User.ID, titled("Piranesi", "", books.ShelfWant))),
-		url.Values{"shelf": {"want"}, "title": {""}})
-	if rec.Code != http.StatusOK {
-		t.Errorf("Find cover with an empty title box = %d, want 200 from the saved title", rec.Code)
+	piranesi := add(t, s, uid, titled("Piranesi", "", books.ShelfWant))
+	if code := find(piranesi, url.Values{"title": {""}}); code != http.StatusOK {
+		t.Errorf("Find cover with an empty title box = %d, want 200 from the saved title", code)
 	}
 }
 

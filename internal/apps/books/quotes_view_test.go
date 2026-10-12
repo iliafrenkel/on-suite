@@ -73,10 +73,21 @@ func TestQuotesShowAsCards(t *testing.T) {
 	if n := len(doc.QueryAll(".books-quote button[hx-confirm]")); n != 2 {
 		t.Errorf("%d delete buttons with a confirmation, want one per quote", n)
 	}
+	if n := len(doc.QueryAll(".books-quote .books-entry-edit summary")); n != 2 {
+		t.Errorf("%d ✎ buttons, want one per quote", n)
+	}
 	body := rec.Body.String()
 	notes, quotes, history := strings.Index(body, `id="books-notes"`), strings.Index(body, `id="books-quotes"`), strings.Index(body, `id="books-history-head"`)
 	if !(notes < quotes && quotes < history) {
 		t.Errorf("section order: notes at %d, quotes at %d, history at %d; want Notes, Quotes, Reading history", notes, quotes, history)
+	}
+
+	other := add(t, s, uid, titled("Emma", "", books.ShelfWant))
+	doc = s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", other))
+	doc.MustHave("details#books-quote-new")
+	doc.MustNotHave(".books-quote")
+	if got := htmlassert.Text(doc.MustHave("#books-quotes-head")); got != "Quotes" {
+		t.Errorf("quotes heading with none = %q, want no count", got)
 	}
 }
 
