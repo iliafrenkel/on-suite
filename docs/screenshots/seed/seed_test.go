@@ -194,27 +194,27 @@ func TestSeedFillsEveryApp(t *testing.T) {
 		}
 	}
 	// ... and notes and quotes the filter finds.
-	for q, want := range map[string]books.MatchIn{"protomolecule": books.MatchNote, "agony": books.MatchQuote} {
+	for q, want := range map[string]books.MatchIn{"rache": books.MatchNote, "agony": books.MatchQuote} {
 		found, err := bst.List(ctx, demo.ID, books.ListQuery{Shelf: books.ShelfAll, Q: q})
 		if err != nil || len(found) != 1 || found[0].Match != want {
 			t.Errorf("books search %q = %+v, %v; want one book matched in a %s", q, found, err, want)
 		}
 	}
-	// ... dated the day the reading reached their page (progress 120 on day
-	// 4 ago, 260 on day 2 ago), with the book's last change the latest.
-	if found, err := bst.List(ctx, demo.ID, books.ListQuery{Shelf: books.ShelfAll, Q: "protomolecule"}); err == nil && len(found) == 1 {
+	// ... dated the day the reading reached their page (progress 36 on day
+	// 4 ago, 81 on day 2 ago), with the book's last change the latest.
+	if found, err := bst.List(ctx, demo.ID, books.ListQuery{Shelf: books.ShelfAll, Q: "rache"}); err == nil && len(found) == 1 {
 		ns, err := bst.Notes(ctx, demo.ID, found[0].ID)
 		if err != nil || len(ns) != 2 {
-			t.Fatalf("Leviathan Wakes notes = %+v, %v; want 2", ns, err)
+			t.Fatalf("A Study in Scarlet notes = %+v, %v; want 2", ns, err)
 		}
 		for _, n := range ns {
-			want := map[int]int{120: 4, 260: 2}[n.Page]
+			want := map[int]int{36: 4, 81: 2}[n.Page]
 			if !n.CreatedAt.Equal(now.AddDate(0, 0, -want)) {
 				t.Errorf("note on p. %d dated %v, want %d days ago", n.Page, n.CreatedAt, want)
 			}
 		}
 		if b, err := bst.Get(ctx, demo.ID, found[0].ID); err != nil || !b.UpdatedAt.Equal(now.AddDate(0, 0, -1)) {
-			t.Errorf("Leviathan Wakes updated_at = %v, %v; want 1 day ago, its last progress", b.UpdatedAt, err)
+			t.Errorf("A Study in Scarlet updated_at = %v, %v; want 1 day ago, its last progress", b.UpdatedAt, err)
 		}
 	}
 
@@ -252,7 +252,7 @@ var shotIDs = map[string]map[int64]string{
 	"flash":  {1: "Japanese travel phrases", 2: "F1 circuits"},
 	"later":  {1: "The case for reading slowly"},
 	"focus":  {1: "Deep work"},
-	"books":  {1: "Leviathan Wakes"},
+	"books":  {1: "A Study in Scarlet"},
 }
 
 // shotIDRe finds the seeded IDs in shots.go URLs: /paste/3, /notes/25,

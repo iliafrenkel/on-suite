@@ -121,13 +121,13 @@ var shots = []shot{
 	{Name: "docs/user/images/focus-history.png", URL: "/focus/history", Height: 1000},
 
 	// docs/user/books.md
-	// Book 1 is Leviathan Wakes, on the Reading shelf in the seed. Nothing
+	// Book 1 is A Study in Scarlet, on the Reading shelf in the seed. Nothing
 	// here imports a file or presses Find cover, so no request reaches
 	// Open Library and the library stays as seeded; the list shot puts the
 	// saved view back to grid (booksListView).
-	{Name: "docs/user/images/books-home.png", URL: "/books/?shelf=reading", Height: 640},
-	{Name: "docs/user/images/books-home-list.png", URL: "/books/?shelf=read", Height: 560, Setup: booksListView},
-	{Name: "docs/user/images/books-book.png", URL: "/books/b/1?shelf=reading", Height: 1076},
+	{Name: "docs/user/images/books-home.png", URL: "/books/?shelf=reading", Height: 740},
+	{Name: "docs/user/images/books-home-list.png", URL: "/books/?shelf=read", Height: 592, Setup: booksListView},
+	{Name: "docs/user/images/books-book.png", URL: "/books/b/1?shelf=reading", Height: 1220},
 	{Name: "docs/user/images/books-add.png", URL: "/books/new?shelf=reading", Height: 720},
 	{Name: "docs/user/images/books-stats.png", URL: "/books/stats", Height: 980},
 	{Name: "docs/user/images/books-import.png", URL: "/books/import", Height: 560},

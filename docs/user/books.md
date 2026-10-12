@@ -190,7 +190,7 @@ few hours. A cover you remove stays removed.
 ## Series
 
 If a book is part of a series, its series and number show under the
-author — "The Expanse #1 · 2 books". Click it to list the series in
+author — "Sherlock Holmes #1 · 2 books". Click it to list the series in
 order. Add a series name and number with ✎ on the book's page.
 
 ## Tags
