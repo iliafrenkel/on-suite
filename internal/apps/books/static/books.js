@@ -1,8 +1,9 @@
-// ON Books' script: the delete confirmation, resizable panes, keyboard
-// shortcuts, the open book's row highlight and the panes' scroll
-// positions across a swap. Vanilla and
-// CSP-clean; the sections mirror reader.js's (apps never share app
-// scripts).
+// ON Books' script: the delete confirmation, the sidebar's resize gutter,
+// focus kept in the sort and view controls across a list swap, and
+// keyboard shortcuts (UI redesign spec,
+// docs/superpowers/specs/2026-10-12-on-books-ui-redesign-design.md).
+// Vanilla and CSP-clean; the sections mirror reader.js's (apps never share
+// app scripts).
 (function () {
 	"use strict";
 
@@ -14,8 +15,8 @@
 	// hidden tab, so a declined delete would otherwise fire with the next.
 	var confirmController = null;
 	document.addEventListener("htmx:confirm", function (e) {
-		var panes = document.getElementById("books-panes");
-		if (!panes || !e.target || !panes.contains(e.target)) return;
+		var page = document.getElementById("books-page");
+		if (!page || !e.target || !page.contains(e.target)) return;
 		var msg = e.target.getAttribute("hx-confirm");
 		if (!msg) return;
 		var dialog = document.getElementById("books-confirm-dialog");
@@ -45,189 +46,128 @@
 		dialog.showModal();
 	});
 
-	// --- Resizable panes ---------------------------------------------------
+	// --- Resizable sidebar -------------------------------------------------
 	//
-	// reader.js's, with Books' panes. Desktop only (the 900px breakpoint
-	// where the CSS collapses the layout); below it the stored widths are
-	// cleared rather than left to misapply. The widths live on <html>, not
-	// on the row, so a full panes swap doesn't snap them back (#453).
-	var PANE_STORE_KEY = "books.paneWidths";
-	var PANE_MIN = { side: 10, list: 16 }; // rem
-	var PANE_MAX = { side: 22, list: 36 }; // rem
-	var DESKTOP_QUERY = window.matchMedia("(min-width: 901px)");
+	// reader.js's gutter, for the one pane Books has left (spec "Sidebar").
+	// Above the 640px drawer breakpoint only; below it the stored width is
+	// cleared rather than left to misapply. The width lives on <html>, not
+	// on the home, so a swap never snaps it back (#453). The sidebar is
+	// swapped out of band on every list change, so it is looked up each
+	// time rather than held.
+	var SIDE_STORE_KEY = "books.sideWidth";
+	var SIDE_MIN = 10; // rem
+	var SIDE_MAX = 22; // rem
+	var DESKTOP_QUERY = window.matchMedia("(min-width: 641px)");
+
+	try {
+		window.localStorage.removeItem("books.paneWidths"); // the three panes' widths, before UI1
+	} catch (e) {
+		// Storage blocked: nothing to tidy.
+	}
 
 	function remToPx(rem) {
 		var rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
 		return rem * rootPx;
 	}
 
-	function clampPx(px, key) {
-		return Math.min(remToPx(PANE_MAX[key]), Math.max(remToPx(PANE_MIN[key]), px));
+	function setSideWidth(px) {
+		var clamped = Math.min(remToPx(SIDE_MAX), Math.max(remToPx(SIDE_MIN), px));
+		document.documentElement.style.setProperty("--books-side-w", clamped + "px");
 	}
 
-	function paneFor(row, key) {
-		return row.querySelector(key === "side" ? ".books-side" : ".books-listpane");
+	function sideWidth() {
+		var side = document.getElementById("books-side");
+		return side ? side.getBoundingClientRect().width : 0;
 	}
 
-	function setWidth(key, px) {
-		document.documentElement.style.setProperty("--books-" + key + "-w", clampPx(px, key) + "px");
-	}
-
-	function loadPaneWidths() {
+	function saveSideWidth() {
 		try {
-			var parsed = JSON.parse(window.localStorage.getItem(PANE_STORE_KEY) || "null");
-			if (!parsed || typeof parsed.side !== "number" || typeof parsed.list !== "number") return null;
-			return parsed;
-		} catch (e) {
-			return null;
-		}
-	}
-
-	function savePaneWidths(row) {
-		try {
-			window.localStorage.setItem(PANE_STORE_KEY, JSON.stringify({
-				side: Math.round(paneFor(row, "side").getBoundingClientRect().width),
-				list: Math.round(paneFor(row, "list").getBoundingClientRect().width),
-			}));
+			window.localStorage.setItem(SIDE_STORE_KEY, String(Math.round(sideWidth())));
 		} catch (e) {
 			// Private browsing or a full quota: the drag worked, it just won't be remembered.
 		}
 	}
 
-	function syncPaneWidths() {
-		var root = document.documentElement;
+	function syncSideWidth() {
 		if (!DESKTOP_QUERY.matches) {
-			root.style.removeProperty("--books-side-w");
-			root.style.removeProperty("--books-list-w");
+			document.documentElement.style.removeProperty("--books-side-w");
 			return;
 		}
-		var stored = loadPaneWidths();
-		if (!stored) return;
-		setWidth("side", stored.side);
-		setWidth("list", stored.list);
+		var stored = 0;
+		try {
+			stored = Number(window.localStorage.getItem(SIDE_STORE_KEY)) || 0;
+		} catch (e) {
+			stored = 0;
+		}
+		if (stored > 0) setSideWidth(stored);
 	}
 
-	function initResizablePanes() {
-		var row = document.getElementById("books-panes-row");
-		if (!row) return;
-		var dragging = null; // { key, startX, startWidth }
+	function initGutter() {
+		var home = document.getElementById("books-home");
+		var gutter = home && home.querySelector('.pane-gutter[data-gutter-for="side"]');
+		if (!gutter || gutter.getAttribute("data-bound") === "1") return;
+		gutter.setAttribute("data-bound", "1");
+		var dragging = null; // { startX, startWidth }
 
-		row.querySelectorAll(".pane-gutter").forEach(function (gutter) {
-			var key = gutter.getAttribute("data-gutter-for");
-			gutter.addEventListener("pointerdown", function (e) {
-				if (!DESKTOP_QUERY.matches) return;
-				dragging = { key: key, startX: e.clientX, startWidth: paneFor(row, key).getBoundingClientRect().width };
-				gutter.classList.add("is-dragging");
-				gutter.setPointerCapture(e.pointerId);
-				e.preventDefault();
-			});
-			// The WAI-ARIA separator pattern: arrows nudge the pane.
-			gutter.addEventListener("keydown", function (e) {
-				if (!DESKTOP_QUERY.matches) return;
-				if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-				setWidth(key, paneFor(row, key).getBoundingClientRect().width + (e.key === "ArrowRight" ? 16 : -16));
-				savePaneWidths(row);
-				e.preventDefault();
-			});
+		gutter.addEventListener("pointerdown", function (e) {
+			if (!DESKTOP_QUERY.matches) return;
+			dragging = { startX: e.clientX, startWidth: sideWidth() };
+			gutter.classList.add("is-dragging");
+			gutter.setPointerCapture(e.pointerId);
+			e.preventDefault();
 		});
-
-		row.addEventListener("pointermove", function (e) {
+		gutter.addEventListener("pointermove", function (e) {
 			if (!dragging) return;
-			setWidth(dragging.key, dragging.startWidth + (e.clientX - dragging.startX));
+			setSideWidth(dragging.startWidth + (e.clientX - dragging.startX));
 		});
 		function endDrag() {
 			if (!dragging) return;
 			dragging = null;
-			row.querySelectorAll(".pane-gutter.is-dragging").forEach(function (g) {
-				g.classList.remove("is-dragging");
-			});
-			savePaneWidths(row);
+			gutter.classList.remove("is-dragging");
+			saveSideWidth();
 		}
-		row.addEventListener("pointerup", endDrag);
-		row.addEventListener("pointercancel", endDrag);
-	}
-
-	document.addEventListener("DOMContentLoaded", function () {
-		syncPaneWidths();
-		DESKTOP_QUERY.addEventListener("change", syncPaneWidths);
-		initResizablePanes();
-	});
-	// A full panes swap (any change to a book) brings new gutters to bind.
-	document.addEventListener("htmx:afterSettle", function (e) {
-		if (e.target && e.target.id === "books-panes") initResizablePanes();
-	});
-	// Back/forward restores <body> from htmx's history cache: new gutters,
-	// no afterSettle (#456).
-	document.addEventListener("htmx:historyRestore", initResizablePanes);
-
-	// --- Keep the panes where they were (#578) -------------------------------
-	//
-	// A change made in the book pane — a star, the review, the tags, the
-	// format, a reading — swaps the whole panes (#books-panes), and new
-	// panes start scrolled to the top: the control just used would jump
-	// out of sight. Remember where the book pane and the list were, and put
-	// them back when the same book, and the same list, are still showing.
-	// Smaller swap targets would do it too, but every one of those actions
-	// can move the shelf counts, the list and the book at once.
-	function listKey() {
-		var list = document.getElementById("books-list");
-		if (!list) return "";
-		return ["shelf", "tag", "q", "series"].map(function (k) {
-			return list.getAttribute("data-" + k) || "";
-		}).join("\u0000");
-	}
-
-	var keptScroll = null;
-	document.addEventListener("htmx:beforeSwap", function (e) {
-		keptScroll = null;
-		if (!e.detail.shouldSwap || !e.detail.target || e.detail.target.id !== "books-panes") return;
-		var book = document.getElementById("books-book");
-		var listPane = document.querySelector(".books-listpane");
-		keptScroll = {
-			bookId: (book && book.getAttribute("data-book-id")) || "",
-			book: book ? book.scrollTop : 0,
-			listKey: listKey(),
-			list: listPane ? listPane.scrollTop : 0,
-		};
-	});
-	document.addEventListener("htmx:afterSwap", function () {
-		if (!keptScroll) return;
-		var kept = keptScroll;
-		keptScroll = null;
-		var book = document.getElementById("books-book");
-		if (book && kept.bookId !== "" && book.getAttribute("data-book-id") === kept.bookId) book.scrollTop = kept.book;
-		var listPane = document.querySelector(".books-listpane");
-		if (listPane && listKey() === kept.listKey) listPane.scrollTop = kept.list;
-	});
-
-	// --- The open book's row ------------------------------------------------
-	//
-	// A full render marks it on the server; these two cover what the server
-	// doesn't see: a click that opens a book (only the book pane is swapped),
-	// and a list swap, which leaves the book pane as it was.
-	function markActive(id) {
-		document.querySelectorAll(".books-row").forEach(function (li) {
-			li.classList.toggle("is-active", id !== "" && li.getAttribute("data-book-id") === id);
+		gutter.addEventListener("pointerup", endDrag);
+		gutter.addEventListener("pointercancel", endDrag);
+		// The WAI-ARIA separator pattern: arrows nudge the pane.
+		gutter.addEventListener("keydown", function (e) {
+			if (!DESKTOP_QUERY.matches) return;
+			if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+			setSideWidth(sideWidth() + (e.key === "ArrowRight" ? 16 : -16));
+			saveSideWidth();
+			e.preventDefault();
 		});
 	}
 
-	document.addEventListener("click", function (e) {
-		var link = e.target.closest(".books-row-link");
-		if (link) markActive(link.parentNode.getAttribute("data-book-id"));
+	document.addEventListener("DOMContentLoaded", function () {
+		syncSideWidth();
+		DESKTOP_QUERY.addEventListener("change", syncSideWidth);
+		initGutter();
 	});
+	// Back/forward restores <body> from htmx's history cache: a new gutter,
+	// no DOMContentLoaded (#456).
+	document.addEventListener("htmx:historyRestore", initGutter);
 
-	document.addEventListener("htmx:afterSwap", function (e) {
-		if (!e.target || e.target.id !== "books-list") return;
-		var book = document.getElementById("books-book");
-		markActive((book && book.getAttribute("data-book-id")) || "");
-		syncBookContext(e.target, book);
+	// --- Focus in the sort and view controls ---------------------------------
+	//
+	// Choosing a sort or a view swaps the whole controls form out of band
+	// (it carries the pressed state and the list's context), which would
+	// drop focus to <body>. Put it back on the control that had it.
+	var keptFocus = null;
+	document.addEventListener("htmx:beforeSwap", function () {
+		var el = document.activeElement;
+		keptFocus = el && el.id && el.closest && el.closest("#books-prefs") ? el.id : null;
+	});
+	document.addEventListener("htmx:afterSettle", function () {
+		if (!keptFocus) return;
+		var el = document.getElementById(keptFocus);
+		keptFocus = null;
+		if (el && !el.disabled) el.focus();
 	});
 
 	// The progress form swaps its whole box (input included), so focus would
 	// drop to <body> after Enter. Put it back on the new input, selected, so
 	// the next number replaces the old one — on success and on the inline
-	// error alike. Only for swaps the progress form itself made: opening a
-	// book swaps the pane and should leave focus alone.
+	// error alike. Only for swaps the progress form itself made.
 	document.addEventListener("htmx:afterSwap", function (e) {
 		var src = (e.detail && (e.detail.requestConfig && e.detail.requestConfig.elt || e.detail.elt)) || e.target;
 		if (!src || !src.classList || !src.classList.contains("books-progress-form")) return;
@@ -237,56 +177,16 @@
 		input.select();
 	});
 
-	// A list swap leaves the book pane alone, so its hidden shelf/tag/q/
-	// series fields and Edit link would keep POSTing and returning to the
-	// previous list while the address bar shows the new one. Copy the new
-	// list's context (data-* on #books-list) into them, as reader.js does
-	// for its own panes. tag, q and series are only rendered when
-	// non-empty, so they are created and removed here too.
-	var OPTIONAL_CTX = ["tag", "q", "series"];
-	function syncBookContext(list, book) {
-		if (!book) return;
-		var ctx = {
-			shelf: list.getAttribute("data-shelf") || "",
-			tag: list.getAttribute("data-tag") || "",
-			q: list.getAttribute("data-q") || "",
-			series: list.getAttribute("data-series") || "",
-		};
-		book.querySelectorAll("input[name=shelf]").forEach(function (shelf) {
-			shelf.value = ctx.shelf;
-			OPTIONAL_CTX.forEach(function (name) {
-				var field = shelf.parentNode.querySelector("input[name=" + name + "]");
-				if (!ctx[name]) {
-					if (field) field.remove();
-					return;
-				}
-				if (!field) {
-					field = document.createElement("input");
-					field.type = "hidden";
-					field.name = name;
-					shelf.parentNode.appendChild(field);
-				}
-				field.value = ctx[name];
-			});
-		});
-		var edit = book.querySelector(".books-edit-link");
-		var id = book.getAttribute("data-book-id");
-		if (edit && id) {
-			var safeId = encodeURIComponent(id);
-			var qs = new URLSearchParams();
-			qs.set("shelf", ctx.shelf);
-			OPTIONAL_CTX.forEach(function (name) {
-				if (ctx[name]) qs.set(name, ctx[name]);
-			});
-			edit.setAttribute("href", "/books/edit/" + safeId + "?" + qs.toString());
-		}
-	}
-
 	// --- Keyboard shortcuts --------------------------------------------------
+	//
+	// Home: j/k move through the books, Enter (natively) or o opens one,
+	// / searches, a adds a book, Esc closes the drawer. Book page: p goes to
+	// the progress box, n and q open the add-note and add-quote forms, e
+	// edits, Esc closes an open disclosure — or, with none open, goes back
+	// to the list (spec "Keyboard").
 
-	// openEntry opens an add disclosure in the book pane ("+ Add note",
-	// "+ Add quote") and puts the cursor in its box; false when the pane
-	// has none.
+	// openEntry opens an add disclosure ("+ Add note", "+ Add quote") and
+	// puts the cursor in its box; false when the page has none.
 	function openEntry(detailsId, inputId) {
 		var details = document.getElementById(detailsId);
 		var input = document.getElementById(inputId);
@@ -296,83 +196,117 @@
 		return true;
 	}
 
-	// Keys are ignored while typing, so "/" in the filter box is a slash.
+	// Keys are ignored while typing, so "/" in the search box is a slash.
 	function isTyping(el) {
 		if (!el) return false;
 		var tag = el.tagName;
 		return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
 	}
 
+	function itemLinks() {
+		return Array.prototype.slice.call(document.querySelectorAll(".books-item-link"));
+	}
+
 	function step(delta) {
-		var links = Array.prototype.slice.call(document.querySelectorAll(".books-row-link"));
+		var links = itemLinks();
 		if (!links.length) return;
-		var active = document.querySelector(".books-row.is-active .books-row-link");
-		var i = active ? links.indexOf(active) : -1;
+		var i = links.indexOf(document.activeElement);
 		var next = i === -1 ? 0 : Math.min(links.length - 1, Math.max(0, i + delta));
-		if (next === i) return;
-		links[next].click();
+		links[next].focus();
 		links[next].scrollIntoView({ block: "nearest" });
+	}
+
+	// closeDisclosures closes every open <details> on the book page; false
+	// when none was open.
+	function closeDisclosures() {
+		var open = document.querySelectorAll("#books-book details[open]");
+		open.forEach(function (d) {
+			d.open = false;
+		});
+		return open.length > 0;
+	}
+
+	function homeKey(e) {
+		switch (e.key) {
+		case "j":
+			step(1);
+			return true;
+		case "k":
+			step(-1);
+			return true;
+		case "o":
+			if (itemLinks().indexOf(document.activeElement) === -1) return false;
+			document.activeElement.click();
+			return true;
+		case "/":
+			var q = document.getElementById("books-q");
+			if (!q) return false;
+			q.focus();
+			q.select();
+			return true;
+		case "a":
+			window.location.href = "/books/new";
+			return true;
+		case "Escape":
+			var drawer = document.getElementById("books-drawer");
+			if (!drawer || !drawer.checked) return false;
+			drawer.checked = false;
+			return true;
+		}
+		return false;
+	}
+
+	function bookKey(e) {
+		switch (e.key) {
+		case "p":
+			var progress = document.getElementById("books-progress-input");
+			if (!progress) return false;
+			progress.focus();
+			progress.select();
+			return true;
+		case "n":
+			return openEntry("books-note-new", "books-note-new-body");
+		case "q":
+			return openEntry("books-quote-new", "books-quote-new-text");
+		case "e":
+			var edit = document.querySelector(".books-edit-link");
+			if (!edit) return false;
+			window.location.href = edit.href;
+			return true;
+		case "Escape":
+			if (closeDisclosures()) return true;
+			var back = document.querySelector(".books-back");
+			if (!back) return false;
+			window.location.href = back.href;
+			return true;
+		}
+		return false;
 	}
 
 	document.addEventListener("keydown", function (e) {
 		if (e.defaultPrevented || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
 		// The modal confirm owns the keyboard (Escape still closes it natively).
 		if (document.querySelector("dialog[open]")) return;
-		if (!document.getElementById("books-panes")) return;
+		var home = document.getElementById("books-home");
+		var page = document.getElementById("books-page");
+		if (!home && !page) return;
 		if (isTyping(e.target)) {
-			if (e.key === "Escape") {
-				if (e.target.id === "books-q" || e.target.id === "books-progress-input") {
-					e.target.blur();
-				} else {
-					// Esc from a field in an open disclosure of the book pane
-					// (Finish, Did not finish, the menus) closes it and returns
-					// focus to its summary.
-					var open = e.target.closest("#books-book details[open]");
-					if (open) {
-						open.open = false;
-						var summary = open.querySelector("summary");
-						if (summary) summary.focus();
-					}
-				}
+			if (e.key !== "Escape") return;
+			if (e.target.id === "books-q" || e.target.id === "books-progress-input") {
+				e.target.blur();
+				return;
+			}
+			// Esc from a field in an open disclosure of the book page
+			// (Finish, Did not finish, an edit form) closes it and returns
+			// focus to its summary.
+			var open = e.target.closest("#books-book details[open]");
+			if (open) {
+				open.open = false;
+				var summary = open.querySelector("summary");
+				if (summary) summary.focus();
 			}
 			return;
 		}
-		switch (e.key) {
-		case "j":
-			step(1);
-			break;
-		case "k":
-			step(-1);
-			break;
-		case "/":
-			var q = document.getElementById("books-q");
-			if (!q) return;
-			q.focus();
-			q.select();
-			break;
-		case "a":
-			window.location.href = "/books/new";
-			break;
-		case "p":
-			var progress = document.getElementById("books-progress-input");
-			if (!progress) return;
-			progress.focus();
-			progress.select();
-			break;
-		case "n":
-			if (!openEntry("books-note-new", "books-note-new-body")) return;
-			break;
-		case "q":
-			if (!openEntry("books-quote-new", "books-quote-new-text")) return;
-			break;
-		case "Escape":
-			document.querySelectorAll("#books-book details[open]").forEach(function (d) {
-				d.open = false;
-			});
-			return;
-		default:
-			return;
-		}
-		e.preventDefault();
+		if (home ? homeKey(e) : bookKey(e)) e.preventDefault();
 	});
 })();
