@@ -146,3 +146,26 @@ func TestTagsByBook(t *testing.T) {
 		t.Error("Bob's book's tags came back for Alice")
 	}
 }
+
+func TestSortEqualTitlesKeepAddedOrder(t *testing.T) {
+	f := newFixture(t)
+	var ids [2]int64
+	for i := range ids {
+		nb := onShelf("Dune", books.ShelfWant)
+		nb.Authors = "Frank Herbert"
+		ids[i] = addedInTurn(t, f, nb)
+	}
+	for _, by := range []books.Sort{books.SortTitle, books.SortAuthor} {
+		for _, reversed := range []bool{false, true} {
+			items, err := f.store.List(context.Background(), f.alice.ID,
+				books.ListQuery{Shelf: books.ShelfWant, Sort: by, Reversed: reversed})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != 2 || items[0].ID != ids[0] || items[1].ID != ids[1] {
+				t.Errorf("%s (reversed %v): ids = [%d %d], want added order [%d %d]",
+					by, reversed, items[0].ID, items[1].ID, ids[0], ids[1])
+			}
+		}
+	}
+}

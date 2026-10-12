@@ -56,6 +56,6 @@ func sortItems(items []ListItem, by Sort, reversed bool) {
 		if c := strings.Compare(titleKey(a.Title), titleKey(b.Title)); c != 0 {
 			return dir * c
 		}
-		return dir * cmp.Compare(a.ID, b.ID)
+		return cmp.Compare(a.ID, b.ID)
 	})
 }
