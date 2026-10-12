@@ -119,6 +119,17 @@ func viewSidebar(c listCtx, counts map[Shelf]int, tags []string, goal *goalView)
 	return v
 }
 
+// tagLinks are a book's header pills: read-only, each a link to every book
+// with that tag (UI redesign spec "Header"). Tags are edited on the Edit
+// page.
+func tagLinks(names []string) []tagLink {
+	var out []tagLink
+	for _, n := range names {
+		out = append(out, tagLink{Name: n, URL: listCtx{Shelf: ShelfAll, Tag: n}.ListURL()})
+	}
+	return out
+}
+
 // itemView is one book on the home page: a tile in the grid, a row in
 // the list (UI redesign spec "Book tile", "Book row").
 type itemView struct {
@@ -353,9 +364,8 @@ type bookView struct {
 	Spine                            string
 	Cover                            string // the stored cover; "" draws the spine
 	ShelfLabel                       string
-	BackLabel                        string // the page bar's way back: the list's name, "Reading", "Tagged “sf”"
-	Tags                             []string
-	TagsValue                        string // the tags box: "classics, sf"
+	BackLabel                        string    // the page bar's way back: the list's name, "Reading", "Tagged “sf”"
+	Tags                             []tagLink // the header's pills, each its tag's list
 	// The reading box.
 	Reading       bool         // a reading is in progress
 	Progress      progressView // its progress, when Reading
@@ -448,7 +458,7 @@ func ratingChoices(current int) []choice {
 func viewBook(b Book, c listCtx, today string) bookView {
 	v := bookView{ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
 		Description: b.Description, Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion),
-		ShelfLabel: b.Shelf.Label(), BackLabel: listHeading(c), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Pages: b.Pages,
+		ShelfLabel: b.Shelf.Label(), BackLabel: listHeading(c), Tags: tagLinks(b.Tags), Today: today, Pages: b.Pages,
 		Rating: b.Rating, Stars: starButtons(b.Rating), Review: b.Review, ReviewHTML: RenderReview(b.Review), Ctx: c}
 	v.DescriptionLong = longDescription(b.Description)
 	if b.SeriesName != "" {

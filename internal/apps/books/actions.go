@@ -269,10 +269,6 @@ func (a *App) deleteQuote(r *http.Request, userID, id int64) error {
 	return a.store.DeleteQuote(r.Context(), userID, id, qid)
 }
 
-func (a *App) setTags(r *http.Request, userID, id int64) error {
-	return a.store.SetTags(r.Context(), userID, id, ParseTags(r.PostFormValue("tags")))
-}
-
 func (a *App) remove(r *http.Request, userID, id int64) error {
 	return a.store.Delete(r.Context(), userID, id)
 }

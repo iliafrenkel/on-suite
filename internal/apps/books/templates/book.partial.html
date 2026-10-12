@@ -44,13 +44,12 @@
 			{{with .Authors}}<p class="books-authors">{{.}}</p>{{end}}
 			{{with .Series}}<p class="books-series"><a href="{{$.Book.SeriesURL}}">{{.}}</a></p>{{end}}
 			{{with .Facts}}<p class="books-facts">{{range $i, $f := .}}{{if $i}} · {{end}}{{$f}}{{end}}</p>{{end}}
-			<p class="books-pills"><span class="books-pill books-pill-shelf">{{.ShelfLabel}}</span>{{range .Tags}} <span class="books-pill">{{.}}</span>{{end}}</p>
+			<p class="books-pills"><span class="books-pill books-pill-shelf">{{.ShelfLabel}}</span>{{range .Tags}} <a class="books-pill books-pill-link" href="{{.URL}}">{{.Name}}</a>{{end}}</p>
 		</div>
 	</header>
 	{{template "reading" (dict "Book" . "OOB" false)}}
 	{{template "take" .}}
 	{{template "description" .}}
-	{{template "tags-form" .}}
 	{{template "notes" .}}
 	{{template "quotes" .}}
 	{{template "history" .}}
@@ -241,19 +240,6 @@
 	{{if $.DescriptionLong}}<label class="books-description-more" for="books-description-more"><span class="books-more-label">More</span><span class="books-less-label">Less</span></label>{{end}}
 </section>
 {{end}}
-{{end}}
-
-{{/* tags-form edits a book's tags in place. Takes a bookView. */}}
-{{define "tags-form"}}
-<form class="books-tags-form" method="post" action="/books/tags/{{.ID}}"
-      hx-post="/books/tags/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
-	{{template "post-ctx" .}}
-	<label for="books-tags-input">Tags</label>
-	<div class="books-tags-row">
-		<input id="books-tags-input" name="tags" type="text" value="{{.TagsValue}}" placeholder="sf, favourites" autocomplete="off">
-		<button type="submit">Save tags</button>
-	</div>
-</form>
 {{end}}
 
 {{/* notes is Notes · n, newest first (spec "Sections"). The + in the

@@ -150,26 +150,6 @@ func TestDNFUsesTheGivenDay(t *testing.T) {
 	}
 }
 
-func TestSetTagsOverHTMX(t *testing.T) {
-	s := newServer(t)
-	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfWant))
-	rec := s.PostHX(t, s.Alice, fmt.Sprintf("/books/tags/%d", id), url.Values{"shelf": {"want"}, "tags": {"Space, sf"}})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("htmx tags = %d, want 200", rec.Code)
-	}
-	doc := htmlassert.Parse(t, rec.Body.String())
-	doc.MustHave("#books-book")
-	if got := attr(t, doc, "#books-tags-input", "value"); got != "sf, space" {
-		t.Errorf("tags box = %q, want the saved tags", got)
-	}
-	if got := strings.Join(texts(doc, ".books-pills .books-pill"), "|"); got != "Want to read|sf|space" {
-		t.Errorf("pills = %q, want the shelf, then the new tags", got)
-	}
-	if tags, _ := s.Store.BookTags(context.Background(), s.Alice.User.ID, id); !slices.Equal(tags, []string{"sf", "space"}) {
-		t.Errorf("stored tags = %v", tags)
-	}
-}
-
 func TestAnInvalidEditOfSomeoneElsesBookIsStillNotFound(t *testing.T) {
 	s := newServer(t)
 	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfWant))
@@ -181,28 +161,6 @@ func TestAnInvalidEditOfSomeoneElsesBookIsStillNotFound(t *testing.T) {
 	rec = s.Post(t, s.Alice, fmt.Sprintf("/books/edit/%d", id), url.Values{"title": {""}})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("Alice's invalid edit = %d, want 422", rec.Code)
-	}
-}
-
-func TestEditLeavesTagsAndShelfAlone(t *testing.T) {
-	s := newServer(t)
-	nb := titled("Dune", "", books.ShelfReading)
-	nb.Tags = []string{"sf", "classics"}
-	id := add(t, s, s.Alice.User.ID, nb)
-	s.Submit(t, s.Alice, fmt.Sprintf("/books/edit/%d", id), url.Values{
-		"title": {"Dune, revised"}, "shelf": {"reading"},
-		// A tampered form: the edit form has no such fields.
-		"tags": {"other"}, "add_to": {"read"},
-	}, fmt.Sprintf("/books/b/%d?shelf=reading", id))
-	b, err := s.Store.Get(context.Background(), s.Alice.User.ID, id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b.Title != "Dune, revised" {
-		t.Fatalf("title = %q, the edit was not saved", b.Title)
-	}
-	if !slices.Equal(b.Tags, []string{"classics", "sf"}) || b.Shelf != books.ShelfReading {
-		t.Errorf("tags %v, shelf %q; want [classics sf] and reading unchanged", b.Tags, b.Shelf)
 	}
 }
 

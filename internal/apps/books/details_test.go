@@ -3,6 +3,8 @@ package books_test
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -70,5 +72,26 @@ func TestDetailsIconButtonsHaveNames(t *testing.T) {
 		if label == "" || title != label {
 			t.Errorf("icon <%s> has aria-label %q and title %q; want a name, shown as its tooltip too", n.Data, label, title)
 		}
+	}
+}
+
+func TestTheBookPageHasNoTagsForm(t *testing.T) {
+	s := newServer(t)
+	nb := titled("Dune", "", books.ShelfWant)
+	nb.Tags = []string{"book club", "sf"}
+	id := add(t, s, s.Alice.User.ID, nb)
+	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d?shelf=want", id))
+	doc.MustNotHave(".books-tags-form")
+	doc.MustNotHave(fmt.Sprintf(`form[action="/books/tags/%d"]`, id))
+	var hrefs []string
+	for _, a := range doc.QueryAll("a.books-pill-link") {
+		href, _ := htmlassert.Attr(a, "href")
+		hrefs = append(hrefs, htmlassert.Text(a)+" "+href)
+	}
+	if want := "book club /books/?shelf=all&tag=book+club|sf /books/?shelf=all&tag=sf"; strings.Join(hrefs, "|") != want {
+		t.Errorf("tag pills = %q, want %q: each links to its list", hrefs, want)
+	}
+	if rec := s.Post(t, s.Alice, fmt.Sprintf("/books/tags/%d", id), url.Values{"tags": {"x"}}); rec.Code != http.StatusNotFound {
+		t.Errorf("POST /books/tags = %d, want 404: tags are edited on the Edit page now", rec.Code)
 	}
 }

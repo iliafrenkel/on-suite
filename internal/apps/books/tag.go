@@ -93,16 +93,23 @@ func (st *Store) SetTags(ctx context.Context, userID, id int64, names []string) 
 	if err := st.touch(ctx, tx, userID, id); err != nil {
 		return err
 	}
+	if err := replaceTags(ctx, tx, userID, id, names); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// replaceTags makes names (cleaned here) the book's only tags and drops
+// every tag of userID's that no book uses any more. The caller has checked
+// the book is userID's.
+func replaceTags(ctx context.Context, tx *sql.Tx, userID, id int64, names []string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM books_book_tags WHERE book_id = ?`, id); err != nil {
 		return fmt.Errorf("books: clear tags: %w", err)
 	}
 	if err := linkTags(ctx, tx, userID, id, cleanTags(names)); err != nil {
 		return err
 	}
-	if err := gcTags(ctx, tx, userID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return gcTags(ctx, tx, userID)
 }
 
 // BookTags returns the names of a book's tags, alphabetically; none for a

@@ -37,6 +37,7 @@
 			<textarea id="books-description" name="description" rows="5"{{if index $d.Errors "description"}} aria-invalid="true" aria-describedby="books-description-error"{{end}}>{{$d.Values.Description}}</textarea>
 			{{template "field-error" (dict "Name" "description" "Error" (index $d.Errors "description"))}}
 		</div>
+		{{if not $d.New}}{{template "text-field" (dict "Name" "tags" "Label" "Tags" "Placeholder" "sf, favourites" "Value" $d.Values.Tags "Error" "")}}{{end}}
 
 		{{if not $d.New}}
 		<fieldset class="field books-cover-field"{{if index $d.Errors "cover"}} aria-describedby="books-cover-error"{{end}}>

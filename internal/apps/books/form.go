@@ -10,9 +10,10 @@ import (
 )
 
 // formValues is what the book form shows: the raw text, so a mistyped
-// number comes back exactly as typed. AddTo, FinishedOn and Tags are for a
-// new book only; so are OLWork, OLEdition and CoverID, which carry an Open
-// Library pick through the form in hidden fields.
+// number comes back exactly as typed. AddTo and FinishedOn are for a new
+// book only; so are OLWork, OLEdition and CoverID, which carry an Open
+// Library pick through the form in hidden fields. Tags are on both forms
+// (UI redesign spec "Add and Edit pages").
 type formValues struct {
 	Title, Subtitle, Authors, Year, Pages, ISBN string
 	SeriesName, SeriesNumber, Description       string
@@ -278,7 +279,9 @@ func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	v := editBookForm(id, valuesOf(b.BookInput), nil, ctxFrom(r.FormValue), coverURL(b.ID, b.CoverVersion))
+	vals := valuesOf(b.BookInput)
+	vals.Tags = strings.Join(b.Tags, ", ")
+	v := editBookForm(id, vals, nil, ctxFrom(r.FormValue), coverURL(b.ID, b.CoverVersion))
 	v.Found = r.FormValue("found") == "1" && b.CoverVersion != ""
 	a.renderForm(w, r, http.StatusOK, v)
 }
@@ -315,7 +318,7 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 		a.renderForm(w, r, http.StatusUnprocessableEntity, editBookForm(id, vals, errs, c, coverURL(b.ID, b.CoverVersion)))
 		return
 	}
-	if err := a.store.UpdateWithCover(r.Context(), uid, id, in, change); err != nil {
+	if err := a.store.SaveEdit(r.Context(), uid, id, in, change, ParseTags(vals.Tags)); err != nil {
 		a.fail(w, r, err)
 		return
 	}

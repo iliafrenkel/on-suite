@@ -4347,10 +4347,6 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-close > summary::-webkit-details-marker { display: none; }
 .books-close-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-2); margin-top: var(--s-2); }
 .books-close-form label { margin: 0; flex-basis: 100%; }
-.books-tags-form { max-width: 28rem; }
-.books-tags-row { display: flex; gap: var(--s-2); }
-.books-tags-row input { flex: 1 1 auto; min-width: 0; }
-.books-tags-row button { white-space: nowrap; }
 /* Progress: the box in the reading box, and the bar on a Reading row */
 .books-progress { margin-bottom: var(--s-3); }
 .books-progress-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }

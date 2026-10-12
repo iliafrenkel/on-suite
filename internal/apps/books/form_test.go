@@ -131,3 +131,52 @@ func TestBookPaneLinksToEdit(t *testing.T) {
 	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d?shelf=want", id))
 	doc.MustHave(fmt.Sprintf(`a[href="/books/edit/%d?shelf=want"]`, id))
 }
+
+func TestEditSavesTags(t *testing.T) {
+	s := newServer(t)
+	nb := titled("Dune", "", books.ShelfWant)
+	nb.Tags = []string{"sf"}
+	id := add(t, s, s.Alice.User.ID, nb)
+	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/edit/%d?shelf=want", id))
+	if got := attr(t, doc, "input#books-tags", "value"); got != "sf" {
+		t.Errorf("tags box = %q, want the book's tags", got)
+	}
+	edit := func(tags string) []string {
+		t.Helper()
+		s.Submit(t, s.Alice, fmt.Sprintf("/books/edit/%d", id), url.Values{"title": {"Dune"}, "shelf": {"want"}, "tags": {tags}},
+			fmt.Sprintf("/books/b/%d?shelf=want", id))
+		got, err := s.Store.BookTags(context.Background(), s.Alice.User.ID, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if got := edit("Space, sf, classics"); !slices.Equal(got, []string{"classics", "sf", "space"}) {
+		t.Errorf("tags = %v, want [classics sf space]", got)
+	}
+	if got := edit("  "); len(got) != 0 {
+		t.Errorf("tags after clearing the box = %v, want none", got)
+	}
+	if names, _ := s.Store.TagNames(context.Background(), s.Alice.User.ID); len(names) != 0 {
+		t.Errorf("tag names = %v, want none: a tag nobody uses goes", names)
+	}
+}
+
+func TestEditLeavesTheShelfAlone(t *testing.T) {
+	s := newServer(t)
+	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfReading))
+	s.Submit(t, s.Alice, fmt.Sprintf("/books/edit/%d", id), url.Values{
+		"title": {"Dune, revised"}, "shelf": {"reading"}, "tags": {"sf"},
+		"add_to": {"read"}, // a tampered form: the edit form has no such field
+	}, fmt.Sprintf("/books/b/%d?shelf=reading", id))
+	b, err := s.Store.Get(context.Background(), s.Alice.User.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Title != "Dune, revised" || !slices.Equal(b.Tags, []string{"sf"}) {
+		t.Fatalf("title %q, tags %v; the edit was not saved", b.Title, b.Tags)
+	}
+	if b.Shelf != books.ShelfReading {
+		t.Errorf("shelf = %q, want reading unchanged", b.Shelf)
+	}
+}
