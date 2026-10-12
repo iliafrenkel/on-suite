@@ -166,6 +166,9 @@ func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int6
 	}
 	bv := viewBook(b, c, a.store.Today())
 	bv.History = viewHistory(rs)
+	// A history form posts open=history, so saving or deleting a reading
+	// doesn't fold the history away (it is collapsed by default).
+	bv.HistoryOpen = r.PostFormValue("open") == "history"
 	bv.Notes, bv.NewNote = viewNotes(ns, opts.Draft), formFor("note-new", opts.Draft, entryForm{})
 	bv.Quotes, bv.NewQuote = viewQuotes(qs, opts.Draft), formFor("quote-new", opts.Draft, entryForm{})
 	if opts.ProgressError != "" {

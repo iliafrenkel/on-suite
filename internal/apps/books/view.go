@@ -371,6 +371,7 @@ type bookView struct {
 	Review        string       // Markdown, for the edit box
 	ReviewHTML    template.HTML
 	History       []historyView // every reading, newest first
+	HistoryOpen   bool          // the history disclosure starts open: the request came from inside it
 	Pages         int           // the book's page count (0: unknown), the page boxes' max
 	Notes         []noteView    // newest first
 	NewNote       entryForm     // the "+ Add note" form

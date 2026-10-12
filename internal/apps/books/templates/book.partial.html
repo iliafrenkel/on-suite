@@ -256,36 +256,35 @@
 </form>
 {{end}}
 
-{{/* notes is the book's notes, newest first (spec "Book pane"): a
-     "+ Add note" disclosure, then each note with its date and page, an
-     Edit disclosure and Delete (decided 2026-10-09). Every form works
-     without JavaScript; htmx swaps just this section (notes-swap). Takes a
-     bookView. */}}
+{{/* notes is Notes · n, newest first (spec "Sections"). The + in the
+     heading (its summary, lifted there by CSS) opens the add form at the
+     top of the section. Each note shows its date and page, with ✎ / 🗑 at
+     its top right: ✎ turns the note into its form in place, 🗑 goes through
+     the confirm dialog. Every form works without JavaScript; htmx swaps
+     just this section (notes-swap). Takes a bookView. */}}
 {{define "notes"}}
-<section class="books-notes" id="books-notes" aria-labelledby="books-notes-head">
-	<h2 class="books-section-head" id="books-notes-head">Notes</h2>
+<section class="books-section books-notes" id="books-notes" aria-labelledby="books-notes-head">
+	<h2 class="books-section-head" id="books-notes-head">Notes{{with .Notes}} <span class="books-section-count">· {{len .}}</span>{{end}}</h2>
 	<details class="books-entry-add" id="books-note-new"{{if .NewNote.Open}} open{{end}}>
-		<summary class="button">+ Add note</summary>
+		<summary class="toolbar-btn books-icon-btn books-section-action books-section-add" aria-label="Add a note" title="Add a note">{{ticon "plus"}}</summary>
 		{{template "note-form" (dict "Book" . "Key" "new" "Action" (printf "/books/notes/%d" .ID) "Form" .NewNote "Submit" "Add note")}}
 	</details>
 	{{with .Notes}}
 	<ul class="books-entries">
 		{{range .}}
-		<li class="books-note">
+		<li class="books-entry books-note">
 			<p class="books-entry-meta">{{.Date}}{{with .Page}} · {{.}}{{end}}</p>
 			<div class="books-entry-text">{{.HTML}}</div>
-			<div class="books-entry-actions">
-				<details class="books-entry-edit"{{if .Form.Open}} open{{end}}>
-					<summary class="button quiet">Edit</summary>
-					{{template "note-form" (dict "Book" $ "Key" .ID "Action" (printf "/books/notes/%d/%d" $.ID .ID) "Form" .Form "Submit" "Save note")}}
-				</details>
-				<form method="post" action="/books/notes/{{$.ID}}/{{.ID}}/delete">
-					{{template "post-ctx" $}}
-					<button type="submit" class="quiet"
-					        hx-post="/books/notes/{{$.ID}}/{{.ID}}/delete" hx-target="#books-notes" hx-swap="outerHTML"
-					        hx-confirm="Delete this note?">Delete</button>
-				</form>
-			</div>
+			<details class="books-entry-edit"{{if .Form.Open}} open{{end}}>
+				<summary class="toolbar-btn books-icon-btn books-entry-icon" aria-label="Edit note" title="Edit note">{{ticon "edit"}}</summary>
+				{{template "note-form" (dict "Book" $ "Key" .ID "Action" (printf "/books/notes/%d/%d" $.ID .ID) "Form" .Form "Submit" "Save note")}}
+			</details>
+			<form class="books-entry-delete" method="post" action="/books/notes/{{$.ID}}/{{.ID}}/delete">
+				{{template "post-ctx" $}}
+				<button type="submit" class="toolbar-btn books-icon-btn books-entry-icon is-danger" aria-label="Delete note" title="Delete note"
+				        hx-post="/books/notes/{{$.ID}}/{{.ID}}/delete" hx-target="#books-notes" hx-swap="outerHTML"
+				        hx-confirm="Delete this note?">{{ticon "trash"}}</button>
+			</form>
 		</li>
 		{{end}}
 	</ul>
@@ -311,37 +310,34 @@
 </form>
 {{end}}
 
-{{/* quotes is the book's quotes as cards, newest first (spec "Book
-     pane"): a "+ Add quote" disclosure, then each quote — its text with
-     its line breaks, its page and its comment — with an Edit disclosure
-     and Delete, as the notes have. htmx swaps just this section
-     (quotes-swap). Takes a bookView. */}}
+{{/* quotes is Quotes · n, newest first, in the same pattern as the notes:
+     each quote keeps its blockquote with its line breaks, then its page and
+     its comment. htmx swaps just this section (quotes-swap). Takes a
+     bookView. */}}
 {{define "quotes"}}
-<section class="books-quotes" id="books-quotes" aria-labelledby="books-quotes-head">
-	<h2 class="books-section-head" id="books-quotes-head">Quotes</h2>
+<section class="books-section books-quotes" id="books-quotes" aria-labelledby="books-quotes-head">
+	<h2 class="books-section-head" id="books-quotes-head">Quotes{{with .Quotes}} <span class="books-section-count">· {{len .}}</span>{{end}}</h2>
 	<details class="books-entry-add" id="books-quote-new"{{if .NewQuote.Open}} open{{end}}>
-		<summary class="button">+ Add quote</summary>
+		<summary class="toolbar-btn books-icon-btn books-section-action books-section-add" aria-label="Add a quote" title="Add a quote">{{ticon "plus"}}</summary>
 		{{template "quote-form" (dict "Book" . "Key" "new" "Action" (printf "/books/quotes/%d" .ID) "Form" .NewQuote "Submit" "Add quote")}}
 	</details>
 	{{with .Quotes}}
 	<ul class="books-entries">
 		{{range .}}
-		<li class="books-quote">
+		<li class="books-entry books-quote">
 			<blockquote class="books-quote-text">{{.Text}}</blockquote>
 			{{with .Page}}<p class="books-entry-meta">{{.}}</p>{{end}}
 			{{with .CommentHTML}}<div class="books-entry-text books-quote-comment">{{.}}</div>{{end}}
-			<div class="books-entry-actions">
-				<details class="books-entry-edit"{{if .Form.Open}} open{{end}}>
-					<summary class="button quiet">Edit</summary>
-					{{template "quote-form" (dict "Book" $ "Key" .ID "Action" (printf "/books/quotes/%d/%d" $.ID .ID) "Form" .Form "Submit" "Save quote")}}
-				</details>
-				<form method="post" action="/books/quotes/{{$.ID}}/{{.ID}}/delete">
-					{{template "post-ctx" $}}
-					<button type="submit" class="quiet"
-					        hx-post="/books/quotes/{{$.ID}}/{{.ID}}/delete" hx-target="#books-quotes" hx-swap="outerHTML"
-					        hx-confirm="Delete this quote?">Delete</button>
-				</form>
-			</div>
+			<details class="books-entry-edit"{{if .Form.Open}} open{{end}}>
+				<summary class="toolbar-btn books-icon-btn books-entry-icon" aria-label="Edit quote" title="Edit quote">{{ticon "edit"}}</summary>
+				{{template "quote-form" (dict "Book" $ "Key" .ID "Action" (printf "/books/quotes/%d/%d" $.ID .ID) "Form" .Form "Submit" "Save quote")}}
+			</details>
+			<form class="books-entry-delete" method="post" action="/books/quotes/{{$.ID}}/{{.ID}}/delete">
+				{{template "post-ctx" $}}
+				<button type="submit" class="toolbar-btn books-icon-btn books-entry-icon is-danger" aria-label="Delete quote" title="Delete quote"
+				        hx-post="/books/quotes/{{$.ID}}/{{.ID}}/delete" hx-target="#books-quotes" hx-swap="outerHTML"
+				        hx-confirm="Delete this quote?">{{ticon "trash"}}</button>
+			</form>
 		</li>
 		{{end}}
 	</ul>
@@ -367,48 +363,50 @@
 </form>
 {{end}}
 
-{{/* history is every reading of the book, newest first (spec "Book
-     pane"), each with a no-JS <details> to change its dates and format,
-     and Delete (decided 2026-10-09: a reading's status isn't editable;
-     deleting it is how a wrong one is put right). Takes a bookView. */}}
+{{/* history is Reading history · n, newest first (spec "Sections"): a
+     <details>, collapsed unless the request came from one of its own forms
+     (HistoryOpen, from their open=history field). Each reading has ✎ (its
+     dates and format, in place) and 🗑 (decided 2026-10-09: a reading's
+     status isn't editable; deleting it is how a wrong one is put right).
+     Left out for a book never started. Takes a bookView. */}}
 {{define "history"}}
 {{with .History}}
-<section class="books-history" aria-labelledby="books-history-head">
-	<h2 class="books-section-head" id="books-history-head">Reading history</h2>
-	<ul class="books-history-list">
+<details class="books-section books-history" id="books-history"{{if $.HistoryOpen}} open{{end}}>
+	<summary class="books-history-summary"><h2 class="books-section-head" id="books-history-head">Reading history <span class="books-section-count">· {{len .}}</span></h2></summary>
+	<ul class="books-entries">
 		{{range .}}
-		<li class="books-history-item">
+		<li class="books-entry books-history-item">
 			<p class="books-history-line"><span class="books-pill">{{.Status}}</span> {{.Dates}}{{with .Format}} · {{.}}{{end}}</p>
-			<div class="books-history-actions">
-				<details class="books-reading-edit">
-					<summary class="button quiet">Edit</summary>
-					<form class="books-reading-edit-form" method="post" action="/books/readings/{{$.ID}}/{{.ID}}"
-					      hx-post="/books/readings/{{$.ID}}/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
-						{{template "post-ctx" $}}
-						<label for="books-r{{.ID}}-started">Started on</label>
-						<input id="books-r{{.ID}}-started" name="started_on" type="date" value="{{.StartedOn}}" max="{{$.Today}}">
-						{{if not .InProgress}}
-						<label for="books-r{{.ID}}-finished">{{.FinishLabel}}</label>
-						<input id="books-r{{.ID}}-finished" name="finished_on" type="date" value="{{.FinishedOn}}" max="{{$.Today}}">
-						{{end}}
-						<label for="books-r{{.ID}}-format">Format</label>
-						<select id="books-r{{.ID}}-format" name="format">
-							{{range .Formats}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}
-						</select>
-						<button type="submit" class="primary">Save</button>
-					</form>
-				</details>
-				<form method="post" action="/books/readings/{{$.ID}}/{{.ID}}/delete">
+			<details class="books-entry-edit">
+				<summary class="toolbar-btn books-icon-btn books-entry-icon" aria-label="Edit reading" title="Edit reading">{{ticon "edit"}}</summary>
+				<form class="books-reading-edit-form" method="post" action="/books/readings/{{$.ID}}/{{.ID}}"
+				      hx-post="/books/readings/{{$.ID}}/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
 					{{template "post-ctx" $}}
-					<button type="submit" class="quiet"
-					        hx-post="/books/readings/{{$.ID}}/{{.ID}}/delete" hx-target="#books-book" hx-swap="outerHTML"
-					        hx-confirm="Delete this reading? Its progress goes with it.">Delete</button>
+					<input type="hidden" name="open" value="history">
+					<label for="books-r{{.ID}}-started">Started on</label>
+					<input id="books-r{{.ID}}-started" name="started_on" type="date" value="{{.StartedOn}}" max="{{$.Today}}">
+					{{if not .InProgress}}
+					<label for="books-r{{.ID}}-finished">{{.FinishLabel}}</label>
+					<input id="books-r{{.ID}}-finished" name="finished_on" type="date" value="{{.FinishedOn}}" max="{{$.Today}}">
+					{{end}}
+					<label for="books-r{{.ID}}-format">Format</label>
+					<select id="books-r{{.ID}}-format" name="format">
+						{{range .Formats}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}
+					</select>
+					<button type="submit" class="primary">Save</button>
 				</form>
-			</div>
+			</details>
+			<form class="books-entry-delete" method="post" action="/books/readings/{{$.ID}}/{{.ID}}/delete">
+				{{template "post-ctx" $}}
+				<input type="hidden" name="open" value="history">
+				<button type="submit" class="toolbar-btn books-icon-btn books-entry-icon is-danger" aria-label="Delete reading" title="Delete reading"
+				        hx-post="/books/readings/{{$.ID}}/{{.ID}}/delete" hx-target="#books-book" hx-swap="outerHTML"
+				        hx-confirm="Delete this reading? Its progress goes with it.">{{ticon "trash"}}</button>
+			</form>
 		</li>
 		{{end}}
 	</ul>
-</section>
+</details>
 {{end}}
 {{end}}
 

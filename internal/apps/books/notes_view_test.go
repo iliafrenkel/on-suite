@@ -72,6 +72,15 @@ func TestTheBookPaneShowsNotesNewestFirst(t *testing.T) {
 	if isOpen(doc, "details#books-note-new") {
 		t.Error("the add-note box is open on a plain page load")
 	}
+	if got := htmlassert.Text(doc.MustHave("#books-notes-head")); got != "Notes · 2" {
+		t.Errorf("notes heading = %q, want the count", got)
+	}
+	if got := attr(t, doc, "details#books-note-new summary", "aria-label"); got != "Add a note" {
+		t.Errorf("+ aria-label = %q", got)
+	}
+	if n := len(doc.QueryAll(".books-note .books-entry-edit summary")); n != 2 {
+		t.Errorf("%d ✎ buttons, want one per note", n)
+	}
 	if v, _ := htmlassert.Attr(doc.MustHave("input#books-note-new-page"), "max"); v != "600" {
 		t.Errorf("page box max = %q, want 600", v)
 	}
@@ -87,6 +96,9 @@ func TestTheBookPaneShowsNotesNewestFirst(t *testing.T) {
 	doc = s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", other))
 	doc.MustHave("details#books-note-new")
 	doc.MustNotHave(".books-note")
+	if got := htmlassert.Text(doc.MustHave("#books-notes-head")); got != "Notes" {
+		t.Errorf("notes heading with none = %q, want no count", got)
+	}
 }
 
 func TestAddingANote(t *testing.T) {
