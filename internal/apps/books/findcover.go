@@ -65,9 +65,13 @@ func (a *App) lookUpCover(ctx context.Context, b Book) (string, []byte, error) {
 }
 
 // findCover is the Edit page's Find cover (UI redesign spec "Add and Edit
-// pages"): the lookup, now. Found, it is back to the Edit page, which
-// says so; finding none, or Open Library not answering, is the Edit page
-// again with the reason by the cover, as a 422.
+// pages"): the lookup, now. Its button posts the whole Edit form, so the
+// page comes back with what was typed in it, saved or not (#591): found,
+// with the new cover and a notice; finding none, or Open Library not
+// answering, with the reason by the cover, as a 422. Only the cover is
+// saved. The lookup uses the form's ISBN, title and author when the form
+// would save, the saved book's otherwise. A file chosen in the upload box
+// isn't kept: a browser can't refill one.
 func (a *App) findCover(w http.ResponseWriter, r *http.Request) {
 	uid, ok := a.userID(w, r)
 	if !ok {
@@ -84,7 +88,12 @@ func (a *App) findCover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := ctxFrom(r.PostFormValue)
-	ct, data, err := a.lookUpCover(ctx, b)
+	in, typed, errs := parseForm(r.PostFormValue)
+	look := b
+	if len(merge(errs, in.Normalize().Validate())) == 0 {
+		look.BookInput = in.Normalize()
+	}
+	ct, data, err := a.lookUpCover(ctx, look)
 	var msg string
 	switch {
 	case errors.Is(err, ErrNoCover):
@@ -98,7 +107,7 @@ func (a *App) findCover(w http.ResponseWriter, r *http.Request) {
 		msg = "Open Library didn't answer. Try again in a minute."
 	}
 	if msg != "" {
-		v := editBookForm(b, valuesOf(b.BookInput), nil, c)
+		v := editBookForm(b, typed, nil, c)
 		v.CoverNotice = msg
 		a.renderForm(w, r, http.StatusUnprocessableEntity, v)
 		return
@@ -107,5 +116,11 @@ func (a *App) findCover(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, c.EditURL(id)+"&found=1", http.StatusSeeOther)
+	if b, err = a.store.Get(ctx, uid, id); err != nil { // the new cover's version
+		a.fail(w, r, err)
+		return
+	}
+	v := editBookForm(b, typed, nil, c)
+	v.Found = true
+	a.renderForm(w, r, http.StatusOK, v)
 }

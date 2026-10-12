@@ -59,7 +59,10 @@
 						<input id="books-cover_url" name="cover_url" type="url" placeholder="https://…" value="{{$d.Values.CoverURL}}">
 					</div>
 					{{if $d.Cover}}<label class="books-choice"><input type="checkbox" name="remove_cover" value="1"> Remove the cover</label>{{end}}
-					{{if not $d.Cover}}<p><button type="submit" form="books-find-cover" class="button">Find a cover on Open Library</button></p>{{end}}
+					{{/* Find cover posts this whole form, so what was typed comes
+					     back with the cover; nothing but the cover is saved
+					     (#591). */}}
+					{{if not $d.Cover}}<p><button type="submit" class="button books-find-cover" formaction="/books/find-cover/{{$d.ID}}">Find a cover on Open Library</button></p>{{end}}
 				</div>
 			</div>
 			{{if $d.Found}}<p class="notice" role="status">Found a cover on Open Library.</p>{{end}}
@@ -90,12 +93,6 @@
 			<a class="button" href="{{$d.Back}}">Cancel</a>
 		</div>
 	</form>
-	{{if and (not $d.New) (not $d.Cover)}}
-	<form id="books-find-cover" method="post" action="/books/find-cover/{{$d.ID}}" hidden>
-		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
-		{{template "ctx-fields" $d.Ctx}}
-	</form>
-	{{end}}
 </div>
 {{end}}
 

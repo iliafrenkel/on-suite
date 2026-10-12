@@ -298,9 +298,7 @@ func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
 	}
 	vals := valuesOf(b.BookInput)
 	vals.Tags = strings.Join(b.Tags, ", ")
-	v := editBookForm(b, vals, nil, ctxFrom(r.FormValue))
-	v.Found = r.FormValue("found") == "1" && b.CoverVersion != ""
-	a.renderForm(w, r, http.StatusOK, v)
+	a.renderForm(w, r, http.StatusOK, editBookForm(b, vals, nil, ctxFrom(r.FormValue)))
 }
 
 // update saves the edit form. The owner check comes first, before any
