@@ -65,6 +65,13 @@ type formView struct {
 	// Cover is the edit form's current cover ("" draws Spine instead).
 	Cover string
 	Spine string
+	// ID is the edited book's id; 0 on the Add page.
+	ID int64
+	// Found says the Edit page is back from a successful Find cover;
+	// CoverNotice is why Find cover found nothing (UI redesign spec "Add
+	// and Edit pages").
+	Found       bool
+	CoverNotice string
 }
 
 // parseForm reads a posted book form: the input, the raw values to echo
@@ -254,7 +261,7 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 
 func editBookForm(id int64, v formValues, errs FieldErrors, c listCtx, cover string) formView {
 	return formView{Action: "/books/edit/" + strconv.FormatInt(id, 10), Heading: "Edit book", Submit: "Save",
-		Cancel: c.BookURL(id), Values: v, Errors: errs, Ctx: c, Cover: cover, Spine: SpineColor(v.Title)}
+		Cancel: c.BookURL(id), Values: v, Errors: errs, Ctx: c, Cover: cover, Spine: SpineColor(v.Title), ID: id}
 }
 
 func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
@@ -271,7 +278,9 @@ func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.renderForm(w, r, http.StatusOK, editBookForm(id, valuesOf(b.BookInput), nil, ctxFrom(r.FormValue), coverURL(b.ID, b.CoverVersion)))
+	v := editBookForm(id, valuesOf(b.BookInput), nil, ctxFrom(r.FormValue), coverURL(b.ID, b.CoverVersion))
+	v.Found = r.FormValue("found") == "1" && b.CoverVersion != ""
+	a.renderForm(w, r, http.StatusOK, v)
 }
 
 // update saves the edit form. The owner check comes first, before any
