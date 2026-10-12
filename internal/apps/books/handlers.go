@@ -135,8 +135,11 @@ type bookOpts struct {
 // "Book details page"). A normal request gets the whole page — 422 when
 // there is a refusal, so a refused form post without JavaScript isn't a
 // 200. An htmx request gets the block for what it targeted:
-// #books-reading → reading-swap (the whole Reading section, so Did not finish… offers the page just saved), #books-notes → notes-swap,
-// #books-quotes → quotes-swap, anything else → book-swap (#books-book).
+// #books-reading → reading-swap (the whole Reading section, so Did not
+// finish… offers the page just saved), #books-take → take-swap,
+// #books-notes → notes-swap, #books-quotes → quotes-swap, anything else
+// → book-swap (#books-book). A refusal's banner tops the page body,
+// outside every section, so it is always book-swap, retargeted there.
 // There is no list on the page, so none of them carries one. Fragments are
 // always 200: htmx's default responseHandling only swaps 2xx/3xx.
 func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int64, c listCtx, opts bookOpts) {
@@ -174,12 +177,19 @@ func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int6
 
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
 		block := "book-swap"
-		switch web.HTMXTarget(r) {
-		case "books-reading":
+		switch target := web.HTMXTarget(r); {
+		case opts.Banner != "":
+			if target != "books-book" {
+				w.Header().Set("HX-Retarget", "#books-book")
+				w.Header().Set("HX-Reswap", "outerHTML")
+			}
+		case target == "books-reading":
 			block = "reading-swap"
-		case "books-notes":
+		case target == "books-take":
+			block = "take-swap"
+		case target == "books-notes":
 			block = "notes-swap"
-		case "books-quotes":
+		case target == "books-quotes":
 			block = "quotes-swap"
 		}
 		if err := a.deps.Render.Fragment(w, http.StatusOK, "books/book", block, v); err != nil {

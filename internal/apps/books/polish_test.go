@@ -32,6 +32,11 @@ func TestLongDescriptionsFold(t *testing.T) {
 	}
 	doc.MustNotHave("input#books-description-more")
 	doc.MustNotHave(".is-clamped")
+	if got := htmlassert.Text(doc.MustHave("section.books-about h2")); got != "About" {
+		t.Errorf("description heading = %q, want About", got)
+	}
+	none := add(t, s, uid, titled("Bare", "", books.ShelfWant))
+	s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", none)).MustNotHave(".books-about") // no description, no section
 }
 
 func TestShelfCountsReadAsWords(t *testing.T) {

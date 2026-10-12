@@ -4,15 +4,20 @@
      page blocks take a bookPageView; the sections below them take its Book
      (a bookView), as their comments say. */}}
 
-{{/* book-swap answers a change that can move more than one section —
-     start, finish, did not finish, the format, the rating, the review, the
-     tags, a reading edited or deleted — and a refusal's banner: the page
-     body (target #books-book). */}}
+{{/* book-swap answers a change that moves the shelf pill or more than one
+     section — start, finish, did not finish, the format, a reading edited
+     or deleted — and a refusal's banner: the page body (target
+     #books-book). */}}
 {{define "book-swap"}}{{template "book-body" .}}{{end}}
 
 {{/* reading-swap answers a progress update (target #books-reading): the
      whole Reading section, so Did not finish… offers the page just saved. */}}
 {{define "reading-swap"}}{{template "reading" (dict "Book" .Book "OOB" false)}}{{end}}
+
+{{/* take-swap answers a rating or a review (target #books-take). While a
+     reading is in progress the Reading section rides along out of band:
+     its Finish… popover offers the book's rating, which has just changed. */}}
+{{define "take-swap"}}{{template "take" .Book}}{{if .Book.Reading}}{{template "reading" (dict "Book" .Book "OOB" true)}}{{end}}{{end}}
 
 {{/* notes-swap and quotes-swap answer a note or a quote being added,
      edited or deleted (targets #books-notes, #books-quotes). */}}
@@ -43,8 +48,7 @@
 		</div>
 	</header>
 	{{template "reading" (dict "Book" . "OOB" false)}}
-	{{template "rating" .}}
-	{{template "review" .}}
+	{{template "take" .}}
 	{{template "description" .}}
 	{{template "tags-form" .}}
 	{{template "notes" .}}
@@ -186,29 +190,34 @@
 </details>
 {{end}}
 
-{{/* rating is the book's stars (spec "Book pane"): five submit buttons,
-     so it works without JavaScript; the current rating's own star clears
-     it. The stars wrap together, never one by one, in a narrow pane
-     (#579). Takes a bookView. */}}
+{{/* rating is the book's stars: five submit buttons, so it works without
+     JavaScript; the current rating's own star clears it. The stars wrap
+     together, never one by one (#579). htmx swaps Your take (take-swap).
+     Takes a bookView. */}}
 {{define "rating"}}
 <form class="books-rating" method="post" action="/books/rating/{{.ID}}"
-      hx-post="/books/rating/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
+      hx-post="/books/rating/{{.ID}}" hx-target="#books-take" hx-swap="outerHTML">
 	{{template "post-ctx" .}}
-	<span class="books-rating-label">{{if .Rating}}Your rating{{else}}Rate it{{end}}</span>
 	<span class="books-star-row">{{range .Stars}}<button type="submit" class="books-star{{if .On}} is-on{{end}}" name="rating" value="{{.Value}}" aria-label="{{.Label}}" title="{{.Label}}">{{if .On}}{{ticon "star-filled"}}{{else}}{{ticon "star-outline"}}{{end}}</button>{{end}}</span>
 </form>
 {{end}}
 
-{{/* review is the book's review, rendered, and a no-JS <details> with a
-     textarea to write or edit it (decided 2026-10-09); htmx swaps the book
-     on save. Takes a bookView. */}}
-{{define "review"}}
-<section class="books-review" aria-label="Review">
+{{/* take is Your take (spec "Sections"): the stars, then the review and
+     the no-JS <details> that writes it. It has one opener (decided
+     2026-10-12): with a review, the ✎ in the heading (its summary, lifted
+     there by CSS), and the form stands in for the review while it is open;
+     with none yet, the quiet "Write a review" under the stars. htmx swaps
+     just this section (take-swap). Takes a bookView. */}}
+{{define "take"}}
+<section class="books-section books-take" id="books-take" aria-labelledby="books-take-head">
+	<h2 class="books-section-head" id="books-take-head">Your take</h2>
+	{{template "rating" .}}
 	{{with .ReviewHTML}}<div class="books-review-text">{{.}}</div>{{end}}
 	<details class="books-review-edit">
-		<summary class="button">{{if .Review}}Edit review{{else}}Write a review{{end}}</summary>
+		{{if .Review}}<summary class="toolbar-btn books-icon-btn books-section-action" aria-label="Edit review" title="Edit review">{{ticon "edit"}}</summary>
+		{{else}}<summary class="books-review-write">Write a review</summary>{{end}}
 		<form class="books-review-form" method="post" action="/books/review/{{.ID}}"
-		      hx-post="/books/review/{{.ID}}" hx-target="#books-book" hx-swap="outerHTML">
+		      hx-post="/books/review/{{.ID}}" hx-target="#books-take" hx-swap="outerHTML">
 			{{template "post-ctx" .}}
 			<label for="books-review-input">Review</label>
 			<textarea id="books-review-input" name="review" rows="8">{{.Review}}</textarea>
@@ -219,16 +228,18 @@
 </section>
 {{end}}
 
-{{/* description is the Open Library description, held to four lines
-     when it is long, with a More / Less toggle (#566): the checkbox
-     technique (PATTERNS.md), so it needs no JavaScript. Takes a bookView. */}}
+{{/* description is About: the Open Library description, held to four
+     lines when it is long, with a More / Less toggle (#566) — the checkbox
+     technique (PATTERNS.md), so it needs no JavaScript. Left out when there
+     is no description (spec "Sections"). Takes a bookView. */}}
 {{define "description"}}
 {{with .Description}}
-<div class="books-description">
+<section class="books-section books-about" aria-labelledby="books-about-head">
+	<h2 class="books-section-head" id="books-about-head">About</h2>
 	{{if $.DescriptionLong}}<input type="checkbox" id="books-description-more" class="visually-hidden books-description-toggle">{{end}}
 	<p class="books-description-text{{if $.DescriptionLong}} is-clamped{{end}}">{{.}}</p>
 	{{if $.DescriptionLong}}<label class="books-description-more" for="books-description-more"><span class="books-more-label">More</span><span class="books-less-label">Less</span></label>{{end}}
-</div>
+</section>
 {{end}}
 {{end}}
 
