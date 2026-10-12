@@ -135,7 +135,7 @@ type bookOpts struct {
 // "Book details page"). A normal request gets the whole page — 422 when
 // there is a refusal, so a refused form post without JavaScript isn't a
 // 200. An htmx request gets the block for what it targeted:
-// #books-progress → progress-swap, #books-notes → notes-swap,
+// #books-reading → reading-swap (the whole Reading section, so Did not finish… offers the page just saved), #books-notes → notes-swap,
 // #books-quotes → quotes-swap, anything else → book-swap (#books-book).
 // There is no list on the page, so none of them carries one. Fragments are
 // always 200: htmx's default responseHandling only swaps 2xx/3xx.
@@ -175,8 +175,8 @@ func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int6
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
 		block := "book-swap"
 		switch web.HTMXTarget(r) {
-		case "books-progress":
-			block = "progress-swap"
+		case "books-reading":
+			block = "reading-swap"
 		case "books-notes":
 			block = "notes-swap"
 		case "books-quotes":

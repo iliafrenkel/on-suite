@@ -155,6 +155,19 @@ var toolbarIcons = map[string]template.HTML{
 		<path d="M9 6h11M9 12h11M9 18h11"/>
 		<path d="M4 6h.01M4 12h.01M4 18h.01"/>
 	</svg>`,
+	"book-open": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M3 5.5A1.5 1.5 0 0 1 4.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5h-5A1.5 1.5 0 0 1 3 16z"/>
+		<path d="M21 5.5A1.5 1.5 0 0 0 19.5 4H15a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5h5a1.5 1.5 0 0 0 1.5-1.5z"/>
+	</svg>`,
+	"tablet": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<rect x="5" y="2" width="14" height="20" rx="2"/>
+		<path d="M11 18h2"/>
+	</svg>`,
+	"headphones": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+		<path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/>
+		<path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+	</svg>`,
 	"user": `<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
 		<circle cx="12" cy="8" r="4"/>
 		<path d="M4 21a8 8 0 0 1 16 0"/>

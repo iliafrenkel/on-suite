@@ -359,8 +359,8 @@ type bookView struct {
 	// The reading box.
 	Reading       bool         // a reading is in progress
 	Progress      progressView // its progress, when Reading
-	FormatLabel   string       // its format, for the pill: "Paper", "Format not set"
-	FormatChoices []choice     // the format menu
+	FormatIcon    string       // its format's icon (ticon); "" while the format isn't set
+	FormatChoices []choice     // the format select
 	StartedOn     string       // "3 Oct 2026"; "" when unknown
 	MinDay        string       // the earliest finish date allowed (the start), YYYY-MM-DD
 	Today         string       // the latest date allowed, YYYY-MM-DD
@@ -397,6 +397,10 @@ type choice struct {
 }
 
 var formatLabels = map[string]string{"paper": "Paper", "ebook": "Ebook", "audio": "Audiobook", "": "Not set"}
+
+// formatIcons are drawn before the format select (UI redesign spec
+// "Sections", decided 2026-10-12); a reading with no format has none.
+var formatIcons = map[string]string{"paper": "book-open", "ebook": "tablet", "audio": "headphones"}
 
 // formatChoices is the format menu: every format, then "not set".
 func formatChoices(current string) []choice {
@@ -466,10 +470,7 @@ func viewBook(b Book, c listCtx, today string) bookView {
 	case b.Latest.Status == StatusReading:
 		v.Reading = true
 		v.Progress = viewProgress(b)
-		v.FormatLabel, v.FormatChoices = "Format not set", formatChoices(b.Latest.Format)
-		if b.Latest.Format != "" {
-			v.FormatLabel = formatLabels[b.Latest.Format]
-		}
+		v.FormatIcon, v.FormatChoices = formatIcons[b.Latest.Format], formatChoices(b.Latest.Format)
 		v.RatingChoices = ratingChoices(b.Rating)
 		v.MinDay = b.Latest.StartedOn
 		if b.Latest.StartedOn != "" {
@@ -622,7 +623,7 @@ type progressView struct {
 	Value   string // the input: the current progress in Unit ("" for none yet)
 	Max     int    // the book's pages, or 100 for percent
 	Percent int    // the bar
-	Note    string // "20% · updated 9 Oct 2026"
+	Note    string // "20% · updated 9 Oct 2026"; in percent just "updated 9 Oct 2026"
 	Error   string
 }
 
@@ -636,7 +637,10 @@ func viewProgress(b Book) progressView {
 	}
 	if b.Progress.Set() {
 		v.Value = strconv.Itoa(b.Progress.In(u, b.Pages))
-		v.Note = strconv.Itoa(v.Percent) + "% · updated " + b.Progress.RecordedAt.Local().Format("2 Jan 2006")
+		v.Note = "updated " + b.Progress.RecordedAt.Local().Format("2 Jan 2006")
+		if u == UnitPage { // in percent, the box itself says it
+			v.Note = strconv.Itoa(v.Percent) + "% · " + v.Note
+		}
 	}
 	return v
 }

@@ -157,6 +157,7 @@ func TestBookPaneOffersTheRightReadingActions(t *testing.T) {
 	read := add(t, s, uid, titled("Ulysses", "", books.ShelfRead))
 
 	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", want))
+	doc.MustHave("section#books-reading .books-start") // the Reading section holds just the button
 	if got := htmlassert.Text(doc.MustHave(".books-start")); got != "Start reading" {
 		t.Errorf("want-to-read button = %q", got)
 	}

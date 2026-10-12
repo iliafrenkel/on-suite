@@ -52,8 +52,8 @@ func (a *App) act(do change, gone bool) http.HandlerFunc {
 }
 
 // progress records where the reading in progress stands. htmx aims it at
-// the progress box, so the answer is the box;
-// a value the store refuses comes back inside the box with what was typed
+// the Reading section, so the answer is the section;
+// a value the store refuses comes back inside it with what was typed
 // (spec "Errors"). Nothing typed is refused like any other bad value.
 func (a *App) progress(w http.ResponseWriter, r *http.Request) {
 	uid, ok := a.userID(w, r)

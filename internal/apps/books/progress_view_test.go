@@ -56,6 +56,12 @@ func TestTheProgressBoxIsInTheUnitOfTheReading(t *testing.T) {
 	if got := htmlassert.Text(doc.MustHave(".books-progress-note")); got != "No progress yet." {
 		t.Errorf("note = %q", got)
 	}
+	if got := attr(t, doc, "form.books-progress-form", "hx-target"); got != "#books-reading" {
+		t.Errorf("progress form hx-target = %q, want the whole Reading section", got)
+	}
+	if got := attr(t, doc, "button.books-progress-save", "aria-label"); got != "Save progress" {
+		t.Errorf("save button aria-label = %q: the iOS number pad has no Enter, so it needs a named button", got)
+	}
 
 	doc = s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", audio))
 	if v, _ := htmlassert.Attr(doc.MustHave("input#books-progress-input"), "max"); v != "100" {
@@ -63,6 +69,15 @@ func TestTheProgressBoxIsInTheUnitOfTheReading(t *testing.T) {
 	}
 	if got := htmlassert.Text(doc.MustHave(".books-progress-of")); got != "%" {
 		t.Errorf("audio unit = %q, want %%", got)
+	}
+
+	s.Clock.Set(time.Date(2026, 10, 9, 1, 0, 0, 0, time.UTC))
+	if err := s.Store.RecordProgress(context.Background(), s.Alice.User.ID, audio, 40); err != nil {
+		t.Fatal(err)
+	}
+	doc = s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", audio))
+	if got := htmlassert.Text(doc.MustHave(".books-progress-note")); got != "updated 9 Oct 2026" {
+		t.Errorf("percent note = %q, want just the date: the box says the %% already", got)
 	}
 
 	want := add(t, s, s.Alice.User.ID, titled("Piranesi", "", books.ShelfWant))
@@ -73,11 +88,12 @@ func TestProgressOverHTMXSwapsTheBox(t *testing.T) {
 	s := newServer(t)
 	s.Clock.Set(time.Date(2026, 10, 9, 1, 0, 0, 0, time.UTC))
 	id := readingBook(t, s, "Dune", 600)
-	rec := postHXTo(t, s, fmt.Sprintf("/books/progress/%d", id), "books-progress", url.Values{"shelf": {"reading"}, "at": {"120"}})
+	rec := postHXTo(t, s, fmt.Sprintf("/books/progress/%d", id), "books-reading", url.Values{"shelf": {"reading"}, "at": {"120"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("htmx progress = %d, want 200", rec.Code)
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("section#books-reading")
 	doc.MustNotHave("#books-book")
 	if v, _ := htmlassert.Attr(doc.MustHave("input#books-progress-input"), "value"); v != "120" {
 		t.Errorf("input value = %q, want 120", v)
@@ -106,7 +122,7 @@ func TestBadProgressIsRefusedInsideTheBox(t *testing.T) {
 	id := readingBook(t, s, "Dune", 600)
 	path := fmt.Sprintf("/books/progress/%d", id)
 	for _, typed := range []string{"700", "-3", "lots", ""} {
-		rec := postHXTo(t, s, path, "books-progress", url.Values{"shelf": {"reading"}, "at": {typed}})
+		rec := postHXTo(t, s, path, "books-reading", url.Values{"shelf": {"reading"}, "at": {typed}})
 		if rec.Code != http.StatusOK {
 			t.Fatalf("htmx refused progress %q = %d, want 200 so htmx swaps it", typed, rec.Code)
 		}
@@ -165,5 +181,20 @@ func TestRowsShowProgressAndStars(t *testing.T) {
 	}
 	if v, _ := htmlassert.Attr(starsEl, "aria-label"); v != "Rated 4 of 5" {
 		t.Errorf("stars label = %q", v)
+	}
+}
+
+func TestProgressSwapsTheWholeReadingSection(t *testing.T) {
+	s := newServer(t)
+	id := readingBook(t, s, "Dune", 600)
+	rec := postHXTo(t, s, fmt.Sprintf("/books/progress/%d", id), "books-reading", url.Values{"shelf": {"reading"}, "at": {"212"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("htmx progress = %d, want 200", rec.Code)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave("section#books-reading")
+	doc.MustNotHave("#books-book")
+	if got := attr(t, doc, "input#books-dnf-at", "value"); got != "212" {
+		t.Errorf("Did not finish… stops at %q, want the page just saved, 212", got)
 	}
 }
