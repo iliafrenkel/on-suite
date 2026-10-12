@@ -313,7 +313,10 @@
 		if (!home && !page) return;
 		// Esc closes the phone drawer from anywhere, its own checkbox and the
 		// links inside it included, before anything else sees the key (#592).
+		// It leaves the search box too, so one Esc does what it does with the
+		// drawer shut (#600).
 		if (e.key === "Escape" && closeDrawer(e.target)) {
+			if (e.target.id === "books-q") e.target.blur();
 			e.preventDefault();
 			return;
 		}
@@ -331,8 +334,13 @@
 				open.open = false;
 				var summary = open.querySelector("summary");
 				if (summary) summary.focus();
+				return;
 			}
-			return;
+			// Nothing is typed into a select, so Esc on one outside a popover
+			// (the reading's format) is Esc as anywhere else on the page: back
+			// to the list (#600). An open select's own list takes Esc before
+			// the page sees it.
+			if (e.target.tagName !== "SELECT") return;
 		}
 		if (home ? homeKey(e) : bookKey(e)) e.preventDefault();
 	});

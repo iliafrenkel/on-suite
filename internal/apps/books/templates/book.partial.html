@@ -185,7 +185,7 @@
 		</select>
 		{{else}}
 		<label for="books-dnf-at">Stopped at {{if eq .Book.Progress.Unit "page"}}page{{else}}percent{{end}} (optional)</label>
-		<input id="books-dnf-at" name="at" type="number" inputmode="numeric" min="0" max="{{.Book.Progress.Max}}" value="{{.Book.Progress.Value}}">
+		<input id="books-dnf-at" name="at" type="number" inputmode="numeric" min="0" max="{{.Book.Progress.Max}}" value="{{.Book.Progress.Saved}}">
 		{{end}}
 		<button type="submit"{{if .Primary}} class="primary"{{end}}>{{.Submit}}</button>
 	</form>

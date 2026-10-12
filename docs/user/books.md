@@ -339,7 +339,8 @@ On a book's page:
 - **e** — edit the book's details
 - **Esc** — close an open box (Finish…, Did not finish…, the review, or a
   note, quote or reading you're changing); with none open, go back to your
-  library
+  library. An open Reading history isn't a box: Esc goes back and leaves it
+  as it is
 
 ## On a phone
 

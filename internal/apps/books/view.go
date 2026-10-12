@@ -650,10 +650,12 @@ func pageValue(page int) string {
 }
 
 // progressView is the progress box: an input in the reading's unit, a
-// bar and a note. Error and a typed Value come from a refused update.
+// bar and a note. Error and a typed Value come from a refused update;
+// Saved stays what is stored.
 type progressView struct {
 	Unit    Unit
 	Value   string // the input: the current progress in Unit ("" for none yet)
+	Saved   string // the saved progress, Value before a refused update: Did not finish…'s place (#600)
 	Max     int    // the book's pages, or 100 for percent
 	Percent int    // the bar
 	Note    string // "20% · updated 9 Oct 2026"; in percent just "updated 9 Oct 2026"
@@ -670,6 +672,7 @@ func viewProgress(b Book) progressView {
 	}
 	if b.Progress.Set() {
 		v.Value = strconv.Itoa(b.Progress.In(u, b.Pages))
+		v.Saved = v.Value
 		v.Note = "updated " + b.Progress.RecordedAt.Local().Format("2 Jan 2006")
 		if u == UnitPage { // in percent, the box itself says it
 			v.Note = strconv.Itoa(v.Percent) + "% · " + v.Note

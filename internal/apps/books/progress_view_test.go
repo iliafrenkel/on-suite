@@ -144,6 +144,22 @@ func TestBadProgressIsRefusedInsideTheBox(t *testing.T) {
 	}
 }
 
+// Did not finish… offers the saved page as where it stopped, never a
+// refused one still in the progress box (#600).
+func TestARefusedProgressLeavesDidNotFinishAtTheSavedPage(t *testing.T) {
+	s := newServer(t)
+	id := readingBook(t, s, "Dune", 600)
+	path := fmt.Sprintf("/books/progress/%d", id)
+	s.Submit(t, s.Alice, path, url.Values{"shelf": {"reading"}, "at": {"212"}}, fmt.Sprintf("/books/b/%d?shelf=reading", id))
+	doc := htmlassert.Parse(t, postHXTo(t, s, path, "books-reading", url.Values{"shelf": {"reading"}, "at": {"700"}}).Body.String())
+	if v, _ := htmlassert.Attr(doc.MustHave("input#books-progress-input"), "value"); v != "700" {
+		t.Errorf("progress box = %q, want the refused 700 kept", v)
+	}
+	if v, _ := htmlassert.Attr(doc.MustHave("input#books-dnf-at"), "value"); v != "212" {
+		t.Errorf("Did not finish… stopped at = %q, want the saved 212", v)
+	}
+}
+
 func TestProgressOnSomeoneElsesBookIsNotFound(t *testing.T) {
 	s := newServer(t)
 	id := readingBook(t, s, "Dune", 600)

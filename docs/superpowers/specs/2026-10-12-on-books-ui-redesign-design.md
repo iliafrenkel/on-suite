@@ -196,7 +196,7 @@ These are smaller than today's, because there's no list on the page any more:
   - `/` focuses search, and `a` goes to Add book.
 - **Details page:**
   - `p` focuses the progress box, `n` opens the add-note form, `q` the add-quote form, and `e` goes to Edit.
-  - `Esc` closes an open disclosure or popover first. With nothing open, it goes back to the list.
+  - `Esc` closes an open disclosure or popover first. With nothing open, it goes back to the list. The Reading history is a section, not a popup: Esc leaves it open and goes back to the list (decided 2026-10-12, #600).
 
 Keys are ignored while typing, as today.
 
