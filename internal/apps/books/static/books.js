@@ -105,8 +105,7 @@
 	function initGutter() {
 		var home = document.getElementById("books-home");
 		var gutter = home && home.querySelector('.pane-gutter[data-gutter-for="side"]');
-		if (!gutter || gutter.getAttribute("data-bound") === "1") return;
-		gutter.setAttribute("data-bound", "1");
+		if (!gutter) return;
 		var dragging = null; // { startX, startWidth }
 
 		gutter.addEventListener("pointerdown", function (e) {
