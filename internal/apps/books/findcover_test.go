@@ -29,7 +29,7 @@ func TestFindCoverIsOnTheEditPageOfABookWithout(t *testing.T) {
 	id := add(t, s, uid, titled("Piranesi", "", books.ShelfWant))
 	path := fmt.Sprintf("/books/edit/%d?shelf=want", id)
 	doc := s.Get(t, s.Alice, path)
-	btn := doc.MustHave(".books-cover-field button.books-find-cover")
+	btn := doc.MustHave("form.books-form button.books-find-cover")
 	if got, _ := htmlassert.Attr(btn, "formaction"); got != fmt.Sprintf("/books/find-cover/%d", id) {
 		t.Errorf("Find cover formaction = %q", got)
 	}
@@ -42,10 +42,24 @@ func TestFindCoverIsOnTheEditPageOfABookWithout(t *testing.T) {
 	if got := attr(t, doc, `form.books-form input[name="shelf"]`, "value"); got != "want" {
 		t.Errorf("the Edit form's shelf = %q, want the list the page came from", got)
 	}
+	// Enter in a text field submits with the first submit button, which
+	// must be Save, not Find cover.
+	first := doc.QueryAll("form.books-form button")[0]
+	if _, ok := htmlassert.Attr(first, "formaction"); ok {
+		t.Error("the Edit form's first button has a formaction; Enter would not save")
+	}
+	if got, _ := htmlassert.Attr(first, "type"); got != "submit" {
+		t.Errorf("the Edit form's first button has type %q, want submit", got)
+	}
 	if err := s.Store.SetCover(context.Background(), uid, id, "image/png", onePNG, books.CoverUpload); err != nil {
 		t.Fatal(err)
 	}
-	s.Get(t, s.Alice, path).MustNotHave("button.books-find-cover")
+	doc = s.Get(t, s.Alice, path)
+	doc.MustNotHave("button.books-find-cover")
+	// The default Save is drawn only alongside Find cover.
+	if got, _ := htmlassert.Attr(doc.QueryAll("form.books-form button")[0], "class"); got == "visually-hidden" {
+		t.Error("the hidden default Save is drawn on a book with a cover")
+	}
 }
 
 func TestFindCoverByISBNThenByTitle(t *testing.T) {

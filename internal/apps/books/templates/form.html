@@ -11,6 +11,10 @@
 	<form class="books-form stack" method="post" action="{{$d.Action}}"{{if not $d.New}} enctype="multipart/form-data"{{end}} novalidate>
 		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
 		{{template "ctx-fields" $d.Ctx}}
+		{{/* Enter in a text field submits with the form's first submit
+		     button. Find cover, in the Cover fieldset, would win that; this
+		     one, with no formaction, keeps Enter meaning Save (#591). */}}
+		{{if and (not $d.New) (not $d.Cover)}}<button type="submit" class="visually-hidden" tabindex="-1" aria-hidden="true">{{$d.Submit}}</button>{{end}}
 		{{if $d.New}}
 		<input type="hidden" name="ol_work" value="{{$d.Values.OLWork}}">
 		<input type="hidden" name="ol_edition" value="{{$d.Values.OLEdition}}">

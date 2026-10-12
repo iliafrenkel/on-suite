@@ -90,8 +90,9 @@ func (a *App) findCover(w http.ResponseWriter, r *http.Request) {
 	c := ctxFrom(r.PostFormValue)
 	in, typed, errs := parseForm(r.PostFormValue)
 	look := b
-	if len(merge(errs, in.Normalize().Validate())) == 0 {
-		look.BookInput = in.Normalize()
+	n := in.Normalize()
+	if len(merge(errs, n.Validate())) == 0 {
+		look.BookInput = n
 	}
 	ct, data, err := a.lookUpCover(ctx, look)
 	var msg string
