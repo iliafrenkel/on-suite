@@ -92,8 +92,8 @@ func TestTheSeriesLinkFiltersTheList(t *testing.T) {
 
 	// A book opened from the series list posts back into it.
 	doc = s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d?shelf=all&series=The+Expanse", id))
-	if v, _ := htmlassert.Attr(doc.MustHave(`.books-tags-form input[name="series"]`), "value"); v != "The Expanse" {
-		t.Errorf("tags form series field = %q", v)
+	if v, _ := htmlassert.Attr(doc.MustHave(`.books-page-bar input[name="series"]`), "value"); v != "The Expanse" {
+		t.Errorf("page bar series field = %q", v)
 	}
 }
 

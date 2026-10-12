@@ -1,11 +1,20 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="books-form-page stack">
+	{{/* The book page's page bar, with the way back and no actions (UI
+	     redesign spec "Add and Edit pages"). */}}
+	<div class="books-page-bar">
+		<a class="books-back" href="{{$d.Back}}">{{ticon "arrow-left"}}{{$d.BackLabel}}</a>
+	</div>
 	<h1>{{$d.Heading}}</h1>
-	{{if $d.New}}{{template "ol-search" $d.Search}}{{end}}
+	{{if $d.New}}{{template "ol-search" (dict "Search" $d.Search "Ctx" $d.Ctx)}}{{end}}
 	<form class="books-form stack" method="post" action="{{$d.Action}}"{{if not $d.New}} enctype="multipart/form-data"{{end}} novalidate>
 		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
-		{{if not $d.New}}{{template "ctx-fields" $d.Ctx}}{{end}}
+		{{template "ctx-fields" $d.Ctx}}
+		{{/* Enter in a text field submits with the form's first submit
+		     button. Find cover, in the Cover fieldset, would win that; this
+		     one, with no formaction, keeps Enter meaning Save (#591). */}}
+		{{if and (not $d.New) (not $d.Cover)}}<button type="submit" class="visually-hidden" tabindex="-1" aria-hidden="true">{{$d.Submit}}</button>{{end}}
 		{{if $d.New}}
 		<input type="hidden" name="ol_work" value="{{$d.Values.OLWork}}">
 		<input type="hidden" name="ol_edition" value="{{$d.Values.OLEdition}}">
@@ -37,6 +46,7 @@
 			<textarea id="books-description" name="description" rows="5"{{if index $d.Errors "description"}} aria-invalid="true" aria-describedby="books-description-error"{{end}}>{{$d.Values.Description}}</textarea>
 			{{template "field-error" (dict "Name" "description" "Error" (index $d.Errors "description"))}}
 		</div>
+		{{if not $d.New}}{{template "text-field" (dict "Name" "tags" "Label" "Tags" "Placeholder" "sf, favourites" "Value" $d.Values.Tags "Error" "")}}{{end}}
 
 		{{if not $d.New}}
 		<fieldset class="field books-cover-field"{{if index $d.Errors "cover"}} aria-describedby="books-cover-error"{{end}}>
@@ -53,7 +63,10 @@
 						<input id="books-cover_url" name="cover_url" type="url" placeholder="https://…" value="{{$d.Values.CoverURL}}">
 					</div>
 					{{if $d.Cover}}<label class="books-choice"><input type="checkbox" name="remove_cover" value="1"> Remove the cover</label>{{end}}
-					{{if not $d.Cover}}<p><button type="submit" form="books-find-cover" class="button">Find a cover on Open Library</button></p>{{end}}
+					{{/* Find cover posts this whole form, so what was typed comes
+					     back with the cover; nothing but the cover is saved
+					     (#591). */}}
+					{{if not $d.Cover}}<p><button type="submit" class="button books-find-cover" formaction="/books/find-cover/{{$d.ID}}">Find a cover on Open Library</button></p>{{end}}
 				</div>
 			</div>
 			{{if $d.Found}}<p class="notice" role="status">Found a cover on Open Library.</p>{{end}}
@@ -81,33 +94,31 @@
 
 		<div class="books-form-actions">
 			<button class="primary" type="submit">{{$d.Submit}}</button>
-			<a href="{{$d.Cancel}}">Cancel</a>
+			<a class="button" href="{{$d.Back}}">Cancel</a>
 		</div>
 	</form>
-	{{if and (not $d.New) (not $d.Cover)}}
-	<form id="books-find-cover" method="post" action="/books/find-cover/{{$d.ID}}" hidden>
-		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
-		{{template "ctx-fields" $d.Ctx}}
-	</form>
-	{{end}}
 </div>
 {{end}}
 
 {{/* ol-search is the Open Library search on the Add book page: a plain
-     GET form, so it works without JavaScript. Takes a searchView. */}}
+     GET form, so it works without JavaScript. It carries the list the page
+     came from, so the results and "Use this" do too. Takes a dict: Search
+     (a searchView), Ctx (the list, without its search). */}}
 {{define "ol-search"}}
+{{$s := .Search}}
 <section class="books-search stack" aria-label="Find a book on Open Library">
 	<form class="books-search-form" method="get" action="/books/new" role="search">
+		{{template "ctx-fields" .Ctx}}
 		<label for="books-search-q">Find it on Open Library</label>
 		<div class="books-search-row">
-			<input id="books-search-q" name="q" type="search" value="{{.Query}}" placeholder="Title, author or ISBN">
+			<input id="books-search-q" name="q" type="search" value="{{$s.Query}}" placeholder="Title, author or ISBN">
 			<button type="submit">Search</button>
 		</div>
 	</form>
-	{{with .Error}}<p class="notice notice-error" role="alert">{{.}}</p>{{end}}
-	{{if .Results}}
+	{{with $s.Error}}<p class="notice notice-error" role="alert">{{.}}</p>{{end}}
+	{{if $s.Results}}
 	<ul class="books-results">
-		{{range .Results}}
+		{{range $s.Results}}
 		<li class="books-result">
 			{{if .Thumb}}<img class="books-result-cover" src="{{.Thumb}}" alt="" width="40" height="60" loading="lazy">{{else}}<span class="books-result-cover" aria-hidden="true"></span>{{end}}
 			<span class="books-result-text"><span class="books-result-title">{{.Title}}</span>{{with .Byline}}<span class="books-result-byline">{{.}}</span>{{end}}</span>
@@ -115,8 +126,8 @@
 		</li>
 		{{end}}
 	</ul>
-	{{else if and .Searched (not .Error)}}
-	<p class="empty">Open Library has nothing for “{{.Query}}”. Fill it in yourself below.</p>
+	{{else if and $s.Searched (not $s.Error)}}
+	<p class="empty">Open Library has nothing for “{{$s.Query}}”. Fill it in yourself below.</p>
 	{{end}}
 </section>
 {{end}}

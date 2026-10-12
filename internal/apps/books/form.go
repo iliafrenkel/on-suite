@@ -10,9 +10,10 @@ import (
 )
 
 // formValues is what the book form shows: the raw text, so a mistyped
-// number comes back exactly as typed. AddTo, FinishedOn and Tags are for a
-// new book only; so are OLWork, OLEdition and CoverID, which carry an Open
-// Library pick through the form in hidden fields.
+// number comes back exactly as typed. AddTo and FinishedOn are for a new
+// book only; so are OLWork, OLEdition and CoverID, which carry an Open
+// Library pick through the form in hidden fields. Tags are on both forms
+// (UI redesign spec "Add and Edit pages").
 type formValues struct {
 	Title, Subtitle, Authors, Year, Pages, ISBN string
 	SeriesName, SeriesNumber, Description       string
@@ -52,16 +53,17 @@ type resultView struct {
 
 // formView is the Add/Edit book page.
 type formView struct {
-	New     bool
-	Action  string
-	Heading string
-	Submit  string
-	Cancel  string
-	Values  formValues
-	Errors  FieldErrors
-	Today   string // the latest finish date the form allows
-	Ctx     listCtx
-	Search  searchView
+	New       bool
+	Action    string
+	Heading   string
+	Submit    string
+	Back      string // the page bar's way back, and Cancel's: the list (Add) or the book (Edit)
+	BackLabel string // "Reading", "Tagged “sf”", or the book's title
+	Values    formValues
+	Errors    FieldErrors
+	Today     string // the latest finish date the form allows
+	Ctx       listCtx
+	Search    searchView
 	// Cover is the edit form's current cover ("" draws Spine instead).
 	Cover string
 	Spine string
@@ -130,10 +132,12 @@ func thumbURL(coverID int64) string {
 	return "/books/olcover/" + strconv.FormatInt(coverID, 10)
 }
 
-// pickURL is the Add book page pre-filled with c. Everything travels in
-// the link: the values are only a starting point the person edits anyway.
-func pickURL(c Candidate) string {
-	v := url.Values{"pick": {"1"}}
+// pickURL is the Add book page pre-filled with c, coming back to list
+// back. Everything travels in the link: the values are only a starting
+// point the person edits anyway.
+func pickURL(c Candidate, back listCtx) string {
+	v := back.values()
+	v.Set("pick", "1")
 	for k, val := range map[string]string{"title": c.Title, "subtitle": c.Subtitle, "authors": c.Authors,
 		"year": numText(c.Year), "pages": numText(c.Pages), "isbn": c.ISBN,
 		"ol_work": c.WorkID, "ol_edition": c.EditionID} {
@@ -149,9 +153,9 @@ func pickURL(c Candidate) string {
 
 const searchFailed = "Open Library didn't answer. Try again, or fill in the book yourself below."
 
-// search asks Open Library for q. A failure is logged and shown as a
-// notice; the page still works.
-func (a *App) search(ctx context.Context, q string) searchView {
+// search asks Open Library for q, for the Add page of list back. A failure
+// is logged and shown as a notice; the page still works.
+func (a *App) search(ctx context.Context, q string, back listCtx) searchView {
 	sv := searchView{Query: q, Searched: true}
 	found, err := a.ol.Search(ctx, q)
 	if err != nil {
@@ -161,7 +165,7 @@ func (a *App) search(ctx context.Context, q string) searchView {
 	}
 	for _, c := range found {
 		sv.Results = append(sv.Results, resultView{Title: c.Title, Byline: byline(c.Authors, numText(c.Year)),
-			Thumb: thumbURL(c.CoverID), PickURL: pickURL(c)})
+			Thumb: thumbURL(c.CoverID), PickURL: pickURL(c, back)})
 	}
 	return sv
 }
@@ -190,9 +194,18 @@ func (a *App) renderForm(w http.ResponseWriter, r *http.Request, status int, v f
 	}
 }
 
-func (a *App) newBookForm(v formValues, errs FieldErrors) formView {
+// addCtx is the list the Add page came from and goes back to. On the Add
+// page q is the Open Library search, not the list's, so the list's search
+// stays behind (AddURL never carries one).
+func addCtx(get func(string) string) listCtx {
+	c := ctxFrom(get)
+	c.Q = ""
+	return c
+}
+
+func (a *App) newBookForm(v formValues, errs FieldErrors, c listCtx) formView {
 	return formView{New: true, Action: "/books/new", Heading: "Add a book", Submit: "Add book",
-		Cancel: "/books/", Values: v, Errors: errs, Today: a.store.Today()}
+		Back: c.ListURL(), BackLabel: listHeading(c), Values: v, Errors: errs, Today: a.store.Today(), Ctx: c}
 }
 
 // newForm is the Add book page: an Open Library search (q), a result
@@ -202,13 +215,14 @@ func (a *App) newForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
+	c := addCtx(q.Get)
 	v := formValues{AddTo: string(ShelfWant)}
 	if q.Get("pick") != "" {
 		v = a.picked(r.Context(), q)
 	}
-	view := a.newBookForm(v, nil)
+	view := a.newBookForm(v, nil, c)
 	if text := strings.TrimSpace(q.Get("q")); text != "" {
-		view.Search = a.search(r.Context(), text)
+		view.Search = a.search(r.Context(), text, c)
 		// Nothing to pick from: start the form with what was typed (spec
 		// "Screens → Add book").
 		if len(view.Search.Results) == 0 && view.Values.Title == "" && view.Values.ISBN == "" {
@@ -228,10 +242,11 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in, vals, errs := parseForm(r.PostFormValue)
+	c := addCtx(r.PostFormValue)
 	errs = merge(errs, in.Normalize().Validate())
 	shelf, _ := ParseShelf(vals.AddTo)
 	if len(errs) > 0 {
-		a.renderForm(w, r, http.StatusUnprocessableEntity, a.newBookForm(vals, errs))
+		a.renderForm(w, r, http.StatusUnprocessableEntity, a.newBookForm(vals, errs, c))
 		return
 	}
 	id, err := a.store.Create(r.Context(), uid, NewBook{BookInput: in, Shelf: shelf,
@@ -241,13 +256,13 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 	var ref *Refusal
 	switch {
 	case errors.As(err, &verr):
-		a.renderForm(w, r, http.StatusUnprocessableEntity, a.newBookForm(vals, verr.Fields))
+		a.renderForm(w, r, http.StatusUnprocessableEntity, a.newBookForm(vals, verr.Fields, c))
 		return
 	case errors.As(err, &ref):
-		a.renderForm(w, r, http.StatusUnprocessableEntity, a.newBookForm(vals, FieldErrors{"finished_on": ref.Msg}))
+		a.renderForm(w, r, http.StatusUnprocessableEntity, a.newBookForm(vals, FieldErrors{"finished_on": ref.Msg}, c))
 		return
 	case errors.Is(err, ErrInvalid):
-		a.renderForm(w, r, http.StatusUnprocessableEntity, a.newBookForm(vals, FieldErrors{"add_to": "Pick where the book goes."}))
+		a.renderForm(w, r, http.StatusUnprocessableEntity, a.newBookForm(vals, FieldErrors{"add_to": "Pick where the book goes."}, c))
 		return
 	case err != nil:
 		a.fail(w, r, err)
@@ -259,9 +274,12 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, listCtx{Shelf: shelf}.BookURL(id), http.StatusSeeOther)
 }
 
-func editBookForm(id int64, v formValues, errs FieldErrors, c listCtx, cover string) formView {
-	return formView{Action: "/books/edit/" + strconv.FormatInt(id, 10), Heading: "Edit book", Submit: "Save",
-		Cancel: c.BookURL(id), Values: v, Errors: errs, Ctx: c, Cover: cover, Spine: SpineColor(v.Title), ID: id}
+// editBookForm is the Edit page of b showing v; its page bar goes back to
+// b's page, named after b's saved title.
+func editBookForm(b Book, v formValues, errs FieldErrors, c listCtx) formView {
+	return formView{Action: "/books/edit/" + strconv.FormatInt(b.ID, 10), Heading: "Edit book", Submit: "Save",
+		Back: c.BookURL(b.ID), BackLabel: b.Title, Values: v, Errors: errs, Ctx: c,
+		Cover: coverURL(b.ID, b.CoverVersion), Spine: SpineColor(v.Title), ID: b.ID}
 }
 
 func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
@@ -278,9 +296,9 @@ func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	v := editBookForm(id, valuesOf(b.BookInput), nil, ctxFrom(r.FormValue), coverURL(b.ID, b.CoverVersion))
-	v.Found = r.FormValue("found") == "1" && b.CoverVersion != ""
-	a.renderForm(w, r, http.StatusOK, v)
+	vals := valuesOf(b.BookInput)
+	vals.Tags = strings.Join(b.Tags, ", ")
+	a.renderForm(w, r, http.StatusOK, editBookForm(b, vals, nil, ctxFrom(r.FormValue)))
 }
 
 // update saves the edit form. The owner check comes first, before any
@@ -312,10 +330,10 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(errs) > 0 {
-		a.renderForm(w, r, http.StatusUnprocessableEntity, editBookForm(id, vals, errs, c, coverURL(b.ID, b.CoverVersion)))
+		a.renderForm(w, r, http.StatusUnprocessableEntity, editBookForm(b, vals, errs, c))
 		return
 	}
-	if err := a.store.UpdateWithCover(r.Context(), uid, id, in, change); err != nil {
+	if err := a.store.SaveEdit(r.Context(), uid, id, in, change, ParseTags(vals.Tags)); err != nil {
 		a.fail(w, r, err)
 		return
 	}

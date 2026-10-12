@@ -122,7 +122,7 @@ someone else in your ON Suite instance.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-books-dark.png">
-    <img src="docs/images/app-books-light.png" alt="ON Books: shelves on the left, the books being read in the middle and Leviathan Wakes open on the right, with its progress and notes">
+    <img src="docs/images/app-books-light.png" alt="ON Books: the shelves on the left and the books being read as a grid of covers, each with its progress">
   </picture>
 </p>
 

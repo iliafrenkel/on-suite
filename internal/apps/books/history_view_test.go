@@ -49,7 +49,7 @@ func historyIDs(t *testing.T, s *server, id int64) []int64 {
 	return out
 }
 
-func TestTheBookPaneListsEveryReading(t *testing.T) {
+func TestTheBookPageListsEveryReading(t *testing.T) {
 	s := newServer(t)
 	id := readTwiceOverHTTP(t, s)
 	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", id))
@@ -66,6 +66,9 @@ func TestTheBookPaneListsEveryReading(t *testing.T) {
 	}
 	if n := len(doc.QueryAll(".books-history-item button[hx-confirm]")); n != 2 {
 		t.Errorf("%d delete buttons, want one per reading", n)
+	}
+	if got := htmlassert.Text(doc.MustHave("#books-history-head")); got != "Reading history · 2" {
+		t.Errorf("history heading = %q", got)
 	}
 
 	want0 := add(t, s, s.Alice.User.ID, titled("Emma", "", books.ShelfWant))
@@ -135,5 +138,30 @@ func TestReadingRoutesAreNotFoundForOthers(t *testing.T) {
 	}
 	if n := len(historyIDs(t, s, id)); n != 2 {
 		t.Errorf("%d readings, want both still there", n)
+	}
+}
+
+func TestEditingAReadingKeepsTheHistoryOpen(t *testing.T) {
+	s := newServer(t)
+	id := readTwiceOverHTTP(t, s)
+	past := historyIDs(t, s, id)[1]
+	path := fmt.Sprintf("/books/readings/%d/%d", id, past)
+	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", id))
+	for _, sel := range []string{
+		fmt.Sprintf(`form[action="%s"] input[name="open"]`, path),
+		fmt.Sprintf(`form[action="%s/delete"] input[name="open"]`, path),
+	} {
+		if got := attr(t, doc, sel, "value"); got != "history" {
+			t.Errorf("%s = %q, want history", sel, got)
+		}
+	}
+	rec := s.PostHX(t, s.Alice, path, url.Values{"shelf": {"read"}, "open": {"history"},
+		"started_on": {"2026-09-20"}, "finished_on": {"2026-09-28"}, "format": {"paper"}})
+	if !isOpen(htmlassert.Parse(t, rec.Body.String()), "details#books-history") {
+		t.Error("the history folded away after saving one of its readings")
+	}
+	rec = s.PostHX(t, s.Alice, fmt.Sprintf("/books/format/%d", id), url.Values{"shelf": {"read"}, "format": {"ebook"}})
+	if isOpen(htmlassert.Parse(t, rec.Body.String()), "details#books-history") {
+		t.Error("the history opened for a change made outside it")
 	}
 }

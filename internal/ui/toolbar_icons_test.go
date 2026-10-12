@@ -18,6 +18,7 @@ func TestToolbarIconForKnownNames(t *testing.T) {
 		"edit", "trash", "cards", "play", "arrow-left", "share",
 		"user", "log-out", "settings", "help",
 		"arrow-down", "arrow-up", "grid", "list",
+		"book-open", "tablet", "headphones",
 	}
 	seen := map[string]bool{}
 	for _, name := range names {

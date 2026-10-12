@@ -1,5 +1,5 @@
 // ON Books' script: the delete confirmation, the sidebar's resize gutter,
-// focus kept in the sort and view controls across a list swap, and
+// focus kept in the sort, view and format controls across their swaps, and
 // keyboard shortcuts (UI redesign spec,
 // docs/superpowers/specs/2026-10-12-on-books-ui-redesign-design.md).
 // Vanilla and CSP-clean; the sections mirror reader.js's (apps never share
@@ -146,15 +146,17 @@
 	// no DOMContentLoaded (#456).
 	document.addEventListener("htmx:historyRestore", initGutter);
 
-	// --- Focus in the sort and view controls ---------------------------------
+	// --- Focus in the sort, view and format controls -------------------------
 	//
 	// Choosing a sort or a view swaps the whole controls form out of band
-	// (it carries the pressed state and the list's context), which would
-	// drop focus to <body>. Put it back on the control that had it.
+	// (it carries the pressed state and the list's context), and choosing a
+	// format swaps the book page's body (the shelf pill and the progress
+	// unit can follow). Either would drop focus to <body>; put it back on
+	// the control that had it.
 	var keptFocus = null;
 	document.addEventListener("htmx:beforeSwap", function () {
 		var el = document.activeElement;
-		keptFocus = el && el.id && el.closest && el.closest("#books-prefs") ? el.id : null;
+		keptFocus = el && el.id && el.closest && el.closest("#books-prefs, .books-format") ? el.id : null;
 	});
 	document.addEventListener("htmx:afterSettle", function () {
 		if (!keptFocus) return;
@@ -181,8 +183,8 @@
 	// Home: j/k move through the books, Enter (natively) or o opens one,
 	// / searches, a adds a book, Esc closes the drawer. Book page: p goes to
 	// the progress box, n and q open the add-note and add-quote forms, e
-	// edits, Esc closes an open disclosure — or, with none open, goes back
-	// to the list (spec "Keyboard").
+	// edits, Esc closes an open popover or edit form — or, with none open,
+	// goes back to the list (spec "Keyboard").
 
 	// openEntry opens an add disclosure ("+ Add note", "+ Add quote") and
 	// puts the cursor in its box; false when the page has none.
@@ -215,14 +217,28 @@
 		links[next].scrollIntoView({ block: "nearest" });
 	}
 
-	// closeDisclosures closes every open <details> on the book page; false
-	// when none was open.
+	// closeDisclosures closes every open popover and edit form on the book
+	// page; false when none was open. The Reading history is a section, not
+	// a popup, so Esc leaves it as it is.
 	function closeDisclosures() {
-		var open = document.querySelectorAll("#books-book details[open]");
+		var open = document.querySelectorAll("#books-book details[open]:not(.books-history)");
 		open.forEach(function (d) {
 			d.open = false;
 		});
 		return open.length > 0;
+	}
+
+	// closeDrawer closes the phone drawer; false when it isn't open. Focus
+	// that was in the drawer, or on its checkbox, goes back to the checkbox:
+	// the drawer button labels it and is outlined while it has focus, and
+	// the link that had focus has just been hidden (#592).
+	function closeDrawer(from) {
+		var drawer = document.getElementById("books-drawer");
+		if (!drawer || !drawer.checked) return false;
+		drawer.checked = false;
+		var side = document.getElementById("books-side");
+		if (from === drawer || (side && side.contains(from))) drawer.focus();
+		return true;
 	}
 
 	function homeKey(e) {
@@ -244,12 +260,9 @@
 			q.select();
 			return true;
 		case "a":
-			window.location.href = "/books/new";
-			return true;
-		case "Escape":
-			var drawer = document.getElementById("books-drawer");
-			if (!drawer || !drawer.checked) return false;
-			drawer.checked = false;
+			var add = document.getElementById("books-add");
+			if (!add) return false;
+			window.location.href = add.href;
 			return true;
 		}
 		return false;
@@ -273,7 +286,16 @@
 			window.location.href = edit.href;
 			return true;
 		case "Escape":
-			if (closeDisclosures()) return true;
+			// Focus on a button inside the popover (Mark as read, a history
+			// edit's Save) would be left on a hidden element once it closes,
+			// so it goes back to the popover's own summary.
+			var active = document.activeElement;
+			var host = active && active.closest ? active.closest("#books-book details[open]:not(.books-history)") : null;
+			if (closeDisclosures()) {
+				var toggle = host && host.querySelector("summary");
+				if (toggle) toggle.focus();
+				return true;
+			}
 			var back = document.querySelector(".books-back");
 			if (!back) return false;
 			window.location.href = back.href;
@@ -289,20 +311,22 @@
 		var home = document.getElementById("books-home");
 		var page = document.getElementById("books-page");
 		if (!home && !page) return;
+		// Esc closes the phone drawer from anywhere, its own checkbox and the
+		// links inside it included, before anything else sees the key (#592).
+		if (e.key === "Escape" && closeDrawer(e.target)) {
+			e.preventDefault();
+			return;
+		}
 		if (isTyping(e.target)) {
 			if (e.key !== "Escape") return;
-			if (e.target.id === "books-drawer") {
-				e.target.checked = false;
-				return;
-			}
 			if (e.target.id === "books-q" || e.target.id === "books-progress-input") {
 				e.target.blur();
 				return;
 			}
-			// Esc from a field in an open disclosure of the book page
-			// (Finish, Did not finish, an edit form) closes it and returns
-			// focus to its summary.
-			var open = e.target.closest("#books-book details[open]");
+			// Esc from a field in an open popover or edit form of the book
+			// page (Finish…, Did not finish…, the review, an entry's ✎) closes
+			// it and returns focus to its summary.
+			var open = e.target.closest("#books-book details[open]:not(.books-history)");
 			if (open) {
 				open.open = false;
 				var summary = open.querySelector("summary");

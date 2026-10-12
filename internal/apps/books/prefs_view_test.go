@@ -86,3 +86,18 @@ func TestPrefsRefuseWhatTheToolbarNeverSends(t *testing.T) {
 		t.Errorf("prefs after refused posts = %+v, want the defaults", got)
 	}
 }
+
+func TestSearchingPressesTheListButton(t *testing.T) {
+	s := newServer(t)
+	add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfWant))
+	doc := s.Get(t, s.Alice, "/books/?shelf=all&q=dune") // saved view: the default grid
+	if got := attr(t, doc, "#books-view-list", "aria-pressed"); got != "true" {
+		t.Errorf("list button aria-pressed while searching = %q, want true: the list is what shows (#594)", got)
+	}
+	if got := attr(t, doc, "#books-view-grid", "aria-pressed"); got != "false" {
+		t.Errorf("grid button aria-pressed while searching = %q, want false", got)
+	}
+	if p := prefsOf(t, s); p.View != books.ViewGrid {
+		t.Errorf("saved view = %q after searching, want grid unchanged", p.View)
+	}
+}

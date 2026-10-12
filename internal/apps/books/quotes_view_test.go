@@ -64,6 +64,12 @@ func TestQuotesShowAsCards(t *testing.T) {
 		t.Errorf("%d comments, want 1: no empty comment box", n)
 	}
 	doc.MustHave(".books-quote button[hx-confirm]")
+	if got := htmlassert.Text(doc.MustHave("#books-quotes-head")); got != "Quotes · 2" {
+		t.Errorf("quotes heading = %q, want the count", got)
+	}
+	if got := attr(t, doc, "details#books-quote-new summary", "aria-label"); got != "Add a quote" {
+		t.Errorf("+ aria-label = %q", got)
+	}
 	if n := len(doc.QueryAll(".books-quote button[hx-confirm]")); n != 2 {
 		t.Errorf("%d delete buttons with a confirmation, want one per quote", n)
 	}
@@ -127,7 +133,7 @@ func TestARefusedQuoteComesBackInItsForm(t *testing.T) {
 	}
 }
 
-func TestEditingAndDeletingAQuoteInThePane(t *testing.T) {
+func TestEditingAndDeletingAQuoteInPlace(t *testing.T) {
 	s := newServer(t)
 	id := readBook(t, s, "Dune", 600)
 	qid, err := s.Store.AddQuote(context.Background(), s.Alice.User.ID, id, books.QuoteInput{Text: "Draft.", Comment: "Hm."})

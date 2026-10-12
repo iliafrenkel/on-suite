@@ -45,10 +45,8 @@ func ctxFrom(get func(string) string) listCtx {
 		Series: strings.TrimSpace(get("series"))}
 }
 
-// Query is the context as a query string. Templates use the URL methods
-// below rather than this: a whole URL dropped into href is left alone by
-// html/template, a query string after a literal "?" gets percent-encoded.
-func (c listCtx) Query() string {
+// values is the context as query values.
+func (c listCtx) values() url.Values {
 	v := url.Values{}
 	v.Set("shelf", string(c.Shelf))
 	if c.Tag != "" {
@@ -60,8 +58,13 @@ func (c listCtx) Query() string {
 	if c.Series != "" {
 		v.Set("series", c.Series)
 	}
-	return v.Encode()
+	return v
 }
+
+// Query is the context as a query string. Templates use the URL methods
+// below rather than this: a whole URL dropped into href is left alone by
+// html/template, a query string after a literal "?" gets percent-encoded.
+func (c listCtx) Query() string { return c.values().Encode() }
 
 // ListURL is this list.
 func (c listCtx) ListURL() string { return "/books/?" + c.Query() }
@@ -69,6 +72,13 @@ func (c listCtx) ListURL() string { return "/books/?" + c.Query() }
 // BookURL is a book opened from this list.
 func (c listCtx) BookURL(id int64) string {
 	return "/books/b/" + strconv.FormatInt(id, 10) + "?" + c.Query()
+}
+
+// AddURL is the Add book page, coming back to this list afterwards — but
+// not to its search: on the Add page q is the Open Library search (UI
+// redesign spec "Add and Edit pages").
+func (c listCtx) AddURL() string {
+	return "/books/new?" + listCtx{Shelf: c.Shelf, Tag: c.Tag, Series: c.Series}.Query()
 }
 
 // homeView is everything the home page draws (UI redesign spec "Home
@@ -117,6 +127,17 @@ func viewSidebar(c listCtx, counts map[Shelf]int, tags []string, goal *goalView)
 		v.Tags = append(v.Tags, tagLink{Name: name, URL: to.ListURL(), Current: c.Tag == name})
 	}
 	return v
+}
+
+// tagLinks are a book's header pills: read-only, each a link to every book
+// with that tag (UI redesign spec "Header"). Tags are edited on the Edit
+// page.
+func tagLinks(names []string) []tagLink {
+	var out []tagLink
+	for _, n := range names {
+		out = append(out, tagLink{Name: n, URL: listCtx{Shelf: ShelfAll, Tag: n}.ListURL()})
+	}
+	return out
 }
 
 // itemView is one book on the home page: a tile in the grid, a row in
@@ -236,7 +257,7 @@ type prefsView struct {
 	Sorts     []choice
 	Reversed  bool
 	DirLabel  string // the order now: "Newest first", "Oldest first", "A–Z", "Z–A"
-	View      View   // the saved view
+	View      View   // the view the switch shows as pressed: the saved one, or the list while a search shows it
 	SortFixed bool   // a series is in reading order: the sort is disabled
 	ViewFixed bool   // a search shows the list: the view switch is disabled
 }
@@ -246,6 +267,9 @@ func viewPrefs(p Prefs, c listCtx) prefsView {
 		SortFixed: c.Series != "", ViewFixed: c.Q != ""}
 	for _, s := range Sorts {
 		v.Sorts = append(v.Sorts, choice{Value: string(s), Label: s.Label(), Current: s == p.Sort})
+	}
+	if v.ViewFixed { // a search shows the list whatever is saved (#594)
+		v.View = ViewList
 	}
 	return v
 }
@@ -353,14 +377,13 @@ type bookView struct {
 	Spine                            string
 	Cover                            string // the stored cover; "" draws the spine
 	ShelfLabel                       string
-	BackLabel                        string // the page bar's way back: the list's name, "Reading", "Tagged “sf”"
-	Tags                             []string
-	TagsValue                        string // the tags box: "classics, sf"
+	BackLabel                        string    // the page bar's way back: the list's name, "Reading", "Tagged “sf”"
+	Tags                             []tagLink // the header's pills, each its tag's list
 	// The reading box.
 	Reading       bool         // a reading is in progress
 	Progress      progressView // its progress, when Reading
-	FormatLabel   string       // its format, for the pill: "Paper", "Format not set"
-	FormatChoices []choice     // the format menu
+	FormatIcon    string       // its format's icon (ticon); "" while the format isn't set
+	FormatChoices []choice     // the format select
 	StartedOn     string       // "3 Oct 2026"; "" when unknown
 	MinDay        string       // the earliest finish date allowed (the start), YYYY-MM-DD
 	Today         string       // the latest date allowed, YYYY-MM-DD
@@ -371,6 +394,7 @@ type bookView struct {
 	Review        string       // Markdown, for the edit box
 	ReviewHTML    template.HTML
 	History       []historyView // every reading, newest first
+	HistoryOpen   bool          // the history disclosure starts open: the request came from inside it
 	Pages         int           // the book's page count (0: unknown), the page boxes' max
 	Notes         []noteView    // newest first
 	NewNote       entryForm     // the "+ Add note" form
@@ -397,6 +421,10 @@ type choice struct {
 }
 
 var formatLabels = map[string]string{"paper": "Paper", "ebook": "Ebook", "audio": "Audiobook", "": "Not set"}
+
+// formatIcons are drawn before the format select (UI redesign spec
+// "Sections", decided 2026-10-12); a reading with no format has none.
+var formatIcons = map[string]string{"paper": "book-open", "ebook": "tablet", "audio": "headphones"}
 
 // formatChoices is the format menu: every format, then "not set".
 func formatChoices(current string) []choice {
@@ -443,7 +471,7 @@ func ratingChoices(current int) []choice {
 func viewBook(b Book, c listCtx, today string) bookView {
 	v := bookView{ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
 		Description: b.Description, Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion),
-		ShelfLabel: b.Shelf.Label(), BackLabel: listHeading(c), Tags: b.Tags, TagsValue: strings.Join(b.Tags, ", "), Today: today, Pages: b.Pages,
+		ShelfLabel: b.Shelf.Label(), BackLabel: listHeading(c), Tags: tagLinks(b.Tags), Today: today, Pages: b.Pages,
 		Rating: b.Rating, Stars: starButtons(b.Rating), Review: b.Review, ReviewHTML: RenderReview(b.Review), Ctx: c}
 	v.DescriptionLong = longDescription(b.Description)
 	if b.SeriesName != "" {
@@ -466,10 +494,7 @@ func viewBook(b Book, c listCtx, today string) bookView {
 	case b.Latest.Status == StatusReading:
 		v.Reading = true
 		v.Progress = viewProgress(b)
-		v.FormatLabel, v.FormatChoices = "Format not set", formatChoices(b.Latest.Format)
-		if b.Latest.Format != "" {
-			v.FormatLabel = formatLabels[b.Latest.Format]
-		}
+		v.FormatIcon, v.FormatChoices = formatIcons[b.Latest.Format], formatChoices(b.Latest.Format)
 		v.RatingChoices = ratingChoices(b.Rating)
 		v.MinDay = b.Latest.StartedOn
 		if b.Latest.StartedOn != "" {
@@ -622,7 +647,7 @@ type progressView struct {
 	Value   string // the input: the current progress in Unit ("" for none yet)
 	Max     int    // the book's pages, or 100 for percent
 	Percent int    // the bar
-	Note    string // "20% · updated 9 Oct 2026"
+	Note    string // "20% · updated 9 Oct 2026"; in percent just "updated 9 Oct 2026"
 	Error   string
 }
 
@@ -636,7 +661,10 @@ func viewProgress(b Book) progressView {
 	}
 	if b.Progress.Set() {
 		v.Value = strconv.Itoa(b.Progress.In(u, b.Pages))
-		v.Note = strconv.Itoa(v.Percent) + "% · updated " + b.Progress.RecordedAt.Local().Format("2 Jan 2006")
+		v.Note = "updated " + b.Progress.RecordedAt.Local().Format("2 Jan 2006")
+		if u == UnitPage { // in percent, the box itself says it
+			v.Note = strconv.Itoa(v.Percent) + "% · " + v.Note
+		}
 	}
 	return v
 }

@@ -19,6 +19,18 @@ const readerScrollToActive = `
 		const i = rows.indexOf(document.querySelector('.reader-row.is-active'));
 		document.querySelector('.reader-list').scrollTop = rows[i - 2].offsetTop - rows[0].offsetTop + 8;`
 
+// booksListView shows a Books shelf as the list the way a person would:
+// it presses the list button (htmx saves the view and swaps the list in).
+// It then saves grid again without redrawing, so the other Books shots,
+// and a later --only run, still find the seeded default.
+const booksListView = `
+		document.getElementById('books-view-list').click();
+		await new Promise(r => setTimeout(r, 1200));
+		const form = document.getElementById('books-prefs');
+		const data = new URLSearchParams(new FormData(form));
+		data.set('view', 'grid');
+		await fetch(form.action, {method: 'POST', body: data});`
+
 // shots is every screenshot the documentation uses. Each guide task adds its
 // own; keep them grouped by guide and in page order.
 //
@@ -111,11 +123,12 @@ var shots = []shot{
 	// docs/user/books.md
 	// Book 1 is Leviathan Wakes, on the Reading shelf in the seed. Nothing
 	// here imports a file or presses Find cover, so no request reaches
-	// Open Library and the library stays as seeded.
-	{Name: "docs/user/images/books-panes.png", URL: "/books/b/1?shelf=reading", Height: 760},
-	{Name: "docs/user/images/books-menu.png", URL: "/books/b/1?shelf=reading", Height: 420, Setup: `
-		document.querySelector('details.books-menu').open = true;`},
-	{Name: "docs/user/images/books-add.png", URL: "/books/new", Height: 720},
+	// Open Library and the library stays as seeded; the list shot puts the
+	// saved view back to grid (booksListView).
+	{Name: "docs/user/images/books-home.png", URL: "/books/?shelf=reading", Height: 640},
+	{Name: "docs/user/images/books-home-list.png", URL: "/books/?shelf=read", Height: 560, Setup: booksListView},
+	{Name: "docs/user/images/books-book.png", URL: "/books/b/1?shelf=reading", Height: 1076},
+	{Name: "docs/user/images/books-add.png", URL: "/books/new?shelf=reading", Height: 720},
 	{Name: "docs/user/images/books-stats.png", URL: "/books/stats", Height: 980},
 	{Name: "docs/user/images/books-import.png", URL: "/books/import", Height: 560},
 
@@ -140,8 +153,8 @@ var shots = []shot{
 	{Name: "docs/images/app-reader-dark.png", URL: "/reader/item/10?scope=all&filter=all", Theme: "dark", Setup: readerScrollToActive},
 	{Name: "docs/images/app-later-light.png", URL: "/later/a/1"},
 	{Name: "docs/images/app-later-dark.png", URL: "/later/a/1", Theme: "dark"},
-	{Name: "docs/images/app-books-light.png", URL: "/books/b/1?shelf=reading"},
-	{Name: "docs/images/app-books-dark.png", URL: "/books/b/1?shelf=reading", Theme: "dark"},
+	{Name: "docs/images/app-books-light.png", URL: "/books/?shelf=reading"},
+	{Name: "docs/images/app-books-dark.png", URL: "/books/?shelf=reading", Theme: "dark"},
 	{Name: "docs/images/app-flash-light.png", URL: "/flash/2/cards/"},
 	{Name: "docs/images/app-flash-dark.png", URL: "/flash/2/cards/", Theme: "dark"},
 	{Name: "docs/images/app-focus-light.png", URL: "/focus/run/1", Setup: focusRunning},

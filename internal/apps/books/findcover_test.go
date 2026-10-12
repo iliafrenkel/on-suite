@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/iliafrenkel/on-suite/internal/apps/books"
 	"github.com/iliafrenkel/on-suite/internal/htmlassert"
+	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
 // findCover presses Find cover on Alice's book id, from the Edit page of
@@ -26,19 +29,37 @@ func TestFindCoverIsOnTheEditPageOfABookWithout(t *testing.T) {
 	id := add(t, s, uid, titled("Piranesi", "", books.ShelfWant))
 	path := fmt.Sprintf("/books/edit/%d?shelf=want", id)
 	doc := s.Get(t, s.Alice, path)
-	doc.MustHave(`.books-cover-field button[form="books-find-cover"]`)
-	if got := attr(t, doc, "form#books-find-cover", "action"); got != fmt.Sprintf("/books/find-cover/%d", id) {
-		t.Errorf("Find cover form posts to %q", got)
+	btn := doc.MustHave("form.books-form button.books-find-cover")
+	if got, _ := htmlassert.Attr(btn, "formaction"); got != fmt.Sprintf("/books/find-cover/%d", id) {
+		t.Errorf("Find cover formaction = %q", got)
 	}
-	if got := attr(t, doc, `form#books-find-cover input[name="shelf"]`, "value"); got != "want" {
-		t.Errorf("Find cover form's shelf = %q, want the list the page came from", got)
+	if _, ok := htmlassert.Attr(btn, "form"); ok {
+		t.Error("Find cover names another form; it should post the Edit form itself (#591)")
+	}
+	doc.MustNotHave("form#books-find-cover")
+	// What it posts carries the CSRF token and the list (#594).
+	doc.MustHave(fmt.Sprintf(`form.books-form input[name="%s"]`, web.CSRFFormField))
+	if got := attr(t, doc, `form.books-form input[name="shelf"]`, "value"); got != "want" {
+		t.Errorf("the Edit form's shelf = %q, want the list the page came from", got)
+	}
+	// Enter in a text field submits with the first submit button, which
+	// must be Save, not Find cover.
+	first := doc.QueryAll("form.books-form button")[0]
+	if _, ok := htmlassert.Attr(first, "formaction"); ok {
+		t.Error("the Edit form's first button has a formaction; Enter would not save")
+	}
+	if got, _ := htmlassert.Attr(first, "type"); got != "submit" {
+		t.Errorf("the Edit form's first button has type %q, want submit", got)
 	}
 	if err := s.Store.SetCover(context.Background(), uid, id, "image/png", onePNG, books.CoverUpload); err != nil {
 		t.Fatal(err)
 	}
 	doc = s.Get(t, s.Alice, path)
-	doc.MustNotHave("form#books-find-cover")
-	doc.MustNotHave(`button[form="books-find-cover"]`)
+	doc.MustNotHave("button.books-find-cover")
+	// The default Save is drawn only alongside Find cover.
+	if got, _ := htmlassert.Attr(doc.QueryAll("form.books-form button")[0], "class"); got == "visually-hidden" {
+		t.Error("the hidden default Save is drawn on a book with a cover")
+	}
 }
 
 func TestFindCoverByISBNThenByTitle(t *testing.T) {
@@ -50,17 +71,18 @@ func TestFindCoverByISBNThenByTitle(t *testing.T) {
 	fallback := withISBN(t, s, uid, "Piranesi", "9780316129084")
 	for name, id := range map[string]int64{"by ISBN": byISBN, "by title": byTitle, "ISBN, then title": fallback} {
 		rec := findCover(t, s, id)
-		if want := fmt.Sprintf("/books/edit/%d?shelf=want&found=1", id); rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != want {
-			t.Errorf("%s: Find cover = %d to %q, want 303 to %q", name, rec.Code, rec.Header().Get("Location"), want)
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: Find cover = %d, want 200: the Edit page again, with the cover", name, rec.Code)
 		}
+		doc := htmlassert.Parse(t, rec.Body.String())
+		if got := htmlassert.Text(doc.MustHave(".books-cover-field .notice")); got != "Found a cover on Open Library." {
+			t.Errorf("%s: notice = %q", name, got)
+		}
+		doc.MustHave(".books-cover-field img.books-cover")
 		c, err := s.Store.Cover(context.Background(), uid, id)
 		if err != nil || !bytes.Equal(c.Bytes, onePNG) || coverSource(t, s, id) != books.CoverFromOL {
 			t.Errorf("%s: cover = %d bytes, %v", name, len(c.Bytes), err)
 		}
-	}
-	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/edit/%d?shelf=want&found=1", byTitle))
-	if got := htmlassert.Text(doc.MustHave(".books-cover-field .notice")); got != "Found a cover on Open Library." {
-		t.Errorf("notice = %q", got)
 	}
 }
 
@@ -100,5 +122,101 @@ func TestFindCoverOfSomeoneElsesBookIsNotFound(t *testing.T) {
 	}
 	if _, err := s.Store.Cover(context.Background(), s.Bob.User.ID, id); err == nil {
 		t.Error("Bob's book got a cover")
+	}
+}
+
+func TestFindCoverKeepsWhatWasTyped(t *testing.T) {
+	s, _, _ := newBooksApp(t)
+	ctx := context.Background()
+	uid := s.Alice.User.ID
+	for _, tt := range []struct {
+		title string
+		code  int
+	}{
+		{"Piranesi", http.StatusOK},                         // found
+		{"Nothing like it", http.StatusUnprocessableEntity}, // none to be had
+	} {
+		id := add(t, s, uid, titled(tt.title, "", books.ShelfWant))
+		rec := s.Post(t, s.Alice, fmt.Sprintf("/books/find-cover/%d", id), url.Values{"shelf": {"want"},
+			"title": {tt.title}, "subtitle": {"Typed, not saved"}, "tags": {"typed, tags"}, "description": {"A typed description."}})
+		if rec.Code != tt.code {
+			t.Errorf("%s: Find cover = %d, want %d", tt.title, rec.Code, tt.code)
+		}
+		doc := htmlassert.Parse(t, rec.Body.String())
+		if got := attr(t, doc, "input#books-subtitle", "value"); got != "Typed, not saved" {
+			t.Errorf("%s: subtitle = %q, want what was typed (#591)", tt.title, got)
+		}
+		if got := attr(t, doc, "input#books-tags", "value"); got != "typed, tags" {
+			t.Errorf("%s: tags = %q, want what was typed", tt.title, got)
+		}
+		if got := htmlassert.Text(doc.MustHave("textarea#books-description")); got != "A typed description." {
+			t.Errorf("%s: description = %q, want what was typed", tt.title, got)
+		}
+		if got := htmlassert.Text(doc.MustHave(".books-back")); got != tt.title {
+			t.Errorf("%s: back link = %q, want the saved title", tt.title, got)
+		}
+		if b, _ := s.Store.Get(ctx, uid, id); b.Subtitle != "" || len(b.Tags) != 0 {
+			t.Errorf("%s: Find cover saved the form (subtitle %q, tags %v); only Save does", tt.title, b.Subtitle, b.Tags)
+		}
+	}
+}
+
+func TestFindCoverLooksUpWhatTheFormSays(t *testing.T) {
+	s, _, _ := newBooksApp(t)
+	// Saved without an ISBN, under a title Open Library has nothing for;
+	// the ISBN typed into the form has a cover.
+	id := add(t, s, s.Alice.User.ID, titled("Nothing like it", "", books.ShelfWant))
+	rec := s.Post(t, s.Alice, fmt.Sprintf("/books/find-cover/%d", id), url.Values{"shelf": {"want"},
+		"title": {"Nothing like it"}, "isbn": {"9781635575637"}})
+	if rec.Code != http.StatusOK {
+		t.Errorf("Find cover with a typed ISBN = %d, want 200: it looks up what the form says", rec.Code)
+	}
+	// A form that wouldn't save (no title) falls back to the saved book.
+	rec = s.Post(t, s.Alice, fmt.Sprintf("/books/find-cover/%d", add(t, s, s.Alice.User.ID, titled("Piranesi", "", books.ShelfWant))),
+		url.Values{"shelf": {"want"}, "title": {""}})
+	if rec.Code != http.StatusOK {
+		t.Errorf("Find cover with an empty title box = %d, want 200 from the saved title", rec.Code)
+	}
+}
+
+// postEditForm posts Alice's Edit form as a browser does, multipart with
+// a file in the upload box, to path.
+func postEditForm(t *testing.T, s *server, path string, fields url.Values, file []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fields.Set(web.CSRFFormField, s.CSRFToken(t, s.Alice))
+	for k, vs := range fields {
+		for _, v := range vs {
+			if err := mw.WriteField(k, v); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	part, err := mw.CreateFormFile("cover_file", "cover.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(file); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return s.Do(t, s.Alice, req)
+}
+
+func TestFindCoverTakesTheEditFormsBody(t *testing.T) {
+	s, _, _ := newBooksApp(t)
+	id := add(t, s, s.Alice.User.ID, titled("Piranesi", "", books.ShelfWant))
+	big := bytes.Repeat([]byte{0}, 3<<19) // 1.5 MiB: over the suite's 1 MiB default
+	rec := postEditForm(t, s, fmt.Sprintf("/books/find-cover/%d", id), url.Values{"shelf": {"want"}, "title": {"Piranesi"}}, big)
+	if rec.Code != http.StatusOK {
+		t.Errorf("Find cover with an image chosen = %d, want 200: it posts the Edit form, so it has Save's body budget", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Found a cover on Open Library.") {
+		t.Error("the chosen file got in the way of the lookup")
 	}
 }

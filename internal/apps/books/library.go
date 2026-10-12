@@ -246,10 +246,12 @@ func (st *Store) Update(ctx context.Context, userID, id int64, in BookInput) err
 	return st.updateBook(ctx, st.db, userID, id, in)
 }
 
-// UpdateWithCover is Update plus a cover change (a new image, a removal or
-// nothing) in one transaction: if the cover can't be written, the details
-// aren't saved either. The image is already in hand; nothing here fetches.
-func (st *Store) UpdateWithCover(ctx context.Context, userID, id int64, in BookInput, ch CoverChange) error {
+// SaveEdit saves the Edit page (UI redesign spec "Add and Edit pages"):
+// the details, a cover change (a new image, a removal or nothing) and the
+// tags, in one transaction, so if any part can't be written none is. The
+// tags replace the book's; none clears them. The image is already in hand;
+// nothing here fetches.
+func (st *Store) SaveEdit(ctx context.Context, userID, id int64, in BookInput, ch CoverChange, tags []string) error {
 	if ch.Source != "" && !validCoverSource(ch.Source) {
 		return ErrInvalid
 	}
@@ -268,6 +270,9 @@ func (st *Store) UpdateWithCover(ctx context.Context, userID, id int64, in BookI
 		err = st.removeCoverTx(ctx, tx, userID, id)
 	}
 	if err != nil {
+		return err
+	}
+	if err := replaceTags(ctx, tx, userID, id, tags); err != nil {
 		return err
 	}
 	return tx.Commit()

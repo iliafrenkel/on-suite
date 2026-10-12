@@ -56,8 +56,9 @@ func (a *App) Templates() fs.FS {
 	return sub
 }
 
-// editFormMaxBytes is the edit form's body budget: one cover plus the
+// editFormMaxBytes is the Edit form's body budget: one cover plus the
 // form's text fields and multipart overhead (the suite default is 1 MiB).
+// Save and Find cover both post that form (#591).
 const editFormMaxBytes = MaxCoverBytes + 1<<20
 
 func (a *App) Mount(r *app.Router, deps app.Deps) {
@@ -97,8 +98,8 @@ func (a *App) Mount(r *app.Router, deps app.Deps) {
 	r.HandleFunc("POST /quotes/{id}", a.saveEntry(a.addQuote))
 	r.HandleFunc("POST /quotes/{id}/{qid}", a.saveEntry(a.editQuote))
 	r.HandleFunc("POST /quotes/{id}/{qid}/delete", a.act(a.deleteQuote, false))
-	r.HandleFunc("POST /tags/{id}", a.act(a.setTags, false))
 	r.HandleFunc("POST /delete/{id}", a.act(a.remove, true))
+	r.RegisterBodyLimit("POST /find-cover/{id}", editFormMaxBytes)
 	r.HandleFunc("POST /find-cover/{id}", a.findCover)
 	r.HandleFunc("GET /stats", a.stats)
 	r.HandleFunc("POST /goal", a.setGoal)

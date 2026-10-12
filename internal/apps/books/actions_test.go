@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -113,17 +112,6 @@ func TestDidNotFinish(t *testing.T) {
 	}
 }
 
-func TestSetTagsFromTheBookPane(t *testing.T) {
-	s := newServer(t)
-	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfWant))
-	s.Submit(t, s.Alice, fmt.Sprintf("/books/tags/%d", id), url.Values{"shelf": {"want"}, "tags": {"Space, sf"}},
-		fmt.Sprintf("/books/b/%d?shelf=want", id))
-	tags, err := s.Store.BookTags(context.Background(), s.Alice.User.ID, id)
-	if err != nil || !slices.Equal(tags, []string{"sf", "space"}) {
-		t.Errorf("tags = %v, %v; want [sf space]", tags, err)
-	}
-}
-
 func TestDeleteReturnsToTheList(t *testing.T) {
 	s := newServer(t)
 	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfWant))
@@ -137,7 +125,7 @@ func TestDeleteReturnsToTheList(t *testing.T) {
 func TestActionsOnSomeoneElsesBookAreNotFound(t *testing.T) {
 	s := newServer(t)
 	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfReading))
-	for _, action := range []string{"start", "finish", "dnf", "tags", "delete"} {
+	for _, action := range []string{"start", "finish", "dnf", "delete"} {
 		path := fmt.Sprintf("/books/%s/%d", action, id)
 		if rec := s.Post(t, s.Bob, path, url.Values{}); rec.Code != http.StatusNotFound {
 			t.Errorf("Bob POST %s = %d, want 404", path, rec.Code)
@@ -148,7 +136,7 @@ func TestActionsOnSomeoneElsesBookAreNotFound(t *testing.T) {
 	}
 }
 
-func TestBookPaneOffersTheRightReadingActions(t *testing.T) {
+func TestBookPageOffersTheRightReadingActions(t *testing.T) {
 	s := newServer(t)
 	s.Clock.Set(time.Date(2026, 10, 9, 1, 0, 0, 0, time.UTC))
 	uid := s.Alice.User.ID
@@ -157,6 +145,7 @@ func TestBookPaneOffersTheRightReadingActions(t *testing.T) {
 	read := add(t, s, uid, titled("Ulysses", "", books.ShelfRead))
 
 	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d", want))
+	doc.MustHave("section#books-reading .books-start") // the Reading section holds just the button
 	if got := htmlassert.Text(doc.MustHave(".books-start")); got != "Start reading" {
 		t.Errorf("want-to-read button = %q", got)
 	}

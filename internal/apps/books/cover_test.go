@@ -146,19 +146,19 @@ func TestCreateKeepsOnlyRealOpenLibraryIDs(t *testing.T) {
 	}
 }
 
-func TestUpdateWithCoverSavesBothTogether(t *testing.T) {
+func TestSaveEditSavesBothTogether(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	id := addBook(t, f, f.alice.ID, onShelf("Piranesi", books.ShelfWant))
 	in := books.BookInput{Title: "Piranesi, edited"}
-	if err := f.store.UpdateWithCover(ctx, f.alice.ID, id, in,
-		books.CoverChange{ContentType: "image/png", Bytes: onePNG, Source: books.CoverUpload}); err != nil {
+	if err := f.store.SaveEdit(ctx, f.alice.ID, id, in,
+		books.CoverChange{ContentType: "image/png", Bytes: onePNG, Source: books.CoverUpload}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if b := getBook(t, f, f.alice.ID, id); b.Title != "Piranesi, edited" || b.CoverVersion == "" {
 		t.Errorf("after edit with cover: title %q, cover version %q", b.Title, b.CoverVersion)
 	}
-	if err := f.store.UpdateWithCover(ctx, f.alice.ID, id, in, books.CoverChange{Remove: true}); err != nil {
+	if err := f.store.SaveEdit(ctx, f.alice.ID, id, in, books.CoverChange{Remove: true}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.Cover(ctx, f.alice.ID, id); !errors.Is(err, books.ErrNotFound) {
@@ -172,7 +172,7 @@ func TestUpdateWithCoverSavesBothTogether(t *testing.T) {
 	if err := f.store.SetCover(ctx, f.alice.ID, id, "image/png", onePNG, books.CoverUpload); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.UpdateWithCover(ctx, f.alice.ID, id, books.BookInput{Title: "Again"}, books.CoverChange{}); err != nil {
+	if err := f.store.SaveEdit(ctx, f.alice.ID, id, books.BookInput{Title: "Again"}, books.CoverChange{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.Cover(ctx, f.alice.ID, id); err != nil {
@@ -180,7 +180,7 @@ func TestUpdateWithCoverSavesBothTogether(t *testing.T) {
 	}
 }
 
-func TestUpdateWithCoverIsAllOrNothing(t *testing.T) {
+func TestSaveEditIsAllOrNothing(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	id := addBook(t, f, f.alice.ID, onShelf("Piranesi", books.ShelfWant))
@@ -189,21 +189,24 @@ func TestUpdateWithCoverIsAllOrNothing(t *testing.T) {
 		BEGIN SELECT RAISE(ABORT, 'cover write failed'); END`); err != nil {
 		t.Fatal(err)
 	}
-	err := f.store.UpdateWithCover(ctx, f.alice.ID, id, books.BookInput{Title: "Changed"},
-		books.CoverChange{ContentType: "image/png", Bytes: onePNG, Source: books.CoverUpload})
+	err := f.store.SaveEdit(ctx, f.alice.ID, id, books.BookInput{Title: "Changed"},
+		books.CoverChange{ContentType: "image/png", Bytes: onePNG, Source: books.CoverUpload}, []string{"new"})
 	if err == nil {
-		t.Fatal("UpdateWithCover succeeded, want the cover failure")
+		t.Fatal("SaveEdit succeeded, want the cover failure")
 	}
 	if b := getBook(t, f, f.alice.ID, id); b.Title != "Piranesi" {
 		t.Errorf("title = %q after a failed cover write, want it unchanged", b.Title)
+	}
+	if tags, _ := f.store.BookTags(ctx, f.alice.ID, id); len(tags) != 0 {
+		t.Errorf("tags = %v after a failed cover write, want none: the tags are in the same transaction", tags)
 	}
 
 	// Someone else's book: not found, and no cover either.
 	if _, err := f.db.Exec(`DROP TRIGGER fail_cover`); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.UpdateWithCover(ctx, f.bob.ID, id, books.BookInput{Title: "Mine"},
-		books.CoverChange{ContentType: "image/png", Bytes: onePNG, Source: books.CoverUpload}); !errors.Is(err, books.ErrNotFound) {
+	if err := f.store.SaveEdit(ctx, f.bob.ID, id, books.BookInput{Title: "Mine"},
+		books.CoverChange{ContentType: "image/png", Bytes: onePNG, Source: books.CoverUpload}, nil); !errors.Is(err, books.ErrNotFound) {
 		t.Errorf("Bob = %v, want ErrNotFound", err)
 	}
 	if _, err := f.store.Cover(ctx, f.alice.ID, id); !errors.Is(err, books.ErrNotFound) {

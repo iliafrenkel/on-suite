@@ -135,8 +135,11 @@ type bookOpts struct {
 // "Book details page"). A normal request gets the whole page — 422 when
 // there is a refusal, so a refused form post without JavaScript isn't a
 // 200. An htmx request gets the block for what it targeted:
-// #books-progress → progress-swap, #books-notes → notes-swap,
-// #books-quotes → quotes-swap, anything else → book-swap (#books-book).
+// #books-reading → reading-swap (the whole Reading section, so Did not
+// finish… offers the page just saved), #books-take → take-swap,
+// #books-notes → notes-swap, #books-quotes → quotes-swap, anything else
+// → book-swap (#books-book). A refusal's banner tops the page body,
+// outside every section, so it is always book-swap, retargeted there.
 // There is no list on the page, so none of them carries one. Fragments are
 // always 200: htmx's default responseHandling only swaps 2xx/3xx.
 func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int64, c listCtx, opts bookOpts) {
@@ -163,6 +166,9 @@ func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int6
 	}
 	bv := viewBook(b, c, a.store.Today())
 	bv.History = viewHistory(rs)
+	// A history form posts open=history, so saving or deleting a reading
+	// doesn't fold the history away (it is collapsed by default).
+	bv.HistoryOpen = r.PostFormValue("open") == "history"
 	bv.Notes, bv.NewNote = viewNotes(ns, opts.Draft), formFor("note-new", opts.Draft, entryForm{})
 	bv.Quotes, bv.NewQuote = viewQuotes(qs, opts.Draft), formFor("quote-new", opts.Draft, entryForm{})
 	if opts.ProgressError != "" {
@@ -174,12 +180,19 @@ func (a *App) renderBook(w http.ResponseWriter, r *http.Request, userID, id int6
 
 	if web.IsHTMX(r) && !web.IsHTMXHistoryRestore(r) {
 		block := "book-swap"
-		switch web.HTMXTarget(r) {
-		case "books-progress":
-			block = "progress-swap"
-		case "books-notes":
+		switch target := web.HTMXTarget(r); {
+		case opts.Banner != "":
+			if target != "books-book" {
+				w.Header().Set("HX-Retarget", "#books-book")
+				w.Header().Set("HX-Reswap", "outerHTML")
+			}
+		case target == "books-reading":
+			block = "reading-swap"
+		case target == "books-take":
+			block = "take-swap"
+		case target == "books-notes":
 			block = "notes-swap"
-		case "books-quotes":
+		case target == "books-quotes":
 			block = "quotes-swap"
 		}
 		if err := a.deps.Render.Fragment(w, http.StatusOK, "books/book", block, v); err != nil {
