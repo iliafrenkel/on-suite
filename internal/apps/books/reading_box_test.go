@@ -106,6 +106,13 @@ func TestFinishOffersARatingAndDNFAPlace(t *testing.T) {
 	if got := attr(t, doc, "select#books-finish-rating option[selected]", "value"); got != "3" {
 		t.Errorf("selected rating = %q, want the book's 3", got)
 	}
+	// Both popovers share a name so the browser keeps one open at a time;
+	// they are drawn at the same spot.
+	for _, d := range doc.QueryAll("details.books-close") {
+		if v, _ := htmlassert.Attr(d, "name"); v != "books-close" {
+			t.Errorf("close popover name = %q, want books-close (one open at a time)", v)
+		}
+	}
 	for _, f := range doc.QueryAll("details.books-close form") {
 		if _, ok := htmlassert.Attr(f, "novalidate"); !ok {
 			t.Errorf("close form %q lacks novalidate", htmlassert.Text(f))

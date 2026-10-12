@@ -165,9 +165,12 @@
      no-JS <details> popover (PATTERNS.md) that holds the date — today
      unless changed, never before the start — then an optional rating
      (Finish) or the place it stopped (Did not finish), and the button that
-     sends it. */}}
+     sends it. Both buttons' <details> share name="books-close", so the
+     browser keeps one popover open at a time: the two forms sit at the same
+     spot and would otherwise draw over each other (older browsers ignore
+     the name and behave as before). */}}
 {{define "close-reading"}}
-<details class="books-close">
+<details class="books-close" name="books-close">
 	<summary class="button books-small-btn{{if .Primary}} primary{{end}}">{{.Label}}</summary>
 	<form class="books-close-form" novalidate method="post" action="/books/{{.Action}}/{{.Book.ID}}"
 	      hx-post="/books/{{.Action}}/{{.Book.ID}}" hx-target="#books-book" hx-swap="outerHTML">

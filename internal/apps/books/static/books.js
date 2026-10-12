@@ -286,7 +286,16 @@
 			window.location.href = edit.href;
 			return true;
 		case "Escape":
-			if (closeDisclosures()) return true;
+			// Focus on a button inside the popover (Mark as read, a history
+			// edit's Save) would be left on a hidden element once it closes,
+			// so it goes back to the popover's own summary.
+			var active = document.activeElement;
+			var host = active && active.closest ? active.closest("#books-book details[open]:not(.books-history)") : null;
+			if (closeDisclosures()) {
+				var toggle = host && host.querySelector("summary");
+				if (toggle) toggle.focus();
+				return true;
+			}
 			var back = document.querySelector(".books-back");
 			if (!back) return false;
 			window.location.href = back.href;

@@ -83,7 +83,10 @@ func gcTags(ctx context.Context, tx *sql.Tx, userID int64) error {
 	return nil
 }
 
-// SetTags replaces a book's tags with names (cleaned here).
+// SetTags replaces a book's tags with names (cleaned here). The Edit page
+// saves its tags together with the rest of the book through SaveEdit, so
+// SetTags remains for callers that change only the tags; today those are
+// the tests.
 func (st *Store) SetTags(ctx context.Context, userID, id int64, names []string) error {
 	tx, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
