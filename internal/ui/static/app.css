@@ -146,7 +146,10 @@
 
 /* Off-screen but still in the layout and the accessibility tree — unlike
    display:none, which some UAs exclude from a form's implicit-submission
-   default-button search (see outline.html's #57 append button). */
+   default-button search (see outline.html's #57 append button). Also
+   selectable, for JS that needs a real textarea to copy from
+   (document.execCommand's fallback path), where display:none would make
+   .select() a no-op. */
 .visually-hidden {
 	position: absolute;
 	width: 1px;
@@ -605,18 +608,6 @@ button, .button {
 .dim { color: var(--c-text-dim); }
 .faint { color: var(--c-text-faint); font-size: var(--fs-sm); }
 .centered { max-width: 22rem; margin: var(--s-6) auto; }
-
-/* Off-screen but still selectable, for JS that needs a real textarea to copy
- * from (document.execCommand's fallback path). display:none would make
- * .select() a no-op, so this clips instead of hiding. */
-.visually-hidden {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	overflow: hidden;
-	clip: rect(0 0 0 0);
-	white-space: nowrap;
-}
 
 /* Wide content scrolls inside its own box rather than making the page
  * scroll sideways. */
