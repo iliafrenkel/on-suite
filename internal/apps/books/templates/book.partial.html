@@ -208,8 +208,10 @@
      the no-JS <details> that writes it. It has one opener (decided
      2026-10-12): with a review, the ✎ in the heading (its summary, lifted
      there by CSS), and the form stands in for the review while it is open;
-     with none yet, the quiet "Write a review" under the stars. htmx swaps
-     just this section (take-swap). Takes a bookView. */}}
+     with none yet, the quiet "Write a review" under the stars. The box
+     stops at the store's limit (#597): a refusal is the page banner, which
+     redraws the stored review. htmx swaps just this section (take-swap).
+     Takes a bookView. */}}
 {{define "take"}}
 <section class="books-section books-take" id="books-take" aria-labelledby="books-take-head">
 	<h2 class="books-section-head" id="books-take-head">Your take</h2>
@@ -222,7 +224,7 @@
 		      hx-post="/books/review/{{.ID}}" hx-target="#books-take" hx-swap="outerHTML">
 			{{template "post-ctx" .}}
 			<label for="books-review-input">Review</label>
-			<textarea id="books-review-input" name="review" rows="8">{{.Review}}</textarea>
+			<textarea id="books-review-input" name="review" rows="8" maxlength="{{.ReviewMax}}">{{.Review}}</textarea>
 			<p class="books-hint">Markdown works: **bold**, *italic*, [a link](https://…). A blank line starts a new paragraph.</p>
 			<button type="submit" class="primary">Save review</button>
 		</form>

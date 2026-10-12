@@ -392,6 +392,7 @@ type bookView struct {
 	RatingChoices []choice     // the Finish step's rating select
 	Stars         []starButton // the rating buttons
 	Review        string       // Markdown, for the edit box
+	ReviewMax     int          // the edit box's maxlength: MaxReviewRunes (#597)
 	ReviewHTML    template.HTML
 	History       []historyView // every reading, newest first
 	HistoryOpen   bool          // the history disclosure starts open: the request came from inside it
@@ -472,7 +473,7 @@ func viewBook(b Book, c listCtx, today string) bookView {
 	v := bookView{ID: b.ID, Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
 		Description: b.Description, Spine: SpineColor(b.Title), Cover: coverURL(b.ID, b.CoverVersion),
 		ShelfLabel: b.Shelf.Label(), BackLabel: listHeading(c), Tags: tagLinks(b.Tags), Today: today, Pages: b.Pages,
-		Rating: b.Rating, Stars: starButtons(b.Rating), Review: b.Review, ReviewHTML: RenderReview(b.Review), Ctx: c}
+		Rating: b.Rating, Stars: starButtons(b.Rating), Review: b.Review, ReviewMax: MaxReviewRunes, ReviewHTML: RenderReview(b.Review), Ctx: c}
 	v.DescriptionLong = longDescription(b.Description)
 	if b.SeriesName != "" {
 		v.Series = seriesText(b.SeriesName, b.SeriesNumber)

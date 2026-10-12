@@ -136,6 +136,19 @@ func TestRatingOverHTMXRefreshesTheFinishRating(t *testing.T) {
 	htmlassert.Parse(t, rec.Body.String()).MustNotHave("#books-reading") // nothing to finish, nothing to refresh
 }
 
+// The review box stops at the store's limit, so a long review is never
+// typed only to be refused and lost (#597). Browsers count maxlength in
+// UTF-16 units, never more than the store's runes, so it can't let through
+// more than the store takes.
+func TestTheReviewBoxStopsAtTheLimit(t *testing.T) {
+	s := newServer(t)
+	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfRead))
+	doc := s.Get(t, s.Alice, fmt.Sprintf("/books/b/%d?shelf=read", id))
+	if got, want := attr(t, doc, "textarea#books-review-input", "maxlength"), fmt.Sprint(books.MaxReviewRunes); got != want {
+		t.Errorf("review box maxlength = %q, want %s", got, want)
+	}
+}
+
 func TestARefusedReviewShowsTheBannerOnThePage(t *testing.T) {
 	s := newServer(t)
 	id := add(t, s, s.Alice.User.ID, titled("Dune", "", books.ShelfRead))
