@@ -26,7 +26,7 @@ func (s Shelf) Label() string { return shelfLabels[s] }
 // tag, one series and a title/author filter. GETs carry it in the query
 // string and POSTs in hidden fields (ctx-fields), so whatever a change
 // re-renders comes back to the same list — the lesson of Reader's
-// reader-ctx. Its fields are ListQuery's, in the same order.
+// reader-ctx. ListQuery has these fields too, and the order.
 type listCtx struct {
 	Shelf  Shelf
 	Tag    string

@@ -99,7 +99,7 @@ func (a *App) renderPanes(w http.ResponseWriter, r *http.Request, userID int64, 
 		a.fail(w, r, err)
 		return
 	}
-	items, err := a.store.List(ctx, userID, ListQuery(c)) // same fields, by design
+	items, err := a.store.List(ctx, userID, ListQuery{Shelf: c.Shelf, Tag: c.Tag, Q: c.Q, Series: c.Series})
 	if err != nil {
 		a.fail(w, r, err)
 		return

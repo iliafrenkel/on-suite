@@ -121,6 +121,35 @@ func (st *Store) TagNames(ctx context.Context, userID int64) ([]string, error) {
 	return st.names(ctx, `SELECT name FROM books_tags WHERE user_id = ? ORDER BY name`, userID)
 }
 
+// TagsByBook returns the names of the tags on each of userID's books,
+// alphabetically, keyed by book id; a book with no tags has no entry. The
+// home page's tiles show them (UI redesign spec "Book tile"). One query
+// for the whole library, which is a personal one: a few hundred books.
+func (st *Store) TagsByBook(ctx context.Context, userID int64) (map[int64][]string, error) {
+	rows, err := st.db.QueryContext(ctx, `
+		SELECT x.book_id, t.name FROM books_book_tags x
+		  JOIN books_tags t ON t.id = x.tag_id
+		 WHERE t.user_id = ?
+		 ORDER BY x.book_id, t.name`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("books: tags by book: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[int64][]string{}
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, fmt.Errorf("books: scan tags by book: %w", err)
+		}
+		out[id] = append(out[id], name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("books: tags by book: %w", err)
+	}
+	return out, nil
+}
+
 func (st *Store) names(ctx context.Context, query string, args ...any) ([]string, error) {
 	rows, err := st.db.QueryContext(ctx, query, args...)
 	if err != nil {
