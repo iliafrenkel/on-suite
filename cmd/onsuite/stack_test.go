@@ -78,6 +78,17 @@ func TestHomePageShowsRealCards(t *testing.T) {
 	}
 }
 
+func TestHomeCardIconCarriesTheAppColour(t *testing.T) {
+	rec := httptest.NewRecorder()
+	testHomeHandler(t).ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	badge := doc.MustHave("a.app-card div.swatch-c-blue")
+	if class, _ := htmlassert.Attr(badge, "class"); !strings.Contains(" "+class+" ", " app-card-icon ") {
+		t.Errorf("paste's swatch-c-blue element has class %q, want it on the app-card-icon badge", class)
+	}
+}
+
 // An app that is registered is by definition no longer coming soon; leaving
 // it in comingSoonApps makes the home page announce a shipped app as future
 // work.
