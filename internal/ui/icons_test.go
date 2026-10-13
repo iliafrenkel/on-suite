@@ -52,3 +52,42 @@ func TestIconStrokeWidthIsConsistent(t *testing.T) {
 		}
 	}
 }
+
+func TestAppColorClassForKnownApps(t *testing.T) {
+	want := map[string]string{
+		"notes":  "swatch-c-amber",
+		"paste":  "swatch-c-blue",
+		"reader": "swatch-c-coral",
+		"later":  "swatch-c-purple",
+		"books":  "swatch-c-green",
+		"flash":  "swatch-c-pink",
+		"focus":  "swatch-c-teal",
+		"admin":  "swatch-c-gray",
+	}
+	for id, w := range want {
+		if got := ui.AppColorClass(id); got != w {
+			t.Errorf("AppColorClass(%q) = %q, want %q", id, got, w)
+		}
+	}
+}
+
+func TestAppColorClassFallsBackToGray(t *testing.T) {
+	if got := ui.AppColorClass("some-future-app"); got != "swatch-c-gray" {
+		t.Errorf("AppColorClass(unknown) = %q, want swatch-c-gray", got)
+	}
+}
+
+// Icons take their colour from CSS (the swatch class on their container),
+// so none may hard-code the suite accent any more. var(--c-accent-bg) as a
+// CSS fallback is fine; the bare accent is not.
+func TestIconsDrawInCurrentColor(t *testing.T) {
+	for _, id := range []string{"paste", "notes", "reader", "flash", "admin", "later", "focus", "books", "some-future-app"} {
+		got := string(ui.IconFor(id))
+		if strings.Contains(got, "var(--c-accent)") {
+			t.Errorf("IconFor(%q) still uses var(--c-accent)", id)
+		}
+		if !strings.Contains(got, "currentColor") {
+			t.Errorf("IconFor(%q) has no currentColor", id)
+		}
+	}
+}

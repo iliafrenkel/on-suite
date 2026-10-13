@@ -93,6 +93,27 @@ func TestComingSoonAppsExcludesRegisteredApps(t *testing.T) {
 	}
 }
 
+// Spec 2026-10-13-app-identity-colours §3: every registered app has a
+// colour of its own (not the gray fallback), and no two share one — Admin's
+// gray included — so apps stay recognisable at a glance as more are added.
+func TestEveryRegisteredAppHasItsOwnColour(t *testing.T) {
+	gray := ui.AppColorClass("admin")
+	owner := map[string]string{gray: "admin"}
+	for _, a := range registeredApps() {
+		id := a.Meta().ID
+		c := ui.AppColorClass(id)
+		if c == gray {
+			t.Errorf("%q has no colour in internal/ui/icons.go's appColors; give it an unused swatch (add one to the shared palette if all are taken)", id)
+			continue
+		}
+		if prev, dup := owner[c]; dup {
+			t.Errorf("%q and %q both use %s; every app needs its own colour", prev, id, c)
+			continue
+		}
+		owner[c] = id
+	}
+}
+
 func TestHomePageFooterShowsVersion(t *testing.T) {
 	rec := httptest.NewRecorder()
 	testHomeHandler(t).ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))

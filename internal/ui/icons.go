@@ -1,65 +1,57 @@
 package ui
 
-// Icon lookup for the sidebar and home-page cards. Icons are looked up by
-// app id rather than carried on app.Meta, so a "coming soon" placeholder for
-// an app that does not exist yet in code can still get one.
+// Icon and colour lookup for the sidebar and home-page cards. Both are looked
+// up by app id rather than carried on app.Meta, so a "coming soon"
+// placeholder for an app that does not exist yet in code can still get one.
 
 import "html/template"
 
 var icons = map[string]template.HTML{
 	"paste": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>
-		<path d="M7 9h10M7 13h10M7 17h6" stroke="var(--c-accent)" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+		<path d="M7 9h10M7 13h10M7 17h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>
 	</svg>`,
 	// The three dots are the one deliberate exception to "no solid fills":
 	// at this scale a hollow circle reads as an empty ring, not a bullet
 	// point, so the glyph itself would stop looking like notes/an outline.
 	"notes": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>
-		<circle cx="8" cy="9" r="1.3" fill="var(--c-accent)"/>
-		<circle cx="8" cy="13" r="1.3" fill="var(--c-accent)"/>
-		<circle cx="8" cy="17" r="1.3" fill="var(--c-accent)"/>
-		<path d="M11.5 9h7M11.5 13h7M11.5 17h4" stroke="var(--c-accent)" stroke-width="1.5" stroke-linecap="round"/>
+		<circle cx="8" cy="9" r="1.3" fill="currentColor"/>
+		<circle cx="8" cy="13" r="1.3" fill="currentColor"/>
+		<circle cx="8" cy="17" r="1.3" fill="currentColor"/>
+		<path d="M11.5 9h7M11.5 13h7M11.5 17h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 	</svg>`,
 	"reader": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>
-		<circle cx="7" cy="17" r="1.5" fill="var(--c-accent)"/>
-		<path d="M7 12.5a4.5 4.5 0 0 1 4.5 4.5" stroke="var(--c-accent)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-		<path d="M7 8a9 9 0 0 1 9 9" stroke="var(--c-accent)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+		<circle cx="7" cy="17" r="1.5" fill="currentColor"/>
+		<path d="M7 12.5a4.5 4.5 0 0 1 4.5 4.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+		<path d="M7 8a9 9 0 0 1 9 9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
 	</svg>`,
 	// A bookmark: something set aside to come back to.
 	"later": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>
-		<path d="M8.5 6.5h7v11l-3.5-2.6-3.5 2.6z" fill="none" stroke="var(--c-accent)" stroke-width="1.5" stroke-linejoin="round"/>
+		<path d="M8.5 6.5h7v11l-3.5-2.6-3.5 2.6z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
 	</svg>`,
 	// An open book: two pages meeting at the spine.
 	"books": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>
-		<path d="M12 8.5C10.4 7.3 8.6 6.9 6.5 7v9.5c2.1-.1 3.9.3 5.5 1.5 1.6-1.2 3.4-1.6 5.5-1.5V7c-2.1-.1-3.9.3-5.5 1.5zM12 8.5V18" fill="none" stroke="var(--c-accent)" stroke-width="1.5" stroke-linejoin="round"/>
+		<path d="M12 8.5C10.4 7.3 8.6 6.9 6.5 7v9.5c2.1-.1 3.9.3 5.5 1.5 1.6-1.2 3.4-1.6 5.5-1.5V7c-2.1-.1-3.9.3-5.5 1.5zM12 8.5V18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
 	</svg>`,
 	// A stopwatch: a ring with the crown on top.
 	"focus": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>
-		<circle cx="12" cy="13.5" r="5" fill="none" stroke="var(--c-accent)" stroke-width="1.5"/>
-		<path d="M12 13.5V11M10.5 6.5h3" stroke="var(--c-accent)" stroke-width="1.5" stroke-linecap="round"/>
+		<circle cx="12" cy="13.5" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+		<path d="M12 13.5V11M10.5 6.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 	</svg>`,
 	"admin": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>
-		<path d="M12 6l5 2.2v3.4c0 3-2.1 5.2-5 6.4-2.9-1.2-5-3.4-5-6.4V8.2L12 6z" fill="none" stroke="var(--c-accent)" stroke-width="1.5" stroke-linejoin="round"/>
+		<path d="M12 6l5 2.2v3.4c0 3-2.1 5.2-5 6.4-2.9-1.2-5-3.4-5-6.4V8.2L12 6z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
 	</svg>`,
 	// Was a solid-filled bolt; redrawn as an outline so it matches the other
 	// four tiles instead of being the one duotone/filled glyph among them.
 	"flash": `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-		<rect x="2" y="2" width="20" height="20" rx="5" fill="none"/>
-		<path d="M13 6 8 13h4l-1 5 6-8h-4l1-4z" fill="none" stroke="var(--c-accent)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+		<path d="M13 6 8 13h4l-1 5 6-8h-4l1-4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
 	</svg>`,
 }
 
 const fallbackIcon = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-	<rect x="1" y="1" width="10" height="10" rx="3" fill="var(--c-accent)"/>
-	<rect x="13" y="1" width="10" height="10" rx="3" fill="var(--c-accent-bg)"/>
-	<rect x="1" y="13" width="10" height="10" rx="3" fill="var(--c-accent-bg)"/>
-	<rect x="13" y="13" width="10" height="10" rx="3" fill="var(--c-accent)"/>
+	<rect x="1" y="1" width="10" height="10" rx="3" fill="currentColor"/>
+	<rect x="13" y="1" width="10" height="10" rx="3" fill="var(--swatch-soft, var(--c-accent-bg))"/>
+	<rect x="1" y="13" width="10" height="10" rx="3" fill="var(--swatch-soft, var(--c-accent-bg))"/>
+	<rect x="13" y="13" width="10" height="10" rx="3" fill="currentColor"/>
 </svg>`
 
 // IconFor returns the icon markup for a known app id, or a generic tile icon
@@ -71,4 +63,32 @@ func IconFor(id string) template.HTML {
 		return svg
 	}
 	return template.HTML(fallbackIcon)
+}
+
+// appColors gives each app one swatch from the shared palette (app.css,
+// "Colour swatches") so it can be recognised at a glance on the home page and
+// in the sidebar. Every registered app needs its own, unused entry —
+// TestEveryRegisteredAppHasItsOwnColour in cmd/onsuite enforces it. When all
+// swatches are taken, add a new one to the palette rather than reuse one.
+// Gray is reserved for Admin and anything without an entry. See
+// docs/superpowers/specs/2026-10-13-app-identity-colours-design.md.
+var appColors = map[string]string{
+	"notes":  "amber",
+	"paste":  "blue",
+	"reader": "coral",
+	"later":  "purple",
+	"books":  "green",
+	"flash":  "pink",
+	"focus":  "teal",
+	"admin":  "gray",
+}
+
+// AppColorClass returns the swatch-c-<name> class carrying an app's colour,
+// or swatch-c-gray for an id without one. A class rather than a style
+// attribute because the CSP forbids style="".
+func AppColorClass(id string) string {
+	if c, ok := appColors[id]; ok {
+		return "swatch-c-" + c
+	}
+	return "swatch-c-gray"
 }

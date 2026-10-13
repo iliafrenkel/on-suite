@@ -249,8 +249,12 @@ list of registered apps and will fail until you add yours:
 `TestOpenDatabaseSkipsMigrationsForADisabledApp` and
 `TestOpenDatabaseExportBuildsAConfigLiteralSoDisablingNeverApplies`.
 
-Give the app an icon in `internal/ui/icons.go`, keyed by its ID. Without one
-the sidebar and dashboard fall back to a generic tile.
+Give the app an icon and a colour in `internal/ui/icons.go`, both keyed by
+its ID. Without an icon the sidebar and dashboard fall back to a generic
+tile. The colour must be a swatch no other app uses. If every swatch in
+app.css's shared palette is taken, add a new one (light, soft, dark-soft and
+`--swatch-line` values, each at least 3:1 against the surfaces it sits on)
+rather than reuse one.
 
 Write a user guide, `docs/user/<id>.md`, following the existing guides'
 outline (see [ON Paste's](../user/paste.md) for the shape, and
@@ -331,6 +335,7 @@ func TestIndexGreetsTheSignedInUser(t *testing.T) {
 | `TestReadabilityIsContained`, `TestFSRSIsContained`, `TestGoldmarkIsContained` | you import go-readability, go-fsrs or goldmark outside their one allowed file |
 | `TestDocsIsALeaf` | `docs/embed.go` imports anything but `embed`/`io/fs` |
 | `TestBuildStackServesHelpForEveryRegisteredApp` | your app has no `docs/user/<id>.md` guide, or it's missing from `order` in `internal/platform/help/pages.go` |
+| `TestEveryRegisteredAppHasItsOwnColour` | your app has no colour in `internal/ui/icons.go`, or shares one with another app |
 | `Meta.Validate`, `Registry.Mount` (at startup) | bad ID or name, no templates, no routes |
 
 **Next:** [Testing](testing.md)
