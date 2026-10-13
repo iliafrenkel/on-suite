@@ -71,6 +71,10 @@ Applies to:
 - App-tile icons in [icons.go](../../../internal/ui/icons.go) (Notes, Paste,
   Reader, Admin, Flash) — redrawn from their current duotone-tile style to
   the thin-line style, still tinted with `var(--c-accent)`
+  — **superseded for colour on 2026-10-13:** app-tile and sidebar icons now
+  draw in `currentColor`, coloured per app; see
+  [App Identity Colours](2026-10-13-app-identity-colours-design.md). Line
+  style and stroke weight are unchanged.
 - ON Notes toolbar/menu icons (new, see §4) — Due, Archive, Export, Import,
   Hide-completed, Shortcuts disclosure
 
