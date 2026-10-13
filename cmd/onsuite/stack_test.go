@@ -78,6 +78,17 @@ func TestHomePageShowsRealCards(t *testing.T) {
 	}
 }
 
+func TestHomeCardIconCarriesTheAppColour(t *testing.T) {
+	rec := httptest.NewRecorder()
+	testHomeHandler(t).ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+
+	doc := htmlassert.Parse(t, rec.Body.String())
+	badge := doc.MustHave("a.app-card div.swatch-c-blue")
+	if class, _ := htmlassert.Attr(badge, "class"); !strings.Contains(" "+class+" ", " app-card-icon ") {
+		t.Errorf("paste's swatch-c-blue element has class %q, want it on the app-card-icon badge", class)
+	}
+}
+
 // An app that is registered is by definition no longer coming soon; leaving
 // it in comingSoonApps makes the home page announce a shipped app as future
 // work.
@@ -90,6 +101,27 @@ func TestComingSoonAppsExcludesRegisteredApps(t *testing.T) {
 		if registered[a.ID] {
 			t.Errorf("%q (%s) is registered in registeredApps() but still listed in comingSoonApps", a.ID, a.Name)
 		}
+	}
+}
+
+// Spec 2026-10-13-app-identity-colours §3: every registered app has a
+// colour of its own (not the gray fallback), and no two share one — Admin's
+// gray included — so apps stay recognisable at a glance as more are added.
+func TestEveryRegisteredAppHasItsOwnColour(t *testing.T) {
+	gray := ui.AppColorClass("admin")
+	owner := map[string]string{gray: "admin"}
+	for _, a := range registeredApps() {
+		id := a.Meta().ID
+		c := ui.AppColorClass(id)
+		if c == gray {
+			t.Errorf("%q has no colour in internal/ui/icons.go's appColors; give it an unused swatch (add one to the shared palette if all are taken)", id)
+			continue
+		}
+		if prev, dup := owner[c]; dup {
+			t.Errorf("%q and %q both use %s; every app needs its own colour", prev, id, c)
+			continue
+		}
+		owner[c] = id
 	}
 }
 

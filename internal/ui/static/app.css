@@ -452,11 +452,17 @@ kbd {
 	overflow: hidden;
 }
 
+/* Each app's glyph in its own colour (spec 2026-10-13-app-identity-colours).
+ * The fallbacks keep an item without a swatch class looking as it used to. */
+.sidebar-item svg { flex: none; color: var(--swatch-line, var(--c-accent)); }
+
 .sidebar-item:not(.sidebar-item-disabled):hover { background: var(--c-bg-inset); color: var(--c-text); }
 
+/* The active app's row picks up its own soft tint; the label stays in the
+ * normal text colour so the tint, not the text, carries the identity. */
 .sidebar-item[aria-current="page"] {
-	background: var(--c-accent-bg);
-	color: var(--c-accent);
+	background: var(--swatch-soft, var(--c-accent-bg));
+	color: var(--c-text);
 	font-weight: 600;
 }
 
@@ -637,7 +643,21 @@ button, .button {
 .app-card h3 { margin: var(--s-3) 0 var(--s-1); }
 .app-card p { margin: 0; }
 
-.app-card-icon { width: 2.5rem; height: 2.5rem; }
+/* A soft badge in the app's own colour, so each tile is recognisable before
+ * its name is read (spec 2026-10-13-app-identity-colours §4.1). The glyph is
+ * still the thin line icon; only its colour and the tint behind it are per app. */
+.app-card-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.5rem;
+	height: 2.5rem;
+	border-radius: calc(var(--radius) + var(--s-1));
+	background: var(--swatch-soft, var(--c-accent-bg));
+	color: var(--swatch-line, var(--c-accent));
+}
+
+.app-card-icon svg { width: 1.625rem; height: 1.625rem; }
 
 /* Equal card area for a shipped app and three that don't exist yet reads as
  * "this is a mockup." One muted line carries the same information without
@@ -2646,24 +2666,27 @@ kbd {
  * The CSP forbids style="", so a user-picked colour arrives as a
  * swatch-c-<name> class that sets --swatch/--swatch-soft for everything
  * inside it. Apps keep their own copy of the name list (they never import
- * each other); these classes are the shared part. */
+ * each other); these classes are the shared part.
+ * --swatch-line is the glyph colour for app icons (home badge, sidebar):
+ * at least 3:1 on --swatch-soft and on the page/sidebar surfaces in both
+ * themes. See docs/superpowers/specs/2026-10-13-app-identity-colours-design.md §6. */
 
-.swatch-c-teal   { --swatch: #1D9E75; --swatch-soft: #E1F5EE; }
-.swatch-c-blue   { --swatch: #378ADD; --swatch-soft: #E6F1FB; }
-.swatch-c-purple { --swatch: #7F77DD; --swatch-soft: #EEEDFE; }
-.swatch-c-pink   { --swatch: #D4537E; --swatch-soft: #FBEAF0; }
-.swatch-c-coral  { --swatch: #D85A30; --swatch-soft: #FAECE7; }
-.swatch-c-amber  { --swatch: #BA7517; --swatch-soft: #FAEEDA; }
-.swatch-c-green  { --swatch: #639922; --swatch-soft: #EAF3DE; }
-.swatch-c-gray   { --swatch: #888780; --swatch-soft: #F1EFE8; }
-:root[data-theme="dark"] .swatch-c-teal   { --swatch-soft: #085041; }
-:root[data-theme="dark"] .swatch-c-blue   { --swatch-soft: #0C447C; }
-:root[data-theme="dark"] .swatch-c-purple { --swatch-soft: #3C3489; }
-:root[data-theme="dark"] .swatch-c-pink   { --swatch-soft: #72243E; }
-:root[data-theme="dark"] .swatch-c-coral  { --swatch-soft: #712B13; }
-:root[data-theme="dark"] .swatch-c-amber  { --swatch-soft: #633806; }
-:root[data-theme="dark"] .swatch-c-green  { --swatch-soft: #27500A; }
-:root[data-theme="dark"] .swatch-c-gray   { --swatch-soft: #444441; }
+.swatch-c-teal   { --swatch: #1D9E75; --swatch-soft: #E1F5EE; --swatch-line: #188D6A; }
+.swatch-c-blue   { --swatch: #378ADD; --swatch-soft: #E6F1FB; --swatch-line: #2C7BC9; }
+.swatch-c-purple { --swatch: #7F77DD; --swatch-soft: #EEEDFE; --swatch-line: #7067D0; }
+.swatch-c-pink   { --swatch: #D4537E; --swatch-soft: #FBEAF0; --swatch-line: #BF4870; }
+.swatch-c-coral  { --swatch: #D85A30; --swatch-soft: #FAECE7; --swatch-line: #C25029; }
+.swatch-c-amber  { --swatch: #BA7517; --swatch-soft: #FAEEDA; --swatch-line: #A76813; }
+.swatch-c-green  { --swatch: #639922; --swatch-soft: #EAF3DE; --swatch-line: #558A1C; }
+.swatch-c-gray   { --swatch: #888780; --swatch-soft: #F1EFE8; --swatch-line: #7A7973; }
+:root[data-theme="dark"] .swatch-c-teal   { --swatch-soft: #085041; --swatch-line: #5DCAA5; }
+:root[data-theme="dark"] .swatch-c-blue   { --swatch-soft: #0C447C; --swatch-line: #85B7EB; }
+:root[data-theme="dark"] .swatch-c-purple { --swatch-soft: #3C3489; --swatch-line: #AFA9EC; }
+:root[data-theme="dark"] .swatch-c-pink   { --swatch-soft: #72243E; --swatch-line: #ED93B1; }
+:root[data-theme="dark"] .swatch-c-coral  { --swatch-soft: #712B13; --swatch-line: #F0997B; }
+:root[data-theme="dark"] .swatch-c-amber  { --swatch-soft: #633806; --swatch-line: #EF9F27; }
+:root[data-theme="dark"] .swatch-c-green  { --swatch-soft: #27500A; --swatch-line: #97C459; }
+:root[data-theme="dark"] .swatch-c-gray   { --swatch-soft: #444441; --swatch-line: #B4B2A9; }
 
 /* ---- ON Flash: home screen (UI overhaul U1) ------------------------------
  * Spec: docs/superpowers/specs/2026-09-23-on-flash-ui-overhaul-design.md. */

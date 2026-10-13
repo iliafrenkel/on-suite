@@ -458,6 +458,47 @@ func TestIconFuncIsAvailableInTemplates(t *testing.T) {
 	}
 }
 
+// Spec 2026-10-13-app-identity-colours §4.2: each sidebar item carries its
+// app's swatch class (Admin's is gray), so CSS can colour the glyph and tint
+// the active row.
+func TestSidebarItemsCarryTheirAppColour(t *testing.T) {
+	r := testRenderer(t)
+	rec := httptest.NewRecorder()
+
+	err := r.Page(rec, http.StatusOK, "error", render.Page{
+		Title: "Not found",
+		Shell: render.Shell{
+			LoggedIn:  true,
+			IsAdmin:   true,
+			Username:  "ilia",
+			CSRFToken: "tok123",
+			ActiveApp: "notes",
+			Apps: []render.NavItem{
+				{ID: "paste", Name: "ON Paste", Path: "/paste/"},
+				{ID: "notes", Name: "ON Notes", Path: "/notes/"},
+			},
+		},
+		Data: map[string]any{"Status": 404, "Title": "Not found", "Message": "no such page"},
+	})
+	if err != nil {
+		t.Fatalf("Page: %v", err)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+
+	for sel, want := range map[string]string{
+		"nav.shell-nav a.swatch-c-blue":  "ON Paste",
+		"nav.shell-nav a.swatch-c-amber": "ON Notes",
+		"nav.shell-nav a.swatch-c-gray":  "Admin",
+	} {
+		if got := htmlassert.Text(doc.MustHave(sel)); got != want {
+			t.Errorf("%s text = %q, want %q", sel, got, want)
+		}
+	}
+	if _, ok := htmlassert.Attr(doc.MustHave("nav.shell-nav a.swatch-c-amber"), "aria-current"); !ok {
+		t.Error("the active app's item (notes, amber) is not marked aria-current")
+	}
+}
+
 func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 	r := testRenderer(t)
 	rec := httptest.NewRecorder()
