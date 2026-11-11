@@ -2,12 +2,13 @@ package web
 
 import "net/http"
 
-// Cookie names for the three display preferences. These are written entirely
+// Cookie names for the display preferences. These are written entirely
 // client-side, by theme.js — the server only ever reads them, so setting one
 // is never a CSRF-relevant action.
 const (
 	ThemeCookieName   = "onsuite_theme"
 	FontCookieName    = "onsuite_font"
+	PaletteCookieName = "onsuite_palette"
 	SidebarCookieName = "onsuite_sidebar"
 )
 
@@ -41,4 +42,13 @@ func FontFrom(r *http.Request) string {
 func SidebarCollapsedFrom(r *http.Request) bool {
 	c, err := r.Cookie(SidebarCookieName)
 	return err == nil && c.Value == "collapsed"
+}
+
+// PaletteFrom reads the colour-palette preference, defaulting to "warm"
+// (cream and teal).
+func PaletteFrom(r *http.Request) string {
+	if c, err := r.Cookie(PaletteCookieName); err == nil && c.Value == "ink" {
+		return "ink"
+	}
+	return "warm"
 }

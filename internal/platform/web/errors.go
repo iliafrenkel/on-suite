@@ -68,6 +68,7 @@ func (e *Errors) Status(w http.ResponseWriter, r *http.Request, status int) {
 			ActiveApp:        ActiveApp(r.Context()),
 			Theme:            ThemeFrom(r),
 			Font:             FontFrom(r),
+			Palette:          PaletteFrom(r),
 			SidebarCollapsed: SidebarCollapsedFrom(r),
 			Version:          e.Version,
 		},

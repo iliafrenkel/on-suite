@@ -50,6 +50,21 @@
 		});
 	}
 
+	function initPaletteSwitch() {
+		var group = document.querySelector("[data-palette-switch]");
+		if (!group) return;
+		var buttons = group.querySelectorAll("[data-palette-value]");
+		markActive(buttons, "data-palette-value", document.documentElement.getAttribute("data-palette"));
+		buttons.forEach(function (btn) {
+			btn.addEventListener("click", function () {
+				var value = btn.getAttribute("data-palette-value");
+				document.documentElement.setAttribute("data-palette", value);
+				setCookie("onsuite_palette", value);
+				markActive(buttons, "data-palette-value", value);
+			});
+		});
+	}
+
 	function initSidebarToggle() {
 		var sidebar = document.querySelector("[data-sidebar]");
 		var toggle = document.querySelector("[data-sidebar-toggle]");
@@ -297,6 +312,7 @@
 
 	initThemeSwitch();
 	initFontSwitch();
+	initPaletteSwitch();
 	initSidebarToggle();
 	initUserMenu();
 	initCopyLink();

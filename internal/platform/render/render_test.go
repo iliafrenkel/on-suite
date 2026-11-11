@@ -177,6 +177,7 @@ func TestShellPutsUserActionsBehindOneMenu(t *testing.T) {
 	}
 	doc.MustHave(panel + " [data-theme-switch]")
 	doc.MustHave(panel + " [data-font-switch]")
+	doc.MustHave(panel + " [data-palette-switch]")
 }
 
 // TestShellHasConnectivityIndicator covers the element connectivity.js
@@ -510,6 +511,7 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 			Username:      "ilia",
 			Theme:         "dark",
 			Font:          "serif",
+			Palette:       "ink",
 			ActiveApp:     "paste",
 			ActiveAppName: "ON Paste",
 			ActiveAppPath: "/paste/",
@@ -526,12 +528,15 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
 
-	// data-theme/data-font land on <html>, set from the very first response.
+	// data-theme/data-font/data-palette land on <html>, set from the very first response.
 	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-theme"); v != "dark" {
 		t.Errorf("data-theme = %q, want dark", v)
 	}
 	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-font"); v != "serif" {
 		t.Errorf("data-font = %q, want serif", v)
+	}
+	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-palette"); v != "ink" {
+		t.Errorf("data-palette = %q, want ink", v)
 	}
 
 	// Breadcrumbs: Home / ON Paste / New snippet.

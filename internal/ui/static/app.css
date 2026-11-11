@@ -142,6 +142,46 @@
 	--c-danger-bg:   #3a1e22;
 }
 
+/* The "Paper and ink" palette: near-black on off-white, a navy accent, red
+ * for attention. data-palette is set server-side from a cookie (prefs.go,
+ * PaletteFrom) exactly like data-theme, and always carries "warm" or "ink";
+ * the warm palette is simply the :root tokens above, so it needs no block of
+ * its own. Palette and theme are independent, hence one block per pairing.
+ *
+ * It overrides colours only: fonts stay with the Font setting, and the
+ * per-app swatches and Flash grade colours deliberately stay the same in
+ * every palette. Every pairing that #556 holds the warm tokens to (text,
+ * dim and accent on each background, faint on --c-bg and --c-bg-subtle,
+ * attention on its own tint) measures at least as high here. */
+:root[data-palette="ink"] {
+	--c-bg:          #fdfcf9;
+	--c-bg-subtle:   #f4f1ea;
+	--c-bg-inset:    #ebe7de;
+	--c-border:      #e2ddd2;
+	--c-border-firm: #c4bdb0;
+	--c-text:        #1c1b19;
+	--c-text-dim:    #5c5850;
+	--c-text-faint:  #6b665d;
+	--c-accent:      #1d3a6b;
+	--c-accent-bg:   #e3e8f1;
+	--c-accent-attention:    #b3261e;
+	--c-accent-attention-bg: #f9e3e1;
+}
+:root[data-palette="ink"][data-theme="dark"] {
+	--c-bg:          #191817;
+	--c-bg-subtle:   #201f1d;
+	--c-bg-inset:    #262522;
+	--c-border:      #33312d;
+	--c-border-firm: #4a4741;
+	--c-text:        #ebe7df;
+	--c-text-dim:    #aaa49a;
+	--c-text-faint:  #948e84;
+	--c-accent:      #8eaadb;
+	--c-accent-bg:   #1f2a3d;
+	--c-accent-attention:    #ef8a80;
+	--c-accent-attention-bg: #3b1f1d;
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 
 /* Off-screen but still in the layout and the accessibility tree — unlike
@@ -367,7 +407,8 @@ kbd {
 .shell-menu-settings .field:last-child { margin-bottom: 0; }
 .shell-menu-settings .row { flex-wrap: wrap; margin-top: var(--s-1); }
 .shell-menu-settings button[data-theme-value].active,
-.shell-menu-settings button[data-font-value].active {
+.shell-menu-settings button[data-font-value].active,
+.shell-menu-settings button[data-palette-value].active {
 	background: var(--c-accent-bg);
 	color: var(--c-accent);
 	border-color: var(--c-accent);
@@ -3975,6 +4016,9 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 }
 /* 4.8:1 under the pills' dark text; the old #7a6c5d was 3.6. */
 :root[data-theme="dark"] .focus-runner { --focus-break: #8f806e; }
+/* The ink palette is neutral rather than warm, so its break grey is too. */
+:root[data-palette="ink"] .focus-runner { --focus-break: #a29d94; }
+:root[data-palette="ink"][data-theme="dark"] .focus-runner { --focus-break: #8a857d; }
 .focus-runner-break { --focus-ring: var(--focus-break); }
 .focus-runner [hidden] { display: none; }
 
