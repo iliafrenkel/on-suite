@@ -35,6 +35,13 @@ Agents open PRs but never merge them. Agent sessions run as the
 merges every PR. Don't run `gh pr merge`, enable auto-merge, or approve
 your own PRs.
 
+Pace GitHub writes. A burst of 44 API writes once got the agent account
+spam-flagged for over a month. Leave at least ~5 seconds between writes
+that create content (issues, PRs, comments, label or milestone edits), and
+make no more than ~10 in one go. If a task needs more, file fewer, bigger
+items (one issue with a checklist) or check with a human and spread them
+out. Don't retry a failed write in a tight loop.
+
 Before writing new code, check [PATTERNS.md](PATTERNS.md) — an index of
 recurring patterns this codebase already has a deliberate answer for
 (error-surfacing, view-model projection, store test conventions, and more).
