@@ -164,7 +164,8 @@ func TestLoginPageRenders(t *testing.T) {
 func TestLoginPageRespectsThemeCookie(t *testing.T) {
 	f := newAuthFixture(t)
 	req := httptest.NewRequest("GET", "/login", nil)
-	rec := f.do(t, req, &http.Cookie{Name: web.ThemeCookieName, Value: "dark"})
+	rec := f.do(t, req, &http.Cookie{Name: web.ThemeCookieName, Value: "dark"},
+		&http.Cookie{Name: web.PaletteCookieName, Value: "ink"})
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -173,6 +174,9 @@ func TestLoginPageRespectsThemeCookie(t *testing.T) {
 	html := doc.MustHave("html")
 	if theme, _ := htmlassert.Attr(html, "data-theme"); theme != "dark" {
 		t.Errorf("<html> data-theme = %q, want %q", theme, "dark")
+	}
+	if palette, _ := htmlassert.Attr(html, "data-palette"); palette != "ink" {
+		t.Errorf("<html> data-palette = %q, want %q", palette, "ink")
 	}
 }
 

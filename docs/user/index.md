@@ -82,6 +82,9 @@ Click your name in the top right corner to open the user menu.
   elsewhere it opens the welcome guide.
 - **Display** — change how ON Suite looks:
   - **Theme:** **Light** or **Dark**.
+  - **Palette:** **Warm** (cream with teal, the original look) or **Ink**
+    (near-black on off-white paper, with navy). Each works in both light
+    and dark themes.
   - **Font:** **Default**, **Serif** (a classic book style) or **Duo** (a
     typewriter style).
 

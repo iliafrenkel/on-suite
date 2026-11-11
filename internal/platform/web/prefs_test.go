@@ -58,6 +58,26 @@ func TestFontFrom(t *testing.T) {
 	}
 }
 
+func TestPaletteFrom(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"no cookie defaults to warm", "", "warm"},
+		{"explicit warm", "warm", "warm"},
+		{"explicit ink", "ink", "ink"},
+		{"garbage value defaults to warm", "neon", "warm"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := PaletteFrom(withCookie(PaletteCookieName, tt.value)); got != tt.want {
+				t.Errorf("PaletteFrom = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSidebarCollapsedFrom(t *testing.T) {
 	tests := []struct {
 		name  string
