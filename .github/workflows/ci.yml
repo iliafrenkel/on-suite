@@ -99,7 +99,7 @@ jobs:
         # that doesn't yet understand a newer go.mod Go directive (as has
         # happened historically) can't turn CI red with no code change here;
         # bump this deliberately instead.
-        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.0 ./...
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 
       - name: go mod tidy is clean
         run: |

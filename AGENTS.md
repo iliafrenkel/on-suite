@@ -61,7 +61,7 @@ Full check (must stay green on every commit; mirrors CI in
 ```bash
 gofmt -l .                                              # must print nothing
 go vet ./...
-go run honnef.co/go/tools/cmd/staticcheck@v0.8.0 ./...  # pinned version, not @latest
+go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...  # pinned version, not @latest
 go mod tidy && git diff --exit-code go.mod go.sum
 go test ./... -race -count=1
 ```
