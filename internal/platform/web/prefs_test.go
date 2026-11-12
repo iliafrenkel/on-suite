@@ -41,13 +41,16 @@ func TestFontFrom(t *testing.T) {
 		value string
 		want  string
 	}{
-		{"no cookie defaults to default", "", "default"},
-		{"explicit default", "default", "default"},
+		{"no cookie defaults to sans", "", "sans"},
+		{"explicit sans", "sans", "sans"},
 		{"explicit serif", "serif", "serif"},
-		{"explicit duo", "duo", "duo"},
+		{"explicit mono", "mono", "mono"},
+		{"explicit mixed", "mixed", "mixed"},
+		{"legacy default maps to sans", "default", "sans"},
+		{"legacy duo maps to mono", "duo", "mono"},
 		{"legacy literata maps to serif", "literata", "serif"},
-		{"legacy grotesk maps to duo", "grotesk", "duo"},
-		{"garbage value defaults to default", "comic-sans", "default"},
+		{"legacy grotesk maps to mono", "grotesk", "mono"},
+		{"garbage value defaults to sans", "comic-sans", "sans"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

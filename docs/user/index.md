@@ -85,8 +85,10 @@ Click your name in the top right corner to open the user menu.
   - **Palette:** **Warm** (cream with teal, the original look) or **Ink**
     (near-black on off-white paper, with navy). Each works in both light
     and dark themes.
-  - **Font:** **Default**, **Serif** (a classic book style) or **Duo** (a
-    typewriter style).
+  - **Font:** **Sans** (clean and modern), **Serif** (a classic book
+    style), **Mono** (a typewriter style) or **Mixed** (sans for menus and
+    buttons, serif for the text you read: Reader articles, notes, book
+    notes and quotes, and help pages).
 
   Changes apply straight away and are remembered on this browser. On
   another computer or phone, you choose them again.

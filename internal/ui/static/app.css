@@ -39,9 +39,10 @@
 	--s-5: 1.5rem;
 	--s-6: 2rem;
 
-	/* --font-ui drives headings and UI chrome; --font-body drives prose.
-	 * They're equal in the default and literary pairings and differ only in
-	 * specialized pairings. --font-mono never changes with the pairing. */
+	/* --font-ui drives the page, headings and UI chrome; --font-body drives
+	 * only reading text (see "Reading surfaces" below). They're equal in the
+	 * Sans, Serif and Mono pairings and differ only in Mixed.
+	 * --font-mono never changes with the pairing. */
 	--font-ui: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--font-body: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
@@ -72,12 +73,37 @@
 	--font-body: 'Source Serif 4', Georgia, "Times New Roman", serif;
 }
 
-[data-font="duo"] {
+[data-font="mono"] {
 	--font-ui: 'iA Writer Duo S', monospace, sans-serif;
 	--font-body: 'iA Writer Duo S', monospace, sans-serif;
 	--fs-base: 0.875rem;
 	--fs-sm: 0.75rem;
 	--fs-xs: 0.7rem;
+}
+
+/* Mixed: the interface stays Inter, reading text takes the serif (#617). */
+[data-font="mixed"] {
+	--font-body: 'Source Serif 4', Georgia, "Times New Roman", serif;
+}
+
+/* Reading surfaces. The page itself is set in --font-ui, so these are the
+ * only places --font-body shows (plus .reader-body and .help-body, which
+ * set it in their own sections). ON Later is deliberately absent: its
+ * article font is its own Serif/Sans setting. Chips inside an outline row
+ * are chrome, so they go back to --font-ui. */
+.outline-text,
+.notes-shared-title,
+.notes-shared-note,
+.books-entry-text,
+.books-quote-text {
+	font-family: var(--font-body);
+}
+
+.outline-share-chip,
+.outline-children-badge,
+.outline-due-chip,
+.notes-shared-due {
+	font-family: var(--font-ui);
 }
 
 /* Self-hosted fonts. One file per subset per family; Google's own served CSS declares
@@ -213,7 +239,7 @@ body {
 	margin: 0;
 	background: var(--c-bg);
 	color: var(--c-text);
-	font: var(--fs-base)/1.6 var(--font-body);
+	font: var(--fs-base)/1.6 var(--font-ui);
 }
 
 /* Focus is restyled, never removed. This suite is meant to be usable
