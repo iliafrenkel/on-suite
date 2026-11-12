@@ -6,6 +6,10 @@
  */
 
 :root {
+	/* Tells the browser which native UI (scrollbars, form controls) to draw.
+	 * Chrome won't darken scrollbars without it (#616). */
+	color-scheme: light;
+
 	/* A warm cream base carries the interface. Teal is the everyday accent
 	 * (links, buttons, active states); --c-accent-attention (orange) is
 	 * deliberately separate and used only for things that need attention —
@@ -126,6 +130,7 @@
  * unset, there is no need for a prefers-color-scheme fallback here — every
  * response already carries the attribute this selector keys off. */
 :root[data-theme="dark"] {
+	color-scheme: dark;
 	--c-bg:          #241d17;
 	--c-bg-subtle:   #2b231b;
 	--c-bg-inset:    #2e2621;
