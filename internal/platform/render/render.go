@@ -41,7 +41,7 @@ type Shell struct {
 	CSRFToken string
 	Version   string
 
-	// Theme is "light" or "dark". Font is "default", "serif", or "duo".
+	// Theme is "light" or "dark". Font is "sans", "serif", "mono", or "mixed".
 	// These and Palette are each read from a cookie once per request, so
 	// the first response already carries the right value.
 	Theme string

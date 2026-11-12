@@ -21,20 +21,22 @@ func ThemeFrom(r *http.Request) string {
 	return "light"
 }
 
-// FontFrom reads the font-pairing preference, defaulting to "default"
-// (Inter/JetBrains Mono).
+// FontFrom reads the font-pairing preference, defaulting to "sans"
+// (Inter/JetBrains Mono). "mixed" keeps Inter for the interface and sets
+// reading text in Source Serif (#617). Older cookie values from before the
+// options were renamed still map to their current equivalents.
 func FontFrom(r *http.Request) string {
 	if c, err := r.Cookie(FontCookieName); err == nil {
 		switch c.Value {
-		case "serif", "duo":
+		case "sans", "serif", "mono", "mixed":
 			return c.Value
 		case "literata":
 			return "serif"
-		case "grotesk":
-			return "duo"
+		case "duo", "grotesk":
+			return "mono"
 		}
 	}
-	return "default"
+	return "sans"
 }
 
 // SidebarCollapsedFrom reads whether the sidebar should render collapsed,

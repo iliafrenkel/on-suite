@@ -270,8 +270,8 @@ func TestNewPageDefaultsWithNoCookiesAndNoActiveApp(t *testing.T) {
 	if page.Shell.Theme != "light" {
 		t.Errorf("Theme = %q, want light", page.Shell.Theme)
 	}
-	if page.Shell.Font != "default" {
-		t.Errorf("Font = %q, want default", page.Shell.Font)
+	if page.Shell.Font != "sans" {
+		t.Errorf("Font = %q, want sans", page.Shell.Font)
 	}
 	if page.Shell.SidebarCollapsed {
 		t.Error("SidebarCollapsed = true, want false")
