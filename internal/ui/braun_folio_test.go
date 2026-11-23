@@ -44,73 +44,75 @@ func contrastRatio(t *testing.T, fgHex, bgHex string) float64 {
 	return (l1 + 0.05) / (l2 + 0.05)
 }
 
-func extractToken(t *testing.T, block, name string) string {
+func extractToken(t *testing.T, decls, name string) string {
 	t.Helper()
 	re := regexp.MustCompile(regexp.QuoteMeta(name) + `:\s*(#[0-9a-fA-F]{6})`)
-	m := re.FindStringSubmatch(block)
+	m := re.FindStringSubmatch(decls)
 	if m == nil {
-		t.Fatalf("token %s not found in CSS block", name)
+		t.Fatalf("token %s not found", name)
 	}
 	return m[1]
 }
 
 // TestBraunFolioReviewFixes pins the Critical and Important code-review fixes:
-// 1. Bare label selector never forces uppercase/mono onto non-form <label> controls.
+// 1. No rule listing bare `label` forces uppercase/mono onto <label> controls.
 // 2. ON Later drop-cap uses :not(:dir(rtl)) and logical float: inline-start.
 // 3. Key Light/Dark/Plate token pairings meet WCAG AA 4.5:1+.
 // 4. No byte-identical duplicate font files are bundled under static/fonts/.
 func TestBraunFolioReviewFixes(t *testing.T) {
-	src, err := fs.ReadFile(ui.Static(), "app.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	css := string(src)
+	css := loadAppCSS(t)
 
-	// 1. Bare label rule must not force uppercase or monospace globally.
-	bareLabel := regexp.MustCompile(`(?s)\nlabel \{([^}]*)\}`).FindStringSubmatch(css)
-	if bareLabel != nil {
-		if strings.Contains(bareLabel[1], "text-transform") || strings.Contains(bareLabel[1], "--font-mono") {
-			t.Error("bare label selector must not set text-transform or --font-mono (breaks <label> cards and controls)")
+	// 1. Every rule that lists bare `label` among its selectors, in any
+	// position and inside any @media, stays clear of uppercase and mono.
+	for _, r := range css.rulesFor("label") {
+		if strings.Contains(r.body, "text-transform") || strings.Contains(r.body, "--font-mono") {
+			t.Errorf("rule %v sets text-transform or --font-mono on bare label (breaks <label> cards and controls)", r.selectors)
 		}
 	}
 
-	// 2. ON Later drop-cap must guard RTL with :dir(rtl) and use logical float.
-	if !strings.Contains(css, ":not(:dir(rtl))") {
-		t.Error("ON Later drop-cap must use :not(:dir(rtl)) to protect dir=auto RTL articles")
+	// 2. The drop-cap rule itself guards RTL and floats logically.
+	dropCap := false
+	for _, r := range css.rules {
+		for _, sel := range r.selectors {
+			if strings.Contains(sel, ".later-article-body") && strings.Contains(sel, "::first-letter") {
+				dropCap = true
+				if !strings.Contains(sel, ":not(:dir(rtl))") {
+					t.Errorf("drop-cap selector %q must use :not(:dir(rtl)) to protect dir=auto RTL articles", sel)
+				}
+				if !strings.Contains(r.body, "float: inline-start") {
+					t.Errorf("drop-cap rule %q must use logical float: inline-start", sel)
+				}
+			}
+		}
 	}
-	if !strings.Contains(css, "float: inline-start;") {
-		t.Error("ON Later drop-cap must use logical float: inline-start")
+	if !dropCap {
+		t.Error("app.css: no ON Later drop-cap rule (.later-article-body ... ::first-letter)")
 	}
 
 	// 3. WCAG AA contrast checks on Light, Dark, and Login Plate tokens.
-	lightBlock := regexp.MustCompile(`(?s)\n:root \{([^}]*)\}`).FindStringSubmatch(css)
-	darkBlock := regexp.MustCompile(`(?s)\n:root\[data-theme="dark"\] \{([^}]*)\}`).FindStringSubmatch(css)
-	if lightBlock == nil || darkBlock == nil {
-		t.Fatal("missing :root or dark theme block")
-	}
-
+	light := css.declsFor(":root")
+	dark := css.declsFor(`:root[data-theme="dark"]`)
 	checkPair := func(label, fg, bg string, min float64) {
 		t.Helper()
 		if got := contrastRatio(t, fg, bg); got < min {
 			t.Errorf("%s (%s on %s): contrast %.2f:1 < %.1f:1", label, fg, bg, got, min)
 		}
 	}
-
 	checkPair("light attention on attention-bg",
-		extractToken(t, lightBlock[1], "--c-accent-attention"),
-		extractToken(t, lightBlock[1], "--c-accent-attention-bg"), 4.5)
+		extractToken(t, light, "--c-accent-attention"),
+		extractToken(t, light, "--c-accent-attention-bg"), 4.5)
 	checkPair("light primary white on attention",
 		"#ffffff",
-		extractToken(t, lightBlock[1], "--c-accent-attention"), 4.5)
+		extractToken(t, light, "--c-accent-attention"), 4.5)
 	checkPair("dark faint on inset",
-		extractToken(t, darkBlock[1], "--c-text-faint"),
-		extractToken(t, darkBlock[1], "--c-bg-inset"), 4.5)
+		extractToken(t, dark, "--c-text-faint"),
+		extractToken(t, dark, "--c-bg-inset"), 4.5)
 	checkPair("light plate accent on plate",
-		extractToken(t, lightBlock[1], "--c-plate-accent"),
-		extractToken(t, lightBlock[1], "--c-plate"), 4.5)
+		extractToken(t, light, "--c-plate-accent"),
+		extractToken(t, light, "--c-plate"), 4.5)
 	checkPair("light plate signal on plate",
-		extractToken(t, lightBlock[1], "--c-plate-signal"),
-		extractToken(t, lightBlock[1], "--c-plate"), 4.5)
+		extractToken(t, light, "--c-plate-signal"),
+		extractToken(t, light, "--c-plate"), 4.5)
 
 	// 4. No duplicate byte-identical font files bundled.
 	seen := map[string]string{}
@@ -136,107 +138,70 @@ func TestBraunFolioReviewFixes(t *testing.T) {
 }
 
 func TestBraunFolioPhase2InstrumentApps(t *testing.T) {
-	src, err := fs.ReadFile(ui.Static(), "app.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	css := string(src)
+	css := loadAppCSS(t)
 
-	checks := []struct {
-		name string
-		re   string
-	}{
-		{"paste code frame uses subtle surface with firm border (Chroma Light AA contrast)", `(?s)\.snippet-body\s*\{[^}]*background:\s*var\(--c-bg-subtle\)[^}]*border:\s*1px solid var\(--c-border-firm\)`},
-		{"paste active row has 2px left rail", `(?s)\.snippet-row-active[^{]*\{[^}]*border-left-color:\s*var\(--c-accent\)`},
-		{"paste active row keeps dim date contrast", `(?s)\.snippet-row-active \.snippet-date\s*\{[^}]*color:\s*var\(--c-text-dim\)`},
-		{"paste pill uses mono", `(?s)\.snippet-pill\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
-		{"flash card text uses display serif with normal case", `(?s)\.flash-card-text\s*\{[^}]*font-family:\s*var\(--font-display\)[^}]*text-transform:\s*none`},
-		{"flash editor face matches precision radius", `(?s)\.flash-editor-face\s*\{[^}]*border-radius:\s*var\(--radius\)`},
-		{"flash show-answer uses chamfered signal primary", `(?s)\.flash-show-answer\s*\{[^}]*clip-path:\s*polygon\(`},
-		{"flash show-answer has unclipped focus-visible ring", `(?s)\.flash-show-answer:focus-visible[^{]*\{[^}]*box-shadow:`},
-		{"flash grade uses precision radius", `(?s)\.flash-grade\s*\{[^}]*border-radius:\s*var\(--radius\)`},
-	}
-	for _, c := range checks {
-		if !regexp.MustCompile(c.re).MatchString(css) {
-			t.Errorf("app.css missing Phase 2 instrument contract: %s", c.name)
-		}
-	}
+	// ON Paste: hairline code frame on the subtle surface (keeps Chroma
+	// Light at AA), 2px active rail, dim date kept readable, mono pills.
+	css.mustDeclare("", ".snippet-body", "background: var(--c-bg-subtle)", "border: 1px solid var(--c-border-firm)")
+	css.mustDeclare("", ".snippet-row-active", "border-left-color: var(--c-accent)")
+	css.mustDeclare("", ".snippet-row-active .snippet-date", "color: var(--c-text-dim)")
+	css.mustDeclare("", ".snippet-pill", "font-family: var(--font-mono)")
 
-	// Verify Chroma Light keyword (#cf222e) keeps >= 4.5:1 on Light --c-bg-subtle.
-	lightBlock := regexp.MustCompile(`(?s)\n:root \{([^}]*)\}`).FindStringSubmatch(css)
-	if lightBlock == nil {
-		t.Fatal("missing :root block")
-	}
-	if got := contrastRatio(t, "#cf222e", extractToken(t, lightBlock[1], "--c-bg-subtle")); got < 4.5 {
+	// ON Flash: display-serif cards in normal case, precision radii, and a
+	// chamfered Show answer with an inset focus ring clip-path can't cut.
+	css.mustDeclare("", ".flash-card-text", "font-family: var(--font-display)", "text-transform: none")
+	css.mustDeclare("", ".flash-editor-face", "border-radius: var(--radius)")
+	css.mustDeclare("", ".flash-show-answer", "clip-path: polygon(")
+	css.mustDeclare("", ".flash-show-answer:focus-visible", "box-shadow: inset")
+	css.mustDeclare("", ".flash-grade", "border-radius: var(--radius)")
+
+	// Chroma Light keyword (#cf222e) keeps >= 4.5:1 on Light --c-bg-subtle.
+	light := css.declsFor(":root")
+	if got := contrastRatio(t, "#cf222e", extractToken(t, light, "--c-bg-subtle")); got < 4.5 {
 		t.Errorf("Chroma Light keyword (#cf222e) on --c-bg-subtle: %.2f:1 < 4.5:1", got)
 	}
 
-	// Verify ON Flash FSRS grade pairings stay >= 4.5:1 in Light and Dark.
-	flashLight := regexp.MustCompile(`(?s)/\* ---- ON Flash: review[^*]*\*/\s*:root \{([^}]*)\}`).FindStringSubmatch(css)
-	flashDark := regexp.MustCompile(`(?s)/\* ---- ON Flash: review[^*]*\*/\s*:root \{[^}]*\}\s*:root\[data-theme="dark"\] \{([^}]*)\}`).FindStringSubmatch(css)
-	if flashLight == nil || flashDark == nil {
-		t.Fatal("missing ON Flash grade token blocks")
-	}
+	// ON Flash FSRS grade pairings stay >= 4.5:1 in Light and Dark.
+	dark := css.declsFor(`:root[data-theme="dark"]`)
 	for _, g := range []string{"again", "hard", "good", "easy"} {
-		if got := contrastRatio(t, extractToken(t, flashLight[1], "--flash-grade-"+g+"-text"), extractToken(t, flashLight[1], "--flash-grade-"+g+"-bg")); got < 4.5 {
+		if got := contrastRatio(t, extractToken(t, light, "--flash-grade-"+g+"-text"), extractToken(t, light, "--flash-grade-"+g+"-bg")); got < 4.5 {
 			t.Errorf("light flash-grade-%s contrast %.2f:1 < 4.5:1", g, got)
 		}
-		if got := contrastRatio(t, extractToken(t, flashDark[1], "--flash-grade-"+g+"-text"), extractToken(t, flashDark[1], "--flash-grade-"+g+"-bg")); got < 4.5 {
+		if got := contrastRatio(t, extractToken(t, dark, "--flash-grade-"+g+"-text"), extractToken(t, dark, "--flash-grade-"+g+"-bg")); got < 4.5 {
 			t.Errorf("dark flash-grade-%s contrast %.2f:1 < 4.5:1", g, got)
 		}
 	}
 }
 
 func TestBraunFolioPhase2EditorialAndOutlinerApps(t *testing.T) {
-	src, err := fs.ReadFile(ui.Static(), "app.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	css := string(src)
+	css := loadAppCSS(t)
 
-	checks := []struct {
-		name string
-		re   string
-	}{
-		{"notes crumbs use mono", `(?s)\.outline-crumbs\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
-		{"notes due group heading uses mono", `(?s)\.notes-due-group h2\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
-		{"reader active feed has 2px left rail", `(?s)\.reader-node\.is-active[^{]*\{[^}]*border-left:\s*2px solid var\(--c-accent\)`},
-		{"reader active row has 2px left rail", `(?s)\.reader-row\.is-active a[^{]*\{[^}]*border-left-color:\s*var\(--c-accent\)`},
-		{"reader active row keeps dim meta contrast", `(?s)\.reader-row\.is-active \.meta\s*\{[^}]*color:\s*var\(--c-text-dim\)`},
-		{"reader list heading uses mono", `(?s)\.reader-list-head h2\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
-		{"reader body has editorial blockquote", `(?s)\.reader-body blockquote\s*\{[^}]*border-left:\s*2px solid var\(--c-accent\)`},
-		{"books side heading uses mono", `(?s)\.books-side-head\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
-		{"books section heading uses mono", `(?s)\.books-section-head\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
-		{"books item title uses display serif", `(?s)\.books-item-title\s*\{[^}]*font-family:\s*var\(--font-display\)`},
-		{"books title uses display serif", `(?s)\.books-book-titles h1\s*\{[^}]*font-family:\s*var\(--font-display\)`},
-		{"books cover uses firm hairline border", `(?s)\.books-cover\s*\{[^}]*border:\s*1px solid var\(--c-border-firm\)`},
-	}
-	for _, c := range checks {
-		if !regexp.MustCompile(c.re).MatchString(css) {
-			t.Errorf("app.css missing Phase 2 editorial/outliner contract: %s", c.name)
-		}
-	}
+	// ON Notes: mono crumbs and due-group headings.
+	css.mustDeclare("", ".outline-crumbs", "font-family: var(--font-mono)")
+	css.mustDeclare("", ".notes-due-group h2", "font-family: var(--font-mono)")
+
+	// ON Reader: 2px active rails, readable active meta, mono list heading,
+	// editorial blockquotes.
+	css.mustDeclare("", ".reader-node.is-active", "border-left: 2px solid var(--c-accent)")
+	css.mustDeclare("", ".reader-row.is-active a", "border-left-color: var(--c-accent)")
+	css.mustDeclare("", ".reader-row.is-active .meta", "color: var(--c-text-dim)")
+	css.mustDeclare("", ".reader-list-head h2", "font-family: var(--font-mono)")
+	css.mustDeclare("", ".reader-body blockquote", "border-left: 2px solid var(--c-accent)")
+
+	// ON Books: mono section labels, display-serif titles, hairline covers.
+	css.mustDeclare("", ".books-side-head", "font-family: var(--font-mono)")
+	css.mustDeclare("", ".books-section-head", "font-family: var(--font-mono)")
+	css.mustDeclare("", ".books-item-title", "font-family: var(--font-display)")
+	css.mustDeclare("", ".books-book-titles h1", "font-family: var(--font-display)")
+	css.mustDeclare("", ".books-cover", "border: 1px solid var(--c-border-firm)")
 }
 
 // TestLoginFormComesFirstOnPhones pins the narrow-screen login layout: the
 // form pane moves above the art panel and the decorative figure is hidden,
 // so Sign in is on the first screen.
 func TestLoginFormComesFirstOnPhones(t *testing.T) {
-	src, err := fs.ReadFile(ui.Static(), "app.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m := regexp.MustCompile(`(?s)@media \(max-width: 780px\) \{(.*?)\n\}`).FindSubmatch(src)
-	if m == nil {
-		t.Fatal("app.css: no @media (max-width: 780px) block")
-	}
-	block := string(m[1])
-	for _, want := range []string{
-		".login-form-pane { order: -1; }",
-		".login-art-figure { display: none; }",
-	} {
-		if !strings.Contains(block, want) {
-			t.Errorf("780px block lacks %q", want)
-		}
-	}
+	css := loadAppCSS(t)
+	const phone = "@media (max-width: 780px)"
+	css.mustDeclare(phone, ".login-form-pane", "order: -1")
+	css.mustDeclare(phone, ".login-art-figure", "display: none")
 }

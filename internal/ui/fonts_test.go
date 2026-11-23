@@ -26,21 +26,15 @@ func TestTypographyRolesAndBundledFonts(t *testing.T) {
 		t.Error("app.css must not contain retired data-font or data-palette selectors")
 	}
 
-	checks := []struct {
-		name string
-		re   string
-	}{
-		{"body uses --font-ui", `(?s)\nbody \{[^}]*var\(--font-ui\)`},
-		{"headings use --font-display", `(?s)\nh1[^{]*\{[^}]*var\(--font-display\)`},
-		{"reading surfaces use --font-body", `(?s)font-family:\s*var\(--font-body\)`},
-		{"code uses --font-mono", `(?s)code,\s*pre,\s*kbd\s*\{[^}]*var\(--font-mono\)`},
-		{"primary button has unclipped focus-visible", `(?s)\.primary:focus-visible[^{]*\{[^}]*box-shadow:`},
-	}
-	for _, c := range checks {
-		if !regexp.MustCompile(c.re).MatchString(css) {
-			t.Errorf("app.css missing contract: %s", c.name)
-		}
-	}
+	sheet := parseCSS(t, css)
+	sheet.mustDeclare("", "body", "var(--font-ui)")
+	sheet.mustDeclare("", "h1", "font-family: var(--font-display)")
+	sheet.mustDeclare("", ".reader-body", "font-family: var(--font-body)")
+	sheet.mustDeclare("", ".books-quote-text", "font-family: var(--font-body)")
+	sheet.mustDeclare("", ".help-body", "font-family: var(--font-body)")
+	sheet.mustDeclare("", "code", "font-family: var(--font-mono)")
+	// clip-path cuts outlines, so the chamfered primary uses an inset ring.
+	sheet.mustDeclare("", ".primary:focus-visible", "box-shadow: inset")
 
 	urlRe := regexp.MustCompile(`url\("/static/(fonts/[^"]+)"\)`)
 	matches := urlRe.FindAllStringSubmatch(css, -1)
