@@ -1,30 +1,64 @@
 {{define "content"}}
-<div class="centered stack">
-	<h1>Sign in</h1>
+<div class="login-stage">
+	<div class="login-plate">
+		<div class="login-art">
+			<div class="login-art-brand">
+				<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+					<polygon points="2,2 17,2 22,7 22,22 2,22" fill="none" stroke="var(--c-plate-text)" stroke-width="1.6"/>
+					<rect x="6" y="6" width="6" height="6" fill="var(--c-plate-accent)"/>
+					<circle cx="15.5" cy="15.5" r="3" fill="var(--c-plate-signal)"/>
+				</svg>
+				<span>ON Suite</span>
+			</div>
 
-	{{with .Data.Error}}
-	<div class="notice notice-error" role="alert">{{.}}</div>
-	{{end}}
+			<div class="login-art-figure" aria-hidden="true">
+				<svg viewBox="0 0 260 150" width="260" height="150">
+					<circle class="login-art-ring" cx="130" cy="75" r="56"/>
+					<polygon class="login-art-outline" points="34,114 166,114 218,38 86,38"/>
+					<polygon class="login-art-plane" points="62,98 194,98 228,48 96,48"/>
+					<line class="login-art-axis" x1="20" y1="75" x2="240" y2="75"/>
+					<circle class="art-signal" cx="182" cy="60" r="9"/>
+					<circle class="art-signal-halo" cx="182" cy="60" r="16"/>
+				</svg>
+			</div>
 
-	<form method="post" action="/login" class="stack">
-		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
-		<input type="hidden" name="next" value="{{.Data.Next}}">
-
-		<div class="field">
-			<label for="username">Username</label>
-			<input id="username" name="username" type="text"
-			       autocomplete="username" autocapitalize="none"
-			       spellcheck="false" required autofocus
-			       value="{{.Data.Username}}">
+			<div class="login-art-copy">
+				<p class="login-art-title">Private software,<br><em>crafted</em> to last.</p>
+				<p>Invite-only household suite. Sign in to open your workspace.</p>
+			</div>
 		</div>
 
-		<div class="field">
-			<label for="password">Password</label>
-			<input id="password" name="password" type="password"
-			       autocomplete="current-password" required>
-		</div>
+		<div class="login-form-pane stack">
+			<div>
+				<div class="home-kicker">Authentication</div>
+				<h1>Sign in</h1>
+			</div>
 
-		<button type="submit" class="primary">Sign in</button>
-	</form>
+			{{with .Data.Error}}
+			<div class="notice notice-error" role="alert">{{.}}</div>
+			{{end}}
+
+			<form method="post" action="/login" class="stack">
+				<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+				<input type="hidden" name="next" value="{{.Data.Next}}">
+
+				<div class="field">
+					<label for="username">Username</label>
+					<input id="username" name="username" type="text"
+					       autocomplete="username" autocapitalize="none"
+					       spellcheck="false" required autofocus
+					       value="{{.Data.Username}}">
+				</div>
+
+				<div class="field">
+					<label for="password">Password</label>
+					<input id="password" name="password" type="password"
+					       autocomplete="current-password" required>
+				</div>
+
+				<button type="submit" class="primary">Sign in</button>
+			</form>
+		</div>
+	</div>
 </div>
 {{end}}

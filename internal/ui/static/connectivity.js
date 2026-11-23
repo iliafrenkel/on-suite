@@ -27,6 +27,8 @@
 		if (next === online) return;
 		online = next;
 		indicator.setAttribute("data-status", online ? "online" : "offline");
+		var label = indicator.querySelector(".conn-label");
+		if (label) label.textContent = online ? "Online" : "Offline";
 		indicator.setAttribute("title", online
 			? "All changes are saving normally"
 			: "You're offline — changes won't be saved until you reconnect");

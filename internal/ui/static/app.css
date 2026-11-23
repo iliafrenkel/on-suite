@@ -1,8 +1,9 @@
-/* ON Suite — warm and a little more alive than it used to be.
+/* ON Suite — Braun Folio visual system.
  *
- * Everything is driven by the tokens in :root. Apps must not introduce new
- * colours or spacing values; they compose these. That constraint is what
- * makes four separately-built apps look like one suite.
+ * Precision industrial geometry (Dieter Rams / Romotow) paired with calm
+ * editorial print typography (Quanta Magazine). Everything is driven by the
+ * tokens in :root and :root[data-theme="dark"]. Apps compose these tokens so
+ * all seven separately-built apps look and feel like one suite.
  */
 
 :root {
@@ -10,28 +11,29 @@
 	 * Chrome won't darken scrollbars without it (#616). */
 	color-scheme: light;
 
-	/* A warm cream base carries the interface. Teal is the everyday accent
-	 * (links, buttons, active states); --c-accent-attention (orange) is
-	 * deliberately separate and used only for things that need attention —
-	 * a due/overdue badge — so it stays meaningful by staying rare. */
-	--c-bg:          #fefefe;
-	--c-bg-subtle:   #f2e9db;
-	--c-bg-inset:    #efe0cf;
-	--c-border:      #e3d3bf;
-	--c-border-firm: #c9b49a;
-	--c-text:        #3a2f26;
-	--c-text-dim:    #6b5d4f;
-	--c-text-faint:  #756758; /* 4.5:1+ on --c-bg and --c-bg-subtle (#556) */
-	--c-accent:      #2f6f6a;
-	--c-accent-bg:   #d9e8e6;
-	--c-accent-attention:    #a84c1b; /* 4.5:1+ as text on --c-accent-attention-bg (#556) */
-	--c-accent-attention-bg: #f7e4d5;
-	--c-danger:      #a51d2d;
-	--c-danger-bg:   #fbeaec;
+	/* Alabaster stone surfaces with Deep Verdigris as the everyday working
+	 * accent and Braun Signal Vermilion reserved for active/signal moments. */
+	--c-bg:                  #f4f1ea;
+	--c-bg-subtle:           #fbf9f5;
+	--c-bg-inset:            #ebe6dc;
+	--c-border:              #d7d0c3;
+	--c-border-firm:         #9f9687;
+	--c-text:                #1c1a17;
+	--c-text-dim:            #5c564c;
+	--c-text-faint:          #6b6459; /* 4.5:1+ on --c-bg and --c-bg-subtle */
+	--c-accent:              #1c665d;
+	--c-accent-bg:           #dfe9e7;
+	--c-accent-attention:    #b53812; /* Braun Signal Vermilion (5.15:1 on --c-accent-attention-bg, 5.86:1 white text) */
+	--c-accent-attention-bg: #f9e7e1;
+	--c-danger:              #a51d2d;
+	--c-danger-bg:           #fbeaec;
+	--c-plate:               #1b1917;
+	--c-plate-text:          #f4f1ea;
+	--c-plate-dim:           #a8a196;
+	--c-plate-accent:        #4eb8aa; /* 7.8:1 on --c-plate */
+	--c-plate-signal:        #f06437; /* 5.7:1 on --c-plate */
 
-	/* A 4px scale. Still the scarce-vertical-space discipline of a code
-	 * listing, just with more breathing room applied on top in the shell
-	 * chrome (see .shell-bar, main, .app-sidebar below). */
+	/* A 4px scale. */
 	--s-1: 0.25rem;
 	--s-2: 0.5rem;
 	--s-3: 0.75rem;
@@ -39,13 +41,15 @@
 	--s-5: 1.5rem;
 	--s-6: 2rem;
 
-	/* --font-ui drives the page, headings and UI chrome; --font-body drives
-	 * only reading text (see "Reading surfaces" below). They're equal in the
-	 * Sans, Serif and Mono pairings and differ only in Mixed.
-	 * --font-mono never changes with the pairing. */
-	--font-ui: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-	--font-body: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+	/* Four-role typography system:
+	 * --font-display: editorial display headings and titles (IBM Plex Serif)
+	 * --font-ui:      rational industrial interface chrome (IBM Plex Sans)
+	 * --font-body:    calm long-form reading surfaces (Source Serif 4)
+	 * --font-mono:    instrument readouts, kickers, code (IBM Plex Mono) */
+	--font-display: 'IBM Plex Serif', Georgia, "Times New Roman", serif;
+	--font-ui:      'IBM Plex Sans', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--font-body:    'Source Serif 4', Georgia, "Times New Roman", serif;
+	--font-mono:    'IBM Plex Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
 	--fs-2xs: 0.625rem;
 	--fs-xs: 0.75rem;
@@ -53,44 +57,20 @@
 	--fs-base: 0.9375rem;
 	--fs-lg: 1.125rem;
 	--fs-xl: 1.375rem;
-	--fs-2xl: 1.75rem;
+	--fs-2xl: 1.875rem;
 
-	--radius: 6px;
+	--radius: 2px;
+	--chamfer-sm: 8px;
+	--chamfer-lg: 22px;
 	--border: 1px solid var(--c-border);
 	--ring: 2px solid var(--c-accent);
 
-	--measure: 68ch; /* comfortable reading width, for prose and forms */
-	--content-max: 75rem; /* main's own cap — wider, since a snippet list or
-	                          a wide code block has no comfortable-line-length
-	                          reason to stay prose-narrow */
+	--measure: 68ch;
+	--content-max: 75rem;
 }
 
-/* Runtime font switcher. data-font is set on <html> from a cookie, read
- * server-side on every request (internal/platform/web/prefs.go) so the first
- * paint already has the right fonts — no flash of the wrong typeface. */
-[data-font="serif"] {
-	--font-ui: 'Source Serif 4', Georgia, "Times New Roman", serif;
-	--font-body: 'Source Serif 4', Georgia, "Times New Roman", serif;
-}
-
-[data-font="mono"] {
-	--font-ui: 'iA Writer Duo S', monospace, sans-serif;
-	--font-body: 'iA Writer Duo S', monospace, sans-serif;
-	--fs-base: 0.875rem;
-	--fs-sm: 0.75rem;
-	--fs-xs: 0.7rem;
-}
-
-/* Mixed: the interface stays Inter, reading text takes the serif (#617). */
-[data-font="mixed"] {
-	--font-body: 'Source Serif 4', Georgia, "Times New Roman", serif;
-}
-
-/* Reading surfaces. The page itself is set in --font-ui, so these are the
- * only places --font-body shows (plus .reader-body and .help-body, which
- * set it in their own sections). ON Later is deliberately absent: its
- * article font is its own Serif/Sans setting. Chips inside an outline row
- * are chrome, so they go back to --font-ui. */
+/* Reading surfaces: long-form text takes --font-body (Source Serif 4) while
+ * chips and UI metadata stay in --font-ui / --font-mono. */
 .outline-text,
 .notes-shared-title,
 .notes-shared-note,
@@ -99,36 +79,43 @@
 	font-family: var(--font-body);
 }
 
-.outline-share-chip,
-.outline-children-badge,
-.outline-due-chip,
-.notes-shared-due {
-	font-family: var(--font-ui);
-}
+/* Self-hosted fonts (SIL OFL 1.1). Latin + Cyrillic subsets declared with
+ * unicode-range so browsers fetch Cyrillic files only when needed. */
+/* IBM Plex Mono */
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-mono-400-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-mono-400-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-mono-400-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-mono-500-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-mono-500-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-mono-500-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-mono-600-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-mono-600-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-mono-600-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
-/* Self-hosted fonts. One file per subset per family; Google's own served CSS declares
- * every weight it supports against the same file, so we mirror that exactly
- * rather than guessing at a variable-font weight range. Subsets declare unicode-range
- * so browsers fetch Cyrillic files only when needed, and fall back to system fonts
- * for unbundled scripts like Hebrew. */
-/* Inter */
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/inter-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/inter-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/inter-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/inter-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/inter-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/inter-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+/* IBM Plex Sans (variable font: one cached file per subset across weights 400–600) */
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
-/* JetBrains Mono */
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/jetbrains-mono-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/jetbrains-mono-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/jetbrains-mono-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/jetbrains-mono-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/jetbrains-mono.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/jetbrains-mono.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+/* IBM Plex Serif */
+@font-face { font-family: 'IBM Plex Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400i-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400i-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400i-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-serif-500-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-serif-500-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-serif-500-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-serif-600-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-serif-600-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-serif-600-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 /* Source Serif 4 */
 @font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/source-serif-4-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
@@ -141,79 +128,41 @@
 @font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/source-serif-4.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 @font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/source-serif-4.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
-/* iA Writer Duo S */
-@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-regular.woff2") format("woff2"); }
-@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-regular.woff2") format("woff2"); }
-@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-bold.woff2") format("woff2"); }
-@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 700; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-bold.woff2") format("woff2"); }
-@font-face { font-family: 'iA Writer Duo S'; font-style: italic; font-weight: 400; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-italic.woff2") format("woff2"); }
-@font-face { font-family: 'iA Writer Duo S'; font-style: italic; font-weight: 700; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-bold-italic.woff2") format("woff2"); }
-
-/* Dark mode is a real toggle, not prefers-color-scheme: data-theme is set
- * server-side from a cookie (internal/platform/web/prefs.go, ThemeFrom)
- * which always returns an explicit "light" or "dark", defaulting to light
- * when no cookie exists yet. Because the server never leaves data-theme
- * unset, there is no need for a prefers-color-scheme fallback here — every
- * response already carries the attribute this selector keys off. */
+/* Warm Obsidian dark mode: data-theme is set server-side from a cookie
+ * (internal/platform/web/prefs.go, ThemeFrom) on every response. */
 :root[data-theme="dark"] {
 	color-scheme: dark;
-	--c-bg:          #241d17;
-	--c-bg-subtle:   #2b231b;
-	--c-bg-inset:    #2e2621;
-	--c-border:      #3d322a;
-	--c-border-firm: #52443a;
-	--c-text:        #efe6da;
-	--c-text-dim:    #b8a996;
-	--c-text-faint:  #998a7a; /* 4.5:1+ on --c-bg and --c-bg-subtle (#556) */
-	--c-accent:      #64a5a0; /* 4.5:1+ for links on every dark background and on --c-accent-bg (#556) */
-	--c-accent-bg:   #1e3532;
-	--c-accent-attention:    #cf8357; /* 4.5:1+ as text on --c-accent-attention-bg; fills take dark text (#556) */
-	--c-accent-attention-bg: #3d2a1c;
-	--c-danger:      #f08c95;
-	--c-danger-bg:   #3a1e22;
-}
-
-/* The "Paper and ink" palette: near-black on off-white, a navy accent, red
- * for attention. data-palette is set server-side from a cookie (prefs.go,
- * PaletteFrom) exactly like data-theme, and always carries "warm" or "ink";
- * the warm palette is simply the :root tokens above, so it needs no block of
- * its own. Palette and theme are independent, hence one block per pairing.
- *
- * It overrides colours only: fonts stay with the Font setting, and the
- * per-app swatches and Flash grade colours deliberately stay the same in
- * every palette. Every pairing that #556 holds the warm tokens to (text,
- * dim and accent on each background, faint on --c-bg and --c-bg-subtle,
- * attention on its own tint) measures at least as high here. */
-:root[data-palette="ink"] {
-	--c-bg:          #fdfcf9;
-	--c-bg-subtle:   #f4f1ea;
-	--c-bg-inset:    #ebe7de;
-	--c-border:      #e2ddd2;
-	--c-border-firm: #c4bdb0;
-	--c-text:        #1c1b19;
-	--c-text-dim:    #5c5850;
-	--c-text-faint:  #6b665d;
-	--c-accent:      #1d3a6b;
-	--c-accent-bg:   #e3e8f1;
-	--c-accent-attention:    #b3261e;
-	--c-accent-attention-bg: #f9e3e1;
-}
-:root[data-palette="ink"][data-theme="dark"] {
-	--c-bg:          #191817;
-	--c-bg-subtle:   #201f1d;
-	--c-bg-inset:    #262522;
-	--c-border:      #33312d;
-	--c-border-firm: #4a4741;
-	--c-text:        #ebe7df;
-	--c-text-dim:    #aaa49a;
-	--c-text-faint:  #948e84;
-	--c-accent:      #8eaadb;
-	--c-accent-bg:   #1f2a3d;
-	--c-accent-attention:    #ef8a80;
-	--c-accent-attention-bg: #3b1f1d;
+	--c-bg:                  #151412;
+	--c-bg-subtle:           #1d1b18;
+	--c-bg-inset:            #26231f;
+	--c-border:              #332f29;
+	--c-border-firm:         #575148;
+	--c-text:                #f0ece3;
+	--c-text-dim:            #aba497;
+	--c-text-faint:          #968f82; /* 4.5:1+ on --c-bg, --c-bg-subtle, and --c-bg-inset */
+	--c-accent:              #4eb8aa; /* 4.5:1+ on dark surfaces and --c-accent-bg */
+	--c-accent-bg:           #1b302d;
+	--c-accent-attention:    #f06437;
+	--c-accent-attention-bg: #3a2118;
+	--c-danger:              #f08c95;
+	--c-danger-bg:           #3a1e22;
+	--c-plate:               #0f0e0d;
+	--c-plate-text:          #f0ece3;
+	--c-plate-dim:           #9b9489;
+	--c-plate-accent:        #4eb8aa;
+	--c-plate-signal:        #f06437;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
 
 /* Off-screen but still in the layout and the accessibility tree — unlike
    display:none, which some UAs exclude from a form's implicit-submission
@@ -256,10 +205,10 @@ a:hover { text-decoration-thickness: 2px; }
 /* Wider steps than the 4px spacing scale on purpose: at the old h1=22px vs
  * body=15px (a 1.47x ratio), nothing on a page announced itself as more
  * important than anything else. */
-h1, h2, h3 { margin: 0 0 var(--s-3); font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }
-h1 { font-size: var(--fs-2xl); }
-h2 { font-size: var(--fs-xl); }
-h3 { font-size: var(--fs-lg); }
+h1, h2, h3 { margin: 0 0 var(--s-3); font-weight: 500; line-height: 1.2; letter-spacing: -0.02em; }
+h1 { font-family: var(--font-display); font-size: var(--fs-2xl); }
+h2 { font-family: var(--font-display); font-size: var(--fs-xl); }
+h3 { font-size: var(--fs-lg); font-weight: 600; }
 
 code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 
@@ -275,8 +224,12 @@ pre {
 	border-radius: var(--radius);
 }
 
+/* The one kbd style for the suite: Notes' help, Focus's key legend and
+ * Flash's review keys all use it (Flash tweaks its own size). */
 kbd {
+	display: inline-block;
 	padding: 1px var(--s-1);
+	color: var(--c-text);
 	background: var(--c-bg-inset);
 	border: 1px solid var(--c-border-firm);
 	border-radius: var(--radius);
@@ -288,9 +241,9 @@ kbd {
 .shell-bar {
 	display: flex;
 	align-items: center;
-	gap: var(--s-5);
+	gap: var(--s-4);
 	padding: var(--s-3) var(--s-5);
-	background: var(--c-bg);
+	background: var(--c-bg-subtle);
 	border-bottom: var(--border);
 }
 
@@ -303,7 +256,12 @@ kbd {
 	white-space: nowrap;
 }
 
-.shell-mark { font-weight: 600; letter-spacing: 0.01em; }
+.shell-mark {
+	font-weight: 600;
+	font-size: var(--fs-sm);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
 
 .shell-crumbs {
 	display: flex;
@@ -311,15 +269,20 @@ kbd {
 	gap: var(--s-2);
 	flex: 1;
 	min-width: 0;
-	font-size: var(--fs-sm);
-	color: var(--c-text-dim);
+	padding-left: var(--s-4);
+	border-left: var(--border);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--c-text-faint);
 	overflow-x: auto;
 	white-space: nowrap;
 }
 
 .shell-crumbs a,
 #shell-crumb-tail > span:not([aria-hidden]) {
-	max-width: 200px;
+	max-width: 220px;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
@@ -437,32 +400,46 @@ kbd {
 .shell-menu-settings .field { margin-bottom: var(--s-2); }
 .shell-menu-settings .field:last-child { margin-bottom: 0; }
 .shell-menu-settings .row { flex-wrap: wrap; margin-top: var(--s-1); }
-.shell-menu-settings button[data-theme-value].active,
-.shell-menu-settings button[data-font-value].active,
-.shell-menu-settings button[data-palette-value].active {
+.shell-menu-settings button[data-theme-value].active {
 	background: var(--c-accent-bg);
 	color: var(--c-accent);
 	border-color: var(--c-accent);
 }
 
-/* Online/offline dot — see internal/ui/static/connectivity.js, which owns
- * data-status on this element after page load. Initial markup ships
- * "online" so a page rendered before the script runs never flashes a
- * false "offline" reading. */
+/* Online/offline Braun status pill — see internal/ui/static/connectivity.js,
+ * which owns data-status on this element after page load. Initial markup ships
+ * "online" so a page rendered before the script runs never flashes a false
+ * "offline" reading. */
 .conn-indicator {
 	display: inline-flex;
 	align-items: center;
+	gap: 0.4rem;
+	padding: 0.25rem 0.6rem;
+	background: var(--c-bg-inset);
+	border: var(--border);
+	border-radius: var(--radius);
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--c-text-dim);
 }
 
 .conn-dot {
-	width: 0.5rem;
-	height: 0.5rem;
+	width: 0.45rem;
+	height: 0.45rem;
 	border-radius: 50%;
-	background: #16a34a;
+	background: var(--c-accent);
+	box-shadow: 0 0 0 3px var(--c-accent-bg);
 }
 
 .conn-indicator[data-status="offline"] .conn-dot {
 	background: var(--c-danger);
+	box-shadow: 0 0 0 3px var(--c-danger-bg);
+}
+
+.conn-indicator[data-status="offline"] .conn-label {
+	color: var(--c-danger);
 }
 
 /* ---- App shell: sidebar + main ------------------------------------------ */
@@ -477,8 +454,9 @@ kbd {
 	display: flex;
 	flex-direction: column;
 	flex-shrink: 0;
-	width: 12rem;
-	padding: var(--s-4) var(--s-2);
+	width: 12.5rem;
+	padding: var(--s-3) 0;
+	background: var(--c-bg-subtle);
 	border-right: var(--border);
 	transition: width 0.15s ease;
 }
@@ -487,52 +465,58 @@ kbd {
 
 .sidebar-toggle {
 	display: flex;
-	width: 100%;
+	width: calc(100% - var(--s-4));
+	margin: 0 var(--s-2) var(--s-3);
 	justify-content: flex-start;
-	margin-bottom: var(--s-3);
+	background: var(--c-bg-inset);
+	border: var(--border);
 	transition: transform 0.15s ease;
 }
 
-/* Points the other way once collapsed, so the glyph itself shows which
- * way the next click will go rather than staying static regardless of
- * state. */
 .app-sidebar[data-collapsed] .sidebar-toggle {
+	justify-content: center;
 	transform: rotate(180deg);
 }
 
-/* flex: 1 1 auto (not the default 0 1 auto) lets this stretch to fill
- * .app-sidebar's full height below the toggle button — the same flex column
- * it now is — so .sidebar-separator's margin-top: auto below has leftover
- * height to absorb and pins Admin to the sidebar's bottom edge. */
 .shell-nav {
 	display: flex;
 	flex-direction: column;
 	flex: 1 1 auto;
 	min-height: 0;
-	gap: var(--s-1);
+	gap: 2px;
 }
 
 .sidebar-item {
 	display: flex;
 	align-items: center;
 	gap: var(--s-2);
-	padding: var(--s-2);
-	border-radius: var(--radius);
+	padding: var(--s-2) var(--s-4);
+	border-left: 2px solid transparent;
+	border-radius: 0;
 	color: var(--c-text-dim);
+	font-size: var(--fs-sm);
+	font-weight: 500;
 	text-decoration: none;
 	white-space: nowrap;
 	overflow: hidden;
+	transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
-/* Each app's glyph in its own colour (spec 2026-10-13-app-identity-colours).
- * The fallbacks keep an item without a swatch class looking as it used to. */
+.app-sidebar[data-collapsed] .sidebar-item {
+	justify-content: center;
+	padding: var(--s-2) 0;
+}
+
 .sidebar-item svg { flex: none; color: var(--swatch-line, var(--c-accent)); }
 
-.sidebar-item:not(.sidebar-item-disabled):hover { background: var(--c-bg-inset); color: var(--c-text); }
+.sidebar-item:not(.sidebar-item-disabled):hover {
+	background: var(--c-bg-inset);
+	color: var(--c-text);
+}
 
-/* The active app's row picks up its own soft tint; the label stays in the
- * normal text colour so the tint, not the text, carries the identity. */
+/* The active app's row gets the signature 2px Verdigris/app rail and soft wash. */
 .sidebar-item[aria-current="page"] {
+	border-left-color: var(--swatch-line, var(--c-accent));
 	background: var(--swatch-soft, var(--c-accent-bg));
 	color: var(--c-text);
 	font-weight: 600;
@@ -542,19 +526,17 @@ kbd {
 
 .app-sidebar[data-collapsed] .sidebar-label { display: none; }
 
-/* main needs no rule here: it is a flex item inside .app-shell, and the
- * max-width + margin: 0 auto it already got in Step 3 is enough — CSS gives
- * a flex item's auto margins first claim on any free space in the flex
- * line, so main centers itself in whatever room the sidebar leaves without
- * needing flex-grow. */
-
 /* ---- Footer -------------------------------------------------------------- */
 
 .app-footer {
 	padding: var(--s-3) var(--s-5);
+	background: var(--c-bg-subtle);
 	border-top: var(--border);
 	color: var(--c-text-faint);
-	font-size: var(--fs-sm);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 	text-align: center;
 }
 
@@ -575,14 +557,40 @@ main:has(.reader-panes) { max-width: none; padding: 0;}
 
 label { display: block; margin-bottom: var(--s-1); font-size: var(--fs-sm); color: var(--c-text-dim); }
 
+/* Monospaced uppercase treatment is scoped to form-field labels only, so
+ * CSS-only interactive <label> controls (Flash cards, Later drawer toggle,
+ * toolbar buttons, radio choices) keep their own typography and spacing. */
+.field > label {
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
 input[type="text"], input[type="password"], input[type="url"], input[type="number"], textarea, select {
 	width: 100%;
-	padding: var(--s-2);
-	background: var(--c-bg);
+	padding: var(--s-2) var(--s-3);
+	background: var(--c-bg-inset);
 	color: var(--c-text);
-	border: 1px solid var(--c-border-firm);
+	border: 1px solid var(--c-border);
 	border-radius: var(--radius);
 	font: inherit;
+	transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+input[type="text"]:focus, input[type="password"]:focus, input[type="url"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
+	border-color: var(--c-accent);
+}
+/* A focused field lifts to the subtle surface, but only as a default. Its
+ * weight is one element plus :focus: enough to beat the base field rule
+ * above (equal weight, later in the file), not enough to beat a component's
+ * own field background further down (ON Notes' borderless title and note
+ * must stay on the page colour while focused). :where() keeps the [type]
+ * out of the count; input[type="text"]:focus would outweigh them all. */
+input:where([type="text"], [type="password"], [type="url"], [type="number"]):focus,
+textarea:focus,
+select:focus {
+	background: var(--c-bg-subtle);
 }
 
 textarea { font-family: var(--font-mono); resize: vertical; }
@@ -604,7 +612,13 @@ button, .button {
 	font: inherit;
 	text-decoration: none;
 	cursor: pointer;
+	transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
+
+/* A link styled as a button is inline by default, so its vertical padding
+ * overlaps the lines around it (e.g. "Create your first timer" in a <p>).
+ * Zero weight: a component that lays its link buttons out as flex keeps it. */
+:where(a.button) { display: inline-block; }
 
 /* :where() drops this to (0,1,0) — just the :hover — so any component rule
  * that sets its own background (one class plus its own :hover, or one class
@@ -613,11 +627,7 @@ button, .button {
 :where(button:not(:disabled), .button):hover { background: var(--c-border); }
 
 /* A button that reads as a link: used for actions that must be POSTs, such as
- * logging out, without shouting like a primary button. Comes after
- * `button, .button` on purpose: `.quiet` and `.button` are equal
- * specificity, so an element carrying both classes (e.g. the settings-menu
- * gear `<summary class="quiet button">`, or the theme/font/sidebar toggle
- * buttons) needs `.quiet` to win the source-order tie-break. */
+ * logging out, without shouting like a primary button. */
 .quiet {
 	padding: var(--s-1) var(--s-2);
 	background: transparent;
@@ -628,21 +638,34 @@ button, .button {
 
 .quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
 
-/* Prominence is opt-in via `.primary`, never implied by <button type=submit">
- * on its own. A page should carry at most one of these — it is the single
- * action the page wants a visitor to take (Sign in, Save snippet) — so a
- * new form's submit button starts out neutral instead of accidentally
- * shouting the loudest thing on the page. */
+/* Prominence is opt-in via `.primary`: Braun Signal Vermilion with the
+ * signature 45-degree chamfered top-right corner. Because clip-path clips
+ * standard outlines, :focus-visible uses a high-contrast inset double ring
+ * so keyboard focus is always unmistakably visible. */
 .primary {
-	background: var(--c-accent);
-	border-color: var(--c-accent);
+	background: var(--c-accent-attention);
+	border-color: transparent;
 	color: #fff;
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
 	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	clip-path: polygon(0 0, calc(100% - var(--chamfer-sm)) 0, 100% var(--chamfer-sm), 100% 100%, 0 100%);
 }
 
-.primary:hover { background: var(--c-accent); border-color: var(--c-accent); filter: brightness(1.1); }
+.primary:hover {
+	background: var(--c-accent-attention);
+	border-color: transparent;
+	filter: brightness(1.08);
+}
 
-:root[data-theme="dark"] .primary { color: #10141a; }
+.primary:focus-visible {
+	outline: none;
+	box-shadow: inset 0 0 0 2px var(--c-bg), inset 0 0 0 4px var(--c-text);
+}
+
+:root[data-theme="dark"] .primary { color: #151412; }
 
 /* ---- Notices ----------------------------------------------------------- */
 
@@ -691,50 +714,254 @@ button, .button {
  * scroll sideways. */
 .scroll-x { overflow-x: auto; }
 
-/* ---- Home page card grid ------------------------------------------------ */
+/* ---- Home page hero & hairline app directory --------------------------- */
+
+.home-kicker {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	margin-bottom: var(--s-2);
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--c-accent);
+}
+
+.home-kicker::before {
+	content: "";
+	width: 1rem;
+	height: 2px;
+	background: var(--c-accent-attention);
+}
+
+.home-hero {
+	display: grid;
+	grid-template-columns: 1.25fr 0.9fr;
+	gap: var(--s-5);
+	align-items: center;
+	padding: var(--s-6);
+	background: var(--c-bg-subtle);
+	border: 1px solid var(--c-border-firm);
+	clip-path: polygon(0 0, calc(100% - var(--chamfer-lg)) 0, 100% var(--chamfer-lg), 100% 100%, 0 100%);
+}
+
+.home-hero h1 {
+	margin: 0 0 var(--s-3);
+	font-family: var(--font-display);
+	font-size: clamp(1.75rem, 3vw, 2.25rem);
+	font-weight: 500;
+	line-height: 1.1;
+	letter-spacing: -0.02em;
+}
+
+.home-hero h1 em {
+	font-style: italic;
+	font-weight: 400;
+	color: var(--c-accent-attention);
+}
+
+.home-hero-sub {
+	margin: 0;
+	max-width: 46ch;
+	color: var(--c-text-dim);
+	line-height: 1.55;
+}
+
+.home-hero-art svg {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.art-plane-back {
+	fill: var(--c-accent-bg);
+	stroke: var(--c-accent);
+	stroke-width: 1.3;
+}
+
+.art-plane-front {
+	fill: var(--c-bg-subtle);
+	stroke: var(--c-text);
+	stroke-width: 1.5;
+}
+
+.art-guide {
+	stroke: var(--c-border-firm);
+	stroke-width: 1;
+	stroke-dasharray: 3 3;
+}
+
+.art-arc {
+	fill: none;
+	stroke: var(--c-accent);
+	stroke-width: 1.2;
+}
+
+.art-signal { fill: var(--c-accent-attention); }
+
+.art-signal-halo {
+	fill: none;
+	stroke: var(--c-accent-attention);
+	stroke-width: 1;
+	stroke-opacity: 0.45;
+}
+
+.art-rule-strong { stroke: var(--c-text); stroke-width: 1.4; }
+.art-rule-faint { stroke: var(--c-text-faint); stroke-width: 1; }
+.art-dot { fill: var(--c-accent); }
+
+.home-dir-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	margin-top: var(--s-5);
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--c-text-faint);
+}
 
 .home-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-	gap: var(--s-4);
+	grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+	gap: 1px;
+	/* Each card draws its own 1px ring, which meets its neighbour's in the
+	 * 1px gap; the padding keeps the outer ring inside the grid's box. A
+	 * row the apps don't fill then ends cleanly on the page background,
+	 * where a border-coloured grid background would show through as a
+	 * solid block. */
+	padding: 1px;
 }
 
 .app-card {
-	display: block;
-	padding: var(--s-4);
-	background: var(--c-bg);
-	border: var(--border);
-	border-radius: var(--radius);
+	display: flex;
+	flex-direction: column;
+	padding: var(--s-5);
+	background: var(--c-bg-subtle);
+	box-shadow: 0 0 0 1px var(--c-border);
 	color: var(--c-text);
 	text-decoration: none;
-	transition: border-color 0.15s ease;
+	transition: background-color 140ms ease;
 }
 
-.app-card:hover { border-color: var(--c-border-firm); }
+.app-card:hover { background: var(--c-bg-inset); }
 
-.app-card h3 { margin: var(--s-3) 0 var(--s-1); }
-.app-card p { margin: 0; }
+.app-card h3 {
+	margin: var(--s-3) 0 var(--s-1);
+	font-family: var(--font-display);
+	font-size: var(--fs-lg);
+	font-weight: 500;
+}
 
-/* A soft badge in the app's own colour, so each tile is recognisable before
- * its name is read (spec 2026-10-13-app-identity-colours §4.1). The glyph is
- * still the thin line icon; only its colour and the tint behind it are per app. */
+.app-card p { margin: 0 0 var(--s-4); }
+
 .app-card-icon {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 2.5rem;
-	height: 2.5rem;
-	border-radius: calc(var(--radius) + var(--s-1));
+	width: 2.25rem;
+	height: 2.25rem;
+	border-radius: var(--radius);
 	background: var(--swatch-soft, var(--c-accent-bg));
 	color: var(--swatch-line, var(--c-accent));
 }
 
-.app-card-icon svg { width: 1.625rem; height: 1.625rem; }
+.app-card-icon svg { width: 1.35rem; height: 1.35rem; }
 
-/* Equal card area for a shipped app and three that don't exist yet reads as
- * "this is a mockup." One muted line carries the same information without
- * competing with ON Paste for attention. */
+.app-card-rule {
+	display: block;
+	width: 1.5rem;
+	height: 2px;
+	margin-top: auto;
+	background: var(--swatch-line, var(--c-accent));
+	transition: width 180ms ease;
+}
+
+.app-card:hover .app-card-rule { width: 3.25rem; }
+
 .home-coming-soon { margin-top: var(--s-2); }
+
+/* ---- Split architectural Login plate ----------------------------------- */
+
+.login-stage {
+	display: grid;
+	place-items: center;
+	padding: var(--s-5) 0;
+}
+
+.login-plate {
+	display: grid;
+	grid-template-columns: 1.05fr 1fr;
+	width: 100%;
+	max-width: 52rem;
+	background: var(--c-bg-subtle);
+	border: 1px solid var(--c-border-firm);
+	clip-path: polygon(0 0, calc(100% - var(--chamfer-lg)) 0, 100% var(--chamfer-lg), 100% 100%, 0 100%);
+}
+
+.login-art {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: var(--s-5);
+	padding: var(--s-6);
+	background: var(--c-plate);
+	color: var(--c-plate-text);
+	border-right: var(--border);
+}
+
+.login-art-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.login-art-figure svg { display: block; width: 100%; height: auto; }
+.login-art-ring { fill: none; stroke: var(--c-plate-accent); stroke-opacity: 0.55; stroke-width: 1; }
+.login-art-outline { fill: none; stroke: var(--c-plate-text); stroke-opacity: 0.7; stroke-width: 1.3; }
+.login-art-plane { fill: var(--c-plate-accent); fill-opacity: 0.16; stroke: var(--c-plate-accent); stroke-width: 1.2; }
+.login-art-axis { stroke: var(--c-plate-text); stroke-opacity: 0.2; stroke-dasharray: 3 4; }
+.login-art .art-signal { fill: var(--c-plate-signal); }
+.login-art .art-signal-halo { stroke: var(--c-plate-signal); }
+
+.login-art-copy .login-art-title {
+	margin: 0 0 var(--s-2);
+	font-family: var(--font-display);
+	font-size: 1.75rem;
+	font-weight: 400;
+	line-height: 1.18;
+	color: var(--c-plate-text);
+}
+
+.login-art-copy .login-art-title em { font-style: italic; color: var(--c-plate-signal); }
+.login-art-copy p { margin: 0; font-size: var(--fs-sm); color: var(--c-plate-dim); }
+
+.login-form-pane {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: var(--s-6);
+}
+
+.login-form-pane h1 { margin-bottom: 0; font-size: 1.625rem; }
+.login-form-pane button.primary { align-self: flex-start; }
+
+@media (max-width: 780px) {
+	.home-hero,
+	.login-plate { grid-template-columns: 1fr; }
+	/* On a phone the form comes first, so Sign in is on the first screen;
+	 * the art panel follows as a slim brand strip without its figure. */
+	.login-form-pane { order: -1; }
+	.login-art { border-right: none; border-top: var(--border); }
+	.login-art-figure { display: none; }
+	.conn-label { display: none; }
+}
 
 /* ---- Snippets ---------------------------------------------------------- */
 
@@ -755,7 +982,8 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 .snippet-body {
 	border-radius: var(--radius);
 	background: var(--c-bg-subtle);
-	padding: var(--s-2) var(--s-3);
+	border: 1px solid var(--c-border-firm);
+	padding: var(--s-3) var(--s-4);
 }
 
 /* Stacked title/metadata/toolbar for the detail pane's view mode (as
@@ -767,9 +995,11 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	flex-direction: column;
 	gap: var(--s-2);
 }
-.paste-detail-header h1,
+.paste-detail-header h1 { margin: 0; }
 .paste-detail-header p {
 	margin: 0;
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
 }
 
 .paste-toolbar-actions {
@@ -851,17 +1081,21 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	align-items: center;
 	padding: 0 var(--s-1);
 	border: 1px solid var(--c-border);
-	border-radius: 999px;
+	border-radius: var(--radius);
 	background: var(--c-bg-subtle);
 	color: var(--c-text-dim);
+	font-family: var(--font-mono);
 	font-size: var(--fs-2xs);
-	font-weight: 400;
+	font-weight: 500;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
 	line-height: 1.5;
 	white-space: nowrap;
 }
 .snippet-pill-shared {
 	border-color: var(--c-border-firm);
 	background: var(--c-accent-attention-bg);
+	color: var(--c-accent-attention);
 }
 .snippet-pill .chip-icon {
 	width: 0.9em;
@@ -872,6 +1106,7 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	flex: none;
 	margin-left: var(--s-1);
 	color: var(--c-text-faint);
+	font-family: var(--font-mono);
 	font-size: var(--fs-xs);
 	font-weight: 400;
 	white-space: nowrap;
@@ -911,15 +1146,18 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 
 .snippet-row {
 	display: block;
-	padding: var(--s-1) var(--s-2);
+	padding: var(--s-2) var(--s-3);
 	margin: 0 calc(var(--s-2) * -1);
-	border-radius: var(--radius);
+	border-left: 2px solid transparent;
+	border-radius: 0;
 	text-decoration: none;
 	color: inherit;
+	transition: background-color 120ms ease, border-color 120ms ease;
 }
 .snippet-row:hover { background: var(--c-bg-subtle); }
 .snippet-row-active,
 .snippet-row-active:hover {
+	border-left-color: var(--c-accent);
 	background: var(--c-accent-bg);
 }
 .snippet-row-active .snippet-title { color: var(--c-accent); }
@@ -1106,7 +1344,10 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	flex-wrap: wrap;
 	align-items: center;
 	gap: var(--s-2);
-	font-size: var(--fs-sm);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
 	color: var(--c-text-dim);
 }
 
@@ -1264,6 +1505,7 @@ button.outline-chevron {
 
 .outline-due-chip {
 	display: inline-block;
+	font-family: var(--font-mono);
 	font-size: var(--fs-2xs);
 	background: var(--c-accent-bg);
 	color: var(--c-accent);
@@ -1287,10 +1529,12 @@ button.outline-chevron {
 
 .outline-children-badge {
 	display: inline-block;
+	font-family: var(--font-mono);
 	font-size: var(--fs-2xs);
 	background: var(--c-bg-subtle);
 	color: var(--c-text-dim);
 	padding: 0 0.4em;
+	border: 1px solid var(--c-border);
 	border-radius: var(--radius);
 	white-space: nowrap;
 	font-weight: 500;
@@ -1298,18 +1542,20 @@ button.outline-chevron {
 .outline-children-all-done {
 	background: var(--c-accent-bg);
 	color: var(--c-accent);
+	border-color: transparent;
 }
 
 .outline-share-chip {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.25em;
-	font-size: var(--fs-xs);
-	font-variant: small-caps;
-	letter-spacing: 0.04em;
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 	background: var(--c-accent-attention-bg);
 	color: var(--c-accent-attention);
-	padding: 0 0.4em;
+	padding: 0 0.45em;
 	border-radius: var(--radius);
 	text-decoration: none;
 	white-space: nowrap;
@@ -1477,10 +1723,11 @@ button.outline-chevron {
 
 .notes-due-group + .notes-due-group { margin-top: var(--s-4); }
 .notes-due-group h2 {
-	font-size: var(--fs-sm);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
 	color: var(--c-text-dim);
 	text-transform: uppercase;
-	letter-spacing: 0.04em;
+	letter-spacing: 0.08em;
 }
 .notes-due-list { margin: 0; padding: 0; list-style: none; }
 .notes-due-item {
@@ -1558,7 +1805,8 @@ mark.notes-search-hit {
 .notes-shared-item { padding: var(--s-1) 0; }
 .notes-shared-title { color: var(--c-text); }
 .notes-shared-done .notes-shared-title { color: var(--c-text-dim); text-decoration: line-through; }
-.notes-shared-due { font-size: var(--fs-sm); color: var(--c-text-dim); }
+/* Mono, like the outline's due chip it mirrors on the shared page. */
+.notes-shared-due { font-family: var(--font-mono); font-size: var(--fs-sm); color: var(--c-text-dim); }
 .notes-shared-note { font-size: var(--fs-sm); color: var(--c-text-dim); margin-top: 0.125rem; }
 
 .outline-dot { text-decoration: none; }
@@ -1897,17 +2145,6 @@ input.outline-note:focus { outline: none; }
 	padding: 0.2rem 0;
 	color: var(--c-text-dim);
 }
-kbd {
-	display: inline-block;
-	padding: 0.1em 0.4em;
-	font-size: var(--fs-xs);
-	font-family: var(--font-mono);
-	color: var(--c-text);
-	background: var(--c-bg-subtle);
-	border: var(--border);
-	border-radius: 4px;
-	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
-}
 
 /* ---- Narrow viewports --------------------------------------------------- */
 
@@ -1915,6 +2152,16 @@ kbd {
 	.shell-bar {
 		flex-wrap: wrap;
 		gap: var(--s-2) var(--s-4);
+	}
+	/* Logo and user menu share the first row; the breadcrumbs take a full
+	 * row of their own below, where they have room to be read. Squeezed
+	 * between the two they shrank to a bare "/ /" and a scrollbar. */
+	.shell-user { margin-left: auto; }
+	.shell-crumbs {
+		order: 1;
+		flex: 1 0 100%;
+		padding-left: 0;
+		border-left: none;
 	}
 
 	/* The user menu button keeps the name (it is the button's accessible
@@ -2370,6 +2617,8 @@ kbd {
 
 .reader-node.is-active,
 .reader-sub.is-active {
+	border-left: 2px solid var(--c-accent);
+	border-radius: 0;
 	background: var(--c-accent-bg);
 }
 
@@ -2431,10 +2680,11 @@ kbd {
 .reader-list-head h2 {
 	flex: 1 1 auto;
 	margin: 0;
-	font-size: var(--fs-sm);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
 	color: var(--c-text-dim);
 	text-transform: uppercase;
-	letter-spacing: 0.04em;
+	letter-spacing: 0.08em;
 }
 
 /* Moved into .reader-list-toolbar, alongside Mark all read — narrowed to
@@ -2470,9 +2720,11 @@ kbd {
 
 .reader-row a {
 	display: block;
-	padding: var(--s-2);
-	border-radius: 3px;
+	padding: var(--s-2) var(--s-3);
+	border-left: 2px solid transparent;
+	border-radius: 0;
 	text-decoration: none;
+	transition: background-color 120ms ease, border-color 120ms ease;
 }
 
 .reader-row a:hover {
@@ -2481,6 +2733,7 @@ kbd {
 
 .reader-row.is-active a,
 .reader-row.is-active a:hover {
+	border-left-color: var(--c-accent);
 	background: var(--c-accent-bg);
 }
 
@@ -2491,8 +2744,10 @@ kbd {
 
 .reader-row .meta {
 	display: block;
+	font-family: var(--font-mono);
 	color: var(--c-text-faint);
-	font-size: var(--fs-xs);
+	font-size: var(--fs-2xs);
+	letter-spacing: 0.03em;
 }
 /* Faint is under 4.5:1 on --c-accent-bg (#556). */
 .reader-row.is-active .meta { color: var(--c-text-dim); }
@@ -2559,7 +2814,16 @@ kbd {
 .reader-body {
 	max-width: 38rem;
 	font-family: var(--font-body);
-	line-height: 1.6;
+	line-height: 1.72;
+}
+
+.reader-body blockquote {
+	margin: var(--s-5) 0;
+	padding: var(--s-1) 0 var(--s-1) var(--s-5);
+	border-left: 2px solid var(--c-accent);
+	font-family: var(--font-display);
+	font-style: italic;
+	color: var(--c-text-dim);
 }
 
 .reader-body img {
@@ -2666,7 +2930,7 @@ kbd {
 	gap: var(--s-3);
 	margin-bottom: var(--s-5);
 }
-.reader-stat-tile { background: var(--c-bg-subtle); border-radius: 4px; padding: var(--s-3); }
+.reader-stat-tile { background: var(--c-bg-subtle); border-radius: var(--radius); padding: var(--s-3); }
 .reader-stat-tile .value { font-size: var(--fs-xl); }
 .reader-stat-tile .label { color: var(--c-text-dim); font-size: var(--fs-xs); }
 
@@ -2715,7 +2979,7 @@ kbd {
 	gap: var(--s-3);
 	margin-bottom: var(--s-5);
 }
-.flash-stat-tile { background: var(--c-bg-subtle); border-radius: 4px; padding: var(--s-3); }
+.flash-stat-tile { background: var(--c-bg-subtle); border-radius: var(--radius); padding: var(--s-3); }
 .flash-stat-tile .value { font-size: var(--fs-xl); }
 .flash-stat-tile .label { color: var(--c-text-dim); font-size: var(--fs-xs); }
 
@@ -2883,7 +3147,7 @@ kbd {
 .flash-review-cta:hover { filter: brightness(1.08); }
 /* Dark mode's lighter orange takes dark text, as .primary does (#556). */
 :root[data-theme="dark"] .toolbar-due-badge,
-:root[data-theme="dark"] .flash-review-cta { color: #10141a; }
+:root[data-theme="dark"] .flash-review-cta { color: #151412; }
 .flash-review-cta:focus-visible { outline: var(--ring); outline-offset: 2px; }
 
 .flash-all-done {
@@ -2918,7 +3182,7 @@ kbd {
 	color: #fff;
 }
 .flash-big-btn-primary:hover { background: var(--c-accent); filter: brightness(1.1); }
-:root[data-theme="dark"] .flash-big-btn-primary { color: #10141a; }
+:root[data-theme="dark"] .flash-big-btn-primary { color: #151412; }
 
 .flash-welcome {
 	display: flex;
@@ -3142,8 +3406,8 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	gap: var(--s-3);
 	padding: var(--s-6) var(--s-4) var(--s-4);
 	overflow: auto;
-	border-radius: 14px;
-	border: 1px solid var(--c-border);
+	border-radius: var(--radius);
+	border: 1px solid var(--c-border-firm);
 	background: var(--flash-card-bg);
 	text-align: center;
 	backface-visibility: hidden;
@@ -3153,11 +3417,18 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	content: "";
 	position: absolute;
 	top: 0; left: 0; right: 0;
-	height: 8px;
-	background: var(--swatch, var(--c-border-firm));
+	height: 4px;
+	background: var(--swatch, var(--c-accent));
 }
 .flash-card-back { transform: rotateY(180deg); }
-.flash-card-text { font-size: var(--fs-xl); font-weight: 500; white-space: pre-line; overflow-wrap: anywhere; }
+.flash-card-text {
+	font-family: var(--font-display);
+	font-size: var(--fs-xl);
+	font-weight: 500;
+	text-transform: none;
+	white-space: pre-line;
+	overflow-wrap: anywhere;
+}
 .flash-card-notes { color: var(--c-text-dim); font-size: var(--fs-sm); white-space: pre-line; }
 .flash-card-hint { color: var(--c-text-faint); font-size: var(--fs-xs); }
 .flash-card-image { max-width: 100%; max-height: 8rem; border-radius: var(--radius); }
@@ -3227,7 +3498,7 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	cursor: pointer;
 }
 .flash-type-toggle input:checked + label { background: var(--c-accent); color: #fff; }
-:root[data-theme="dark"] .flash-type-toggle input:checked + label { color: #10141a; }
+:root[data-theme="dark"] .flash-type-toggle input:checked + label { color: #151412; }
 .flash-type-toggle input:focus-visible + label { outline: var(--ring); outline-offset: -3px; }
 
 /* The two faces, drawn as cards. */
@@ -3243,8 +3514,8 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	flex-direction: column;
 	gap: var(--s-2);
 	padding: var(--s-5) var(--s-4) var(--s-4);
-	border-radius: 14px;
-	border: 1px solid var(--c-border);
+	border-radius: var(--radius);
+	border: 1px solid var(--c-border-firm);
 	background: var(--flash-card-bg);
 	overflow: hidden;
 }
@@ -3252,8 +3523,8 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	content: "";
 	position: absolute;
 	top: 0; left: 0; right: 0;
-	height: 8px;
-	background: var(--swatch, var(--c-border-firm));
+	height: 4px;
+	background: var(--swatch, var(--c-accent));
 }
 .flash-editor-back { background: color-mix(in srgb, var(--flash-card-bg) 92%, var(--c-bg-subtle)); }
 .flash-editor-face label { margin: 0; font-size: var(--fs-xs); color: var(--c-text-faint); }
@@ -3406,20 +3677,31 @@ input.flash-tag-entry:focus { outline: none; }
 	min-height: 2.75rem;
 	margin: var(--s-4) auto 0;
 	padding: var(--s-2) var(--s-6);
-	border-radius: 10px;
-	background: var(--c-accent);
+	border-radius: 0;
+	background: var(--c-accent-attention);
 	color: #fff;
-	font-size: var(--fs-lg);
-	font-weight: 500;
+	font-family: var(--font-mono);
+	font-size: var(--fs-sm);
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
 	cursor: pointer;
+	clip-path: polygon(0 0, calc(100% - var(--chamfer-sm)) 0, 100% var(--chamfer-sm), 100% 100%, 0 100%);
 }
-:root[data-theme="dark"] .flash-show-answer { color: #10141a; }
+:root[data-theme="dark"] .flash-show-answer { color: #151412; }
+/* The same lift as .primary:hover; it's a <label>, so it doesn't inherit it. */
+.flash-show-answer:hover { filter: brightness(1.08); }
+.flash-show-answer:focus-visible,
+.flash-flip:focus-visible ~ .flash-show-answer {
+	outline: none;
+	box-shadow: inset 0 0 0 2px var(--c-bg), inset 0 0 0 4px var(--c-text);
+}
 .flash-show-answer kbd,
 .flash-grade kbd,
 .flash-undo-btn kbd {
-	font-family: var(--font-ui);
+	font-family: var(--font-mono);
 	font-size: var(--fs-2xs);
-	opacity: 0.75;
+	opacity: 0.8;
 }
 
 /* Grade buttons: hidden until the card is flipped (CSS only). */
@@ -3439,10 +3721,11 @@ input.flash-tag-entry:focus { outline: none; }
 	gap: 2px;
 	min-height: 3.5rem;
 	padding: var(--s-2);
-	border-radius: 10px;
-	border: 2px solid;
-	font-size: var(--fs-base);
+	border-radius: var(--radius);
+	border: 1.5px solid;
+	font-size: var(--fs-sm);
 	font-weight: 600;
+	font-variant-numeric: tabular-nums;
 	cursor: pointer;
 }
 /* Two classes (0,2,0): since #375 the generic button hover is only (0,1,0)
@@ -3635,7 +3918,7 @@ input.flash-tag-entry:focus { outline: none; }
 	font-weight: 600;
 	font-size: var(--fs-sm);
 }
-:root[data-theme="dark"] .flash-import-steps li::before { color: #10141a; }
+:root[data-theme="dark"] .flash-import-steps li::before { color: #151412; }
 .flash-copy-prompt { margin-top: var(--s-2); }
 .flash-copy-prompt[hidden] { display: none; }
 .flash-import-prompt summary,
@@ -3676,7 +3959,13 @@ input.flash-tag-entry:focus { outline: none; }
 
 /* ---- ON Later ---------------------------------------------------------- */
 
-.later-hl { background: var(--c-accent-attention-bg); color: inherit; border-radius: 2px; scroll-margin-top: 5rem; }
+.later-hl {
+	background: var(--c-accent-attention-bg);
+	color: inherit;
+	border-radius: 2px;
+	box-shadow: inset 0 -2px var(--c-accent-attention);
+	scroll-margin-top: 5rem;
+}
 .later-page { max-width: var(--measure); margin-inline: auto; }
 .later-save { display: flex; gap: .5rem; }
 .later-save-input { flex: 1; min-width: 0; }
@@ -3739,13 +4028,14 @@ body:has(.later-reader) .shell-bar,
 body:has(.later-reader) .app-sidebar,
 body:has(.later-reader) .app-footer { display: none; }
 main:has(.later-reader) { max-width: none; padding: 0; }
-.later-sticky { position: sticky; top: 0; z-index: 2; background: var(--c-bg); }
+.later-sticky { position: sticky; top: 0; z-index: 2; background: var(--c-bg-subtle); }
 .later-topbar { display: flex; align-items: center; gap: .75rem;
-  padding: .5rem 1rem; background: var(--c-bg); border-bottom: var(--border); font-size: var(--fs-sm); color: var(--c-text-dim); }
+  padding: .65rem 1.25rem; background: var(--c-bg-subtle); border-bottom: var(--border); font-size: var(--fs-sm); color: var(--c-text-dim); }
 .later-topbar form { margin: 0; }
-.later-topbar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text); font-weight: 500; }
-.later-left { white-space: nowrap; }
-.later-progress { display: block; width: 100%; height: 3px; appearance: none; border: 0; background: var(--c-bg-subtle); }
+.later-back { font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
+.later-topbar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-display); color: var(--c-text-dim); font-weight: 500; }
+.later-left { white-space: nowrap; font-family: var(--font-mono); font-size: var(--fs-xs); }
+.later-progress { display: block; width: 100%; height: 2px; appearance: none; border: 0; background: var(--c-border); }
 .later-progress::-webkit-progress-bar { background: var(--c-bg-subtle); }
 .later-progress::-webkit-progress-value { background: var(--c-accent); }
 .later-progress::-moz-progress-bar { background: var(--c-accent); }
@@ -3791,9 +4081,67 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-size-3 .later-article-body { font-size: 1.125rem; }
 .later-size-4 .later-article-body { font-size: 1.25rem; }
 .later-size-5 .later-article-body { font-size: 1.4rem; }
-.later-article-title { font-size: 2rem; line-height: 1.2; margin: 0; }
-.later-article-meta { color: var(--c-text-faint); font-size: var(--fs-sm); margin: 0; }
-.later-article-body { line-height: 1.65; overflow-wrap: anywhere; }
+.later-article-kicker {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--c-accent);
+}
+.later-article-kicker::before {
+	content: "";
+	width: 1.125rem;
+	height: 2px;
+	background: var(--c-accent-attention);
+}
+.later-article-title {
+	font-family: var(--font-display);
+	font-size: clamp(1.85rem, 3.6vw, 2.4rem);
+	font-weight: 500;
+	line-height: 1.14;
+	letter-spacing: -0.02em;
+	margin: 0;
+}
+.later-article-meta-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2) var(--s-4);
+	padding: var(--s-3) 0;
+	border-top: 1px solid var(--c-border-firm);
+	border-bottom: 1px solid var(--c-border);
+}
+.later-article-meta {
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.04em;
+	color: var(--c-text-dim);
+	margin: 0;
+}
+.later-article-body { line-height: 1.72; overflow-wrap: anywhere; }
+.later-article:not(:lang(ar)):not(:lang(he)):not(:lang(fa)):not(:lang(ur)):not(:lang(zh)):not(:lang(ja)):not(:lang(ko)) .later-article-body:not(:dir(rtl)) > p:first-of-type::first-letter {
+	float: inline-start;
+	font-family: var(--font-display);
+	font-size: 3.35em;
+	line-height: 0.85;
+	padding: 0.08em 0 0;
+	padding-inline-end: 0.16em;
+	color: var(--c-accent-attention);
+	font-weight: 500;
+}
+.later-article-body blockquote {
+	margin: var(--s-5) 0;
+	padding: var(--s-1) 0 var(--s-1) var(--s-5);
+	border-left: 2px solid var(--c-accent);
+	font-family: var(--font-display);
+	font-style: italic;
+	color: var(--c-text-dim);
+}
 /* A calmer right edge (#559): hyphenate long words and let the browser
    balance the line breaks. Prose only — headings, code and tables keep
    their words whole. Hyphenation follows the page's lang. */
@@ -4042,14 +4390,11 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 	align-items: center;
 	justify-content: center;
 	padding: var(--s-6) var(--s-4);
-	background: var(--c-bg-subtle);
+	background: var(--c-bg);
 	color: var(--c-text);
 }
 /* 4.8:1 under the pills' dark text; the old #7a6c5d was 3.6. */
 :root[data-theme="dark"] .focus-runner { --focus-break: #8f806e; }
-/* The ink palette is neutral rather than warm, so its break grey is too. */
-:root[data-palette="ink"] .focus-runner { --focus-break: #a29d94; }
-:root[data-palette="ink"][data-theme="dark"] .focus-runner { --focus-break: #8a857d; }
 .focus-runner-break { --focus-ring: var(--focus-break); }
 .focus-runner [hidden] { display: none; }
 
@@ -4060,6 +4405,8 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 	right: var(--s-4);
 	display: flex;
 	align-items: center;
+	padding-bottom: var(--s-2);
+	border-bottom: var(--border);
 }
 .focus-runner-quiet {
 	padding: var(--s-1) var(--s-2);
@@ -4067,45 +4414,94 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 	border-radius: var(--radius);
 	background: none;
 	color: var(--c-text-dim);
-	font: inherit;
-	font-size: var(--fs-sm);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
 	text-decoration: none;
 	cursor: pointer;
 }
 .focus-runner-quiet:hover { background: var(--c-bg-inset); color: var(--c-text); text-decoration: none; }
 .focus-runner-fullscreen { margin-left: auto; }
 
-.focus-runner-main { display: flex; flex-direction: column; align-items: center; gap: var(--s-5); }
+.focus-runner-main { display: flex; flex-direction: column; align-items: center; gap: var(--s-5); width: 100%; }
+
+.focus-chassis {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--s-5);
+	width: min(28rem, 100%);
+	padding: var(--s-5) var(--s-6) var(--s-6);
+	background: var(--c-bg-subtle);
+	border: 1px solid var(--c-border-firm);
+	clip-path: polygon(0 0, calc(100% - var(--chamfer-lg)) 0, 100% var(--chamfer-lg), 100% 100%, 0 100%);
+}
+
+.focus-chassis-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--c-text-faint);
+}
+
+.focus-led {
+	display: inline-block;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: var(--c-accent-attention);
+	box-shadow: 0 0 0 4px var(--c-accent-attention-bg);
+}
+.focus-runner-paused .focus-led,
+.focus-runner-waiting .focus-led {
+	background: var(--c-border-firm);
+	box-shadow: none;
+}
+
 .focus-ring {
 	position: relative;
-	width: min(22rem, 80vw, 60vh);
+	width: min(19rem, 74vw, 52vh);
 	aspect-ratio: 1;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 }
 .focus-ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
-.focus-ring-track, .focus-ring-bar { fill: none; stroke-width: 6; }
-.focus-ring-track { stroke: var(--c-bg-inset); }
+.focus-ring-ticks { fill: none; stroke: var(--c-border-firm); stroke-width: 1; stroke-dasharray: 1.5 10.44; }
+.focus-ring-track, .focus-ring-bar { fill: none; stroke-width: 4.5; }
+.focus-ring-track { stroke: var(--c-border); }
 /* stroke-dashoffset is an SVG attribute focus.js sets; CSS must not set it,
  * or the stylesheet would win over the attribute. */
-.focus-ring-bar { stroke: var(--focus-ring); stroke-linecap: round; stroke-dasharray: 1000; transition: stroke-dashoffset .5s linear; }
-/* Nothing elapsed: a round cap would still draw a dot at 12 o'clock.
- * focus.js sets this attribute, so CSS can match it without a class. */
-.focus-ring-bar[stroke-dashoffset="1000"] { stroke-linecap: butt; }
+.focus-ring-bar { stroke: var(--focus-ring); stroke-linecap: butt; stroke-dasharray: 1000; transition: stroke-dashoffset .5s linear; }
 
-.focus-ring-inner { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s-2); max-width: 75%; text-align: center; }
+.focus-ring-well {
+	position: relative;
+	width: 78%;
+	height: 78%;
+	border-radius: 50%;
+	background: var(--c-bg-inset);
+	border: var(--border);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.focus-ring-inner { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s-2); max-width: 82%; text-align: center; }
 .focus-ring-inner p { margin: 0; }
-.focus-runner-name { color: var(--c-text-dim); font-size: var(--fs-sm); letter-spacing: .04em; text-transform: uppercase; overflow-wrap: anywhere; }
-.focus-digits { font-size: clamp(3rem, 12vmin, 4.5rem); font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1; }
-/* Dim text, not the timer's colour: every swatch is under 4.5:1 on the
- * runner's background. The ring and dots carry the colour (F4 dark-mode pass). */
-.focus-phase { color: var(--c-text-dim); font-size: var(--fs-sm); font-weight: 600; }
+.focus-runner-name { font-family: var(--font-display); color: var(--c-text-dim); font-size: var(--fs-base); font-weight: 500; overflow-wrap: anywhere; }
+.focus-digits { font-family: var(--font-mono); font-size: clamp(2.5rem, 10vmin, 3.75rem); font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.04em; line-height: 1; }
+.focus-phase { font-family: var(--font-mono); color: var(--c-accent); font-size: var(--fs-2xs); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
 
 .focus-dots { display: flex; gap: .4rem; margin: 0; padding: 0; list-style: none; }
-.focus-dot { width: .5rem; height: .5rem; border: 1.5px solid var(--c-text-faint); border-radius: 50%; }
-.focus-dot-done { background: var(--focus-ring); border-color: var(--focus-ring); }
-.focus-dot-now { border-color: var(--swatch); box-shadow: 0 0 0 2px var(--swatch-soft); }
+.focus-dot { width: .9rem; height: 3px; border: 0; border-radius: 0; background: var(--c-border-firm); }
+.focus-dot-done { background: var(--c-accent); }
+.focus-dot-now { background: var(--focus-ring); }
 
 .focus-runner-paused .focus-ring-bar,
 .focus-runner-paused .focus-digits { opacity: .45; }
@@ -4115,18 +4511,40 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 .focus-runner-waiting .focus-ring-bar,
 .focus-runner-waiting .focus-digits { opacity: .45; }
 .focus-runner-waiting [data-focus-next] { animation: focus-pulse 2s ease-in-out infinite; }
-@keyframes focus-pulse { 50% { transform: scale(1.06); } }
+@keyframes focus-pulse { 50% { transform: scale(1.04); } }
 @media (prefers-reduced-motion: reduce) {
 	.focus-runner-waiting [data-focus-next] { animation: none; }
 }
 
 .focus-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
 .focus-controls button,
-.focus-controls .button { padding: var(--s-2) var(--s-4); border-radius: 999px; }
+.focus-controls .button {
+	padding: var(--s-2) var(--s-4);
+	border-radius: var(--radius);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
 /* Dark text on the timer's colour in both themes: white is under 4.5:1 on
- * every swatch (F4 addendum). Same colour as the suite's dark .primary. */
+ * every swatch (F4 addendum). */
 .focus-controls .primary,
-.focus-controls .primary:hover { background: var(--focus-ring); border-color: var(--focus-ring); color: #10141a; }
+.focus-controls .primary:hover { background: var(--focus-ring); border-color: transparent; color: #151412; }
+
+.focus-keys {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--s-3);
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	color: var(--c-text-faint);
+	letter-spacing: 0.05em;
+}
+/* No hover usually means a touch screen with no keyboard to press. */
+@media (hover: none) {
+	.focus-keys { display: none; }
+}
 
 .focus-sound-hint { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); text-align: center; }
 .focus-done { display: flex; flex-direction: column; align-items: center; gap: var(--s-4); text-align: center; }
@@ -4244,7 +4662,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-shelf:hover { background: var(--c-bg-inset); }
 .books-shelf[aria-current="page"] { background: var(--c-accent-bg); color: var(--c-accent); font-weight: 600; }
 .books-count { color: var(--c-text-dim); font-size: var(--fs-sm); }
-.books-side-head { margin: var(--s-4) 0 var(--s-1); padding: 0 var(--s-2); font-size: var(--fs-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--c-text-dim); }
+.books-side-head { margin: var(--s-4) 0 var(--s-1); padding: 0 var(--s-2); font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-text-dim); }
 .books-side-foot { margin-top: auto; padding-top: var(--s-3); border-top: 1px solid var(--c-border); }
 .books-goal-card { display: block; margin-top: var(--s-3); padding: var(--s-2) var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg); color: var(--c-text-dim); font-size: var(--fs-sm); text-decoration: none; }
 .books-goal-card:hover { border-color: var(--c-accent); }
@@ -4299,13 +4717,13 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-item-spine { display: flex; align-items: flex-end; padding: var(--s-2); overflow: hidden; border-left: 6px solid var(--swatch); background: var(--swatch-soft); color: var(--c-text); font-size: var(--fs-xs); font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
 .books-item-initial { display: none; }
 .books-item-cover-bar { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 4px; border-radius: 0 0 3px 3px; }
-.books-item-title { font-weight: 600; }
+.books-item-title { font-family: var(--font-display); font-weight: 500; }
 .books-item-authors { color: var(--c-text-dim); font-size: var(--fs-sm); }
 .books-item-tags { display: flex; flex-wrap: wrap; gap: var(--s-1); }
 .books-item-status { color: var(--c-text-dim); font-size: var(--fs-xs); font-weight: 600; }
 .books-status-reading { color: var(--c-accent); }
 .books-status-dnf { color: var(--c-accent-attention); }
-.books-item-date { color: var(--c-text-faint); font-size: var(--fs-xs); }
+.books-item-date { font-family: var(--font-mono); color: var(--c-text-faint); font-size: var(--fs-2xs); }
 .books-item-bar { display: block; width: 7rem; height: 4px; margin: var(--s-1) 0; }
 /* A searched row's third line: where the search matched (B3), held to
  * two lines. */
@@ -4390,14 +4808,14 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-book-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4); margin-bottom: var(--s-4); }
 .books-spine { flex: 0 0 auto; display: flex; align-items: flex-end; width: 6rem; height: 9rem; padding: var(--s-2); overflow: hidden; border-left: 8px solid var(--swatch); border-radius: 3px; background: var(--swatch-soft); color: var(--c-text); font-size: var(--fs-xs); font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
 .books-book-titles { flex: 1 1 12rem; min-width: 0; }
-.books-book-titles h1 { margin: 0; font-size: var(--fs-xl); }
-.books-subtitle { margin: var(--s-1) 0 0; color: var(--c-text-dim); }
+.books-book-titles h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.5rem, 2.8vw, 2rem); font-weight: 500; line-height: 1.15; }
+.books-subtitle { margin: var(--s-1) 0 0; font-family: var(--font-display); font-style: italic; color: var(--c-text-dim); }
 .books-authors { margin: var(--s-2) 0 0; font-weight: 600; }
 .books-series,
-.books-facts { margin: var(--s-1) 0 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
+.books-facts { margin: var(--s-1) 0 0; font-family: var(--font-mono); color: var(--c-text-dim); font-size: var(--fs-xs); letter-spacing: 0.03em; }
 .books-pills { display: flex; flex-wrap: wrap; gap: var(--s-1); margin: var(--s-2) 0 0; }
-.books-pill { padding: 0 var(--s-2); border-radius: 999px; background: var(--c-bg-subtle); color: var(--c-text-dim); font-size: var(--fs-xs); }
-.books-pill-shelf { background: var(--c-accent-bg); color: var(--c-accent); }
+.books-pill { padding: 0 var(--s-2); border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg-subtle); color: var(--c-text-dim); font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: 0.05em; text-transform: uppercase; }
+.books-pill-shelf { border-color: transparent; background: var(--c-accent-bg); color: var(--c-accent); }
 /* The header's tag pills are read-only links to each tag's list (spec
  * "Header"). */
 .books-pill-link { text-decoration: none; }
@@ -4432,8 +4850,8 @@ main:has(.books-home) { max-width: none; padding: 0; }
  * That action is the summary of the section's own <details>, lifted into
  * the heading row, so every disclosure works without JavaScript
  * (PATTERNS.md). */
-.books-section { position: relative; margin-top: var(--s-5); padding-top: var(--s-3); border-top: 1px solid var(--c-border); }
-.books-section-head { margin: 0 0 var(--s-2); min-height: 1.75rem; font-size: var(--fs-xs); font-weight: 600; line-height: 1.75rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--c-text-faint); }
+.books-section { position: relative; margin-top: var(--s-5); padding-top: var(--s-3); border-top: 1px solid var(--c-border-firm); }
+.books-section-head { margin: 0 0 var(--s-2); min-height: 1.75rem; font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 600; line-height: 1.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-text-faint); }
 .books-section-count { font-weight: 400; }
 .books-section-action { position: absolute; top: var(--s-3); right: 0; justify-content: center; width: 1.75rem; height: 1.75rem; padding: 0; list-style: none; }
 .books-section-action::-webkit-details-marker { display: none; }
@@ -4497,7 +4915,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-star { display: inline-flex; padding: var(--s-1); border: 0; background: none; color: var(--c-text-faint); cursor: pointer; }
 .books-star:hover,
 .books-star.is-on { color: var(--c-accent); }
-.books-review-text { max-width: 38rem; }
+.books-review-text { max-width: 38rem; font-family: var(--font-body); }
 .books-review-text p { margin: 0 0 var(--s-2); }
 /* ✎ turns the review into its textarea in place. */
 .books-take:has(> .books-review-edit[open]) > .books-review-text { display: none; }
@@ -4555,7 +4973,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-entry-form input[type="number"] { width: 6rem; }
 .books-entry-form button { align-self: flex-start; }
 /* A quote keeps its blockquote, and the line breaks it was typed with. */
-.books-quote-text { margin: 0 0 var(--s-1); padding-left: var(--s-3); border-left: 3px solid var(--c-accent); font-style: italic; white-space: pre-line; overflow-wrap: anywhere; }
+.books-quote-text { margin: 0 0 var(--s-1); padding-left: var(--s-4); border-left: 2px solid var(--c-accent); font-style: italic; white-space: pre-line; overflow-wrap: anywhere; }
 .books-quote-comment { margin-top: var(--s-1); }
 
 /* Reading history: a disclosure, collapsed until opened. Its toggle is a
@@ -4609,7 +5027,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-picked p { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
 
 /* Covers: the same footprint as the spines they replace */
-.books-cover { flex: 0 0 auto; display: block; width: 6rem; height: auto; max-height: 9rem; object-fit: contain; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+.books-cover { flex: 0 0 auto; display: block; width: 6rem; height: auto; max-height: 9rem; object-fit: contain; border: 1px solid var(--c-border-firm); border-radius: var(--radius); }
 
 /* Edit page: the cover */
 .books-cover-edit { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4); }

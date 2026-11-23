@@ -1,6 +1,6 @@
 // internal/ui/static/theme.js
 //
-// Theme, font and sidebar-collapsed state are plain, non-HttpOnly cookies:
+// Theme and sidebar-collapsed state are plain, non-HttpOnly cookies:
 // this script is the only thing that ever writes them. The server
 // (internal/platform/web/prefs.go) only reads them, so there is no endpoint
 // and no CSRF concern here — flipping a preference is a page-level
@@ -31,36 +31,6 @@
 				document.documentElement.setAttribute("data-theme", value);
 				setCookie("onsuite_theme", value);
 				markActive(buttons, "data-theme-value", value);
-			});
-		});
-	}
-
-	function initFontSwitch() {
-		var group = document.querySelector("[data-font-switch]");
-		if (!group) return;
-		var buttons = group.querySelectorAll("[data-font-value]");
-		markActive(buttons, "data-font-value", document.documentElement.getAttribute("data-font"));
-		buttons.forEach(function (btn) {
-			btn.addEventListener("click", function () {
-				var value = btn.getAttribute("data-font-value");
-				document.documentElement.setAttribute("data-font", value);
-				setCookie("onsuite_font", value);
-				markActive(buttons, "data-font-value", value);
-			});
-		});
-	}
-
-	function initPaletteSwitch() {
-		var group = document.querySelector("[data-palette-switch]");
-		if (!group) return;
-		var buttons = group.querySelectorAll("[data-palette-value]");
-		markActive(buttons, "data-palette-value", document.documentElement.getAttribute("data-palette"));
-		buttons.forEach(function (btn) {
-			btn.addEventListener("click", function () {
-				var value = btn.getAttribute("data-palette-value");
-				document.documentElement.setAttribute("data-palette", value);
-				setCookie("onsuite_palette", value);
-				markActive(buttons, "data-palette-value", value);
 			});
 		});
 	}
@@ -311,8 +281,6 @@
 	}
 
 	initThemeSwitch();
-	initFontSwitch();
-	initPaletteSwitch();
 	initSidebarToggle();
 	initUserMenu();
 	initCopyLink();

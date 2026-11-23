@@ -176,8 +176,8 @@ func TestShellPutsUserActionsBehindOneMenu(t *testing.T) {
 		t.Errorf("logout button = %q", got)
 	}
 	doc.MustHave(panel + " [data-theme-switch]")
-	doc.MustHave(panel + " [data-font-switch]")
-	doc.MustHave(panel + " [data-palette-switch]")
+	doc.MustNotHave(panel + " [data-font-switch]")
+	doc.MustNotHave(panel + " [data-palette-switch]")
 }
 
 // TestShellHasConnectivityIndicator covers the element connectivity.js
@@ -510,8 +510,6 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 			LoggedIn:      true,
 			Username:      "ilia",
 			Theme:         "dark",
-			Font:          "serif",
-			Palette:       "ink",
 			ActiveApp:     "paste",
 			ActiveAppName: "ON Paste",
 			ActiveAppPath: "/paste/",
@@ -528,18 +526,20 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
 
-	// data-theme/data-font/data-palette land on <html>, set from the very first response.
+	// data-theme lands on <html> from the very first response; retired
+	// data-font and data-palette attributes are absent.
 	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-theme"); v != "dark" {
 		t.Errorf("data-theme = %q, want dark", v)
 	}
-	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-font"); v != "serif" {
-		t.Errorf("data-font = %q, want serif", v)
+	if _, ok := htmlassert.Attr(doc.MustHave("html"), "data-font"); ok {
+		t.Error("<html> must not carry data-font")
 	}
-	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-palette"); v != "ink" {
-		t.Errorf("data-palette = %q, want ink", v)
+	if _, ok := htmlassert.Attr(doc.MustHave("html"), "data-palette"); ok {
+		t.Error("<html> must not carry data-palette")
 	}
 
 	// Breadcrumbs: Home / ON Paste / New snippet.
+	doc.MustHave(".shell-logo svg polygon")
 	crumbs := doc.Text()
 	for _, want := range []string{"Home", "ON Paste", "New snippet"} {
 		if !strings.Contains(crumbs, want) {
@@ -569,6 +569,33 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 	if !strings.Contains(htmlassert.Text(doc.MustHave("footer.app-footer")), "v1.2.3") {
 		t.Error("footer does not show the version")
 	}
+}
+
+func TestHomeRendersHeroPlateAndAppDirectory(t *testing.T) {
+	r := testRenderer(t)
+	rec := httptest.NewRecorder()
+	type homeApp struct {
+		ID, Name, Path, Summary string
+		ComingSoon              bool
+	}
+	err := r.Page(rec, http.StatusOK, "home", render.Page{
+		Shell: render.Shell{LoggedIn: true, Username: "ilia", Theme: "light"},
+		Data: map[string]any{
+			"Apps": []homeApp{
+				{ID: "paste", Name: "ON Paste", Path: "/paste/", Summary: "Snippets"},
+				{ID: "focus", Name: "ON Focus", Path: "/focus/", Summary: "Timers"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave(".home-hero")
+	doc.MustHave(".home-hero-art svg")
+	doc.MustHave(".home-grid .app-card")
+	doc.MustHave(`.home-grid a[href="/paste/"]`)
+	doc.MustHave(`.home-grid a[href="/focus/"]`)
 }
 
 func TestRendererRejectsBadInput(t *testing.T) {

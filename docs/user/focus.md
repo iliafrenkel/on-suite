@@ -60,8 +60,8 @@ With a mouse, you can also drag a tile to where you want it.
 
 **▶** starts the timer straight away in a calm, full-window view. The ring
 around the countdown fills as time passes — in the timer's colour while you
-focus, warm grey during breaks. Interval timers also show a dot per round:
-filled for rounds done, ringed for the one you're in.
+focus, warm grey during breaks. Interval timers also show a bar per round:
+filled for rounds done, highlighted for the one you're in.
 
 ![Deep work running: a teal ring a third of the way round, 32 minutes left in round 1 of 4](images/focus-running.png)
 

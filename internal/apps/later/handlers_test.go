@@ -133,6 +133,49 @@ func TestIndexRowShowsSiteMinutesAndLinkOnlyPill(t *testing.T) {
 	}
 }
 
+func TestArticleHasEditorialHeaderAndNoInlineStyles(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	art := seed(t, s, uid, later.NewArticle{
+		URL:         "https://quantamagazine.org/quiet-geometry",
+		Title:       "On Quiet Geometry",
+		ContentHTML: "<p>The most memorable objects rarely shout.</p>",
+	})
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", fmt.Sprintf("/later/a/%v", art.ID), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, ` style="`) {
+		t.Error("later article page must not contain inline style= attributes (strict CSP)")
+	}
+	doc := htmlassert.Parse(t, body)
+	doc.MustHave(".later-article-header")
+	doc.MustHave(".later-article-kicker")
+	doc.MustHave(".later-article-title")
+	doc.MustHave(".later-article-meta-bar")
+}
+
+// The kicker names the site; the meta line under the title carries the
+// byline and reading time. Neither repeats what the other says.
+func TestArticleHeaderSaysSiteAndReadTimeOnce(t *testing.T) {
+	s := newServer(t)
+	a := seed(t, s, s.Alice.User.ID, later.NewArticle{
+		URL: "https://blog.example/essay", Title: "An Essay", SiteName: "Blog", Byline: "Jo",
+		ContentHTML: "<p>Hello reader</p>",
+	})
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	header := htmlassert.Text(doc.MustHave(".later-article-header"))
+	for _, want := range []string{"Blog", "Jo", "min read"} {
+		if got := strings.Count(header, want); got != 1 {
+			t.Errorf("header %q has %q %d times, want 1", header, want, got)
+		}
+	}
+	if got := htmlassert.Text(doc.MustHave(".later-article-kicker")); !strings.Contains(got, "Blog") {
+		t.Errorf("kicker = %q, want the site", got)
+	}
+}
+
 func TestIndexShowsTheEmptyText(t *testing.T) {
 	s := newServer(t)
 	for tab, want := range map[string]string{
@@ -243,7 +286,7 @@ func TestArticleRendersTheSnapshot(t *testing.T) {
 	if rel, _ := htmlassert.Attr(link, "rel"); !strings.Contains(rel, "noopener") {
 		t.Errorf("rel = %q, want noopener", rel)
 	}
-	meta := htmlassert.Text(doc.MustHave(".later-article-meta"))
+	meta := htmlassert.Text(doc.MustHave(".later-article-header"))
 	for _, want := range []string{"Blog", "Jo", "1 min read"} {
 		if !strings.Contains(meta, want) {
 			t.Errorf("meta %q lacks %q", meta, want)
@@ -618,7 +661,7 @@ func TestArticleMetaDoesNotRepeatTheAuthorAsSite(t *testing.T) {
 		URL: "https://jvns.example/p", Title: "P", SiteName: "Julia Evans", Byline: " julia evans ",
 		ContentHTML: "<p>x</p>",
 	})
-	meta := htmlassert.Text(s.Get(t, s.Alice, articlePath(a, "")).MustHave(".later-article-meta"))
+	meta := htmlassert.Text(s.Get(t, s.Alice, articlePath(a, "")).MustHave(".later-article-header"))
 	if got := strings.Count(strings.ToLower(meta), "julia evans"); got != 1 {
 		t.Errorf("meta %q mentions the author %d times, want 1", meta, got)
 	}
@@ -952,9 +995,9 @@ func TestArticleCarriesItsLanguageAndDirection(t *testing.T) {
 		t.Errorf("article lang = %q, want ru", v)
 	}
 	// The site and byline may run right to left inside a left-to-right
-	// meta line; <bdi> keeps them from reordering "N min read" around them.
-	if n := len(doc.QueryAll(".later-article-meta bdi")); n != 1 { // no byline here
-		t.Errorf("%d <bdi> in the meta line, want 1 (the site)", n)
+	// header; <bdi> keeps them from reordering the text around them.
+	if n := len(doc.QueryAll(".later-article-header bdi")); n != 1 { // no byline here
+		t.Errorf("%d <bdi> in the header, want 1 (the site)", n)
 	}
 	for _, sel := range []string{".later-article-title", "#later-body", ".later-topbar-title"} {
 		if v, _ := htmlassert.Attr(doc.MustHave(sel), "dir"); v != "auto" {

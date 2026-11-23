@@ -1,15 +1,47 @@
 {{define "content"}}
-<div class="stack">
-	<h1>ON Suite</h1>
+<div class="stack home-page">
+	<section class="home-hero">
+		<div class="home-hero-copy">
+			<div class="home-kicker">Household Suite</div>
+			<h1>Quiet tools, <em>exact</em> proportion.</h1>
+			<p class="home-hero-sub">One private server for your snippets, notes, feeds, saved essays, books, flashcards, and uninterrupted focus blocks.</p>
+		</div>
+		<div class="home-hero-art" aria-hidden="true">
+			<svg viewBox="0 0 260 150" width="260" height="150">
+				<defs>
+					<pattern id="home-art-grid" width="14" height="14" patternUnits="userSpaceOnUse">
+						<path d="M 14 0 L 0 0 0 14" fill="none" stroke="var(--c-border)" stroke-width="0.7"/>
+					</pattern>
+				</defs>
+				<rect x="6" y="6" width="248" height="138" fill="url(#home-art-grid)" stroke="var(--c-border)" stroke-width="0.8"/>
+				<polygon class="art-plane-back" points="26,118 164,118 198,58 60,58"/>
+				<polygon class="art-plane-front" points="62,98 202,98 232,34 92,34"/>
+				<line class="art-guide" x1="92" y1="34" x2="60" y2="58"/>
+				<line class="art-guide" x1="202" y1="98" x2="164" y2="118"/>
+				<path class="art-arc" d="M 110 82 A 48 48 0 0 1 196 52"/>
+				<circle class="art-signal" cx="192" cy="56" r="10"/>
+				<circle class="art-signal-halo" cx="192" cy="56" r="17"/>
+				<line class="art-rule-strong" x1="88" y1="74" x2="148" y2="74"/>
+				<line class="art-rule-faint" x1="88" y1="81" x2="130" y2="81"/>
+				<circle class="art-dot" cx="38" cy="30" r="2.5"/>
+				<line class="art-rule-faint" x1="46" y1="30" x2="78" y2="30"/>
+			</svg>
+		</div>
+	</section>
 
 	{{if .Data.Apps}}
+	<div class="home-dir-head">
+		<span>Applications</span>
+		<span>Select an instrument</span>
+	</div>
 	<div class="home-grid">
 		{{range .Data.Apps}}
 		{{if not .ComingSoon}}
-		<a class="app-card" href="{{.Path}}">
+		<a class="app-card {{appColor .ID}}" href="{{.Path}}">
 			<div class="app-card-icon {{appColor .ID}}">{{icon .ID}}</div>
 			<h3>{{.Name}}</h3>
 			<p class="faint">{{.Summary}}</p>
+			<span class="app-card-rule" aria-hidden="true"></span>
 		</a>
 		{{end}}
 		{{end}}

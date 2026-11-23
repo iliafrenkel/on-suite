@@ -410,6 +410,33 @@ func TestRunPageDoneScreenCanRetry(t *testing.T) {
 	}
 }
 
+func TestRunPageHasBraunChassisAndInstrumentDial(t *testing.T) {
+	s := newServer(t)
+	tm := seedTimer(t, s, s.Alice.User.ID, single("Deep work", 25))
+	rec := s.Do(t, s.Alice, httptestGet("/focus/run/"+itoa(tm.ID)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, ` style="`) {
+		t.Error("focus run page must not contain inline style= attributes (strict CSP)")
+	}
+	doc := htmlassert.Parse(t, body)
+	doc.MustHave(".focus-chassis")
+	// The chassis label is decoration; screen readers go straight to the timer.
+	if v, _ := htmlassert.Attr(doc.MustHave(".focus-chassis-label"), "aria-hidden"); v != "true" {
+		t.Errorf("chassis label aria-hidden = %q, want true", v)
+	}
+	doc.MustHave(".focus-ring-ticks")
+	doc.MustHave(".focus-ring-well")
+	doc.MustHave("[data-focus-bar]")
+	doc.MustHave("[data-focus-digits]")
+	doc.MustHave("button[data-focus-pause]")
+	// The key legend's Space label is live: focus.js keeps it in step with
+	// the button Space presses (Pause, Resume or Start).
+	doc.MustHave("[data-focus-space-label]")
+}
+
 // The running page embeds the timer as JSON inside <script>; a name that
 // looks like markup must not end the script early or break the JSON.
 func TestRunPageConfigEscapesTheName(t *testing.T) {

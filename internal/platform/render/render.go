@@ -41,13 +41,9 @@ type Shell struct {
 	CSRFToken string
 	Version   string
 
-	// Theme is "light" or "dark". Font is "sans", "serif", "mono", or "mixed".
-	// These and Palette are each read from a cookie once per request, so
-	// the first response already carries the right value.
+	// Theme is "light" or "dark", read from a cookie once per request so the
+	// first response already carries the right value.
 	Theme string
-	Font  string
-	// Palette is "warm" (cream and teal) or "ink" (paper and ink).
-	Palette string
 	// SidebarCollapsed is whether the app switcher should render collapsed
 	// to icons-only.
 	SidebarCollapsed bool

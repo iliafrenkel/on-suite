@@ -123,8 +123,6 @@ func NewPage(r *http.Request, title string, nav []render.NavItem) render.Page {
 		ActiveApp:        web.ActiveApp(r.Context()),
 		CSRFToken:        web.CSRFToken(r.Context()),
 		Theme:            web.ThemeFrom(r),
-		Font:             web.FontFrom(r),
-		Palette:          web.PaletteFrom(r),
 		SidebarCollapsed: web.SidebarCollapsedFrom(r),
 	}
 	for _, n := range nav {
