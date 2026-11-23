@@ -2930,7 +2930,7 @@ input.outline-note:focus { outline: none; }
 	gap: var(--s-3);
 	margin-bottom: var(--s-5);
 }
-.reader-stat-tile { background: var(--c-bg-subtle); border-radius: 4px; padding: var(--s-3); }
+.reader-stat-tile { background: var(--c-bg-subtle); border-radius: var(--radius); padding: var(--s-3); }
 .reader-stat-tile .value { font-size: var(--fs-xl); }
 .reader-stat-tile .label { color: var(--c-text-dim); font-size: var(--fs-xs); }
 
@@ -2979,7 +2979,7 @@ input.outline-note:focus { outline: none; }
 	gap: var(--s-3);
 	margin-bottom: var(--s-5);
 }
-.flash-stat-tile { background: var(--c-bg-subtle); border-radius: 4px; padding: var(--s-3); }
+.flash-stat-tile { background: var(--c-bg-subtle); border-radius: var(--radius); padding: var(--s-3); }
 .flash-stat-tile .value { font-size: var(--fs-xl); }
 .flash-stat-tile .label { color: var(--c-text-dim); font-size: var(--fs-xs); }
 
@@ -3147,7 +3147,7 @@ input.outline-note:focus { outline: none; }
 .flash-review-cta:hover { filter: brightness(1.08); }
 /* Dark mode's lighter orange takes dark text, as .primary does (#556). */
 :root[data-theme="dark"] .toolbar-due-badge,
-:root[data-theme="dark"] .flash-review-cta { color: #10141a; }
+:root[data-theme="dark"] .flash-review-cta { color: #151412; }
 .flash-review-cta:focus-visible { outline: var(--ring); outline-offset: 2px; }
 
 .flash-all-done {
@@ -3182,7 +3182,7 @@ input.outline-note:focus { outline: none; }
 	color: #fff;
 }
 .flash-big-btn-primary:hover { background: var(--c-accent); filter: brightness(1.1); }
-:root[data-theme="dark"] .flash-big-btn-primary { color: #10141a; }
+:root[data-theme="dark"] .flash-big-btn-primary { color: #151412; }
 
 .flash-welcome {
 	display: flex;
@@ -3498,7 +3498,7 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	cursor: pointer;
 }
 .flash-type-toggle input:checked + label { background: var(--c-accent); color: #fff; }
-:root[data-theme="dark"] .flash-type-toggle input:checked + label { color: #10141a; }
+:root[data-theme="dark"] .flash-type-toggle input:checked + label { color: #151412; }
 .flash-type-toggle input:focus-visible + label { outline: var(--ring); outline-offset: -3px; }
 
 /* The two faces, drawn as cards. */
@@ -3918,7 +3918,7 @@ input.flash-tag-entry:focus { outline: none; }
 	font-weight: 600;
 	font-size: var(--fs-sm);
 }
-:root[data-theme="dark"] .flash-import-steps li::before { color: #10141a; }
+:root[data-theme="dark"] .flash-import-steps li::before { color: #151412; }
 .flash-copy-prompt { margin-top: var(--s-2); }
 .flash-copy-prompt[hidden] { display: none; }
 .flash-import-prompt summary,

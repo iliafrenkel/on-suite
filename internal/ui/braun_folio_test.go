@@ -287,3 +287,27 @@ func TestNotesChipsAreMonoEverywhere(t *testing.T) {
 		css.mustDeclare("", sel, "font-family: var(--font-mono)")
 	}
 }
+
+// TestNoPreBraunLeftoversInFlashAndReader pins the stats tiles on the shared
+// radius and the dark-mode ink on Flash's accent controls at the Braun
+// #151412, which keeps 4.5:1+ on both dark accents.
+func TestNoPreBraunLeftoversInFlashAndReader(t *testing.T) {
+	css := loadAppCSS(t)
+	for _, sel := range []string{".reader-stat-tile", ".flash-stat-tile", ".books-stat-tile"} {
+		css.mustDeclare("", sel, "border-radius: var(--radius)")
+	}
+	dark := css.declsFor(`:root[data-theme="dark"]`)
+	for _, sel := range []string{
+		`:root[data-theme="dark"] .flash-review-cta`,
+		`:root[data-theme="dark"] .flash-big-btn-primary`,
+		`:root[data-theme="dark"] .flash-type-toggle input:checked + label`,
+		`:root[data-theme="dark"] .flash-import-steps li::before`,
+	} {
+		css.mustDeclare("", sel, "color: #151412")
+	}
+	for _, tok := range []string{"--c-accent", "--c-accent-attention"} {
+		if got := contrastRatio(t, "#151412", extractToken(t, dark, tok)); got < 4.5 {
+			t.Errorf("#151412 on dark %s: %.2f:1 < 4.5:1", tok, got)
+		}
+	}
+}
