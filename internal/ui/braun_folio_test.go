@@ -146,16 +146,43 @@ func TestBraunFolioPhase2InstrumentApps(t *testing.T) {
 		name string
 		re   string
 	}{
-		{"paste code frame recessed with firm border", `(?s)\.snippet-body\s*\{[^}]*background:\s*var\(--c-bg-inset\)[^}]*border:\s*1px solid var\(--c-border-firm\)`},
+		{"paste code frame uses subtle surface with firm border (Chroma Light AA contrast)", `(?s)\.snippet-body\s*\{[^}]*background:\s*var\(--c-bg-subtle\)[^}]*border:\s*1px solid var\(--c-border-firm\)`},
 		{"paste active row has 2px left rail", `(?s)\.snippet-row-active[^{]*\{[^}]*border-left-color:\s*var\(--c-accent\)`},
+		{"paste active row keeps dim date contrast", `(?s)\.snippet-row-active \.snippet-date\s*\{[^}]*color:\s*var\(--c-text-dim\)`},
 		{"paste pill uses mono", `(?s)\.snippet-pill\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
 		{"flash card text uses display serif with normal case", `(?s)\.flash-card-text\s*\{[^}]*font-family:\s*var\(--font-display\)[^}]*text-transform:\s*none`},
+		{"flash editor face matches precision radius", `(?s)\.flash-editor-face\s*\{[^}]*border-radius:\s*var\(--radius\)`},
 		{"flash show-answer uses chamfered signal primary", `(?s)\.flash-show-answer\s*\{[^}]*clip-path:\s*polygon\(`},
+		{"flash show-answer has unclipped focus-visible ring", `(?s)\.flash-show-answer:focus-visible[^{]*\{[^}]*box-shadow:`},
 		{"flash grade uses precision radius", `(?s)\.flash-grade\s*\{[^}]*border-radius:\s*var\(--radius\)`},
 	}
 	for _, c := range checks {
 		if !regexp.MustCompile(c.re).MatchString(css) {
 			t.Errorf("app.css missing Phase 2 instrument contract: %s", c.name)
+		}
+	}
+
+	// Verify Chroma Light keyword (#cf222e) keeps >= 4.5:1 on Light --c-bg-subtle.
+	lightBlock := regexp.MustCompile(`(?s)\n:root \{([^}]*)\}`).FindStringSubmatch(css)
+	if lightBlock == nil {
+		t.Fatal("missing :root block")
+	}
+	if got := contrastRatio(t, "#cf222e", extractToken(t, lightBlock[1], "--c-bg-subtle")); got < 4.5 {
+		t.Errorf("Chroma Light keyword (#cf222e) on --c-bg-subtle: %.2f:1 < 4.5:1", got)
+	}
+
+	// Verify ON Flash FSRS grade pairings stay >= 4.5:1 in Light and Dark.
+	flashLight := regexp.MustCompile(`(?s)/\* ---- ON Flash: review[^*]*\*/\s*:root \{([^}]*)\}`).FindStringSubmatch(css)
+	flashDark := regexp.MustCompile(`(?s)/\* ---- ON Flash: review[^*]*\*/\s*:root \{[^}]*\}\s*:root\[data-theme="dark"\] \{([^}]*)\}`).FindStringSubmatch(css)
+	if flashLight == nil || flashDark == nil {
+		t.Fatal("missing ON Flash grade token blocks")
+	}
+	for _, g := range []string{"again", "hard", "good", "easy"} {
+		if got := contrastRatio(t, extractToken(t, flashLight[1], "--flash-grade-"+g+"-text"), extractToken(t, flashLight[1], "--flash-grade-"+g+"-bg")); got < 4.5 {
+			t.Errorf("light flash-grade-%s contrast %.2f:1 < 4.5:1", g, got)
+		}
+		if got := contrastRatio(t, extractToken(t, flashDark[1], "--flash-grade-"+g+"-text"), extractToken(t, flashDark[1], "--flash-grade-"+g+"-bg")); got < 4.5 {
+			t.Errorf("dark flash-grade-%s contrast %.2f:1 < 4.5:1", g, got)
 		}
 	}
 }
@@ -173,11 +200,16 @@ func TestBraunFolioPhase2EditorialAndOutlinerApps(t *testing.T) {
 	}{
 		{"notes crumbs use mono", `(?s)\.outline-crumbs\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
 		{"notes due group heading uses mono", `(?s)\.notes-due-group h2\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
+		{"reader active feed has 2px left rail", `(?s)\.reader-node\.is-active[^{]*\{[^}]*border-left:\s*2px solid var\(--c-accent\)`},
 		{"reader active row has 2px left rail", `(?s)\.reader-row\.is-active a[^{]*\{[^}]*border-left-color:\s*var\(--c-accent\)`},
+		{"reader active row keeps dim meta contrast", `(?s)\.reader-row\.is-active \.meta\s*\{[^}]*color:\s*var\(--c-text-dim\)`},
 		{"reader list heading uses mono", `(?s)\.reader-list-head h2\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
 		{"reader body has editorial blockquote", `(?s)\.reader-body blockquote\s*\{[^}]*border-left:\s*2px solid var\(--c-accent\)`},
+		{"books side heading uses mono", `(?s)\.books-side-head\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
 		{"books section heading uses mono", `(?s)\.books-section-head\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
+		{"books item title uses display serif", `(?s)\.books-item-title\s*\{[^}]*font-family:\s*var\(--font-display\)`},
 		{"books title uses display serif", `(?s)\.books-book-titles h1\s*\{[^}]*font-family:\s*var\(--font-display\)`},
+		{"books cover uses firm hairline border", `(?s)\.books-cover\s*\{[^}]*border:\s*1px solid var\(--c-border-firm\)`},
 	}
 	for _, c := range checks {
 		if !regexp.MustCompile(c.re).MatchString(css) {

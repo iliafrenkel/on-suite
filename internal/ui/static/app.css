@@ -960,7 +960,7 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 
 .snippet-body {
 	border-radius: var(--radius);
-	background: var(--c-bg-inset);
+	background: var(--c-bg-subtle);
 	border: 1px solid var(--c-border-firm);
 	padding: var(--s-3) var(--s-4);
 }
@@ -974,9 +974,11 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	flex-direction: column;
 	gap: var(--s-2);
 }
-.paste-detail-header h1,
+.paste-detail-header h1 { margin: 0; }
 .paste-detail-header p {
 	margin: 0;
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
 }
 
 .paste-toolbar-actions {
@@ -2594,6 +2596,8 @@ kbd {
 
 .reader-node.is-active,
 .reader-sub.is-active {
+	border-left: 2px solid var(--c-accent);
+	border-radius: 0;
 	background: var(--c-accent-bg);
 }
 
@@ -3489,8 +3493,8 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	flex-direction: column;
 	gap: var(--s-2);
 	padding: var(--s-5) var(--s-4) var(--s-4);
-	border-radius: 14px;
-	border: 1px solid var(--c-border);
+	border-radius: var(--radius);
+	border: 1px solid var(--c-border-firm);
 	background: var(--flash-card-bg);
 	overflow: hidden;
 }
@@ -3498,8 +3502,8 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	content: "";
 	position: absolute;
 	top: 0; left: 0; right: 0;
-	height: 8px;
-	background: var(--swatch, var(--c-border-firm));
+	height: 4px;
+	background: var(--swatch, var(--c-accent));
 }
 .flash-editor-back { background: color-mix(in srgb, var(--flash-card-bg) 92%, var(--c-bg-subtle)); }
 .flash-editor-face label { margin: 0; font-size: var(--fs-xs); color: var(--c-text-faint); }
@@ -3664,6 +3668,11 @@ input.flash-tag-entry:focus { outline: none; }
 	clip-path: polygon(0 0, calc(100% - var(--chamfer-sm)) 0, 100% var(--chamfer-sm), 100% 100%, 0 100%);
 }
 :root[data-theme="dark"] .flash-show-answer { color: #151412; }
+.flash-show-answer:focus-visible,
+.flash-flip:focus-visible ~ .flash-show-answer {
+	outline: none;
+	box-shadow: inset 0 0 0 2px var(--c-bg), inset 0 0 0 4px var(--c-text);
+}
 .flash-show-answer kbd,
 .flash-grade kbd,
 .flash-undo-btn kbd {
@@ -4626,7 +4635,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-shelf:hover { background: var(--c-bg-inset); }
 .books-shelf[aria-current="page"] { background: var(--c-accent-bg); color: var(--c-accent); font-weight: 600; }
 .books-count { color: var(--c-text-dim); font-size: var(--fs-sm); }
-.books-side-head { margin: var(--s-4) 0 var(--s-1); padding: 0 var(--s-2); font-size: var(--fs-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--c-text-dim); }
+.books-side-head { margin: var(--s-4) 0 var(--s-1); padding: 0 var(--s-2); font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-text-dim); }
 .books-side-foot { margin-top: auto; padding-top: var(--s-3); border-top: 1px solid var(--c-border); }
 .books-goal-card { display: block; margin-top: var(--s-3); padding: var(--s-2) var(--s-3); border: var(--border); border-radius: var(--radius); background: var(--c-bg); color: var(--c-text-dim); font-size: var(--fs-sm); text-decoration: none; }
 .books-goal-card:hover { border-color: var(--c-accent); }
@@ -4681,13 +4690,13 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-item-spine { display: flex; align-items: flex-end; padding: var(--s-2); overflow: hidden; border-left: 6px solid var(--swatch); background: var(--swatch-soft); color: var(--c-text); font-size: var(--fs-xs); font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
 .books-item-initial { display: none; }
 .books-item-cover-bar { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 4px; border-radius: 0 0 3px 3px; }
-.books-item-title { font-weight: 600; }
+.books-item-title { font-family: var(--font-display); font-weight: 500; }
 .books-item-authors { color: var(--c-text-dim); font-size: var(--fs-sm); }
 .books-item-tags { display: flex; flex-wrap: wrap; gap: var(--s-1); }
 .books-item-status { color: var(--c-text-dim); font-size: var(--fs-xs); font-weight: 600; }
 .books-status-reading { color: var(--c-accent); }
 .books-status-dnf { color: var(--c-accent-attention); }
-.books-item-date { color: var(--c-text-faint); font-size: var(--fs-xs); }
+.books-item-date { font-family: var(--font-mono); color: var(--c-text-faint); font-size: var(--fs-2xs); }
 .books-item-bar { display: block; width: 7rem; height: 4px; margin: var(--s-1) 0; }
 /* A searched row's third line: where the search matched (B3), held to
  * two lines. */
@@ -4879,7 +4888,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-star { display: inline-flex; padding: var(--s-1); border: 0; background: none; color: var(--c-text-faint); cursor: pointer; }
 .books-star:hover,
 .books-star.is-on { color: var(--c-accent); }
-.books-review-text { max-width: 38rem; }
+.books-review-text { max-width: 38rem; font-family: var(--font-body); }
 .books-review-text p { margin: 0 0 var(--s-2); }
 /* ✎ turns the review into its textarea in place. */
 .books-take:has(> .books-review-edit[open]) > .books-review-text { display: none; }
@@ -4937,7 +4946,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-entry-form input[type="number"] { width: 6rem; }
 .books-entry-form button { align-self: flex-start; }
 /* A quote keeps its blockquote, and the line breaks it was typed with. */
-.books-quote-text { margin: 0 0 var(--s-1); padding-left: var(--s-3); border-left: 3px solid var(--c-accent); font-style: italic; white-space: pre-line; overflow-wrap: anywhere; }
+.books-quote-text { margin: 0 0 var(--s-1); padding-left: var(--s-4); border-left: 2px solid var(--c-accent); font-style: italic; white-space: pre-line; overflow-wrap: anywhere; }
 .books-quote-comment { margin-top: var(--s-1); }
 
 /* Reading history: a disclosure, collapsed until opened. Its toggle is a
@@ -4991,7 +5000,7 @@ main:has(.books-home) { max-width: none; padding: 0; }
 .books-picked p { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); }
 
 /* Covers: the same footprint as the spines they replace */
-.books-cover { flex: 0 0 auto; display: block; width: 6rem; height: auto; max-height: 9rem; object-fit: contain; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+.books-cover { flex: 0 0 auto; display: block; width: 6rem; height: auto; max-height: 9rem; object-fit: contain; border: 1px solid var(--c-border-firm); border-radius: var(--radius); }
 
 /* Edit page: the cover */
 .books-cover-edit { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4); }
