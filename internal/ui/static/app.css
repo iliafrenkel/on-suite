@@ -815,8 +815,12 @@ button, .button {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
 	gap: 1px;
-	background: var(--c-border);
-	border: 1px solid var(--c-border);
+	/* Each card draws its own 1px ring, which meets its neighbour's in the
+	 * 1px gap; the padding keeps the outer ring inside the grid's box. A
+	 * row the apps don't fill then ends cleanly on the page background,
+	 * where a border-coloured grid background would show through as a
+	 * solid block. */
+	padding: 1px;
 }
 
 .app-card {
@@ -824,6 +828,7 @@ button, .button {
 	flex-direction: column;
 	padding: var(--s-5);
 	background: var(--c-bg-subtle);
+	box-shadow: 0 0 0 1px var(--c-border);
 	color: var(--c-text);
 	text-decoration: none;
 	transition: background-color 140ms ease;

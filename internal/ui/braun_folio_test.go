@@ -205,3 +205,16 @@ func TestLoginFormComesFirstOnPhones(t *testing.T) {
 	css.mustDeclare(phone, ".login-form-pane", "order: -1")
 	css.mustDeclare(phone, ".login-art-figure", "display: none")
 }
+
+// TestHomeGridLeavesUnfilledCellsEmpty pins the home directory's hairlines:
+// each card draws its own ring, so a row the apps don't fill shows the page,
+// not a block of border colour from the grid's own background.
+func TestHomeGridLeavesUnfilledCellsEmpty(t *testing.T) {
+	css := loadAppCSS(t)
+	for _, r := range css.rulesFor(".home-grid") {
+		if strings.Contains(r.body, "background") {
+			t.Errorf(".home-grid sets a background (%q); an unfilled cell would show it", r.body)
+		}
+	}
+	css.mustDeclare("", ".app-card", "box-shadow: 0 0 0 1px var(--c-border)")
+}
