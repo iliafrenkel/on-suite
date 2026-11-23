@@ -82,16 +82,9 @@ Click your name in the top right corner to open the user menu.
   elsewhere it opens the welcome guide.
 - **Display** — change how ON Suite looks:
   - **Theme:** **Light** or **Dark**.
-  - **Palette:** **Warm** (cream with teal, the original look) or **Ink**
-    (near-black on off-white paper, with navy). Each works in both light
-    and dark themes.
-  - **Font:** **Sans** (clean and modern), **Serif** (a classic book
-    style), **Mono** (a typewriter style) or **Mixed** (sans for menus and
-    buttons, serif for the text you read: Reader articles, notes, book
-    notes and quotes, and help pages).
 
   Changes apply straight away and are remembered on this browser. On
-  another computer or phone, you choose them again.
+  another computer or phone, you choose it again.
 - **Log out** — sign out of ON Suite on this browser. Do this on a shared
   or borrowed computer.
 
