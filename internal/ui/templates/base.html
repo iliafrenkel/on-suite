@@ -49,11 +49,10 @@
 {{define "shell"}}
 <header class="shell-bar">
 	<a class="shell-logo" href="/" aria-label="ON Suite home">
-		<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-			<rect x="1" y="1" width="10" height="10" rx="3" fill="var(--c-accent)"/>
-			<rect x="13" y="1" width="10" height="10" rx="3" fill="var(--c-border-firm)"/>
-			<rect x="1" y="13" width="10" height="10" rx="3" fill="var(--c-border-firm)"/>
-			<rect x="13" y="13" width="10" height="10" rx="3" fill="var(--c-accent)"/>
+		<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+			<polygon points="2,2 17,2 22,7 22,22 2,22" fill="none" stroke="var(--c-text)" stroke-width="1.6"/>
+			<rect x="6" y="6" width="6" height="6" fill="var(--c-accent)"/>
+			<circle cx="15.5" cy="15.5" r="3" fill="var(--c-accent-attention)"/>
 		</svg>
 		<span class="shell-mark">ON<span class="dim"> Suite</span></span>
 	</a>
@@ -65,6 +64,7 @@
 	<div class="shell-user">
 		<div class="conn-indicator" data-conn-indicator role="img" data-status="online" title="All changes are saving normally" aria-label="Online — all changes are saving normally">
 			<div class="conn-dot" aria-hidden="true"></div>
+			<span class="conn-label" aria-hidden="true">Online</span>
 		</div>
 		{{/* Everything the signed-in user can do from the header, behind one
 		     button (#403). A plain <details>, so it opens and the forms work

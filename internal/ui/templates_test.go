@@ -42,3 +42,32 @@ func TestPlatformTemplatesUseNoAppClasses(t *testing.T) {
 		}
 	}
 }
+
+var inlineStylePattern = regexp.MustCompile(`\sstyle="`)
+var inlineScriptPattern = regexp.MustCompile(`<script(?:\s+[^>]*)?>`)
+
+// TestPlatformTemplatesRespectStrictCSP enforces the suite's CSP: no inline
+// style="..." attributes and no inline <script> blocks (external src= or
+// type="application/json" data blocks are allowed).
+func TestPlatformTemplatesRespectStrictCSP(t *testing.T) {
+	templates := ui.Templates()
+	names, err := fs.Glob(templates, "*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		src, err := fs.ReadFile(templates, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(src)
+		if inlineStylePattern.MatchString(text) {
+			t.Errorf("%s contains an inline style= attribute (violates strict CSP)", name)
+		}
+		for _, tag := range inlineScriptPattern.FindAllString(text, -1) {
+			if !strings.Contains(tag, `src=`) && !strings.Contains(tag, `type="application/json"`) {
+				t.Errorf("%s contains an inline script tag %q (violates strict CSP)", name, tag)
+			}
+		}
+	}
+}

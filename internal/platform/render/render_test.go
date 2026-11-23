@@ -539,6 +539,7 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 	}
 
 	// Breadcrumbs: Home / ON Paste / New snippet.
+	doc.MustHave(".shell-logo svg polygon")
 	crumbs := doc.Text()
 	for _, want := range []string{"Home", "ON Paste", "New snippet"} {
 		if !strings.Contains(crumbs, want) {

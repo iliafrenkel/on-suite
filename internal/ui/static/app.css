@@ -240,9 +240,9 @@ kbd {
 .shell-bar {
 	display: flex;
 	align-items: center;
-	gap: var(--s-5);
+	gap: var(--s-4);
 	padding: var(--s-3) var(--s-5);
-	background: var(--c-bg);
+	background: var(--c-bg-subtle);
 	border-bottom: var(--border);
 }
 
@@ -255,7 +255,12 @@ kbd {
 	white-space: nowrap;
 }
 
-.shell-mark { font-weight: 600; letter-spacing: 0.01em; }
+.shell-mark {
+	font-weight: 600;
+	font-size: var(--fs-sm);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
 
 .shell-crumbs {
 	display: flex;
@@ -263,15 +268,20 @@ kbd {
 	gap: var(--s-2);
 	flex: 1;
 	min-width: 0;
-	font-size: var(--fs-sm);
-	color: var(--c-text-dim);
+	padding-left: var(--s-4);
+	border-left: var(--border);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--c-text-faint);
 	overflow-x: auto;
 	white-space: nowrap;
 }
 
 .shell-crumbs a,
 #shell-crumb-tail > span:not([aria-hidden]) {
-	max-width: 200px;
+	max-width: 220px;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
@@ -395,24 +405,40 @@ kbd {
 	border-color: var(--c-accent);
 }
 
-/* Online/offline dot — see internal/ui/static/connectivity.js, which owns
- * data-status on this element after page load. Initial markup ships
- * "online" so a page rendered before the script runs never flashes a
- * false "offline" reading. */
+/* Online/offline Braun status pill — see internal/ui/static/connectivity.js,
+ * which owns data-status on this element after page load. Initial markup ships
+ * "online" so a page rendered before the script runs never flashes a false
+ * "offline" reading. */
 .conn-indicator {
 	display: inline-flex;
 	align-items: center;
+	gap: 0.4rem;
+	padding: 0.25rem 0.6rem;
+	background: var(--c-bg-inset);
+	border: var(--border);
+	border-radius: var(--radius);
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--c-text-dim);
 }
 
 .conn-dot {
-	width: 0.5rem;
-	height: 0.5rem;
+	width: 0.45rem;
+	height: 0.45rem;
 	border-radius: 50%;
-	background: #16a34a;
+	background: var(--c-accent);
+	box-shadow: 0 0 0 3px var(--c-accent-bg);
 }
 
 .conn-indicator[data-status="offline"] .conn-dot {
 	background: var(--c-danger);
+	box-shadow: 0 0 0 3px var(--c-danger-bg);
+}
+
+.conn-indicator[data-status="offline"] .conn-label {
+	color: var(--c-danger);
 }
 
 /* ---- App shell: sidebar + main ------------------------------------------ */
@@ -427,8 +453,9 @@ kbd {
 	display: flex;
 	flex-direction: column;
 	flex-shrink: 0;
-	width: 12rem;
-	padding: var(--s-4) var(--s-2);
+	width: 12.5rem;
+	padding: var(--s-3) 0;
+	background: var(--c-bg-subtle);
 	border-right: var(--border);
 	transition: width 0.15s ease;
 }
@@ -437,52 +464,58 @@ kbd {
 
 .sidebar-toggle {
 	display: flex;
-	width: 100%;
+	width: calc(100% - var(--s-4));
+	margin: 0 var(--s-2) var(--s-3);
 	justify-content: flex-start;
-	margin-bottom: var(--s-3);
+	background: var(--c-bg-inset);
+	border: var(--border);
 	transition: transform 0.15s ease;
 }
 
-/* Points the other way once collapsed, so the glyph itself shows which
- * way the next click will go rather than staying static regardless of
- * state. */
 .app-sidebar[data-collapsed] .sidebar-toggle {
+	justify-content: center;
 	transform: rotate(180deg);
 }
 
-/* flex: 1 1 auto (not the default 0 1 auto) lets this stretch to fill
- * .app-sidebar's full height below the toggle button — the same flex column
- * it now is — so .sidebar-separator's margin-top: auto below has leftover
- * height to absorb and pins Admin to the sidebar's bottom edge. */
 .shell-nav {
 	display: flex;
 	flex-direction: column;
 	flex: 1 1 auto;
 	min-height: 0;
-	gap: var(--s-1);
+	gap: 2px;
 }
 
 .sidebar-item {
 	display: flex;
 	align-items: center;
 	gap: var(--s-2);
-	padding: var(--s-2);
-	border-radius: var(--radius);
+	padding: var(--s-2) var(--s-4);
+	border-left: 2px solid transparent;
+	border-radius: 0;
 	color: var(--c-text-dim);
+	font-size: var(--fs-sm);
+	font-weight: 500;
 	text-decoration: none;
 	white-space: nowrap;
 	overflow: hidden;
+	transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
-/* Each app's glyph in its own colour (spec 2026-10-13-app-identity-colours).
- * The fallbacks keep an item without a swatch class looking as it used to. */
+.app-sidebar[data-collapsed] .sidebar-item {
+	justify-content: center;
+	padding: var(--s-2) 0;
+}
+
 .sidebar-item svg { flex: none; color: var(--swatch-line, var(--c-accent)); }
 
-.sidebar-item:not(.sidebar-item-disabled):hover { background: var(--c-bg-inset); color: var(--c-text); }
+.sidebar-item:not(.sidebar-item-disabled):hover {
+	background: var(--c-bg-inset);
+	color: var(--c-text);
+}
 
-/* The active app's row picks up its own soft tint; the label stays in the
- * normal text colour so the tint, not the text, carries the identity. */
+/* The active app's row gets the signature 2px Verdigris/app rail and soft wash. */
 .sidebar-item[aria-current="page"] {
+	border-left-color: var(--swatch-line, var(--c-accent));
 	background: var(--swatch-soft, var(--c-accent-bg));
 	color: var(--c-text);
 	font-weight: 600;
@@ -492,19 +525,17 @@ kbd {
 
 .app-sidebar[data-collapsed] .sidebar-label { display: none; }
 
-/* main needs no rule here: it is a flex item inside .app-shell, and the
- * max-width + margin: 0 auto it already got in Step 3 is enough — CSS gives
- * a flex item's auto margins first claim on any free space in the flex
- * line, so main centers itself in whatever room the sidebar leaves without
- * needing flex-grow. */
-
 /* ---- Footer -------------------------------------------------------------- */
 
 .app-footer {
 	padding: var(--s-3) var(--s-5);
+	background: var(--c-bg-subtle);
 	border-top: var(--border);
 	color: var(--c-text-faint);
-	font-size: var(--fs-sm);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 	text-align: center;
 }
 
