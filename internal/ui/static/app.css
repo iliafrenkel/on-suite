@@ -1,8 +1,9 @@
-/* ON Suite — warm and a little more alive than it used to be.
+/* ON Suite — Braun Folio visual system.
  *
- * Everything is driven by the tokens in :root. Apps must not introduce new
- * colours or spacing values; they compose these. That constraint is what
- * makes four separately-built apps look like one suite.
+ * Precision industrial geometry (Dieter Rams / Romotow) paired with calm
+ * editorial print typography (Quanta Magazine). Everything is driven by the
+ * tokens in :root and :root[data-theme="dark"]. Apps compose these tokens so
+ * all seven separately-built apps look and feel like one suite.
  */
 
 :root {
@@ -10,28 +11,27 @@
 	 * Chrome won't darken scrollbars without it (#616). */
 	color-scheme: light;
 
-	/* A warm cream base carries the interface. Teal is the everyday accent
-	 * (links, buttons, active states); --c-accent-attention (orange) is
-	 * deliberately separate and used only for things that need attention —
-	 * a due/overdue badge — so it stays meaningful by staying rare. */
-	--c-bg:          #fefefe;
-	--c-bg-subtle:   #f2e9db;
-	--c-bg-inset:    #efe0cf;
-	--c-border:      #e3d3bf;
-	--c-border-firm: #c9b49a;
-	--c-text:        #3a2f26;
-	--c-text-dim:    #6b5d4f;
-	--c-text-faint:  #756758; /* 4.5:1+ on --c-bg and --c-bg-subtle (#556) */
-	--c-accent:      #2f6f6a;
-	--c-accent-bg:   #d9e8e6;
-	--c-accent-attention:    #a84c1b; /* 4.5:1+ as text on --c-accent-attention-bg (#556) */
-	--c-accent-attention-bg: #f7e4d5;
-	--c-danger:      #a51d2d;
-	--c-danger-bg:   #fbeaec;
+	/* Alabaster stone surfaces with Deep Verdigris as the everyday working
+	 * accent and Braun Signal Vermilion reserved for active/signal moments. */
+	--c-bg:                  #f4f1ea;
+	--c-bg-subtle:           #fbf9f5;
+	--c-bg-inset:            #ebe6dc;
+	--c-border:              #d7d0c3;
+	--c-border-firm:         #9f9687;
+	--c-text:                #1c1a17;
+	--c-text-dim:            #5c564c;
+	--c-text-faint:          #6b6459; /* 4.5:1+ on --c-bg and --c-bg-subtle */
+	--c-accent:              #1c665d;
+	--c-accent-bg:           #dfe9e7;
+	--c-accent-attention:    #c23d15; /* Braun Signal Vermilion */
+	--c-accent-attention-bg: #f6e2db;
+	--c-danger:              #a51d2d;
+	--c-danger-bg:           #fbeaec;
+	--c-plate:               #1b1917;
+	--c-plate-text:          #f4f1ea;
+	--c-plate-dim:           #a8a196;
 
-	/* A 4px scale. Still the scarce-vertical-space discipline of a code
-	 * listing, just with more breathing room applied on top in the shell
-	 * chrome (see .shell-bar, main, .app-sidebar below). */
+	/* A 4px scale. */
 	--s-1: 0.25rem;
 	--s-2: 0.5rem;
 	--s-3: 0.75rem;
@@ -39,13 +39,15 @@
 	--s-5: 1.5rem;
 	--s-6: 2rem;
 
-	/* --font-ui drives the page, headings and UI chrome; --font-body drives
-	 * only reading text (see "Reading surfaces" below). They're equal in the
-	 * Sans, Serif and Mono pairings and differ only in Mixed.
-	 * --font-mono never changes with the pairing. */
-	--font-ui: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-	--font-body: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+	/* Four-role typography system:
+	 * --font-display: editorial display headings and titles (IBM Plex Serif)
+	 * --font-ui:      rational industrial interface chrome (IBM Plex Sans)
+	 * --font-body:    calm long-form reading surfaces (Source Serif 4)
+	 * --font-mono:    instrument readouts, kickers, code (IBM Plex Mono) */
+	--font-display: 'IBM Plex Serif', Georgia, "Times New Roman", serif;
+	--font-ui:      'IBM Plex Sans', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--font-body:    'Source Serif 4', Georgia, "Times New Roman", serif;
+	--font-mono:    'IBM Plex Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
 	--fs-2xs: 0.625rem;
 	--fs-xs: 0.75rem;
@@ -53,44 +55,20 @@
 	--fs-base: 0.9375rem;
 	--fs-lg: 1.125rem;
 	--fs-xl: 1.375rem;
-	--fs-2xl: 1.75rem;
+	--fs-2xl: 1.875rem;
 
-	--radius: 6px;
+	--radius: 2px;
+	--chamfer-sm: 8px;
+	--chamfer-lg: 22px;
 	--border: 1px solid var(--c-border);
 	--ring: 2px solid var(--c-accent);
 
-	--measure: 68ch; /* comfortable reading width, for prose and forms */
-	--content-max: 75rem; /* main's own cap — wider, since a snippet list or
-	                          a wide code block has no comfortable-line-length
-	                          reason to stay prose-narrow */
+	--measure: 68ch;
+	--content-max: 75rem;
 }
 
-/* Runtime font switcher. data-font is set on <html> from a cookie, read
- * server-side on every request (internal/platform/web/prefs.go) so the first
- * paint already has the right fonts — no flash of the wrong typeface. */
-[data-font="serif"] {
-	--font-ui: 'Source Serif 4', Georgia, "Times New Roman", serif;
-	--font-body: 'Source Serif 4', Georgia, "Times New Roman", serif;
-}
-
-[data-font="mono"] {
-	--font-ui: 'iA Writer Duo S', monospace, sans-serif;
-	--font-body: 'iA Writer Duo S', monospace, sans-serif;
-	--fs-base: 0.875rem;
-	--fs-sm: 0.75rem;
-	--fs-xs: 0.7rem;
-}
-
-/* Mixed: the interface stays Inter, reading text takes the serif (#617). */
-[data-font="mixed"] {
-	--font-body: 'Source Serif 4', Georgia, "Times New Roman", serif;
-}
-
-/* Reading surfaces. The page itself is set in --font-ui, so these are the
- * only places --font-body shows (plus .reader-body and .help-body, which
- * set it in their own sections). ON Later is deliberately absent: its
- * article font is its own Serif/Sans setting. Chips inside an outline row
- * are chrome, so they go back to --font-ui. */
+/* Reading surfaces: long-form text takes --font-body (Source Serif 4) while
+ * chips and UI metadata stay in --font-ui / --font-mono. */
 .outline-text,
 .notes-shared-title,
 .notes-shared-note,
@@ -106,29 +84,43 @@
 	font-family: var(--font-ui);
 }
 
-/* Self-hosted fonts. One file per subset per family; Google's own served CSS declares
- * every weight it supports against the same file, so we mirror that exactly
- * rather than guessing at a variable-font weight range. Subsets declare unicode-range
- * so browsers fetch Cyrillic files only when needed, and fall back to system fonts
- * for unbundled scripts like Hebrew. */
-/* Inter */
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/inter-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/inter-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/inter-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/inter-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/inter-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/inter-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+/* Self-hosted fonts (SIL OFL 1.1). Latin + Cyrillic subsets declared with
+ * unicode-range so browsers fetch Cyrillic files only when needed. */
+/* IBM Plex Mono */
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-mono-400-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-mono-400-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-mono-400-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-mono-500-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-mono-500-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-mono-500-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-mono-600-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-mono-600-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-mono-600-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
-/* JetBrains Mono */
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/jetbrains-mono-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/jetbrains-mono-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/jetbrains-mono-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/jetbrains-mono-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/jetbrains-mono.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/jetbrains-mono.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+/* IBM Plex Sans */
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-400-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-400-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-400-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-500-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-500-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-500-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-600-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-600-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-600-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+/* IBM Plex Serif */
+@font-face { font-family: 'IBM Plex Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400i-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400i-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400i-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-serif-500-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-serif-500-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-serif-500-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-serif-600-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-serif-600-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-serif-600-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 /* Source Serif 4 */
 @font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/source-serif-4-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
@@ -141,79 +133,39 @@
 @font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/source-serif-4.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 @font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/source-serif-4.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
-/* iA Writer Duo S */
-@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-regular.woff2") format("woff2"); }
-@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-regular.woff2") format("woff2"); }
-@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-bold.woff2") format("woff2"); }
-@font-face { font-family: 'iA Writer Duo S'; font-style: normal; font-weight: 700; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-bold.woff2") format("woff2"); }
-@font-face { font-family: 'iA Writer Duo S'; font-style: italic; font-weight: 400; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-italic.woff2") format("woff2"); }
-@font-face { font-family: 'iA Writer Duo S'; font-style: italic; font-weight: 700; font-display: swap; src: url("/static/fonts/ia-writer-duo-s-bold-italic.woff2") format("woff2"); }
-
-/* Dark mode is a real toggle, not prefers-color-scheme: data-theme is set
- * server-side from a cookie (internal/platform/web/prefs.go, ThemeFrom)
- * which always returns an explicit "light" or "dark", defaulting to light
- * when no cookie exists yet. Because the server never leaves data-theme
- * unset, there is no need for a prefers-color-scheme fallback here — every
- * response already carries the attribute this selector keys off. */
+/* Warm Obsidian dark mode: data-theme is set server-side from a cookie
+ * (internal/platform/web/prefs.go, ThemeFrom) on every response. */
 :root[data-theme="dark"] {
 	color-scheme: dark;
-	--c-bg:          #241d17;
-	--c-bg-subtle:   #2b231b;
-	--c-bg-inset:    #2e2621;
-	--c-border:      #3d322a;
-	--c-border-firm: #52443a;
-	--c-text:        #efe6da;
-	--c-text-dim:    #b8a996;
-	--c-text-faint:  #998a7a; /* 4.5:1+ on --c-bg and --c-bg-subtle (#556) */
-	--c-accent:      #64a5a0; /* 4.5:1+ for links on every dark background and on --c-accent-bg (#556) */
-	--c-accent-bg:   #1e3532;
-	--c-accent-attention:    #cf8357; /* 4.5:1+ as text on --c-accent-attention-bg; fills take dark text (#556) */
-	--c-accent-attention-bg: #3d2a1c;
-	--c-danger:      #f08c95;
-	--c-danger-bg:   #3a1e22;
-}
-
-/* The "Paper and ink" palette: near-black on off-white, a navy accent, red
- * for attention. data-palette is set server-side from a cookie (prefs.go,
- * PaletteFrom) exactly like data-theme, and always carries "warm" or "ink";
- * the warm palette is simply the :root tokens above, so it needs no block of
- * its own. Palette and theme are independent, hence one block per pairing.
- *
- * It overrides colours only: fonts stay with the Font setting, and the
- * per-app swatches and Flash grade colours deliberately stay the same in
- * every palette. Every pairing that #556 holds the warm tokens to (text,
- * dim and accent on each background, faint on --c-bg and --c-bg-subtle,
- * attention on its own tint) measures at least as high here. */
-:root[data-palette="ink"] {
-	--c-bg:          #fdfcf9;
-	--c-bg-subtle:   #f4f1ea;
-	--c-bg-inset:    #ebe7de;
-	--c-border:      #e2ddd2;
-	--c-border-firm: #c4bdb0;
-	--c-text:        #1c1b19;
-	--c-text-dim:    #5c5850;
-	--c-text-faint:  #6b665d;
-	--c-accent:      #1d3a6b;
-	--c-accent-bg:   #e3e8f1;
-	--c-accent-attention:    #b3261e;
-	--c-accent-attention-bg: #f9e3e1;
-}
-:root[data-palette="ink"][data-theme="dark"] {
-	--c-bg:          #191817;
-	--c-bg-subtle:   #201f1d;
-	--c-bg-inset:    #262522;
-	--c-border:      #33312d;
-	--c-border-firm: #4a4741;
-	--c-text:        #ebe7df;
-	--c-text-dim:    #aaa49a;
-	--c-text-faint:  #948e84;
-	--c-accent:      #8eaadb;
-	--c-accent-bg:   #1f2a3d;
-	--c-accent-attention:    #ef8a80;
-	--c-accent-attention-bg: #3b1f1d;
+	--c-bg:                  #151412;
+	--c-bg-subtle:           #1d1b18;
+	--c-bg-inset:            #26231f;
+	--c-border:              #332f29;
+	--c-border-firm:         #575148;
+	--c-text:                #f0ece3;
+	--c-text-dim:            #aba497;
+	--c-text-faint:          #8c8579; /* 4.5:1+ on --c-bg and --c-bg-subtle */
+	--c-accent:              #4eb8aa; /* 4.5:1+ on dark surfaces and --c-accent-bg */
+	--c-accent-bg:           #1b302d;
+	--c-accent-attention:    #f06437;
+	--c-accent-attention-bg: #3a2118;
+	--c-danger:              #f08c95;
+	--c-danger-bg:           #3a1e22;
+	--c-plate:               #0f0e0d;
+	--c-plate-text:          #f0ece3;
+	--c-plate-dim:           #9b9489;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
 
 /* Off-screen but still in the layout and the accessibility tree — unlike
    display:none, which some UAs exclude from a form's implicit-submission
@@ -256,10 +208,10 @@ a:hover { text-decoration-thickness: 2px; }
 /* Wider steps than the 4px spacing scale on purpose: at the old h1=22px vs
  * body=15px (a 1.47x ratio), nothing on a page announced itself as more
  * important than anything else. */
-h1, h2, h3 { margin: 0 0 var(--s-3); font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }
-h1 { font-size: var(--fs-2xl); }
-h2 { font-size: var(--fs-xl); }
-h3 { font-size: var(--fs-lg); }
+h1, h2, h3 { margin: 0 0 var(--s-3); font-weight: 500; line-height: 1.2; letter-spacing: -0.02em; }
+h1 { font-family: var(--font-display); font-size: var(--fs-2xl); }
+h2 { font-family: var(--font-display); font-size: var(--fs-xl); }
+h3 { font-size: var(--fs-lg); font-weight: 600; }
 
 code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 
@@ -437,9 +389,7 @@ kbd {
 .shell-menu-settings .field { margin-bottom: var(--s-2); }
 .shell-menu-settings .field:last-child { margin-bottom: 0; }
 .shell-menu-settings .row { flex-wrap: wrap; margin-top: var(--s-1); }
-.shell-menu-settings button[data-theme-value].active,
-.shell-menu-settings button[data-font-value].active,
-.shell-menu-settings button[data-palette-value].active {
+.shell-menu-settings button[data-theme-value].active {
 	background: var(--c-accent-bg);
 	color: var(--c-accent);
 	border-color: var(--c-accent);
@@ -573,16 +523,30 @@ main:has(.reader-panes) { max-width: none; padding: 0;}
 
 /* ---- Forms and buttons ------------------------------------------------- */
 
-label { display: block; margin-bottom: var(--s-1); font-size: var(--fs-sm); color: var(--c-text-dim); }
+label {
+	display: block;
+	margin-bottom: var(--s-1);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--c-text-dim);
+}
 
 input[type="text"], input[type="password"], input[type="url"], input[type="number"], textarea, select {
 	width: 100%;
-	padding: var(--s-2);
-	background: var(--c-bg);
+	padding: var(--s-2) var(--s-3);
+	background: var(--c-bg-inset);
 	color: var(--c-text);
-	border: 1px solid var(--c-border-firm);
+	border: 1px solid var(--c-border);
 	border-radius: var(--radius);
 	font: inherit;
+	transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+input[type="text"]:focus, input[type="password"]:focus, input[type="url"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
+	background: var(--c-bg-subtle);
+	border-color: var(--c-accent);
 }
 
 textarea { font-family: var(--font-mono); resize: vertical; }
@@ -604,6 +568,7 @@ button, .button {
 	font: inherit;
 	text-decoration: none;
 	cursor: pointer;
+	transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 /* :where() drops this to (0,1,0) — just the :hover — so any component rule
@@ -613,11 +578,7 @@ button, .button {
 :where(button:not(:disabled), .button):hover { background: var(--c-border); }
 
 /* A button that reads as a link: used for actions that must be POSTs, such as
- * logging out, without shouting like a primary button. Comes after
- * `button, .button` on purpose: `.quiet` and `.button` are equal
- * specificity, so an element carrying both classes (e.g. the settings-menu
- * gear `<summary class="quiet button">`, or the theme/font/sidebar toggle
- * buttons) needs `.quiet` to win the source-order tie-break. */
+ * logging out, without shouting like a primary button. */
 .quiet {
 	padding: var(--s-1) var(--s-2);
 	background: transparent;
@@ -628,21 +589,34 @@ button, .button {
 
 .quiet:hover { background: var(--c-bg-inset); color: var(--c-text); }
 
-/* Prominence is opt-in via `.primary`, never implied by <button type=submit">
- * on its own. A page should carry at most one of these — it is the single
- * action the page wants a visitor to take (Sign in, Save snippet) — so a
- * new form's submit button starts out neutral instead of accidentally
- * shouting the loudest thing on the page. */
+/* Prominence is opt-in via `.primary`: Braun Signal Vermilion with the
+ * signature 45-degree chamfered top-right corner. Because clip-path clips
+ * standard outlines, :focus-visible uses a high-contrast inset double ring
+ * so keyboard focus is always unmistakably visible. */
 .primary {
-	background: var(--c-accent);
-	border-color: var(--c-accent);
+	background: var(--c-accent-attention);
+	border-color: transparent;
 	color: #fff;
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
 	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	clip-path: polygon(0 0, calc(100% - var(--chamfer-sm)) 0, 100% var(--chamfer-sm), 100% 100%, 0 100%);
 }
 
-.primary:hover { background: var(--c-accent); border-color: var(--c-accent); filter: brightness(1.1); }
+.primary:hover {
+	background: var(--c-accent-attention);
+	border-color: transparent;
+	filter: brightness(1.08);
+}
 
-:root[data-theme="dark"] .primary { color: #10141a; }
+.primary:focus-visible {
+	outline: none;
+	box-shadow: inset 0 0 0 2px var(--c-bg), inset 0 0 0 4px var(--c-text);
+}
+
+:root[data-theme="dark"] .primary { color: #151412; }
 
 /* ---- Notices ----------------------------------------------------------- */
 
@@ -4047,9 +4021,6 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 }
 /* 4.8:1 under the pills' dark text; the old #7a6c5d was 3.6. */
 :root[data-theme="dark"] .focus-runner { --focus-break: #8f806e; }
-/* The ink palette is neutral rather than warm, so its break grey is too. */
-:root[data-palette="ink"] .focus-runner { --focus-break: #a29d94; }
-:root[data-palette="ink"][data-theme="dark"] .focus-runner { --focus-break: #8a857d; }
 .focus-runner-break { --focus-ring: var(--focus-break); }
 .focus-runner [hidden] { display: none; }
 

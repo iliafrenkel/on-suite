@@ -10,3 +10,5 @@ so the diff is reviewable.
 | File | Version | SHA-256 | Source |
 |---|---|---|---|
 | `htmx.min.js` | 2.0.10 | `71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de` | https://unpkg.com/htmx.org@2/dist/htmx.min.js |
+| `fonts/ibm-plex-*.woff2` | SIL OFL 1.1 | — | https://fonts.google.com/specimen/IBM+Plex+Serif (IBM Plex Serif, Sans, Mono — Latin + Cyrillic) |
+| `fonts/source-serif-4*.woff2` | SIL OFL 1.1 | — | https://fonts.google.com/specimen/Source+Serif+4 (Latin + Cyrillic) |
