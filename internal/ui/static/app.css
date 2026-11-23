@@ -622,6 +622,11 @@ button, .button {
 	transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
+/* A link styled as a button is inline by default, so its vertical padding
+ * overlaps the lines around it (e.g. "Create your first timer" in a <p>).
+ * Zero weight: a component that lays its link buttons out as flex keeps it. */
+:where(a.button) { display: inline-block; }
+
 /* :where() drops this to (0,1,0) — just the :hover — so any component rule
  * that sets its own background (one class plus its own :hover, or one class
  * later in this file) wins without needing a second class (#375). Disabled

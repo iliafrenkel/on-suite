@@ -265,3 +265,9 @@ func TestPhoneBreadcrumbsGetTheirOwnRow(t *testing.T) {
 	css.mustDeclare(phone, ".shell-crumbs", "flex: 1 0 100%", "order: 1", "border-left: none")
 	css.mustDeclare(phone, ".shell-user", "margin-left: auto")
 }
+
+// TestLinkButtonsAreInlineBlock pins the zero-weight default that lets an
+// <a class="button"> in running text keep its vertical padding.
+func TestLinkButtonsAreInlineBlock(t *testing.T) {
+	loadAppCSS(t).mustDeclare("", ":where(a.button)", "display: inline-block")
+}
