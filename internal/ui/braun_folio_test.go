@@ -238,3 +238,20 @@ func TestFieldFocusBackgroundIsOnlyADefault(t *testing.T) {
 		"background: var(--c-bg-subtle)")
 	css.mustDeclare("", "input.outline-title", "background: none")
 }
+
+// TestOneKbdStyle pins a single suite-wide kbd rule. A second, top-level
+// kbd rule (once the Notes help panel's) silently restyled every key cap,
+// the Focus legend's included.
+func TestOneKbdStyle(t *testing.T) {
+	css := loadAppCSS(t)
+	n := 0
+	for _, r := range css.rulesFor("kbd") {
+		if r.media == "" && len(r.selectors) == 1 {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("app.css has %d top-level kbd rules, want 1", n)
+	}
+	css.mustDeclare("", "kbd", "background: var(--c-bg-inset)", "border-radius: var(--radius)")
+}
