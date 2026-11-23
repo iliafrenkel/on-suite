@@ -217,3 +217,26 @@ func TestBraunFolioPhase2EditorialAndOutlinerApps(t *testing.T) {
 		}
 	}
 }
+
+// TestLoginFormComesFirstOnPhones pins the narrow-screen login layout: the
+// form pane moves above the art panel and the decorative figure is hidden,
+// so Sign in is on the first screen.
+func TestLoginFormComesFirstOnPhones(t *testing.T) {
+	src, err := fs.ReadFile(ui.Static(), "app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(?s)@media \(max-width: 780px\) \{(.*?)\n\}`).FindSubmatch(src)
+	if m == nil {
+		t.Fatal("app.css: no @media (max-width: 780px) block")
+	}
+	block := string(m[1])
+	for _, want := range []string{
+		".login-form-pane { order: -1; }",
+		".login-art-figure { display: none; }",
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("780px block lacks %q", want)
+		}
+	}
+}

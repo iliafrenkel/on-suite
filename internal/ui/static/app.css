@@ -938,7 +938,11 @@ button, .button {
 @media (max-width: 780px) {
 	.home-hero,
 	.login-plate { grid-template-columns: 1fr; }
-	.login-art { border-right: none; border-bottom: var(--border); }
+	/* On a phone the form comes first, so Sign in is on the first screen;
+	 * the art panel follows as a slim brand strip without its figure. */
+	.login-form-pane { order: -1; }
+	.login-art { border-right: none; border-top: var(--border); }
+	.login-art-figure { display: none; }
 	.conn-label { display: none; }
 }
 
