@@ -218,3 +218,23 @@ func TestHomeGridLeavesUnfilledCellsEmpty(t *testing.T) {
 	}
 	css.mustDeclare("", ".app-card", "box-shadow: 0 0 0 1px var(--c-border)")
 }
+
+// TestFieldFocusBackgroundIsOnlyADefault pins how a focused field lifts to
+// the subtle surface: at one element plus :focus, so it beats the base field
+// rule but never a component's own field background. As
+// input[type="text"]:focus it outweighed input.outline-title
+// { background: none } and turned ON Notes' focused bullet near-white
+// against the page.
+func TestFieldFocusBackgroundIsOnlyADefault(t *testing.T) {
+	css := loadAppCSS(t)
+	for _, sel := range []string{`input[type="text"]:focus`, `input[type="url"]:focus`} {
+		for _, r := range css.rulesFor(sel) {
+			if strings.Contains(r.body, "background") {
+				t.Errorf("%s sets a background (%q); the [type] makes it outweigh component fields, use input:where([type=...]):focus", sel, r.body)
+			}
+		}
+	}
+	css.mustDeclare("", `input:where([type="text"], [type="password"], [type="url"], [type="number"]):focus`,
+		"background: var(--c-bg-subtle)")
+	css.mustDeclare("", "input.outline-title", "background: none")
+}

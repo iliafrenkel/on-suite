@@ -66,7 +66,7 @@ func parseCSS(t *testing.T, css string) *cssSheet {
 				media = atStack[len(atStack)-1]
 			}
 			var sels []string
-			for _, sel := range strings.Split(prelude, ",") {
+			for _, sel := range splitSelectors(prelude) {
 				sels = append(sels, norm(sel))
 			}
 			s.rules = append(s.rules, cssRule{selectors: sels, body: norm(css[i+1 : i+1+end]), media: media})
@@ -87,6 +87,27 @@ func parseCSS(t *testing.T, css string) *cssSheet {
 }
 
 func norm(s string) string { return strings.TrimSpace(cssSpace.ReplaceAllString(s, " ")) }
+
+// splitSelectors splits a selector list on its top-level commas only, so
+// :where(a, b):focus and :not(.x, .y) stay whole.
+func splitSelectors(list string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i, c := range list {
+		switch c {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				out = append(out, list[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, list[start:])
+}
 
 // rulesFor returns every rule, in any at-rule, that lists selector as one
 // of its comma-separated selectors.
@@ -149,6 +170,7 @@ func TestCSSSheetFindsRulesRegardlessOfOrder(t *testing.T) {
 /* a comment { with braces } */
 .a, .b:hover { color: red;
 	background: blue }
+:where(.c, .d):focus { color: green; }
 @media (max-width: 780px) {
 	.a { order: -1; }
 }
@@ -158,6 +180,7 @@ func TestCSSSheetFindsRulesRegardlessOfOrder(t *testing.T) {
 `)
 	s.mustDeclare("", ".b:hover", "background: blue", "color: red")
 	s.mustDeclare("@media (max-width: 780px)", ".a", "order: -1")
+	s.mustDeclare("", ":where(.c, .d):focus", "color: green")
 	if got := s.declsFor(":root"); !strings.Contains(got, "--x: #ffffff") || !strings.Contains(got, "--y: #000000") {
 		t.Errorf("declsFor(:root) = %q, want both blocks", got)
 	}

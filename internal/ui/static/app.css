@@ -582,8 +582,18 @@ input[type="text"], input[type="password"], input[type="url"], input[type="numbe
 }
 
 input[type="text"]:focus, input[type="password"]:focus, input[type="url"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
-	background: var(--c-bg-subtle);
 	border-color: var(--c-accent);
+}
+/* A focused field lifts to the subtle surface, but only as a default. Its
+ * weight is one element plus :focus: enough to beat the base field rule
+ * above (equal weight, later in the file), not enough to beat a component's
+ * own field background further down (ON Notes' borderless title and note
+ * must stay on the page colour while focused). :where() keeps the [type]
+ * out of the count; input[type="text"]:focus would outweigh them all. */
+input:where([type="text"], [type="password"], [type="url"], [type="number"]):focus,
+textarea:focus,
+select:focus {
+	background: var(--c-bg-subtle);
 }
 
 textarea { font-family: var(--font-mono); resize: vertical; }
