@@ -79,13 +79,6 @@
 	font-family: var(--font-body);
 }
 
-.outline-share-chip,
-.outline-children-badge,
-.outline-due-chip,
-.notes-shared-due {
-	font-family: var(--font-ui);
-}
-
 /* Self-hosted fonts (SIL OFL 1.1). Latin + Cyrillic subsets declared with
  * unicode-range so browsers fetch Cyrillic files only when needed. */
 /* IBM Plex Mono */
@@ -1812,7 +1805,8 @@ mark.notes-search-hit {
 .notes-shared-item { padding: var(--s-1) 0; }
 .notes-shared-title { color: var(--c-text); }
 .notes-shared-done .notes-shared-title { color: var(--c-text-dim); text-decoration: line-through; }
-.notes-shared-due { font-size: var(--fs-sm); color: var(--c-text-dim); }
+/* Mono, like the outline's due chip it mirrors on the shared page. */
+.notes-shared-due { font-family: var(--font-mono); font-size: var(--fs-sm); color: var(--c-text-dim); }
 .notes-shared-note { font-size: var(--fs-sm); color: var(--c-text-dim); margin-top: 0.125rem; }
 
 .outline-dot { text-decoration: none; }

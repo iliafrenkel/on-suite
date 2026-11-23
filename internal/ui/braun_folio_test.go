@@ -271,3 +271,18 @@ func TestPhoneBreadcrumbsGetTheirOwnRow(t *testing.T) {
 func TestLinkButtonsAreInlineBlock(t *testing.T) {
 	loadAppCSS(t).mustDeclare("", ":where(a.button)", "display: inline-block")
 }
+
+// TestNotesChipsAreMonoEverywhere pins the outline's chips and the shared
+// page's due date in mono, with no earlier --font-ui rule left to be
+// silently overridden.
+func TestNotesChipsAreMonoEverywhere(t *testing.T) {
+	css := loadAppCSS(t)
+	for _, sel := range []string{".outline-share-chip", ".outline-children-badge", ".outline-due-chip", ".notes-shared-due"} {
+		for _, r := range css.rulesFor(sel) {
+			if strings.Contains(r.body, "var(--font-ui)") {
+				t.Errorf("%s has a --font-ui rule %v; it should be mono", sel, r.selectors)
+			}
+		}
+		css.mustDeclare("", sel, "font-family: var(--font-mono)")
+	}
+}
