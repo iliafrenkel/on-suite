@@ -153,6 +153,7 @@ func TestBraunFolioPhase2InstrumentApps(t *testing.T) {
 	css.mustDeclare("", ".flash-editor-face", "border-radius: var(--radius)")
 	css.mustDeclare("", ".flash-show-answer", "clip-path: polygon(")
 	css.mustDeclare("", ".flash-show-answer:focus-visible", "box-shadow: inset")
+	css.mustDeclare("", ".flash-show-answer:hover", "filter: brightness(1.08)")
 	css.mustDeclare("", ".flash-grade", "border-radius: var(--radius)")
 
 	// Chroma Light keyword (#cf222e) keeps >= 4.5:1 on Light --c-bg-subtle.

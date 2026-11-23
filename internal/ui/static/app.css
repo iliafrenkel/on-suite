@@ -3689,6 +3689,8 @@ input.flash-tag-entry:focus { outline: none; }
 	clip-path: polygon(0 0, calc(100% - var(--chamfer-sm)) 0, 100% var(--chamfer-sm), 100% 100%, 0 100%);
 }
 :root[data-theme="dark"] .flash-show-answer { color: #151412; }
+/* The same lift as .primary:hover; it's a <label>, so it doesn't inherit it. */
+.flash-show-answer:hover { filter: brightness(1.08); }
 .flash-show-answer:focus-visible,
 .flash-flip:focus-visible ~ .flash-show-answer {
 	outline: none;
