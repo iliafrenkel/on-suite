@@ -423,6 +423,10 @@ func TestRunPageHasBraunChassisAndInstrumentDial(t *testing.T) {
 	}
 	doc := htmlassert.Parse(t, body)
 	doc.MustHave(".focus-chassis")
+	// The chassis label is decoration; screen readers go straight to the timer.
+	if v, _ := htmlassert.Attr(doc.MustHave(".focus-chassis-label"), "aria-hidden"); v != "true" {
+		t.Errorf("chassis label aria-hidden = %q, want true", v)
+	}
 	doc.MustHave(".focus-ring-ticks")
 	doc.MustHave(".focus-ring-well")
 	doc.MustHave("[data-focus-bar]")
