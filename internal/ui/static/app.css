@@ -960,8 +960,9 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 
 .snippet-body {
 	border-radius: var(--radius);
-	background: var(--c-bg-subtle);
-	padding: var(--s-2) var(--s-3);
+	background: var(--c-bg-inset);
+	border: 1px solid var(--c-border-firm);
+	padding: var(--s-3) var(--s-4);
 }
 
 /* Stacked title/metadata/toolbar for the detail pane's view mode (as
@@ -1057,17 +1058,21 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	align-items: center;
 	padding: 0 var(--s-1);
 	border: 1px solid var(--c-border);
-	border-radius: 999px;
+	border-radius: var(--radius);
 	background: var(--c-bg-subtle);
 	color: var(--c-text-dim);
+	font-family: var(--font-mono);
 	font-size: var(--fs-2xs);
-	font-weight: 400;
+	font-weight: 500;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
 	line-height: 1.5;
 	white-space: nowrap;
 }
 .snippet-pill-shared {
 	border-color: var(--c-border-firm);
 	background: var(--c-accent-attention-bg);
+	color: var(--c-accent-attention);
 }
 .snippet-pill .chip-icon {
 	width: 0.9em;
@@ -1078,6 +1083,7 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 	flex: none;
 	margin-left: var(--s-1);
 	color: var(--c-text-faint);
+	font-family: var(--font-mono);
 	font-size: var(--fs-xs);
 	font-weight: 400;
 	white-space: nowrap;
@@ -1117,15 +1123,18 @@ button.danger:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 
 .snippet-row {
 	display: block;
-	padding: var(--s-1) var(--s-2);
+	padding: var(--s-2) var(--s-3);
 	margin: 0 calc(var(--s-2) * -1);
-	border-radius: var(--radius);
+	border-left: 2px solid transparent;
+	border-radius: 0;
 	text-decoration: none;
 	color: inherit;
+	transition: background-color 120ms ease, border-color 120ms ease;
 }
 .snippet-row:hover { background: var(--c-bg-subtle); }
 .snippet-row-active,
 .snippet-row-active:hover {
+	border-left-color: var(--c-accent);
 	background: var(--c-accent-bg);
 }
 .snippet-row-active .snippet-title { color: var(--c-accent); }
@@ -3348,8 +3357,8 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	gap: var(--s-3);
 	padding: var(--s-6) var(--s-4) var(--s-4);
 	overflow: auto;
-	border-radius: 14px;
-	border: 1px solid var(--c-border);
+	border-radius: var(--radius);
+	border: 1px solid var(--c-border-firm);
 	background: var(--flash-card-bg);
 	text-align: center;
 	backface-visibility: hidden;
@@ -3359,11 +3368,18 @@ a.flash-mini-card:focus-visible { outline: var(--ring); outline-offset: 2px; }
 	content: "";
 	position: absolute;
 	top: 0; left: 0; right: 0;
-	height: 8px;
-	background: var(--swatch, var(--c-border-firm));
+	height: 4px;
+	background: var(--swatch, var(--c-accent));
 }
 .flash-card-back { transform: rotateY(180deg); }
-.flash-card-text { font-size: var(--fs-xl); font-weight: 500; white-space: pre-line; overflow-wrap: anywhere; }
+.flash-card-text {
+	font-family: var(--font-display);
+	font-size: var(--fs-xl);
+	font-weight: 500;
+	text-transform: none;
+	white-space: pre-line;
+	overflow-wrap: anywhere;
+}
 .flash-card-notes { color: var(--c-text-dim); font-size: var(--fs-sm); white-space: pre-line; }
 .flash-card-hint { color: var(--c-text-faint); font-size: var(--fs-xs); }
 .flash-card-image { max-width: 100%; max-height: 8rem; border-radius: var(--radius); }
@@ -3612,20 +3628,24 @@ input.flash-tag-entry:focus { outline: none; }
 	min-height: 2.75rem;
 	margin: var(--s-4) auto 0;
 	padding: var(--s-2) var(--s-6);
-	border-radius: 10px;
-	background: var(--c-accent);
+	border-radius: 0;
+	background: var(--c-accent-attention);
 	color: #fff;
-	font-size: var(--fs-lg);
-	font-weight: 500;
+	font-family: var(--font-mono);
+	font-size: var(--fs-sm);
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
 	cursor: pointer;
+	clip-path: polygon(0 0, calc(100% - var(--chamfer-sm)) 0, 100% var(--chamfer-sm), 100% 100%, 0 100%);
 }
-:root[data-theme="dark"] .flash-show-answer { color: #10141a; }
+:root[data-theme="dark"] .flash-show-answer { color: #151412; }
 .flash-show-answer kbd,
 .flash-grade kbd,
 .flash-undo-btn kbd {
-	font-family: var(--font-ui);
+	font-family: var(--font-mono);
 	font-size: var(--fs-2xs);
-	opacity: 0.75;
+	opacity: 0.8;
 }
 
 /* Grade buttons: hidden until the card is flipped (CSS only). */
@@ -3645,10 +3665,11 @@ input.flash-tag-entry:focus { outline: none; }
 	gap: 2px;
 	min-height: 3.5rem;
 	padding: var(--s-2);
-	border-radius: 10px;
-	border: 2px solid;
-	font-size: var(--fs-base);
+	border-radius: var(--radius);
+	border: 1.5px solid;
+	font-size: var(--fs-sm);
 	font-weight: 600;
+	font-variant-numeric: tabular-nums;
 	cursor: pointer;
 }
 /* Two classes (0,2,0): since #375 the generic button hover is only (0,1,0)

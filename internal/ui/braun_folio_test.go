@@ -134,3 +134,28 @@ func TestBraunFolioReviewFixes(t *testing.T) {
 		seen[h] = e.Name()
 	}
 }
+
+func TestBraunFolioPhase2InstrumentApps(t *testing.T) {
+	src, err := fs.ReadFile(ui.Static(), "app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := string(src)
+
+	checks := []struct {
+		name string
+		re   string
+	}{
+		{"paste code frame recessed with firm border", `(?s)\.snippet-body\s*\{[^}]*background:\s*var\(--c-bg-inset\)[^}]*border:\s*1px solid var\(--c-border-firm\)`},
+		{"paste active row has 2px left rail", `(?s)\.snippet-row-active[^{]*\{[^}]*border-left-color:\s*var\(--c-accent\)`},
+		{"paste pill uses mono", `(?s)\.snippet-pill\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
+		{"flash card text uses display serif with normal case", `(?s)\.flash-card-text\s*\{[^}]*font-family:\s*var\(--font-display\)[^}]*text-transform:\s*none`},
+		{"flash show-answer uses chamfered signal primary", `(?s)\.flash-show-answer\s*\{[^}]*clip-path:\s*polygon\(`},
+		{"flash grade uses precision radius", `(?s)\.flash-grade\s*\{[^}]*border-radius:\s*var\(--radius\)`},
+	}
+	for _, c := range checks {
+		if !regexp.MustCompile(c.re).MatchString(css) {
+			t.Errorf("app.css missing Phase 2 instrument contract: %s", c.name)
+		}
+	}
+}
