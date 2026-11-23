@@ -159,3 +159,29 @@ func TestBraunFolioPhase2InstrumentApps(t *testing.T) {
 		}
 	}
 }
+
+func TestBraunFolioPhase2EditorialAndOutlinerApps(t *testing.T) {
+	src, err := fs.ReadFile(ui.Static(), "app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := string(src)
+
+	checks := []struct {
+		name string
+		re   string
+	}{
+		{"notes crumbs use mono", `(?s)\.outline-crumbs\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
+		{"notes due group heading uses mono", `(?s)\.notes-due-group h2\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
+		{"reader active row has 2px left rail", `(?s)\.reader-row\.is-active a[^{]*\{[^}]*border-left-color:\s*var\(--c-accent\)`},
+		{"reader list heading uses mono", `(?s)\.reader-list-head h2\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
+		{"reader body has editorial blockquote", `(?s)\.reader-body blockquote\s*\{[^}]*border-left:\s*2px solid var\(--c-accent\)`},
+		{"books section heading uses mono", `(?s)\.books-section-head\s*\{[^}]*font-family:\s*var\(--font-mono\)`},
+		{"books title uses display serif", `(?s)\.books-book-titles h1\s*\{[^}]*font-family:\s*var\(--font-display\)`},
+	}
+	for _, c := range checks {
+		if !regexp.MustCompile(c.re).MatchString(css) {
+			t.Errorf("app.css missing Phase 2 editorial/outliner contract: %s", c.name)
+		}
+	}
+}
