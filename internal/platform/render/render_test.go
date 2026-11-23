@@ -176,8 +176,8 @@ func TestShellPutsUserActionsBehindOneMenu(t *testing.T) {
 		t.Errorf("logout button = %q", got)
 	}
 	doc.MustHave(panel + " [data-theme-switch]")
-	doc.MustHave(panel + " [data-font-switch]")
-	doc.MustHave(panel + " [data-palette-switch]")
+	doc.MustNotHave(panel + " [data-font-switch]")
+	doc.MustNotHave(panel + " [data-palette-switch]")
 }
 
 // TestShellHasConnectivityIndicator covers the element connectivity.js
@@ -510,8 +510,6 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 			LoggedIn:      true,
 			Username:      "ilia",
 			Theme:         "dark",
-			Font:          "serif",
-			Palette:       "ink",
 			ActiveApp:     "paste",
 			ActiveAppName: "ON Paste",
 			ActiveAppPath: "/paste/",
@@ -528,15 +526,16 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 	}
 	doc := htmlassert.Parse(t, rec.Body.String())
 
-	// data-theme/data-font/data-palette land on <html>, set from the very first response.
+	// data-theme lands on <html> from the very first response; retired
+	// data-font and data-palette attributes are absent.
 	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-theme"); v != "dark" {
 		t.Errorf("data-theme = %q, want dark", v)
 	}
-	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-font"); v != "serif" {
-		t.Errorf("data-font = %q, want serif", v)
+	if _, ok := htmlassert.Attr(doc.MustHave("html"), "data-font"); ok {
+		t.Error("<html> must not carry data-font")
 	}
-	if v, _ := htmlassert.Attr(doc.MustHave("html"), "data-palette"); v != "ink" {
-		t.Errorf("data-palette = %q, want ink", v)
+	if _, ok := htmlassert.Attr(doc.MustHave("html"), "data-palette"); ok {
+		t.Error("<html> must not carry data-palette")
 	}
 
 	// Breadcrumbs: Home / ON Paste / New snippet.

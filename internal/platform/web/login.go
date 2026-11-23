@@ -264,8 +264,6 @@ func (a *Auth) renderLogin(w http.ResponseWriter, r *http.Request, status int, m
 		Shell: render.Shell{
 			CSRFToken:        CSRFToken(r.Context()),
 			Theme:            ThemeFrom(r),
-			Font:             FontFrom(r),
-			Palette:          PaletteFrom(r),
 			SidebarCollapsed: SidebarCollapsedFrom(r),
 			Version:          a.version,
 		},
