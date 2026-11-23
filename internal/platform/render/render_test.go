@@ -571,6 +571,33 @@ func TestShellHasBreadcrumbsSidebarAndFooter(t *testing.T) {
 	}
 }
 
+func TestHomeRendersHeroPlateAndAppDirectory(t *testing.T) {
+	r := testRenderer(t)
+	rec := httptest.NewRecorder()
+	type homeApp struct {
+		ID, Name, Path, Summary string
+		ComingSoon              bool
+	}
+	err := r.Page(rec, http.StatusOK, "home", render.Page{
+		Shell: render.Shell{LoggedIn: true, Username: "ilia", Theme: "light"},
+		Data: map[string]any{
+			"Apps": []homeApp{
+				{ID: "paste", Name: "ON Paste", Path: "/paste/", Summary: "Snippets"},
+				{ID: "focus", Name: "ON Focus", Path: "/focus/", Summary: "Timers"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := htmlassert.Parse(t, rec.Body.String())
+	doc.MustHave(".home-hero")
+	doc.MustHave(".home-hero-art svg")
+	doc.MustHave(".home-grid .app-card")
+	doc.MustHave(`.home-grid a[href="/paste/"]`)
+	doc.MustHave(`.home-grid a[href="/focus/"]`)
+}
+
 func TestRendererRejectsBadInput(t *testing.T) {
 	if _, err := render.NewRenderer(render.Options{AssetURL: func(string) string { return "" }, CSRFFieldName: "csrf_token"}); err == nil {
 		t.Error("NewRenderer accepted a nil Layouts")

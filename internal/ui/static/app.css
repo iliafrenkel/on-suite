@@ -696,50 +696,243 @@ button, .button {
  * scroll sideways. */
 .scroll-x { overflow-x: auto; }
 
-/* ---- Home page card grid ------------------------------------------------ */
+/* ---- Home page hero & hairline app directory --------------------------- */
+
+.home-kicker {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	margin-bottom: var(--s-2);
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--c-accent);
+}
+
+.home-kicker::before {
+	content: "";
+	width: 1rem;
+	height: 2px;
+	background: var(--c-accent-attention);
+}
+
+.home-hero {
+	display: grid;
+	grid-template-columns: 1.25fr 0.9fr;
+	gap: var(--s-5);
+	align-items: center;
+	padding: var(--s-6);
+	background: var(--c-bg-subtle);
+	border: 1px solid var(--c-border-firm);
+	clip-path: polygon(0 0, calc(100% - var(--chamfer-lg)) 0, 100% var(--chamfer-lg), 100% 100%, 0 100%);
+}
+
+.home-hero h1 {
+	margin: 0 0 var(--s-3);
+	font-family: var(--font-display);
+	font-size: clamp(1.75rem, 3vw, 2.25rem);
+	font-weight: 500;
+	line-height: 1.1;
+	letter-spacing: -0.02em;
+}
+
+.home-hero h1 em {
+	font-style: italic;
+	font-weight: 400;
+	color: var(--c-accent-attention);
+}
+
+.home-hero-sub {
+	margin: 0;
+	max-width: 46ch;
+	color: var(--c-text-dim);
+	line-height: 1.55;
+}
+
+.home-hero-art svg {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.art-plane-back {
+	fill: var(--c-accent-bg);
+	stroke: var(--c-accent);
+	stroke-width: 1.3;
+}
+
+.art-plane-front {
+	fill: var(--c-bg-subtle);
+	stroke: var(--c-text);
+	stroke-width: 1.5;
+}
+
+.art-guide {
+	stroke: var(--c-border-firm);
+	stroke-width: 1;
+	stroke-dasharray: 3 3;
+}
+
+.art-arc {
+	fill: none;
+	stroke: var(--c-accent);
+	stroke-width: 1.2;
+}
+
+.art-signal { fill: var(--c-accent-attention); }
+
+.art-signal-halo {
+	fill: none;
+	stroke: var(--c-accent-attention);
+	stroke-width: 1;
+	stroke-opacity: 0.45;
+}
+
+.art-rule-strong { stroke: var(--c-text); stroke-width: 1.4; }
+.art-rule-faint { stroke: var(--c-text-faint); stroke-width: 1; }
+.art-dot { fill: var(--c-accent); }
+
+.home-dir-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	margin-top: var(--s-5);
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--c-text-faint);
+}
 
 .home-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-	gap: var(--s-4);
+	grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+	gap: 1px;
+	background: var(--c-border);
+	border: 1px solid var(--c-border);
 }
 
 .app-card {
-	display: block;
-	padding: var(--s-4);
-	background: var(--c-bg);
-	border: var(--border);
-	border-radius: var(--radius);
+	display: flex;
+	flex-direction: column;
+	padding: var(--s-5);
+	background: var(--c-bg-subtle);
 	color: var(--c-text);
 	text-decoration: none;
-	transition: border-color 0.15s ease;
+	transition: background-color 140ms ease;
 }
 
-.app-card:hover { border-color: var(--c-border-firm); }
+.app-card:hover { background: var(--c-bg-inset); }
 
-.app-card h3 { margin: var(--s-3) 0 var(--s-1); }
-.app-card p { margin: 0; }
+.app-card h3 {
+	margin: var(--s-3) 0 var(--s-1);
+	font-family: var(--font-display);
+	font-size: var(--fs-lg);
+	font-weight: 500;
+}
 
-/* A soft badge in the app's own colour, so each tile is recognisable before
- * its name is read (spec 2026-10-13-app-identity-colours §4.1). The glyph is
- * still the thin line icon; only its colour and the tint behind it are per app. */
+.app-card p { margin: 0 0 var(--s-4); }
+
 .app-card-icon {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 2.5rem;
-	height: 2.5rem;
-	border-radius: calc(var(--radius) + var(--s-1));
+	width: 2.25rem;
+	height: 2.25rem;
+	border-radius: var(--radius);
 	background: var(--swatch-soft, var(--c-accent-bg));
 	color: var(--swatch-line, var(--c-accent));
 }
 
-.app-card-icon svg { width: 1.625rem; height: 1.625rem; }
+.app-card-icon svg { width: 1.35rem; height: 1.35rem; }
 
-/* Equal card area for a shipped app and three that don't exist yet reads as
- * "this is a mockup." One muted line carries the same information without
- * competing with ON Paste for attention. */
+.app-card-rule {
+	display: block;
+	width: 1.5rem;
+	height: 2px;
+	margin-top: auto;
+	background: var(--swatch-line, var(--c-accent));
+	transition: width 180ms ease;
+}
+
+.app-card:hover .app-card-rule { width: 3.25rem; }
+
 .home-coming-soon { margin-top: var(--s-2); }
+
+/* ---- Split architectural Login plate ----------------------------------- */
+
+.login-stage {
+	display: grid;
+	place-items: center;
+	padding: var(--s-5) 0;
+}
+
+.login-plate {
+	display: grid;
+	grid-template-columns: 1.05fr 1fr;
+	width: 100%;
+	max-width: 52rem;
+	background: var(--c-bg-subtle);
+	border: 1px solid var(--c-border-firm);
+	clip-path: polygon(0 0, calc(100% - var(--chamfer-lg)) 0, 100% var(--chamfer-lg), 100% 100%, 0 100%);
+}
+
+.login-art {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: var(--s-5);
+	padding: var(--s-6);
+	background: var(--c-plate);
+	color: var(--c-plate-text);
+	border-right: var(--border);
+}
+
+.login-art-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.login-art-figure svg { display: block; width: 100%; height: auto; }
+.login-art-ring { fill: none; stroke: var(--c-accent); stroke-opacity: 0.4; stroke-width: 1; }
+.login-art-outline { fill: none; stroke: var(--c-plate-text); stroke-opacity: 0.7; stroke-width: 1.3; }
+.login-art-plane { fill: var(--c-accent); fill-opacity: 0.16; stroke: var(--c-accent); stroke-width: 1.2; }
+.login-art-axis { stroke: var(--c-plate-text); stroke-opacity: 0.2; stroke-dasharray: 3 4; }
+
+.login-art-copy h2 {
+	margin: 0 0 var(--s-2);
+	font-family: var(--font-display);
+	font-size: 1.75rem;
+	font-weight: 400;
+	line-height: 1.18;
+	color: var(--c-plate-text);
+}
+
+.login-art-copy h2 em { font-style: italic; color: var(--c-accent-attention); }
+.login-art-copy p { margin: 0; font-size: var(--fs-sm); color: var(--c-plate-dim); }
+
+.login-form-pane {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: var(--s-6);
+}
+
+.login-form-pane h1 { margin-bottom: 0; font-size: 1.625rem; }
+.login-form-pane button.primary { align-self: flex-start; }
+
+@media (max-width: 780px) {
+	.home-hero,
+	.login-plate { grid-template-columns: 1fr; }
+	.login-art { border-right: none; border-bottom: var(--border); }
+	.conn-label { display: none; }
+}
 
 /* ---- Snippets ---------------------------------------------------------- */
 

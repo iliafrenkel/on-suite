@@ -155,6 +155,9 @@ func TestLoginPageRenders(t *testing.T) {
 	if typ, _ := htmlassert.Attr(doc.MustHave(`input[name=password]`), "type"); typ != "password" {
 		t.Errorf("password field type = %q", typ)
 	}
+	doc.MustHave(".login-plate")
+	doc.MustHave(".login-art svg")
+	doc.MustHave(".login-form-pane button.primary")
 }
 
 // TestLoginPageRespectsThemeCookie guards against the login page silently
