@@ -11,30 +11,44 @@
 		<button type="button" class="focus-runner-quiet focus-runner-fullscreen" data-focus-fullscreen aria-keyshortcuts="F" hidden>⛶ Full screen</button>
 	</div>
 	<div class="focus-runner-main" data-focus-main>
-		<div class="focus-ring">
-			<svg class="focus-ring-svg" viewBox="0 0 220 220" aria-hidden="true">
-				<circle class="focus-ring-track" cx="110" cy="110" r="100"></circle>
-				<circle class="focus-ring-bar" cx="110" cy="110" r="100" pathLength="1000" stroke-dashoffset="1000" data-focus-bar></circle>
-			</svg>
-			<div class="focus-ring-inner">
-				<p class="focus-runner-name">{{$d.Name}}</p>
-				<p class="focus-digits" role="timer" data-focus-digits>{{$d.Clock}}</p>
-				{{if not $d.Single}}
-				<p class="focus-phase" data-focus-phase>{{$d.Label}}</p>
-				<ol class="focus-dots" aria-hidden="true">{{range $d.Dots}}<li class="focus-dot"></li>{{end}}</ol>
-				{{end}}
+		<div class="focus-chassis">
+			<div class="focus-chassis-head">
+				<span>ON Focus · Instrument</span>
+				<span class="focus-led-row" aria-hidden="true"><span class="focus-led"></span></span>
 			</div>
+			<div class="focus-ring">
+				<svg class="focus-ring-svg" viewBox="0 0 240 240" aria-hidden="true">
+					<circle class="focus-ring-ticks" cx="120" cy="120" r="114"></circle>
+					<circle class="focus-ring-track" cx="120" cy="120" r="104"></circle>
+					<circle class="focus-ring-bar" cx="120" cy="120" r="104" pathLength="1000" stroke-dashoffset="1000" data-focus-bar></circle>
+				</svg>
+				<div class="focus-ring-well">
+					<div class="focus-ring-inner">
+						<p class="focus-runner-name">{{$d.Name}}</p>
+						<p class="focus-digits" role="timer" data-focus-digits>{{$d.Clock}}</p>
+						{{if not $d.Single}}
+						<p class="focus-phase" data-focus-phase>{{$d.Label}}</p>
+						<ol class="focus-dots" aria-hidden="true">{{range $d.Dots}}<li class="focus-dot"></li>{{end}}</ol>
+						{{end}}
+					</div>
+				</div>
+			</div>
+			<div class="focus-controls" data-focus-controls>
+				<button type="button" class="primary" data-focus-pause aria-keyshortcuts="Space">Pause</button>
+				{{if not $d.Single}}<button type="button" data-focus-skip aria-keyshortcuts="S">Skip</button>{{end}}
+				<button type="button" data-focus-restart aria-keyshortcuts="R">Restart</button>
+			</div>
+			<div class="focus-controls" data-focus-waiting hidden>
+				<button type="button" class="primary" data-focus-next aria-keyshortcuts="Space">Start</button>
+			</div>
+			<div class="focus-keys" aria-hidden="true">
+				<span><kbd>Space</kbd> Pause</span>
+				{{if not $d.Single}}<span><kbd>S</kbd> Skip</span>{{end}}
+				<span><kbd>R</kbd> Restart</span>
+			</div>
+			<p class="focus-sound-hint" data-focus-sound-hint hidden>Sound is off — click anywhere to turn it on.</p>
+			<noscript><p class="focus-sound-hint">The timer needs JavaScript. <a href="/focus/">Back to timers</a></p></noscript>
 		</div>
-		<div class="focus-controls" data-focus-controls>
-			<button type="button" class="primary" data-focus-pause aria-keyshortcuts="Space">Pause</button>
-			{{if not $d.Single}}<button type="button" data-focus-skip aria-keyshortcuts="S">Skip</button>{{end}}
-			<button type="button" data-focus-restart aria-keyshortcuts="R">Restart</button>
-		</div>
-		<div class="focus-controls" data-focus-waiting hidden>
-			<button type="button" class="primary" data-focus-next aria-keyshortcuts="Space">Start</button>
-		</div>
-		<p class="focus-sound-hint" data-focus-sound-hint hidden>Sound is off — click anywhere to turn it on.</p>
-		<noscript><p class="focus-sound-hint">The timer needs JavaScript. <a href="/focus/">Back to timers</a></p></noscript>
 	</div>
 	<div class="focus-done" data-focus-done hidden>
 		<p class="focus-done-title" data-focus-done-text>Done</p>

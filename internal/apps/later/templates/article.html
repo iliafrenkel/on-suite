@@ -98,13 +98,18 @@
 	</div>
 	<article class="later-article stack"{{with $d.Lang}} lang="{{.}}"{{end}}>
 		<header class="later-article-header stack">
-			<h1 class="later-article-title" dir="auto">{{$d.Title}}</h1>
-			<p class="later-article-meta">
-				{{with $d.Site}}<bdi>{{.}}</bdi>{{end}}{{with $d.Byline}} · <bdi>{{.}}</bdi>{{end}}
-				{{if not $d.LinkOnly}} · {{$d.Minutes}} min read{{end}}
+			<p class="later-article-kicker">
+				{{if $d.Site}}<bdi>{{$d.Site}}</bdi>{{else}}Saved article{{end}}{{if not $d.LinkOnly}} · {{$d.Minutes}} min read{{end}}
 			</p>
-			{{if $d.Tags}}<p class="later-article-tags">{{range $d.Tags}}<a class="later-pill later-pill-tag" href="{{.URL}}">{{.Name}}</a>
-			{{end}}</p>{{end}}
+			<h1 class="later-article-title" dir="auto">{{$d.Title}}</h1>
+			<div class="later-article-meta-bar">
+				<p class="later-article-meta">
+					{{with $d.Site}}<bdi>{{.}}</bdi>{{end}}{{with $d.Byline}} · <bdi>{{.}}</bdi>{{end}}
+					{{if not $d.LinkOnly}} · {{$d.Minutes}} min read{{end}}
+				</p>
+				{{if $d.Tags}}<p class="later-article-tags">{{range $d.Tags}}<a class="later-pill later-pill-tag" href="{{.URL}}">{{.Name}}</a>
+				{{end}}</p>{{end}}
+			</div>
 		</header>
 
 		{{if $d.LinkOnly}}

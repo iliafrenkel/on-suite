@@ -3937,13 +3937,14 @@ body:has(.later-reader) .shell-bar,
 body:has(.later-reader) .app-sidebar,
 body:has(.later-reader) .app-footer { display: none; }
 main:has(.later-reader) { max-width: none; padding: 0; }
-.later-sticky { position: sticky; top: 0; z-index: 2; background: var(--c-bg); }
+.later-sticky { position: sticky; top: 0; z-index: 2; background: var(--c-bg-subtle); }
 .later-topbar { display: flex; align-items: center; gap: .75rem;
-  padding: .5rem 1rem; background: var(--c-bg); border-bottom: var(--border); font-size: var(--fs-sm); color: var(--c-text-dim); }
+  padding: .65rem 1.25rem; background: var(--c-bg-subtle); border-bottom: var(--border); font-size: var(--fs-sm); color: var(--c-text-dim); }
 .later-topbar form { margin: 0; }
-.later-topbar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text); font-weight: 500; }
-.later-left { white-space: nowrap; }
-.later-progress { display: block; width: 100%; height: 3px; appearance: none; border: 0; background: var(--c-bg-subtle); }
+.later-back { font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
+.later-topbar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-display); color: var(--c-text-dim); font-weight: 500; }
+.later-left { white-space: nowrap; font-family: var(--font-mono); font-size: var(--fs-xs); }
+.later-progress { display: block; width: 100%; height: 2px; appearance: none; border: 0; background: var(--c-border); }
 .later-progress::-webkit-progress-bar { background: var(--c-bg-subtle); }
 .later-progress::-webkit-progress-value { background: var(--c-accent); }
 .later-progress::-moz-progress-bar { background: var(--c-accent); }
@@ -3989,9 +3990,66 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 .later-size-3 .later-article-body { font-size: 1.125rem; }
 .later-size-4 .later-article-body { font-size: 1.25rem; }
 .later-size-5 .later-article-body { font-size: 1.4rem; }
-.later-article-title { font-size: 2rem; line-height: 1.2; margin: 0; }
-.later-article-meta { color: var(--c-text-faint); font-size: var(--fs-sm); margin: 0; }
-.later-article-body { line-height: 1.65; overflow-wrap: anywhere; }
+.later-article-kicker {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--c-accent);
+}
+.later-article-kicker::before {
+	content: "";
+	width: 1.125rem;
+	height: 2px;
+	background: var(--c-accent-attention);
+}
+.later-article-title {
+	font-family: var(--font-display);
+	font-size: clamp(1.85rem, 3.6vw, 2.4rem);
+	font-weight: 500;
+	line-height: 1.14;
+	letter-spacing: -0.02em;
+	margin: 0;
+}
+.later-article-meta-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2) var(--s-4);
+	padding: var(--s-3) 0;
+	border-top: 1px solid var(--c-border-firm);
+	border-bottom: 1px solid var(--c-border);
+}
+.later-article-meta {
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.04em;
+	color: var(--c-text-dim);
+	margin: 0;
+}
+.later-article-body { line-height: 1.72; overflow-wrap: anywhere; }
+.later-article:not([dir="rtl"]) .later-article-body > p:first-of-type::first-letter {
+	float: left;
+	font-family: var(--font-display);
+	font-size: 3.35em;
+	line-height: 0.85;
+	padding: 0.08em 0.16em 0 0;
+	color: var(--c-accent-attention);
+	font-weight: 500;
+}
+.later-article-body blockquote {
+	margin: var(--s-5) 0;
+	padding: var(--s-1) 0 var(--s-1) var(--s-5);
+	border-left: 2px solid var(--c-accent);
+	font-family: var(--font-display);
+	font-style: italic;
+	color: var(--c-text-dim);
+}
 /* A calmer right edge (#559): hyphenate long words and let the browser
    balance the line breaks. Prose only — headings, code and tables keep
    their words whole. Hyphenation follows the page's lang. */
@@ -4240,7 +4298,7 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 	align-items: center;
 	justify-content: center;
 	padding: var(--s-6) var(--s-4);
-	background: var(--c-bg-subtle);
+	background: var(--c-bg);
 	color: var(--c-text);
 }
 /* 4.8:1 under the pills' dark text; the old #7a6c5d was 3.6. */
@@ -4255,6 +4313,8 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 	right: var(--s-4);
 	display: flex;
 	align-items: center;
+	padding-bottom: var(--s-2);
+	border-bottom: var(--border);
 }
 .focus-runner-quiet {
 	padding: var(--s-1) var(--s-2);
@@ -4262,45 +4322,94 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 	border-radius: var(--radius);
 	background: none;
 	color: var(--c-text-dim);
-	font: inherit;
-	font-size: var(--fs-sm);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
 	text-decoration: none;
 	cursor: pointer;
 }
 .focus-runner-quiet:hover { background: var(--c-bg-inset); color: var(--c-text); text-decoration: none; }
 .focus-runner-fullscreen { margin-left: auto; }
 
-.focus-runner-main { display: flex; flex-direction: column; align-items: center; gap: var(--s-5); }
+.focus-runner-main { display: flex; flex-direction: column; align-items: center; gap: var(--s-5); width: 100%; }
+
+.focus-chassis {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--s-5);
+	width: min(28rem, 100%);
+	padding: var(--s-5) var(--s-6) var(--s-6);
+	background: var(--c-bg-subtle);
+	border: 1px solid var(--c-border-firm);
+	clip-path: polygon(0 0, calc(100% - var(--chamfer-lg)) 0, 100% var(--chamfer-lg), 100% 100%, 0 100%);
+}
+
+.focus-chassis-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--c-text-faint);
+}
+
+.focus-led {
+	display: inline-block;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: var(--c-accent-attention);
+	box-shadow: 0 0 0 4px var(--c-accent-attention-bg);
+}
+.focus-runner-paused .focus-led,
+.focus-runner-waiting .focus-led {
+	background: var(--c-border-firm);
+	box-shadow: none;
+}
+
 .focus-ring {
 	position: relative;
-	width: min(22rem, 80vw, 60vh);
+	width: min(19rem, 74vw, 52vh);
 	aspect-ratio: 1;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 }
 .focus-ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
-.focus-ring-track, .focus-ring-bar { fill: none; stroke-width: 6; }
-.focus-ring-track { stroke: var(--c-bg-inset); }
+.focus-ring-ticks { fill: none; stroke: var(--c-border-firm); stroke-width: 1; stroke-dasharray: 1.5 10.44; }
+.focus-ring-track, .focus-ring-bar { fill: none; stroke-width: 4.5; }
+.focus-ring-track { stroke: var(--c-border); }
 /* stroke-dashoffset is an SVG attribute focus.js sets; CSS must not set it,
  * or the stylesheet would win over the attribute. */
-.focus-ring-bar { stroke: var(--focus-ring); stroke-linecap: round; stroke-dasharray: 1000; transition: stroke-dashoffset .5s linear; }
-/* Nothing elapsed: a round cap would still draw a dot at 12 o'clock.
- * focus.js sets this attribute, so CSS can match it without a class. */
-.focus-ring-bar[stroke-dashoffset="1000"] { stroke-linecap: butt; }
+.focus-ring-bar { stroke: var(--focus-ring); stroke-linecap: butt; stroke-dasharray: 1000; transition: stroke-dashoffset .5s linear; }
 
-.focus-ring-inner { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s-2); max-width: 75%; text-align: center; }
+.focus-ring-well {
+	position: relative;
+	width: 78%;
+	height: 78%;
+	border-radius: 50%;
+	background: var(--c-bg-inset);
+	border: var(--border);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.focus-ring-inner { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s-2); max-width: 82%; text-align: center; }
 .focus-ring-inner p { margin: 0; }
-.focus-runner-name { color: var(--c-text-dim); font-size: var(--fs-sm); letter-spacing: .04em; text-transform: uppercase; overflow-wrap: anywhere; }
-.focus-digits { font-size: clamp(3rem, 12vmin, 4.5rem); font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1; }
-/* Dim text, not the timer's colour: every swatch is under 4.5:1 on the
- * runner's background. The ring and dots carry the colour (F4 dark-mode pass). */
-.focus-phase { color: var(--c-text-dim); font-size: var(--fs-sm); font-weight: 600; }
+.focus-runner-name { font-family: var(--font-display); color: var(--c-text-dim); font-size: var(--fs-base); font-weight: 500; overflow-wrap: anywhere; }
+.focus-digits { font-family: var(--font-mono); font-size: clamp(2.5rem, 10vmin, 3.75rem); font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.04em; line-height: 1; }
+.focus-phase { font-family: var(--font-mono); color: var(--c-accent); font-size: var(--fs-2xs); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
 
 .focus-dots { display: flex; gap: .4rem; margin: 0; padding: 0; list-style: none; }
-.focus-dot { width: .5rem; height: .5rem; border: 1.5px solid var(--c-text-faint); border-radius: 50%; }
-.focus-dot-done { background: var(--focus-ring); border-color: var(--focus-ring); }
-.focus-dot-now { border-color: var(--swatch); box-shadow: 0 0 0 2px var(--swatch-soft); }
+.focus-dot { width: .9rem; height: 3px; border: 0; border-radius: 0; background: var(--c-border-firm); }
+.focus-dot-done { background: var(--c-accent); }
+.focus-dot-now { background: var(--focus-ring); }
 
 .focus-runner-paused .focus-ring-bar,
 .focus-runner-paused .focus-digits { opacity: .45; }
@@ -4310,18 +4419,36 @@ main:has(.focus-runner) { max-width: none; padding: 0; }
 .focus-runner-waiting .focus-ring-bar,
 .focus-runner-waiting .focus-digits { opacity: .45; }
 .focus-runner-waiting [data-focus-next] { animation: focus-pulse 2s ease-in-out infinite; }
-@keyframes focus-pulse { 50% { transform: scale(1.06); } }
+@keyframes focus-pulse { 50% { transform: scale(1.04); } }
 @media (prefers-reduced-motion: reduce) {
 	.focus-runner-waiting [data-focus-next] { animation: none; }
 }
 
 .focus-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
 .focus-controls button,
-.focus-controls .button { padding: var(--s-2) var(--s-4); border-radius: 999px; }
+.focus-controls .button {
+	padding: var(--s-2) var(--s-4);
+	border-radius: var(--radius);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
 /* Dark text on the timer's colour in both themes: white is under 4.5:1 on
- * every swatch (F4 addendum). Same colour as the suite's dark .primary. */
+ * every swatch (F4 addendum). */
 .focus-controls .primary,
-.focus-controls .primary:hover { background: var(--focus-ring); border-color: var(--focus-ring); color: #10141a; }
+.focus-controls .primary:hover { background: var(--focus-ring); border-color: transparent; color: #151412; }
+
+.focus-keys {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--s-3);
+	font-family: var(--font-mono);
+	font-size: var(--fs-2xs);
+	color: var(--c-text-faint);
+	letter-spacing: 0.05em;
+}
 
 .focus-sound-hint { margin: 0; color: var(--c-text-dim); font-size: var(--fs-sm); text-align: center; }
 .focus-done { display: flex; flex-direction: column; align-items: center; gap: var(--s-4); text-align: center; }

@@ -133,6 +133,29 @@ func TestIndexRowShowsSiteMinutesAndLinkOnlyPill(t *testing.T) {
 	}
 }
 
+func TestArticleHasEditorialHeaderAndNoInlineStyles(t *testing.T) {
+	s := newServer(t)
+	uid := s.Alice.User.ID
+	art := seed(t, s, uid, later.NewArticle{
+		URL:         "https://quantamagazine.org/quiet-geometry",
+		Title:       "On Quiet Geometry",
+		ContentHTML: "<p>The most memorable objects rarely shout.</p>",
+	})
+	rec := s.Do(t, s.Alice, httptest.NewRequest("GET", fmt.Sprintf("/later/a/%v", art.ID), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, ` style="`) {
+		t.Error("later article page must not contain inline style= attributes (strict CSP)")
+	}
+	doc := htmlassert.Parse(t, body)
+	doc.MustHave(".later-article-header")
+	doc.MustHave(".later-article-kicker")
+	doc.MustHave(".later-article-title")
+	doc.MustHave(".later-article-meta-bar")
+}
+
 func TestIndexShowsTheEmptyText(t *testing.T) {
 	s := newServer(t)
 	for tab, want := range map[string]string{
