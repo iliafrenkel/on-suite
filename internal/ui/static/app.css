@@ -23,13 +23,15 @@
 	--c-text-faint:          #6b6459; /* 4.5:1+ on --c-bg and --c-bg-subtle */
 	--c-accent:              #1c665d;
 	--c-accent-bg:           #dfe9e7;
-	--c-accent-attention:    #c23d15; /* Braun Signal Vermilion */
-	--c-accent-attention-bg: #f6e2db;
+	--c-accent-attention:    #b53812; /* Braun Signal Vermilion (5.15:1 on --c-accent-attention-bg, 5.86:1 white text) */
+	--c-accent-attention-bg: #f9e7e1;
 	--c-danger:              #a51d2d;
 	--c-danger-bg:           #fbeaec;
 	--c-plate:               #1b1917;
 	--c-plate-text:          #f4f1ea;
 	--c-plate-dim:           #a8a196;
+	--c-plate-accent:        #4eb8aa; /* 7.8:1 on --c-plate */
+	--c-plate-signal:        #f06437; /* 5.7:1 on --c-plate */
 
 	/* A 4px scale. */
 	--s-1: 0.25rem;
@@ -97,16 +99,16 @@
 @font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-mono-600-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
 @font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-mono-600-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
-/* IBM Plex Sans */
-@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-400-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-400-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-400-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-500-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-500-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-500-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-600-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
-@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-600-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-600-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+/* IBM Plex Sans (variable font: one cached file per subset across weights 400–600) */
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-sans-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm-plex-sans-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm-plex-sans-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 /* IBM Plex Serif */
 @font-face { font-family: 'IBM Plex Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm-plex-serif-400i-cyrillic-ext.woff2") format("woff2"); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
@@ -144,7 +146,7 @@
 	--c-border-firm:         #575148;
 	--c-text:                #f0ece3;
 	--c-text-dim:            #aba497;
-	--c-text-faint:          #8c8579; /* 4.5:1+ on --c-bg and --c-bg-subtle */
+	--c-text-faint:          #968f82; /* 4.5:1+ on --c-bg, --c-bg-subtle, and --c-bg-inset */
 	--c-accent:              #4eb8aa; /* 4.5:1+ on dark surfaces and --c-accent-bg */
 	--c-accent-bg:           #1b302d;
 	--c-accent-attention:    #f06437;
@@ -154,6 +156,8 @@
 	--c-plate:               #0f0e0d;
 	--c-plate-text:          #f0ece3;
 	--c-plate-dim:           #9b9489;
+	--c-plate-accent:        #4eb8aa;
+	--c-plate-signal:        #f06437;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -554,14 +558,16 @@ main:has(.reader-panes) { max-width: none; padding: 0;}
 
 /* ---- Forms and buttons ------------------------------------------------- */
 
-label {
-	display: block;
-	margin-bottom: var(--s-1);
+label { display: block; margin-bottom: var(--s-1); font-size: var(--fs-sm); color: var(--c-text-dim); }
+
+/* Monospaced uppercase treatment is scoped to form-field labels only, so
+ * CSS-only interactive <label> controls (Flash cards, Later drawer toggle,
+ * toolbar buttons, radio choices) keep their own typography and spacing. */
+.field > label {
 	font-family: var(--font-mono);
 	font-size: var(--fs-xs);
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
-	color: var(--c-text-dim);
 }
 
 input[type="text"], input[type="password"], input[type="url"], input[type="number"], textarea, select {
@@ -900,10 +906,12 @@ button, .button {
 }
 
 .login-art-figure svg { display: block; width: 100%; height: auto; }
-.login-art-ring { fill: none; stroke: var(--c-accent); stroke-opacity: 0.4; stroke-width: 1; }
+.login-art-ring { fill: none; stroke: var(--c-plate-accent); stroke-opacity: 0.55; stroke-width: 1; }
 .login-art-outline { fill: none; stroke: var(--c-plate-text); stroke-opacity: 0.7; stroke-width: 1.3; }
-.login-art-plane { fill: var(--c-accent); fill-opacity: 0.16; stroke: var(--c-accent); stroke-width: 1.2; }
+.login-art-plane { fill: var(--c-plate-accent); fill-opacity: 0.16; stroke: var(--c-plate-accent); stroke-width: 1.2; }
 .login-art-axis { stroke: var(--c-plate-text); stroke-opacity: 0.2; stroke-dasharray: 3 4; }
+.login-art .art-signal { fill: var(--c-plate-signal); }
+.login-art .art-signal-halo { stroke: var(--c-plate-signal); }
 
 .login-art-copy h2 {
 	margin: 0 0 var(--s-2);
@@ -914,7 +922,7 @@ button, .button {
 	color: var(--c-plate-text);
 }
 
-.login-art-copy h2 em { font-style: italic; color: var(--c-accent-attention); }
+.login-art-copy h2 em { font-style: italic; color: var(--c-plate-signal); }
 .login-art-copy p { margin: 0; font-size: var(--fs-sm); color: var(--c-plate-dim); }
 
 .login-form-pane {
@@ -3874,7 +3882,13 @@ input.flash-tag-entry:focus { outline: none; }
 
 /* ---- ON Later ---------------------------------------------------------- */
 
-.later-hl { background: var(--c-accent-attention-bg); color: inherit; border-radius: 2px; scroll-margin-top: 5rem; }
+.later-hl {
+	background: var(--c-accent-attention-bg);
+	color: inherit;
+	border-radius: 2px;
+	box-shadow: inset 0 -2px var(--c-accent-attention);
+	scroll-margin-top: 5rem;
+}
 .later-page { max-width: var(--measure); margin-inline: auto; }
 .later-save { display: flex; gap: .5rem; }
 .later-save-input { flex: 1; min-width: 0; }
@@ -4033,12 +4047,13 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 	margin: 0;
 }
 .later-article-body { line-height: 1.72; overflow-wrap: anywhere; }
-.later-article:not([dir="rtl"]) .later-article-body > p:first-of-type::first-letter {
-	float: left;
+.later-article:not(:lang(ar)):not(:lang(he)):not(:lang(fa)):not(:lang(ur)):not(:lang(zh)):not(:lang(ja)):not(:lang(ko)) .later-article-body:not(:dir(rtl)) > p:first-of-type::first-letter {
+	float: inline-start;
 	font-family: var(--font-display);
 	font-size: 3.35em;
 	line-height: 0.85;
-	padding: 0.08em 0.16em 0 0;
+	padding: 0.08em 0 0;
+	padding-inline-end: 0.16em;
 	color: var(--c-accent-attention);
 	font-weight: 500;
 }
