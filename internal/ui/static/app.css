@@ -913,7 +913,7 @@ button, .button {
 .login-art .art-signal { fill: var(--c-plate-signal); }
 .login-art .art-signal-halo { stroke: var(--c-plate-signal); }
 
-.login-art-copy h2 {
+.login-art-copy .login-art-title {
 	margin: 0 0 var(--s-2);
 	font-family: var(--font-display);
 	font-size: 1.75rem;
@@ -922,7 +922,7 @@ button, .button {
 	color: var(--c-plate-text);
 }
 
-.login-art-copy h2 em { font-style: italic; color: var(--c-plate-signal); }
+.login-art-copy .login-art-title em { font-style: italic; color: var(--c-plate-signal); }
 .login-art-copy p { margin: 0; font-size: var(--fs-sm); color: var(--c-plate-dim); }
 
 .login-form-pane {

@@ -157,6 +157,12 @@ func TestLoginPageRenders(t *testing.T) {
 	}
 	doc.MustHave(".login-plate")
 	doc.MustHave(".login-art svg")
+	// The art panel's tagline is decoration, not a heading: "Sign in" is the
+	// page's first and only heading.
+	doc.MustNotHave(".login-art h2")
+	if n := len(doc.QueryAll("h1")); n != 1 {
+		t.Errorf("%d <h1> on the login page, want 1", n)
+	}
 	doc.MustHave(".login-form-pane button.primary")
 }
 
