@@ -1,6 +1,6 @@
 // internal/ui/static/theme.js
 //
-// Theme, font and sidebar-collapsed state are plain, non-HttpOnly cookies:
+// Theme and sidebar-collapsed state are plain, non-HttpOnly cookies:
 // this script is the only thing that ever writes them. The server
 // (internal/platform/web/prefs.go) only reads them, so there is no endpoint
 // and no CSRF concern here — flipping a preference is a page-level

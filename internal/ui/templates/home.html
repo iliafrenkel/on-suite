@@ -38,9 +38,7 @@
 		{{range .Data.Apps}}
 		{{if not .ComingSoon}}
 		<a class="app-card {{appColor .ID}}" href="{{.Path}}">
-			<div class="app-card-top">
-				<div class="app-card-icon {{appColor .ID}}">{{icon .ID}}</div>
-			</div>
+			<div class="app-card-icon {{appColor .ID}}">{{icon .ID}}</div>
 			<h3>{{.Name}}</h3>
 			<p class="faint">{{.Summary}}</p>
 			<span class="app-card-rule" aria-hidden="true"></span>

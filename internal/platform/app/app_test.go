@@ -270,6 +270,25 @@ func TestNewPageDefaultsWithNoCookiesAndNoActiveApp(t *testing.T) {
 	}
 }
 
+// Browsers that used the retired Palette and Font switchers still send their
+// cookies. They must be ignored, without disturbing the preferences that
+// remain.
+func TestNewPageIgnoresRetiredFontAndPaletteCookies(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.AddCookie(&http.Cookie{Name: "onsuite_palette", Value: "ink"})
+	r.AddCookie(&http.Cookie{Name: "onsuite_font", Value: "serif"})
+	r.AddCookie(&http.Cookie{Name: web.ThemeCookieName, Value: "dark"})
+	r.AddCookie(&http.Cookie{Name: web.SidebarCookieName, Value: "collapsed"})
+	page := app.NewPage(r, "", nil)
+
+	if page.Shell.Theme != "dark" {
+		t.Errorf("Theme = %q, want dark", page.Shell.Theme)
+	}
+	if !page.Shell.SidebarCollapsed {
+		t.Error("SidebarCollapsed = false, want true")
+	}
+}
+
 func TestDepsPageCarriesVersion(t *testing.T) {
 	d := app.Deps{Version: "v1.2.3"}
 	page := d.Page(httptest.NewRequest("GET", "/paste/", nil), "Snippets")
