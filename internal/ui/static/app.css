@@ -2154,6 +2154,16 @@ input.outline-note:focus { outline: none; }
 		flex-wrap: wrap;
 		gap: var(--s-2) var(--s-4);
 	}
+	/* Logo and user menu share the first row; the breadcrumbs take a full
+	 * row of their own below, where they have room to be read. Squeezed
+	 * between the two they shrank to a bare "/ /" and a scrollbar. */
+	.shell-user { margin-left: auto; }
+	.shell-crumbs {
+		order: 1;
+		flex: 1 0 100%;
+		padding-left: 0;
+		border-left: none;
+	}
 
 	/* The user menu button keeps the name (it is the button's accessible
 	 * name) but gives it less room. */

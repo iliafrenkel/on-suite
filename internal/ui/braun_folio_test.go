@@ -255,3 +255,13 @@ func TestOneKbdStyle(t *testing.T) {
 	}
 	css.mustDeclare("", "kbd", "background: var(--c-bg-inset)", "border-radius: var(--radius)")
 }
+
+// TestPhoneBreadcrumbsGetTheirOwnRow pins the phone shell bar: squeezed
+// between the logo and the user menu the crumbs shrank to "/ /" and a
+// scrollbar, so under 640px they take a full row with no divider.
+func TestPhoneBreadcrumbsGetTheirOwnRow(t *testing.T) {
+	css := loadAppCSS(t)
+	const phone = "@media (max-width: 640px)"
+	css.mustDeclare(phone, ".shell-crumbs", "flex: 1 0 100%", "order: 1", "border-left: none")
+	css.mustDeclare(phone, ".shell-user", "margin-left: auto")
+}
