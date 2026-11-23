@@ -25,6 +25,7 @@
 		restart: root.querySelector("[data-focus-restart]"),
 		waiting: root.querySelector("[data-focus-waiting]"),
 		next: root.querySelector("[data-focus-next]"),
+		spaceLabel: root.querySelector("[data-focus-space-label]"),
 		soundHint: root.querySelector("[data-focus-sound-hint]"),
 		done: root.querySelector("[data-focus-done]"),
 		doneText: root.querySelector("[data-focus-done-text]"),
@@ -77,6 +78,8 @@
 		el.waiting.hidden = !s.waiting;
 		if (s.waiting) el.next.textContent = S.startLabel(s);
 		el.pause.textContent = paused ? "Resume" : "Pause";
+		// The key legend names what Space does now: the visible button's label.
+		el.spaceLabel.textContent = (s.waiting ? el.next : el.pause).textContent;
 
 		if (paused) document.title = "Paused · " + s.timerName;
 		else if (s.waiting) document.title = "Ready · " + s.timerName;

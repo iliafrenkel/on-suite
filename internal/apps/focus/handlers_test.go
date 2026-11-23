@@ -432,6 +432,9 @@ func TestRunPageHasBraunChassisAndInstrumentDial(t *testing.T) {
 	doc.MustHave("[data-focus-bar]")
 	doc.MustHave("[data-focus-digits]")
 	doc.MustHave("button[data-focus-pause]")
+	// The key legend's Space label is live: focus.js keeps it in step with
+	// the button Space presses (Pause, Resume or Start).
+	doc.MustHave("[data-focus-space-label]")
 }
 
 // The running page embeds the timer as JSON inside <script>; a name that
