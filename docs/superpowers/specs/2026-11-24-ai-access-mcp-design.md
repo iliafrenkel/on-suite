@@ -97,7 +97,7 @@ containment") and upgrade deliberately.
 | Redirect URI safety | An **exact-match redirect URI allowlist** set by the operator. Registration or CIMD with any other redirect URI is refused. This closes the open-registration phishing hole |
 | Audience | RFC 8707: tokens are bound to the resource `<public-url>/mcp` and refused anywhere else |
 | Token format | Opaque (HMAC strategy). Only signatures and hashes are stored, never usable tokens |
-| Lifetimes | Auth code 1 min; access token 1 h; refresh token 30 days, rotated on every use. Reuse of an old refresh token revokes the whole grant |
+| Lifetimes | Auth code 1 min; access token 1 h; refresh token 90 days, counted from when the assistant was connected (the OAuth 2.1 profile makes it an absolute limit, so users reconnect about once a quarter; Ilia's decision), rotated on every use. Reuse of an old refresh token revokes the whole grant |
 | Scopes | `books:read books:write notes:read notes:write reader:read reader:write later:read later:write`. **All 8 are advertised in `scopes_supported` from P1**, even before their tools exist, so nobody has to reconnect when P2–P4 ship (Ilia's decision). A scope with no tools yet grants nothing. The consent screen shows them grouped per app |
 | Default ticks | On the consent screen, requested **read** scopes come ticked and requested **write** scopes come unticked. The user opts into writes. A request with no `scope` is treated as all four read scopes (Ilia's decision) |
 | Consent | Always shown for a new grant and for scope increases. Shows the client name, its redirect host and the scopes |
