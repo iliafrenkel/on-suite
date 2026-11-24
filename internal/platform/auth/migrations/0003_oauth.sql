@@ -21,13 +21,13 @@ CREATE TABLE oauth_secrets (
 -- Known OAuth clients: dynamically registered ('dcr') or fetched from a
 -- client ID metadata document ('cimd').
 CREATE TABLE oauth_clients (
-    id           TEXT PRIMARY KEY,
-    kind         TEXT NOT NULL CHECK (kind IN ('dcr', 'cimd')),
-    name         TEXT NOT NULL,
+    id            TEXT PRIMARY KEY,
+    kind          TEXT NOT NULL CHECK (kind IN ('dcr', 'cimd')),
+    name          TEXT NOT NULL,
     redirect_uris TEXT NOT NULL,
-    data         BLOB NOT NULL,
-    created_at   TEXT NOT NULL,
-    last_seen_at TEXT
+    data          BLOB NOT NULL,
+    created_at    TEXT NOT NULL,
+    last_seen_at  TEXT
 ) STRICT;
 
 -- The library's cache of fetched client ID metadata documents.
@@ -51,14 +51,16 @@ CREATE TABLE oauth_grants (
     created_at       TEXT    NOT NULL,
     last_used_at     TEXT
 ) STRICT;
-CREATE INDEX oauth_grants_user_id_idx        ON oauth_grants (user_id);
-CREATE INDEX oauth_grants_user_client_idx    ON oauth_grants (user_id, client_id);
+-- Leading column user_id also serves the per-user lookups and the cascade.
+CREATE INDEX oauth_grants_user_client_idx ON oauth_grants (user_id, client_id);
 
 -- Authorization codes, PKCE requests, access and refresh tokens, and
--- registration access tokens, keyed by signature. grant_id is NULL only for
--- 'registration' rows, which exist before any user approves anything.
+-- registration access tokens. The key is (kind, signature), not signature
+-- alone: the library stores the auth-code session and the PKCE session
+-- under the same signature. grant_id is NULL only for 'registration' rows,
+-- which exist before any user approves anything.
 CREATE TABLE oauth_sessions (
-    signature        TEXT    PRIMARY KEY,
+    signature        TEXT    NOT NULL,
     kind             TEXT    NOT NULL CHECK (kind IN ('code', 'pkce', 'access', 'refresh', 'registration')),
     grant_id         TEXT    REFERENCES oauth_grants (id) ON DELETE CASCADE,
     request_id       TEXT    NOT NULL,
@@ -66,9 +68,11 @@ CREATE TABLE oauth_sessions (
     active           INTEGER NOT NULL DEFAULT 1,
     access_signature TEXT,
     data             BLOB    NOT NULL,
-    expires_at       TEXT    NOT NULL
+    expires_at       TEXT    NOT NULL,
+    PRIMARY KEY (kind, signature),
+    CHECK ((kind = 'registration') = (grant_id IS NULL))
 ) STRICT;
-CREATE INDEX oauth_sessions_grant_id_idx   ON oauth_sessions (grant_id);
+CREATE INDEX oauth_sessions_grant_id_idx  ON oauth_sessions (grant_id);
 CREATE INDEX oauth_sessions_request_id_idx ON oauth_sessions (request_id);
 CREATE INDEX oauth_sessions_expires_at_idx ON oauth_sessions (expires_at);
 

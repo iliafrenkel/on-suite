@@ -291,3 +291,36 @@ func TestDeletingAGrantCascadesToItsTokens(t *testing.T) {
 		t.Errorf("%d token rows survived their grant", n)
 	}
 }
+
+func TestOAuthSessionsKeyAndGrantRule(t *testing.T) {
+	s, handle := newStore(t)
+	alice := mustUser(t, s, "alice", true)
+	seedOAuth(t, handle, alice.ID, "g1")
+	ctx := context.Background()
+	const ts = "2026-11-24T00:00:00.000000000Z"
+	insert := func(kind, sig string, grant any) error {
+		_, err := handle.ExecContext(ctx,
+			`INSERT INTO oauth_sessions (signature, kind, grant_id, request_id, client_id, data, expires_at)
+			 VALUES (?, ?, ?, 'r', 'c1', x'00', ?)`, sig, kind, grant, ts)
+		return err
+	}
+	// The library keeps the auth-code and PKCE sessions under one signature.
+	if err := insert("code", "same", "g1"); err != nil {
+		t.Fatalf("code row: %v", err)
+	}
+	if err := insert("pkce", "same", "g1"); err != nil {
+		t.Errorf("pkce row with the code's signature: %v", err)
+	}
+	if err := insert("code", "same", "g1"); err == nil {
+		t.Error("duplicate (kind, signature) accepted")
+	}
+	if err := insert("registration", "reg", nil); err != nil {
+		t.Errorf("registration row without a grant: %v", err)
+	}
+	if err := insert("access", "orphan", nil); err == nil {
+		t.Error("access row without a grant accepted")
+	}
+	if err := insert("registration", "reg2", "g1"); err == nil {
+		t.Error("registration row with a grant accepted")
+	}
+}
