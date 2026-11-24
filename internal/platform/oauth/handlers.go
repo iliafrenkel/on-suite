@@ -54,6 +54,8 @@ func (s *Server) Routes(mux *http.ServeMux, rec *web.Recorder, authn *web.Auth, 
 	csrf.Exempt("/oauth/register")
 	rec.Handle(mux, register, true,
 		limitIP(s.registerLimiter, slowDown, http.HandlerFunc(s.register)))
+
+	s.mountPages(mux, rec, authn, d)
 }
 
 // token is the token endpoint: code exchange and refresh. The provider is

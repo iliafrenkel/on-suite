@@ -14,6 +14,8 @@ type accountPage struct {
 	Username string
 	IsAdmin  bool
 	Joined   string
+	// AIAccess shows the link to the connected-assistants page.
+	AIAccess bool
 	Error    string
 	// Changed shows the confirmation after the post-change redirect.
 	Changed bool
@@ -26,6 +28,7 @@ func (h *handlers) account(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) renderAccount(w http.ResponseWriter, r *http.Request, status int, data accountPage) {
 	me, _ := web.UserFrom(r.Context())
 	data.Username, data.IsAdmin, data.Joined = me.Username, me.IsAdmin, me.CreatedAt.Format("2006-01-02")
+	data.AIAccess = h.d.AIAccess
 	page := h.page(r, "Account", "")
 	page.Data = data
 	if err := h.d.Render.Page(w, status, "account", page); err != nil {

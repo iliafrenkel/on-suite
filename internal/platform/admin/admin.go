@@ -39,6 +39,10 @@ type Deps struct {
 	Version string
 	// Started is when the process came up, for the uptime figure.
 	Started time.Time
+	// AIAccess is whether AI access is on. It only decides whether the page
+	// links to /admin/ai: this package must not import the oauth package
+	// that serves that page.
+	AIAccess bool
 }
 
 // Report is the page's view model. Each section carries its own error, so one
@@ -57,6 +61,8 @@ type Report struct {
 	DatabaseErr  string
 	Routes       []web.Route
 	PublicRoutes int
+	// AIAccess shows the line linking to /admin/ai.
+	AIAccess bool
 }
 
 // collect gathers every section. It never returns an error: an error is a
@@ -107,7 +113,9 @@ func Handler(d Deps) http.Handler {
 		r = r.WithContext(web.WithActiveApp(r.Context(), "admin"))
 		page := app.NewPage(r, "Admin", d.Nav)
 		page.Shell.Version = d.Version
-		page.Data = d.collect(r.Context(), time.Now().UTC())
+		rep := d.collect(r.Context(), time.Now().UTC())
+		rep.AIAccess = d.AIAccess
+		page.Data = rep
 
 		if err := d.Render.Page(w, http.StatusOK, "admin", page); err != nil {
 			d.Errors.Internal(w, r, err)

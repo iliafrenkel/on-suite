@@ -1,0 +1,55 @@
+{{define "content"}}
+<div class="stack">
+	<h1>Connected assistants</h1>
+	<p class="faint">AI assistants you have allowed to use your ON Suite. Disconnecting one ends its access straight away.</p>
+
+	{{if .Data.Grants}}
+	<div class="scroll-x">
+		<table class="admin-table">
+			<thead><tr><th>Assistant</th><th>Can</th><th>Connected</th><th>Last used</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+			<tbody>
+			{{range .Data.Grants}}
+				<tr>
+					<td>{{.Name}}<br><span class="faint">{{.RedirectHost}}</span></td>
+					<td>{{range .Access}}<div><strong>{{.App}}</strong>: {{.Labels}}</div>{{else}}<span class="dim">Nothing</span>{{end}}</td>
+					<td class="dim">{{.Connected}}</td>
+					<td class="dim">{{.LastUsed}}</td>
+					<td>
+						<form method="post" action="/account/assistants/{{.ID}}/disconnect">
+							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+							<button type="submit">Disconnect</button>
+						</form>
+					</td>
+				</tr>
+			{{end}}
+			</tbody>
+		</table>
+	</div>
+	{{else}}
+	<p class="dim">No assistants connected. See <a href="/help/ai-assistants">Help → AI assistants</a> to connect one.</p>
+	{{end}}
+
+	<h2>Recent activity</h2>
+	<p class="faint">The last 50 things your assistants did. This log never records what your notes or books said.</p>
+	{{if .Data.Activity}}
+	<div class="scroll-x">
+		<table class="admin-table">
+			<thead><tr><th>Time</th><th>Assistant</th><th>Tool</th><th>Result</th></tr></thead>
+			<tbody>
+			{{range .Data.Activity}}
+				<tr>
+					<td class="dim">{{.When}}</td>
+					<td>{{.Assistant}}</td>
+					<td><code>{{.Tool}}</code></td>
+					<td>{{if .OK}}<span class="admin-tag admin-tag-ok">ok</span>{{else}}<span class="admin-tag admin-tag-failed">{{.Result}}</span>{{end}}</td>
+				</tr>
+			{{end}}
+			</tbody>
+		</table>
+	</div>
+	{{else}}
+	<p class="dim">No activity yet.</p>
+	{{end}}
+	<p><a href="/account">← Account</a></p>
+</div>
+{{end}}

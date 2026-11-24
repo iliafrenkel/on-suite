@@ -159,3 +159,17 @@ func TestTheRightCurrentPasswordResetsTheCount(t *testing.T) {
 		}
 	}
 }
+
+func TestAccountLinksToAssistantsOnlyWhenMCPOn(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		s := newServerWithAI(t, on)
+		rec := s.get(t, s.plain, "/account")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d", rec.Code)
+		}
+		has := strings.Contains(rec.Body.String(), `href="/account/assistants"`)
+		if has != on {
+			t.Errorf("AIAccess=%v: link to /account/assistants present = %v", on, has)
+		}
+	}
+}

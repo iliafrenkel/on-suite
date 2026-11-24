@@ -27,6 +27,10 @@ type Deps struct {
 	Log     *slog.Logger
 	Nav     []render.NavItem
 	Version string
+	// AIAccess is whether AI access is on. It only decides whether /account
+	// links to /account/assistants: this package must not import the oauth
+	// package that serves that page.
+	AIAccess bool
 	// Now is the clock the /account rate limit reads. Nil means the real
 	// clock; tests set it to age attempts out without waiting.
 	Now func() time.Time

@@ -87,7 +87,10 @@ func newServerWithJobs(t *testing.T) *server {
 	return newServerWith(t, reg)
 }
 
-func newServerWith(t *testing.T, reg *jobs.Registry) *server {
+func newServerWith(t *testing.T, reg *jobs.Registry) *server { return newServerOpts(t, reg, false) }
+
+// newServerOpts is newServerWith with AI access switched on or off.
+func newServerOpts(t *testing.T, reg *jobs.Registry, aiAccess bool) *server {
 	t.Helper()
 	ctx := context.Background()
 
@@ -149,6 +152,7 @@ func newServerWith(t *testing.T, reg *jobs.Registry) *server {
 		Jobs: reg, Routes: routes,
 		Render: rend, Errors: errs, Nav: registry.NavItems(),
 		Version: "v9.9.9", Started: time.Now().Add(-90 * time.Second),
+		AIAccess: aiAccess,
 	}))
 	routes.Handle(mux, "GET /admin", false, adminHandler)
 	routes.Handle(mux, "GET /admin/{$}", false, adminHandler)
@@ -732,4 +736,18 @@ func TestTheJobsSectionLinksToTheJobsPage(t *testing.T) {
 	s := newServer(t)
 	rec := s.get(t, s.admin, "/admin/")
 	htmlassert.Parse(t, rec.Body.String()).MustHave(`#jobs a[href="/admin/jobs"]`)
+}
+
+func TestTheAdminPageLinksToAIAccessOnlyWhenItIsOn(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		s := newServerOpts(t, jobs.NewRegistry(), on)
+		rec := s.get(t, s.admin, "/admin")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d", rec.Code)
+		}
+		has := strings.Contains(rec.Body.String(), `href="/admin/ai"`)
+		if has != on {
+			t.Errorf("AIAccess=%v: link to /admin/ai present = %v", on, has)
+		}
+	}
 }
