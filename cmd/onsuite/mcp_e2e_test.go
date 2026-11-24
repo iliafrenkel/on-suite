@@ -409,8 +409,10 @@ func TestMCPEndToEnd(t *testing.T) {
 
 func TestMCPOffMountsNothing(t *testing.T) {
 	e := newE2EEnv(t, false)
-	e.addUser(t, "alice")
-	cookies := e.logIn(t, "alice")
+	if _, err := e.users.CreateUser(context.Background(), "alice", apptest.PasswordHash, true); err != nil {
+		t.Fatal(err)
+	}
+	cookies := e.logIn(t, "alice") // an admin, so /admin/ai would be reachable if mounted
 
 	// GET throughout: with AI access off, a POST to an unexempted path is
 	// refused by the CSRF check before routing, which would hide whether the
@@ -430,6 +432,13 @@ func TestMCPOffMountsNothing(t *testing.T) {
 	}
 	if strings.Contains(e.get(t, "/account", cookies).Body.String(), "/account/assistants") {
 		t.Error("/account links to connected assistants with AI access off")
+	}
+	admin := e.get(t, "/admin", cookies)
+	if admin.Code != http.StatusOK {
+		t.Fatalf("GET /admin as an admin = %d", admin.Code)
+	}
+	if strings.Contains(admin.Body.String(), "/admin/ai") {
+		t.Error("/admin links to AI access with AI access off")
 	}
 }
 

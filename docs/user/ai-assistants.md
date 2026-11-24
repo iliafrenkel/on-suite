@@ -38,8 +38,12 @@ buttons change from time to time, but the steps are the same:
    **Allow**.
 5. You're sent back to the assistant, which is now connected.
 
-This works the same way for Claude, ChatGPT and Gemini. You connect each
-assistant once; it stays connected for about three months, after which
+Claude and ChatGPT work with ON Suite's default settings. Gemini doesn't
+yet: your admin first has to add Gemini's callback address to ON Suite's
+list of allowed addresses (see the
+[Admin guide](admin.md#ai-access)). Until then, connecting Gemini fails.
+
+You connect each assistant once; it stays connected for about three months, after which
 it asks you to sign in to ON Suite again.
 
 ## What the permission screen means

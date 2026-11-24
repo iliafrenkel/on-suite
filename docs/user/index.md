@@ -124,8 +124,8 @@ These guides explain everything each app can do:
 - [ON Books](books.md) — keeping track of your reading.
 - [ON Flash](flash.md) — making decks and studying cards.
 - [ON Focus](focus.md) — making and running focus timers.
-- [AI assistants](ai-assistants.md) — connecting Claude, ChatGPT or Gemini
-  to your ON Suite.
+- [AI assistants](ai-assistants.md) — connecting an AI assistant, such as
+  Claude or ChatGPT, to your ON Suite.
 - [Admin](admin.md) — managing accounts and the server (for admins only).
 
 If something doesn't work the way a guide says, tell the person who runs

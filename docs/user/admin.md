@@ -251,9 +251,12 @@ that starts ON Suite or in the server's environment:
   after the name. AI access won't start without it.
 - **`--oauth-redirect-uris`** (`ONSUITE_OAUTH_REDIRECT_URIS`) — the
   addresses assistants may send people back to after they allow access,
-  separated by commas. The default already lists Claude's and ChatGPT's,
-  so you only change this to add or remove an assistant. An assistant
-  whose address isn't on the list can't connect.
+  separated by commas. The default lists Claude's and ChatGPT's, so those
+  two work without changing it. An assistant whose address isn't on the
+  list can't connect — Gemini included, until you add its callback
+  address from Google's documentation. Setting this replaces the default
+  list, so keep the addresses shown on the **AI access** page (below) for
+  the assistants you still want, and add Gemini's to them.
 
 Restart ON Suite after changing them. The assistants' companies connect
 from their own servers, so your ON Suite must be reachable from the
