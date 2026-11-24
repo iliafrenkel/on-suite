@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -60,15 +61,8 @@ type flowEnv struct {
 
 func newFlowEnv(t *testing.T) *flowEnv {
 	t.Helper()
-	a := buildASServer(t, nil, []string{claudeRedirect, chatGPTRedirect}, nil, time.Now)
-	e := &flowEnv{asServer: a}
-
-	user, err := auth.NewStore(a.handle).CreateUser(context.Background(), "ilia", apptest.PasswordHash, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.user = user
-	e.cookies = e.logIn(t, "")
+	e := newSignedInEnv(t, nil)
+	a := e.asServer
 
 	// The body Claude sends: refresh_token must be asked for, since RFC 7591
 	// defaults grant_types to authorization_code alone.
@@ -81,6 +75,30 @@ func newFlowEnv(t *testing.T) *flowEnv {
 	if e.clientID == "" {
 		t.Fatalf("register gave no client_id: %v", body)
 	}
+	return e
+}
+
+// newCIMDFlowEnv is newFlowEnv for a client that identifies by its metadata
+// document URL instead of registering: the server fetches host's document.
+func newCIMDFlowEnv(t *testing.T, host *cimdHost) *flowEnv {
+	t.Helper()
+	e := newSignedInEnv(t, host.inProcessClient())
+	e.clientID = host.clientID()
+	return e
+}
+
+// newSignedInEnv is an authorization server with one signed-in user and no
+// client yet. client fetches CIMD documents (nil: the guarded default).
+func newSignedInEnv(t *testing.T, client *http.Client) *flowEnv {
+	t.Helper()
+	a := buildASServer(t, nil, []string{claudeRedirect, chatGPTRedirect}, client, time.Now)
+	e := &flowEnv{asServer: a}
+	user, err := auth.NewStore(a.handle).CreateUser(context.Background(), "ilia", apptest.PasswordHash, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.user = user
+	e.cookies = e.logIn(t, "")
 	return e
 }
 
@@ -657,6 +675,228 @@ func TestLoggedOutAuthorizeBouncesThroughLogin(t *testing.T) {
 		login := e.loginWithNext(t, authorize)
 		if login.Code != http.StatusSeeOther || login.Header().Get("Location") != authorize {
 			t.Errorf("login = %d → %q, want 303 back to %q", login.Code, login.Header().Get("Location"), authorize)
+		}
+	})
+}
+
+// revokeOK posts a token to /oauth/revoke as the client's server would.
+func (e *flowEnv) revokeOK(t *testing.T, token string) {
+	t.Helper()
+	rec := e.postForm(t, "/oauth/revoke", url.Values{"token": {token}, "client_id": {e.clientID}}, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /oauth/revoke = %d %q, want 200", rec.Code, rec.Body.String())
+	}
+}
+
+// The same flow as TestFullFlowDCRConsentTokenRefresh for a client that
+// identifies by its metadata document URL (CIMD), which is how Claude and
+// ChatGPT connect when they can: every step resolves the client through the
+// CIMD resolver and its cache rather than the oauth_clients table.
+func TestFullFlowCIMD(t *testing.T) {
+	host := newCIMDHost(t, claudeRedirect)
+	synctest.Test(t, func(t *testing.T) {
+		e := newCIMDFlowEnv(t, host)
+		ctx := context.Background()
+
+		page := e.getAuthorize(t, e.authorizeQuery("books:read books:write", e.srv.ResourceURL()), e.cookies)
+		if page.Code != http.StatusOK {
+			t.Fatalf("authorize = %d, want 200 consent; Location %q", page.Code, page.Header().Get("Location"))
+		}
+		if text := htmlassert.Parse(t, page.Body.String()).Text(); !strings.Contains(text, "Test assistant") {
+			t.Error("consent page does not name the client from its metadata document")
+		}
+		access, refresh := e.exchangeOK(t, e.approve(t, page, "books:read"))
+
+		c, err := e.srv.Verify(ctx, access)
+		if err != nil {
+			t.Fatalf("Verify: %v", err)
+		}
+		g, ok := e.grant(t)
+		if !ok {
+			t.Fatal("no grant row after consent")
+		}
+		if c.UserID != e.user.ID || c.GrantID != g.ID || c.ClientName != "Test assistant" || !slices.Equal(c.Scopes, []string{"books:read"}) {
+			t.Errorf("Verify = %+v, want ilia's books:read grant %s for Test assistant", c, g.ID)
+		}
+
+		rotatedAccess, rotated := e.refreshOK(t, refresh)
+		if _, err := e.srv.Verify(ctx, rotatedAccess); err != nil {
+			t.Errorf("Verify(refreshed access token): %v", err)
+		}
+
+		// Reusing the rotated-out refresh token revokes the whole grant.
+		status, body := e.refresh(t, refresh)
+		wantTokenError(t, status, body, "invalid_grant")
+		if _, ok := e.grant(t); ok {
+			t.Error("reusing a rotated refresh token left the grant in place")
+		}
+		status, body = e.refresh(t, rotated)
+		wantTokenError(t, status, body, "invalid_grant")
+		if _, err := e.srv.Verify(ctx, rotatedAccess); !errors.Is(err, ErrInvalidToken) {
+			t.Errorf("Verify after reuse = %v, want ErrInvalidToken", err)
+		}
+
+		// A second connection, ended by the client through /oauth/revoke.
+		access2, refresh2 := e.exchangeOK(t, e.connect(t, "books:read", "books:read"))
+		if _, ok := e.grant(t); !ok {
+			t.Fatal("no grant row after the second consent")
+		}
+		e.revokeOK(t, refresh2)
+		if _, ok := e.grant(t); ok {
+			t.Error("revoking the refresh token left the second grant in place")
+		}
+		status, body = e.refresh(t, refresh2)
+		wantTokenError(t, status, body, "invalid_grant")
+		if _, err := e.srv.Verify(ctx, access2); !errors.Is(err, ErrInvalidToken) {
+			t.Errorf("Verify after revoke = %v, want ErrInvalidToken", err)
+		}
+
+		// Everything above ran inside the document's one-hour cache.
+		if n := host.hits.Load(); n != 1 {
+			t.Errorf("document fetched %d times, want 1", n)
+		}
+	})
+}
+
+// A document served with no-store or max-age=0 is never usable from the
+// cache, so the resolver fetches it on every client lookup, including the
+// ones the library makes inside its token-endpoint transaction (rebuilding
+// the stored code or refresh session's client). The flow must still work.
+//
+// Fake time stands still here, so the resolver's per-domain fetch budget
+// (a burst of 20, refilled at 10 a second) never refills: this flow must
+// stay within 20 fetches. It takes about 11 because the in-transaction
+// lookups reuse the authenticated client (clientMemo); before that they
+// fetched too, and the burst ran out at the revoke.
+func TestCIMDFlowWithUncacheableDocument(t *testing.T) {
+	for _, cc := range []string{"no-store", "max-age=0"} {
+		t.Run(cc, func(t *testing.T) {
+			host := newCIMDHost(t, claudeRedirect)
+			host.cacheControl.Store(cc)
+			synctest.Test(t, func(t *testing.T) {
+				e := newCIMDFlowEnv(t, host)
+				access, refresh := e.exchangeOK(t, e.connect(t, "books:read", "books:read"))
+				if _, err := e.srv.Verify(context.Background(), access); err != nil {
+					t.Errorf("Verify: %v", err)
+				}
+				_, rotated := e.refreshOK(t, refresh)
+				status, body := e.refresh(t, refresh)
+				wantTokenError(t, status, body, "invalid_grant")
+				if _, ok := e.grant(t); ok {
+					t.Error("reusing a rotated refresh token left the grant in place")
+				}
+				status, body = e.refresh(t, rotated)
+				wantTokenError(t, status, body, "invalid_grant")
+
+				_, refresh2 := e.exchangeOK(t, e.connect(t, "books:read", "books:read"))
+				e.revokeOK(t, refresh2)
+				if _, ok := e.grant(t); ok {
+					t.Error("revoke left the grant in place")
+				}
+			})
+		})
+	}
+}
+
+// The library rebuilds a stored session's client inside its token-endpoint
+// transaction, which holds the database's only connection. If that lookup
+// could join a CIMD fetch another request started, the two would wait on
+// each other: the fetch must write its result to the database before it
+// finishes, and the transaction does not let go of the connection until the
+// fetch finishes. Every database request, the whole suite's, then hangs.
+// Inside a transaction the store must therefore never wait on a fetch.
+func TestSessionClientInsideTransactionNeverWaitsOnAFetch(t *testing.T) {
+	host := newCIMDHost(t, claudeRedirect)
+	synctest.Test(t, func(t *testing.T) {
+		// Made inside the bubble, so waiting on it counts as durably blocked.
+		host.gate = make(chan struct{})
+		e := newCIMDFlowEnv(t, host)
+		store := e.srv.store
+
+		// Request B, outside any transaction (as /mcp's Verify is), starts
+		// the fetch, which is held at the host.
+		fetched := make(chan error, 1)
+		go func() {
+			_, err := e.srv.clients.GetClient(context.Background(), e.clientID)
+			fetched <- err
+		}()
+		synctest.Wait()
+		if host.hits.Load() != 1 {
+			t.Fatalf("fetches in flight = %d, want 1", host.hits.Load())
+		}
+
+		// Request A, a token request, decodes a session for the same client
+		// inside its transaction.
+		req := oauth2.NewRequest()
+		req.ID = "grant"
+		req.Client = &oauth2.DefaultClient{ID: e.clientID}
+		req.Session = new(oauth2.DefaultSession)
+		data, err := encodeRequest(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+		defer cancel()
+		txCtx, err := store.BeginTX(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded := make(chan error, 1)
+		go func() {
+			_, err := store.decodeRequest(txCtx, data, nil)
+			decoded <- err
+		}()
+		synctest.Wait()
+		close(host.gate)
+
+		start := time.Now()
+		err = <-decoded
+		if waited := time.Since(start); waited >= requestTimeout {
+			t.Errorf("decode inside the transaction waited %v for the other request's fetch (err %v)", waited, err)
+		}
+		// With no authenticated client to reuse, the session is simply not
+		// found; in a real token request the memo supplies the client.
+		if !errors.Is(err, oauth2.ErrNotFound) {
+			t.Errorf("decode inside the transaction err = %v, want oauth2.ErrNotFound", err)
+		}
+		if err := store.Rollback(txCtx); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-fetched; err != nil {
+			t.Errorf("the outside request's client lookup failed: %v", err)
+		}
+	})
+}
+
+// Once the cached document is past its lifetime, the next token request
+// has the resolver fetch it again, and the refresh still succeeds.
+func TestCIMDRefreshRefetchesExpiredDocument(t *testing.T) {
+	host := newCIMDHost(t, claudeRedirect)
+	synctest.Test(t, func(t *testing.T) {
+		e := newCIMDFlowEnv(t, host)
+		ctx := context.Background()
+		_, refresh := e.exchangeOK(t, e.connect(t, "books:read", "books:read"))
+		if n := host.hits.Load(); n != 1 {
+			t.Fatalf("document fetched %d times, want 1", n)
+		}
+
+		time.Sleep(2 * time.Hour) // the host sends max-age=3600
+		access, rotated := e.refreshOK(t, refresh)
+		if n := host.hits.Load(); n != 2 {
+			t.Errorf("document fetched %d times, want 2 (re-fetched once expired)", n)
+		}
+		if _, err := e.srv.Verify(ctx, access); err != nil {
+			t.Errorf("Verify(refreshed access token): %v", err)
+		}
+
+		// Expired again: revocation resolves the client too.
+		time.Sleep(2 * time.Hour)
+		e.revokeOK(t, rotated)
+		if _, ok := e.grant(t); ok {
+			t.Error("revoke after a re-fetch left the grant in place")
+		}
+		if n := host.hits.Load(); n != 3 {
+			t.Errorf("document fetched %d times, want 3", n)
 		}
 	})
 }

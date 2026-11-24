@@ -61,8 +61,14 @@ func (s *Server) Routes(mux *http.ServeMux, rec *web.Recorder, authn *web.Auth, 
 // token is the token endpoint: code exchange and refresh. The provider is
 // composed over checkedClients, so the client is re-checked against the
 // redirect allowlist on every call, refresh included.
+//
+// The request carries a client memo (withClientMemo): the client resolved
+// when the library authenticates the caller is the one the store reuses
+// when it rebuilds the stored code or refresh session inside the library's
+// transaction, where it must never fetch a CIMD document (sessionClient).
 func (s *Server) token(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx := withClientMemo(r.Context())
+	r = r.WithContext(ctx)
 	ar, err := s.provider.NewAccessRequest(ctx, r, new(oauth2.DefaultSession))
 	if err != nil {
 		s.provider.WriteAccessError(ctx, w, ar, err)
@@ -79,7 +85,8 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 // revoke is RFC 7009 token revocation. Revoking either token ends the whole
 // grant (Store.RevokeRefreshToken), the same as disconnecting on /account.
 func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx := withClientMemo(r.Context())
+	r = r.WithContext(ctx)
 	s.provider.WriteRevocationResponse(ctx, w, s.provider.NewRevocationRequest(ctx, r))
 }
 

@@ -2,11 +2,13 @@ package oauth
 
 import (
 	"context"
+	"database/sql"
 	"net"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 
 	"authelia.com/provider/oauth2"
 	"authelia.com/provider/oauth2/handler/cimd"
@@ -163,5 +165,70 @@ func (c checkedClients) GetClient(ctx context.Context, id string) (oauth2.Client
 	if err := c.s.allowedRedirects(client.GetRedirectURIs()); err != nil {
 		return nil, oauth2.ErrInvalidClient.WithHint("The client's redirect URIs are not allowed by this server.").WithWrap(err).WithDebugError(err)
 	}
+	rememberClient(ctx, client)
 	return client, nil
+}
+
+// The token and revocation endpoints resolve the calling client once, when
+// the library authenticates it, before any transaction. The library then
+// rebuilds the stored code or refresh session inside its transaction
+// (Store.decodeRequest), which needs that session's client again. Resolving
+// a CIMD client there could wait on a document fetch while the transaction
+// holds the database's only connection; a fetch started by another request
+// (/mcp's Verify, say) has to write the database before it completes, so the
+// two waited on each other and every database request in the suite stalled
+// until the resolver's 10-second fetch deadline failed both. A per-request
+// memo of the authenticated client removes the need: the session's client
+// must be that client anyway, or the library refuses the request.
+type clientMemoKey struct{}
+
+type clientMemo struct {
+	mu      sync.Mutex
+	clients map[string]oauth2.Client
+}
+
+// withClientMemo gives a request a memo for the clients it resolves.
+func withClientMemo(ctx context.Context) context.Context {
+	return context.WithValue(ctx, clientMemoKey{}, &clientMemo{clients: map[string]oauth2.Client{}})
+}
+
+func rememberClient(ctx context.Context, client oauth2.Client) {
+	if m, ok := ctx.Value(clientMemoKey{}).(*clientMemo); ok {
+		m.mu.Lock()
+		m.clients[client.GetID()] = client
+		m.mu.Unlock()
+	}
+}
+
+func rememberedClient(ctx context.Context, id string) (oauth2.Client, bool) {
+	m, ok := ctx.Value(clientMemoKey{}).(*clientMemo)
+	if !ok {
+		return nil, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.clients[id]
+	return c, ok
+}
+
+// sessionClient rebuilds a stored session's client. Inside a transaction
+// it never reaches the CIMD resolver (see clientMemo): it takes the client
+// the request already authenticated, or a registered client from the
+// table, and otherwise answers oauth2.ErrNotFound, which the library treats
+// as an unknown code or token. Outside a transaction (introspection for
+// /mcp) the full lookup runs, fetching the document if it has expired.
+func (s *Store) sessionClient(ctx context.Context, id string) (oauth2.Client, error) {
+	if c, ok := rememberedClient(ctx, id); ok {
+		return c, nil
+	}
+	if _, inTx := ctx.Value(txKey{}).(*sql.Tx); inTx {
+		return s.GetClient(ctx, id)
+	}
+	// A nil *Config inside an `any` would pass GetClient's type assertion
+	// and then be dereferenced, so pass a true nil until setConfig runs.
+	var cfg any
+	if s.cfg != nil {
+		cfg = s.cfg
+	}
+	return oauth2.GetClient(ctx, cfg, s, id)
 }

@@ -91,13 +91,7 @@ func (s *Store) decodeRequest(ctx context.Context, data []byte, session oauth2.S
 			return nil, fmt.Errorf("oauth: decode session: %w", err)
 		}
 	}
-	// A nil *Config inside an `any` would pass GetClient's type assertion
-	// and then be dereferenced, so pass a true nil until setConfig runs.
-	var cfg any
-	if s.cfg != nil {
-		cfg = s.cfg
-	}
-	client, err := oauth2.GetClient(ctx, cfg, s, sr.ClientID)
+	client, err := s.sessionClient(ctx, sr.ClientID)
 	if err != nil {
 		return nil, err
 	}

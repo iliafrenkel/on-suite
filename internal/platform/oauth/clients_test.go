@@ -240,15 +240,24 @@ func TestRegisterRefusesSectorIdentifierURI(t *testing.T) {
 // cimdHost serves one Client ID Metadata Document over TLS and counts hits.
 type cimdHost struct {
 	srv       *httptest.Server
+	handler   http.Handler
 	hits      atomic.Int32
 	redirects []string
+	// cacheControl overrides the default "max-age=3600" when set.
+	cacheControl atomic.Value
+	// gate, when set before the first request, holds every response until
+	// it is closed, so a test can keep a fetch in flight.
+	gate chan struct{}
 }
 
 func newCIMDHost(t *testing.T, redirects ...string) *cimdHost {
 	t.Helper()
 	h := &cimdHost{redirects: redirects}
-	h.srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.hits.Add(1)
+		if h.gate != nil {
+			<-h.gate
+		}
 		doc, _ := json.Marshal(map[string]any{
 			"client_id":                  h.clientID(),
 			"client_name":                "Test assistant",
@@ -258,14 +267,35 @@ func newCIMDHost(t *testing.T, redirects ...string) *cimdHost {
 			"token_endpoint_auth_method": "none",
 		})
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "max-age=3600")
+		cc := "max-age=3600"
+		if v, ok := h.cacheControl.Load().(string); ok {
+			cc = v
+		}
+		w.Header().Set("Cache-Control", cc)
 		_, _ = w.Write(doc)
-	}))
+	})
+	h.srv = httptest.NewTLSServer(h.handler)
 	t.Cleanup(h.srv.Close)
 	return h
 }
 
 func (h *cimdHost) clientID() string { return h.srv.URL + "/client.json" }
+
+// inProcessClient serves the document without a network round trip. The
+// synctest flow tests need it: a real connection's reader goroutines would
+// start inside the bubble and never exit, and network I/O is not
+// "durably blocked", so fake time could not advance past it.
+func (h *cimdHost) inProcessClient() *http.Client {
+	return &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		rec := httptest.NewRecorder()
+		h.handler.ServeHTTP(rec, r)
+		return rec.Result(), nil
+	})}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestCIMDRefusesDocumentWithUnlistedRedirect(t *testing.T) {
 	host := newCIMDHost(t, "https://evil.example/cb")
