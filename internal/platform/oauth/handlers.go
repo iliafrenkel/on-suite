@@ -35,17 +35,25 @@ const registerBodyLimit = 16 << 10
 func (s *Server) Routes(mux *http.ServeMux, rec *web.Recorder, authn *web.Auth, csrf *web.CSRF, d PageDeps) {
 	rec.Handle(mux, "GET /.well-known/oauth-authorization-server", true, s.metadata(d))
 
-	rec.Handle(mux, "GET /oauth/authorize", false, authn.RequireUser(s.authorize(d)))
-	rec.Handle(mux, "POST /oauth/authorize", false, authn.RequireUser(s.decide(d)))
+	// The limit wraps outside RequireUser, so a logged-out loop of
+	// authorization requests is counted too. The page is the plain error
+	// page; the JSON endpoints get an OAuth error body instead.
+	tooMany := func(w http.ResponseWriter, r *http.Request) { d.Errors.Status(w, r, http.StatusTooManyRequests) }
+	rec.Handle(mux, "GET /oauth/authorize", false,
+		limitIP(s.authorizeLimiter, tooMany, authn.RequireUser(s.authorize(d))))
+	rec.Handle(mux, "POST /oauth/authorize", false,
+		limitIP(s.authorizeLimiter, tooMany, authn.RequireUser(s.decide(d))))
 
 	csrf.Exempt("/oauth/token", "/oauth/revoke")
-	rec.Handle(mux, "POST /oauth/token", true, http.HandlerFunc(s.token))
+	rec.Handle(mux, "POST /oauth/token", true,
+		limitIP(s.tokenLimiter, slowDown, http.HandlerFunc(s.token)))
 	rec.Handle(mux, "POST /oauth/revoke", true, http.HandlerFunc(s.revoke))
 
 	const register = "POST /oauth/register"
 	web.RegisterBodyLimit(register, registerBodyLimit)
 	csrf.Exempt("/oauth/register")
-	rec.Handle(mux, register, true, http.HandlerFunc(s.register))
+	rec.Handle(mux, register, true,
+		limitIP(s.registerLimiter, slowDown, http.HandlerFunc(s.register)))
 }
 
 // token is the token endpoint: code exchange and refresh. The provider is

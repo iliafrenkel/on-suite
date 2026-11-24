@@ -329,7 +329,7 @@ func TestRegisterMaintenanceRegistersBothJobsEnabled(t *testing.T) {
 	reg := jobs.NewRegistry()
 	registerMaintenance(reg, handle, auth.NewStore(handle),
 		config.Config{DataDir: dir, BackupInterval: time.Hour, BackupKeep: 3},
-		slog.New(slog.DiscardHandler))
+		slog.New(slog.DiscardHandler), nil)
 
 	got := reg.Snapshot()
 	if len(got) != 2 {
@@ -348,6 +348,43 @@ func TestRegisterMaintenanceRegistersBothJobsEnabled(t *testing.T) {
 // A zero interval disabled runMaintenance entirely, including the session
 // sweep, which `onsuite backup` then takes over. Splitting maintenance into
 // two jobs must not quietly give the sweep a schedule of its own.
+func TestMaintenanceRegistersOAuthSweepOnlyWhenGiven(t *testing.T) {
+	const name = "sweep expired AI tokens"
+	has := func(reg *jobs.Registry) bool {
+		for _, s := range reg.Snapshot() {
+			if s.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+	dir := t.TempDir()
+	handle := testDB(t, dir)
+	cfg := config.Config{DataDir: dir, BackupInterval: time.Hour, BackupKeep: 3}
+	log := slog.New(slog.DiscardHandler)
+
+	without := jobs.NewRegistry()
+	registerMaintenance(without, handle, auth.NewStore(handle), cfg, log, nil)
+	if has(without) {
+		t.Errorf("job %q registered without an oauthSweep", name)
+	}
+
+	with := jobs.NewRegistry()
+	calls := 0
+	registerMaintenance(with, handle, auth.NewStore(handle), cfg, log,
+		func(context.Context) (int, error) { calls++; return 2, nil })
+	if !has(with) {
+		t.Fatalf("job %q not registered", name)
+	}
+	if err := with.Trigger("sweep-expired-ai-tokens"); err != nil {
+		t.Fatal(err)
+	}
+	with.Wait()
+	if calls != 1 {
+		t.Errorf("sweep ran %d times, want 1", calls)
+	}
+}
+
 func TestRegisterMaintenanceDisablesBothJobsWhenTheIntervalIsZero(t *testing.T) {
 	dir := t.TempDir()
 	handle := testDB(t, dir)
@@ -355,7 +392,7 @@ func TestRegisterMaintenanceDisablesBothJobsWhenTheIntervalIsZero(t *testing.T) 
 	reg := jobs.NewRegistry()
 	registerMaintenance(reg, handle, auth.NewStore(handle),
 		config.Config{DataDir: dir, BackupInterval: 0, BackupKeep: 3},
-		slog.New(slog.DiscardHandler))
+		slog.New(slog.DiscardHandler), nil)
 
 	for _, s := range reg.Snapshot() {
 		if s.Enabled {
@@ -371,7 +408,7 @@ func TestTheSnapshotJobWritesASnapshot(t *testing.T) {
 	reg := jobs.NewRegistry()
 	registerMaintenance(reg, handle, auth.NewStore(handle),
 		config.Config{DataDir: dir, BackupInterval: time.Hour, BackupKeep: 3},
-		slog.New(slog.DiscardHandler))
+		slog.New(slog.DiscardHandler), nil)
 	if err := reg.Trigger("database-snapshot"); err != nil {
 		t.Fatal(err)
 	}

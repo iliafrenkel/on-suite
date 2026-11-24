@@ -41,6 +41,10 @@ type Server struct {
 	clients   checkedClients
 	publicURL string
 	redirects map[string]bool
+
+	// Per-IP limiters, one budget per endpoint (authorize's GET and POST
+	// share one). See ratelimit.go.
+	registerLimiter, tokenLimiter, authorizeLimiter *limiter
 }
 
 // Lifespans (spec 2026-11-24-ai-access-mcp-design.md, "Lifetimes"). The
@@ -66,7 +70,13 @@ func New(ctx context.Context, db *sql.DB, opts Options) (*Server, error) {
 		now = time.Now
 	}
 
-	s := &Server{publicURL: issuer, redirects: map[string]bool{}}
+	s := &Server{
+		publicURL:        issuer,
+		redirects:        map[string]bool{},
+		registerLimiter:  newLimiter(registerLimit, registerWindow, now),
+		tokenLimiter:     newLimiter(endpointLimit, endpointWindow, now),
+		authorizeLimiter: newLimiter(endpointLimit, endpointWindow, now),
+	}
 	for _, u := range opts.RedirectURIs {
 		s.redirects[u] = true
 	}

@@ -63,7 +63,7 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 	// Jobs are registered before the server is built so the admin page can
 	// list them from the very first request.
 	maintenance := jobs.NewRegistry()
-	registerMaintenance(maintenance, handle, users, cfg, log)
+	registerMaintenance(maintenance, handle, users, cfg, log, nil)
 
 	handler, err := buildStack(stackDeps{
 		DB:       handle,

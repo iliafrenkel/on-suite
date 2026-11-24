@@ -155,9 +155,12 @@ func pruneSnapshots(dir string, keep int) (int, error) {
 	return removed, nil
 }
 
-// registerMaintenance registers the server's two housekeeping jobs.
+// registerMaintenance registers the server's housekeeping jobs: the session
+// sweep, the snapshot, and, when oauthSweep is not nil (it is nil while MCP is
+// off), the sweep of expired AI tokens (spec 2026-11-24-ai-access-mcp-design.md,
+// "Storage").
 //
-// Both take cfg.BackupInterval, so --backup-interval 0 disables both, exactly
+// All take cfg.BackupInterval, so --backup-interval 0 disables all, exactly
 // as the single runMaintenance ticker did before: a deployment that drives
 // snapshots from cron or a systemd timer runs `onsuite backup`, which sweeps
 // sessions itself (see backupCmd). Giving the sweep a schedule of its own
@@ -171,6 +174,7 @@ func registerMaintenance(
 	users *auth.Store,
 	cfg config.Config,
 	log *slog.Logger,
+	oauthSweep func(context.Context) (int, error),
 ) {
 	if cfg.BackupInterval <= 0 {
 		log.Info("internal maintenance schedule disabled")
@@ -195,6 +199,25 @@ func registerMaintenance(
 			return nil
 		},
 	)
+
+	if oauthSweep != nil {
+		reg.Register(
+			"sweep expired AI tokens",
+			"Deletes expired AI authorization codes and sessions, and audit rows older than 90 days, so those tables do not grow forever.",
+			cfg.BackupInterval,
+			func(ctx context.Context) error {
+				swept, err := oauthSweep(ctx)
+				if err != nil {
+					log.Error("sweeping expired AI tokens failed", "error", err)
+					return err
+				}
+				if swept > 0 {
+					log.Info("expired AI tokens swept", "count", swept)
+				}
+				return nil
+			},
+		)
+	}
 
 	reg.Register(
 		"database snapshot",
