@@ -244,13 +244,13 @@ func (a *App) searchTool(ctx context.Context, userID int64, args json.RawMessage
 }
 
 // sourceHost is the article's site as the model sees it in the wrapper tag:
-// the host of its link without "www.", or the feed's name when the link has no
-// usable host.
-func sourceHost(link, feedName string) string {
+// the host of its link without "www.", or "unknown" when the link has no
+// usable host. It is never the feed's name: that is publisher text too.
+func sourceHost(link string) string {
 	if u, err := url.Parse(link); err == nil && u.Hostname() != "" {
 		return strings.TrimPrefix(u.Hostname(), "www.")
 	}
-	return feedName
+	return "unknown"
 }
 
 func yesNo(b bool) string {
@@ -278,11 +278,14 @@ func (a *App) getArticleTool(ctx context.Context, userID int64, args json.RawMes
 		feed = it.FeedName
 	}
 
-	header := "Article " + strconv.FormatInt(it.ID, 10) + " from " + feed
+	// Only our own facts stay outside the block: the feed's name, the link
+	// and the title all come from the publisher.
+	header := "Article " + strconv.FormatInt(it.ID, 10)
 	if !it.PublishedAt.IsZero() {
 		header += ", published " + it.PublishedAt.Format("2006-01-02")
 	}
-	header += ". Read: " + yesNo(it.Read) + ". Starred: " + yesNo(it.Starred) + ". Link: " + it.URL
+	header += ". Read: " + yesNo(it.Read) + ". Starred: " + yesNo(it.Starred) + "."
+	facts := "Feed: " + feed + "\nLink: " + it.URL + "\n\n" + it.Title
 
 	body := it.FullHTML
 	if body == "" {
@@ -290,9 +293,10 @@ func (a *App) getArticleTool(ctx context.Context, userID int64, args json.RawMes
 	}
 	text := strings.TrimSpace(SearchText(body))
 	if text == "" {
-		return header + "\nThere's no article text in the feed. Open the link to read it.", nil
+		return header + "\n" + app.WrapUntrusted(sourceHost(it.URL), facts) +
+			"\nThere's no article text in the feed. Open the link to read it.", nil
 	}
-	return header + "\n" + app.WrapUntrusted(sourceHost(it.URL, feed), it.Title+"\n\n"+text), nil
+	return header + "\n" + app.WrapUntrusted(sourceHost(it.URL), facts+"\n\n"+text), nil
 }
 
 func (a *App) markReadTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
