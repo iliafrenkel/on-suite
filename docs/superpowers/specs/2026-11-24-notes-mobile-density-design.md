@@ -59,8 +59,11 @@ sometimes adds quick bullets. Restructuring happens on desktop.
 All of it applies only at the suite's phone breakpoint, `@media (max-width: 780px)`.
 
 1. **Indent.** Per-level indent drops from ~73px to ~20px. The guide line
-   (border-left on the nested list) stays, positioned under the parent's dot
-   given the new control layout.
+   (border-left on the nested list) stays, but runs under the parent's
+   **chevron**, not its dot (planning-time call, flagged to Ilia): with the
+   chevron left of the dot, a line under the dot needs ≥34px per level, which
+   leaves level-4 text ~120px wide; under the chevron, 20px per level gives
+   ~160px.
 2. **`…` menu on the right.** The menu moves to the end of the row, after the
    text, so only chevron + dot precede the text. Its drop-down must open
    anchored to the right edge (like `.outline-menu-list-end`) so it never
