@@ -35,6 +35,8 @@ sometimes adds quick bullets. Restructuring happens on desktop.
 - Touch gestures (swipe-to-done, action sheets).
 - A depth cap on indentation.
 - Changes to the suite-wide app rail.
+- A smaller outline font (dropped by Ilia: titles are already 15px, 13px is
+  too small to read, and iOS Safari already zooms on focus below 16px).
 - A "Zoom in" item in the `…` menu (considered and declined: the larger tap
   area is enough).
 
@@ -68,16 +70,14 @@ All of it applies only at the suite's phone breakpoint, `@media (max-width: 780p
    text, so only chevron + dot precede the text. Its drop-down must open
    anchored to the right edge (like `.outline-menu-list-end`) so it never
    overflows the screen.
-3. **Font.** Outline title text goes down one step from the base size; notes
-   and chips scale with it.
-4. **Zoom tap area.** The dot gets a ~44px finger target via an invisible
+3. **Zoom tap area.** The dot gets a ~44px finger target via an invisible
    hit area (e.g. a pseudo-element) that spills into the indent space and
    costs no layout width. The chevron's own hit area must not overlap it, so
    a near-miss doesn't collapse the row.
 
 ## Left to the builder
 
-- Exact sizes (indent, font step, hit-area geometry), as long as level-4 text
+- Exact sizes (indent, hit-area geometry), as long as level-4 text
   on a 375px viewport ends up roughly 150px+ wide.
 - How the menu is moved. The `<details class="outline-menu">` is a flex child
   of `.outline-main` alongside the chevron, dot and `.outline-text`, so CSS

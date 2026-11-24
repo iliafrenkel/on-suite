@@ -34,7 +34,7 @@
 - Create: `internal/ui/notes_phone_test.go`
 
 **Interfaces:**
-- Produces: the `@media (max-width: 780px)` block in the Notes outline section that Tasks 2–3 add to.
+- Produces: the `@media (max-width: 780px)` block in the Notes outline section that Task 2 adds to.
 
 - [ ] **Step 1: Write the failing test** in `internal/ui/notes_phone_test.go` (package `ui_test`):
 
@@ -113,42 +113,7 @@ git add internal/ui/static/app.css internal/ui/notes_phone_test.go
 git commit -m "feat(notes): finger-sized zoom target on the bullet dot on phones"
 ```
 
-### Task 3: Outline text one step smaller on phones
-
-**Pending Ilia's decision (see hand-off):** outline titles are already 15px (`--fs-base`); one step down is `--fs-sm` (13px). Skip this task if Ilia drops the font change.
-
-**Files:**
-- Modify: `internal/ui/static/app.css` (same phone block)
-- Modify: `internal/ui/notes_phone_test.go`
-
-- [ ] **Step 1: Write the failing test**
-
-```go
-func TestNotesOutlineTextIsSmallerOnPhones(t *testing.T) {
-	css := loadAppCSS(t)
-	const phone = "@media (max-width: 780px)"
-	css.mustDeclare(phone, ".outline-text", "font-size: var(--fs-sm)")
-	css.mustDeclare(phone, "input.outline-note", "font-size: var(--fs-xs)")
-	css.mustDeclare(phone, ".outline-note-rendered", "font-size: var(--fs-xs)")
-}
-```
-
-- [ ] **Step 2: Run it, expect FAIL.**
-
-- [ ] **Step 3: Add the rules.** `input.outline-title` already uses `font: inherit`, so it follows `.outline-text`; the note rules set `--fs-sm` explicitly and need their own phone override. Row control heights (`1.7rem`) stay, so check the dot still centres on the first text line.
-
-- [ ] **Step 4: Run the test, expect PASS.**
-
-- [ ] **Step 5: Verify in the browser at 375×812:** computed title 13px, note 12px; the dot's vertical centre is within 2px of the first text line's centre.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add internal/ui/static/app.css internal/ui/notes_phone_test.go
-git commit -m "feat(notes): one step smaller outline text on phones"
-```
-
-### Task 4: Full check and before/after proof
+### Task 3: Full check and before/after proof
 
 - [ ] **Step 1: Run the full check** from AGENTS.md (`gofmt -l .`, `go vet ./...`, staticcheck v0.8.2, `go mod tidy` diff, `go test ./... -race -count=1`). Expected: all clean.
 - [ ] **Step 2: Screenshot** the 4-level outline at 375×812 (top-level and zoomed into level 1) and the deepest row's open menu, for the PR body alongside the "before" table from the spec.
