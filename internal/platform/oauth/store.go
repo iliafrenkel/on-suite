@@ -152,14 +152,14 @@ func (s *Store) inTx(ctx context.Context, fn func(q querier) error) error {
 	return tx.Commit()
 }
 
-// GetClient loads a dynamically registered client. It answers
-// oauth2.ErrNotFound for anything else, CIMD rows included: that error is
-// what sends the library to the CIMD resolver, whose validators must run on
+// GetClient loads a dynamically registered client. Anything else answers
+// oauth2.ErrNotFound: that error is what sends the library to the CIMD
+// resolver for a client ID that is a URL, whose validators must run on
 // every fetch (plan, "Library notes" §Allowlist hooks).
 func (s *Store) GetClient(ctx context.Context, id string) (oauth2.Client, error) {
 	var data []byte
 	err := s.q(ctx).QueryRowContext(ctx,
-		`SELECT data FROM oauth_clients WHERE id = ? AND kind = 'dcr'`, id).Scan(&data)
+		`SELECT data FROM oauth_clients WHERE id = ?`, id).Scan(&data)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, oauth2.ErrNotFound
 	}
@@ -175,34 +175,29 @@ func (s *Store) GetClient(ctx context.Context, id string) (oauth2.Client, error)
 
 // registered narrows a client to the one type dynamic registration creates
 // (rfc7591.DefaultClientRegistrationStrategy), the only type GetClient can
-// rebuild from JSON.
-func registered(client oauth2.Client) (*oauth2.DefaultRegisteredClient, []byte, []byte, error) {
+// rebuild from JSON, and encodes it.
+func registered(client oauth2.Client) (*oauth2.DefaultRegisteredClient, []byte, error) {
 	rc, ok := client.(*oauth2.DefaultRegisteredClient)
 	if !ok || rc.DefaultClient == nil {
-		return nil, nil, nil, fmt.Errorf("oauth: cannot store a client of type %T", client)
+		return nil, nil, fmt.Errorf("oauth: cannot store a client of type %T", client)
 	}
 	data, err := json.Marshal(rc)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("oauth: encode client: %w", err)
+		return nil, nil, fmt.Errorf("oauth: encode client: %w", err)
 	}
-	uris, err := json.Marshal(rc.GetRedirectURIs())
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("oauth: encode redirect URIs: %w", err)
-	}
-	return rc, data, uris, nil
+	return rc, data, nil
 }
 
 // CreateClient stores a dynamically registered client. A duplicate ID fails
 // on the primary key, as ClientRegistrationManager requires.
 func (s *Store) CreateClient(ctx context.Context, client oauth2.Client) error {
-	rc, data, uris, err := registered(client)
+	rc, data, err := registered(client)
 	if err != nil {
 		return err
 	}
 	_, err = s.q(ctx).ExecContext(ctx,
-		`INSERT INTO oauth_clients (id, kind, name, redirect_uris, data, created_at)
-		 VALUES (?, 'dcr', ?, ?, ?, ?)`,
-		rc.GetID(), rc.ClientName, string(uris), data, formatTime(s.now()))
+		`INSERT INTO oauth_clients (id, data, created_at) VALUES (?, ?, ?)`,
+		rc.GetID(), data, formatTime(s.now()))
 	if err != nil {
 		return fmt.Errorf("oauth: create client: %w", err)
 	}
@@ -211,7 +206,7 @@ func (s *Store) CreateClient(ctx context.Context, client oauth2.Client) error {
 
 // UpdateClient replaces a dynamically registered client.
 func (s *Store) UpdateClient(ctx context.Context, id string, client oauth2.Client) error {
-	rc, data, uris, err := registered(client)
+	rc, data, err := registered(client)
 	if err != nil {
 		return err
 	}
@@ -219,8 +214,7 @@ func (s *Store) UpdateClient(ctx context.Context, id string, client oauth2.Clien
 		return fmt.Errorf("oauth: client %q cannot be updated with client %q", id, rc.GetID())
 	}
 	res, err := s.q(ctx).ExecContext(ctx,
-		`UPDATE oauth_clients SET name = ?, redirect_uris = ?, data = ? WHERE id = ? AND kind = 'dcr'`,
-		rc.ClientName, string(uris), data, id)
+		`UPDATE oauth_clients SET data = ? WHERE id = ?`, data, id)
 	if err != nil {
 		return fmt.Errorf("oauth: update client: %w", err)
 	}
@@ -231,7 +225,7 @@ func (s *Store) UpdateClient(ctx context.Context, id string, client oauth2.Clien
 // registration-token sessions, which would otherwise outlive it.
 func (s *Store) DeleteClient(ctx context.Context, id string) error {
 	return s.inTx(ctx, func(q querier) error {
-		res, err := q.ExecContext(ctx, `DELETE FROM oauth_clients WHERE id = ? AND kind = 'dcr'`, id)
+		res, err := q.ExecContext(ctx, `DELETE FROM oauth_clients WHERE id = ?`, id)
 		if err != nil {
 			return fmt.Errorf("oauth: delete client: %w", err)
 		}

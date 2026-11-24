@@ -154,12 +154,12 @@ func TestUpsertGrantReplacesSameUserClient(t *testing.T) {
 	if _, err := f.s.Grant(ctx, "g1"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("Grant(g1) err = %v, want ErrNotFound: a new grant for the same user and client replaces the old one", err)
 	}
-	g, ok, err := f.s.GrantFor(ctx, f.u1, "c1")
-	if err != nil || !ok {
-		t.Fatalf("GrantFor(u1, c1) = %v, %v", ok, err)
+	g, err := f.s.Grant(ctx, "g3")
+	if err != nil {
+		t.Fatalf("Grant(g3): %v", err)
 	}
-	if g.ID != "g3" || g.Username != "alice" || g.RedirectHost != "claude.ai" {
-		t.Errorf("GrantFor(u1, c1) = %+v, want g3 for alice", g)
+	if g.UserID != f.u1 || g.ClientID != "c1" || g.Username != "alice" || g.RedirectHost != "claude.ai" {
+		t.Errorf("Grant(g3) = %+v, want alice's c1 grant", g)
 	}
 	if len(g.Granted) != 1 || g.Granted[0] != "books:read" || len(g.Requested) != 2 {
 		t.Errorf("scopes did not round-trip: requested %v granted %v", g.Requested, g.Granted)
@@ -177,9 +177,6 @@ func TestUpsertGrantReplacesSameUserClient(t *testing.T) {
 	mine, err := f.s.Grants(ctx, f.u1)
 	if err != nil || len(mine) != 1 || mine[0].ID != "g3" {
 		t.Errorf("Grants(u1) = %+v, %v; want only g3", mine, err)
-	}
-	if _, ok, err := f.s.GrantFor(ctx, f.u2, "nope"); ok || err != nil {
-		t.Errorf("GrantFor(unknown client) = %v, %v; want false, nil", ok, err)
 	}
 
 	f.now = f.now.Add(time.Hour)

@@ -18,16 +18,16 @@ CREATE TABLE oauth_secrets (
     created_at TEXT NOT NULL
 ) STRICT;
 
--- Known OAuth clients: dynamically registered ('dcr') or fetched from a
--- client ID metadata document ('cimd').
+-- Dynamically registered (RFC 7591) clients. data is the library's client
+-- as JSON, the only thing read back; the name people see comes from
+-- oauth_grants.client_name. Clients that identify by a metadata document
+-- URL (CIMD) are never stored here: the library re-fetches them, cached in
+-- oauth_cimd. created_at lets the sweep drop registrations nobody ever
+-- connected with.
 CREATE TABLE oauth_clients (
-    id            TEXT PRIMARY KEY,
-    kind          TEXT NOT NULL CHECK (kind IN ('dcr', 'cimd')),
-    name          TEXT NOT NULL,
-    redirect_uris TEXT NOT NULL,
-    data          BLOB NOT NULL,
-    created_at    TEXT NOT NULL,
-    last_seen_at  TEXT
+    id         TEXT PRIMARY KEY,
+    data       BLOB NOT NULL,
+    created_at TEXT NOT NULL
 ) STRICT;
 
 -- The library's cache of fetched client ID metadata documents.

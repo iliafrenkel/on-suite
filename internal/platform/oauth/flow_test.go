@@ -306,11 +306,16 @@ func wantTokenError(t *testing.T, code int, body map[string]any, errs ...string)
 
 func (e *flowEnv) grant(t *testing.T) (Grant, bool) {
 	t.Helper()
-	g, ok, err := e.srv.store.GrantFor(context.Background(), e.user.ID, e.clientID)
+	gs, err := e.srv.store.Grants(context.Background(), e.user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return g, ok
+	for _, g := range gs {
+		if g.ClientID == e.clientID {
+			return g, true
+		}
+	}
+	return Grant{}, false
 }
 
 func checkbox(t *testing.T, doc *htmlassert.Doc, scope string) (shown, checked bool) {
