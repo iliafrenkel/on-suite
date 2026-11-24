@@ -24,5 +24,8 @@ func TestNotesDotHasFingerSizedTargetOnPhones(t *testing.T) {
 	css := loadAppCSS(t)
 	const phone = "@media (max-width: 780px)"
 	css.mustDeclare(phone, ".outline-dot", "position: relative")
-	css.mustDeclare(phone, ".outline-dot::before", `content: ""`, "position: absolute")
+	// All the extra height goes below the dot: reaching up would cover the
+	// start of the parent's note line, which sits right above a first
+	// child's dot at 1.25rem per level (final review).
+	css.mustDeclare(phone, ".outline-dot::before", `content: ""`, "position: absolute", "inset: 0 -0.25rem -1rem")
 }

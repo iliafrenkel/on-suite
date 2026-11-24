@@ -2084,14 +2084,17 @@ input.outline-note:focus { outline: none; }
 	}
 	/* The dot is the only way to zoom in, but its box is 1.25rem wide
 	 * around an 8px circle, beside the chevron. An invisible hit area makes
-	 * it ~43px tall without taking layout width: it reaches 0.5rem up and
-	 * down, and sideways only into the 0.25rem gaps, so it never covers
-	 * the chevron (a near miss would collapse the row) or the text. */
+	 * it ~43px tall without taking layout width: it reaches 1rem down, into
+	 * the row's own empty note-line space under the dot, and sideways only
+	 * into the 0.25rem gaps, so it never covers the chevron (a near miss
+	 * would collapse the row) or the text. Not upwards: at 1.25rem per
+	 * level a first child's dot sits right under the start of its parent's
+	 * note line, and a tap there must still edit the note. */
 	.outline-dot { position: relative; }
 	.outline-dot::before {
 		content: "";
 		position: absolute;
-		inset: -0.5rem -0.25rem;
+		inset: 0 -0.25rem -1rem;
 	}
 }
 
