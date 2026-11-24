@@ -142,11 +142,24 @@ func TestRegisterRefusesRedirectNotOnAllowlist(t *testing.T) {
 	}
 }
 
+// The loopback URIs are put ON the allowlist, so only the loopback refusal
+// in allowedRedirects can stop them: a registered loopback redirect would
+// match any port at authorize time. The client declares itself "native",
+// because the library's own validator already refuses loopback for the
+// default "web" type but allows it for native apps (RFC 8252).
 func TestRegisterRefusesLoopbackRedirect(t *testing.T) {
-	a := newASServer(t, nil, []string{claudeRedirect}, nil)
-	code, body := a.register(t, `{"redirect_uris":["http://127.0.0.1:1234/cb"],"token_endpoint_auth_method":"none"}`)
-	if code != http.StatusBadRequest {
-		t.Fatalf("register = %d %v, want 400", code, body)
+	loopbacks := []string{"http://127.0.0.1:1234/cb", "https://localhost/cb"}
+	a := newASServer(t, nil, append([]string{claudeRedirect}, loopbacks...), nil)
+	before := a.countClients(t)
+
+	for _, uri := range loopbacks {
+		code, body := a.register(t, `{"redirect_uris":["`+uri+`"],"token_endpoint_auth_method":"none","application_type":"native"}`)
+		if code != http.StatusBadRequest || body["error"] != "invalid_redirect_uri" {
+			t.Errorf("register(%s) = %d %v, want 400 invalid_redirect_uri", uri, code, body)
+		}
+	}
+	if after := a.countClients(t); after != before {
+		t.Errorf("oauth_clients rows = %d, want %d (nothing stored)", after, before)
 	}
 }
 
