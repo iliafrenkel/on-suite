@@ -5,8 +5,13 @@ your ON Suite. Once connected, you can ask it about your own things — for
 example "what should I read next?" — and it looks in ON Suite to answer.
 
 Today an assistant can read your **ON Books** reading log: your shelves,
-ratings, reviews, notes, quotes and reading stats. It can't change
-anything yet. More apps will follow.
+ratings, reviews, notes, quotes and reading stats. If you allow it, it
+can also make changes there: start a book, record your progress, finish
+a book (with a rating), mark one as not finished, and add notes and
+quotes. It can't delete anything. More apps will follow.
+
+For example, you can say "I'm on page 120 of Dune", "I finished Dune,
+five stars", or "save this quote from Dune: ...".
 
 An assistant only ever sees **your** things, never anyone else's in your
 household, and only the parts you allow when you connect it.
@@ -38,10 +43,10 @@ buttons change from time to time, but the steps are the same:
    **Allow**.
 5. You're sent back to the assistant, which is now connected.
 
-Claude and ChatGPT work with ON Suite's default settings. Gemini doesn't
-yet: your admin first has to add Gemini's callback address to ON Suite's
-list of allowed addresses (see the
-[Admin guide](admin.md#ai-access)). Until then, connecting Gemini fails.
+Claude and ChatGPT work with ON Suite's default settings. Gemini works
+too, once your admin has added its callback addresses (it uses six per
+user) to ON Suite's list of allowed addresses; see the
+[Admin guide](admin.md#ai-access). Until then, connecting Gemini fails.
 
 You connect each assistant once; it stays connected for about three months, after which
 it asks you to sign in to ON Suite again.
@@ -57,9 +62,15 @@ The screen is titled **An assistant wants to access your ON Suite**.
   choose any name, so go by the line above instead.
 - **The boxes** — one row per app, showing only what the assistant asked
   for. A box on the left, such as **Read your books**, lets it look; a box
-  on the right lets it make changes, once apps support that. The left
-  boxes start ticked and the right ones unticked. Untick anything you
-  don't want it to have.
+  on the right, such as **Update books**, lets it make changes. The left
+  boxes start ticked and the right ones unticked, so an assistant can't
+  change anything unless you tick one. Untick anything you don't want it
+  to have.
+
+An assistant you connected before can only make changes if you ticked
+**Update books** when you connected it. Check **Connected assistants** on
+your Account page to see what each one can do; to change that, disconnect
+it and connect it again.
 
 Only allow what you need. You can change your mind at any time by
 disconnecting and connecting again.

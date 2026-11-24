@@ -324,7 +324,9 @@ func TestToolErrorMessageReachesModelOtherErrorsDoNot(t *testing.T) {
 }
 
 func TestReadOnlyToolsAnnotated(t *testing.T) {
-	tools := []app.Tool{readTool("books_list", done), writeTool("books_add", done)}
+	start := writeTool("books_start", done)
+	start.Idempotent = true
+	tools := []app.Tool{readTool("books_list", done), writeTool("books_add", done), start}
 	f := newFixture(t, tools, map[string]oauth.Caller{"tok": caller(7, "g1", "books:read", "books:write")})
 	cs := f.connect(t, "tok")
 
@@ -352,13 +354,27 @@ func TestReadOnlyToolsAnnotated(t *testing.T) {
 			if a.DestructiveHint == nil || *a.DestructiveHint {
 				t.Errorf("books_add: destructiveHint = %v, want false", a.DestructiveHint)
 			}
+			if a.IdempotentHint {
+				t.Error("books_add: idempotentHint = true, want false")
+			}
+		case "books_start":
+			seen++
+			if !a.IdempotentHint {
+				t.Error("books_start: idempotentHint = false, want true")
+			}
+			if a.ReadOnlyHint {
+				t.Error("books_start: readOnlyHint = true")
+			}
+			if a.DestructiveHint == nil || *a.DestructiveHint {
+				t.Errorf("books_start: destructiveHint = %v, want false", a.DestructiveHint)
+			}
 		}
 		if s, _ := json.Marshal(tl.InputSchema); !strings.Contains(string(s), `"query"`) {
 			t.Errorf("%s: input schema %s lacks the query argument", tl.Name, s)
 		}
 	}
-	if seen != 2 {
-		t.Errorf("saw %d of the 2 tools", seen)
+	if seen != 3 {
+		t.Errorf("saw %d of the 3 tools", seen)
 	}
 }
 

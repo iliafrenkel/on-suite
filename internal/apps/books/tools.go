@@ -3,7 +3,6 @@ package books
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -54,6 +53,61 @@ func (a *App) Tools(deps app.Deps) []app.Tool {
 			Input: statsToolArgs{},
 			Call:  a.statsTool,
 		},
+		{
+			Name:  "books_start_reading",
+			Title: "Start reading",
+			Description: "Starts a new reading today: the first, or a re-read of a finished book. " +
+				"Refused if the book is already being read.",
+			Scope:      "books:write",
+			Idempotent: true,
+			Input:      idToolArgs{},
+			Call:       a.startReadingTool,
+		},
+		{
+			Name:  "books_update_progress",
+			Title: "Update progress",
+			Description: "Records where the user is in a book they're reading. Give exactly one of page or percent. " +
+				"Reaching the end doesn't finish the book; use books_finish.",
+			Scope: "books:write",
+			Input: progressToolArgs{},
+			Call:  a.progressTool,
+		},
+		{
+			Name:  "books_finish",
+			Title: "Finish a book",
+			Description: "Marks the book being read as finished, today unless day (YYYY-MM-DD) is given. " +
+				"rating 1-5 rates it; leave it out to keep the current rating.",
+			Scope:      "books:write",
+			Idempotent: true,
+			Input:      finishToolArgs{},
+			Call:       a.finishTool,
+		},
+		{
+			Name:        "books_mark_dnf",
+			Title:       "Stop reading (DNF)",
+			Description: "Marks the book being read as did-not-finish, today unless day (YYYY-MM-DD) is given.",
+			Scope:       "books:write",
+			Idempotent:  true,
+			Input:       dnfToolArgs{},
+			Call:        a.dnfTool,
+		},
+		{
+			Name:  "books_add_note",
+			Title: "Add a note",
+			Description: "Adds the user's own thought about a book, optionally at a page. " +
+				"Use books_add_quote for words copied from the book.",
+			Scope: "books:write",
+			Input: noteToolArgs{},
+			Call:  a.addNoteTool,
+		},
+		{
+			Name:        "books_add_quote",
+			Title:       "Add a quote",
+			Description: "Saves a passage from the book, word for word, optionally with its page.",
+			Scope:       "books:write",
+			Input:       quoteToolArgs{},
+			Call:        a.addQuoteTool,
+		},
 	}
 }
 
@@ -87,6 +141,16 @@ type toolBook struct {
 	StartedOn  string `json:"started_on,omitempty"`
 	FinishedOn string `json:"finished_on,omitempty"`
 	Progress   string `json:"progress,omitempty"`
+}
+
+// bookToolView projects a book for the model; books_get and every write
+// tool's result share it.
+func bookToolView(b Book) toolBook {
+	return toolBook{
+		ID: b.ID, Title: b.Title, Authors: b.Authors, Series: toolSeries(b.SeriesName, b.SeriesNumber),
+		Shelf: b.Shelf, Rating: b.Rating, Pages: b.Pages, StartedOn: b.Latest.StartedOn, FinishedOn: b.Latest.FinishedOn,
+		Progress: toolProgress(b.Shelf, b.Progress, b.Latest.Format, b.Pages),
+	}
 }
 
 // toolSeries is "Name #3", or the name alone.
@@ -160,13 +224,8 @@ func (a *App) getTool(ctx context.Context, userID int64, args json.RawMessage) (
 		return "", err
 	}
 	b, err := a.store.Get(ctx, userID, in.ID)
-	if errors.Is(err, ErrNotFound) {
-		// The same answer for a missing book and another user's, so an ID
-		// reveals nothing (spec, "Tool rules").
-		return "", app.ToolError{Msg: "No book with that ID on your shelves"}
-	}
 	if err != nil {
-		return "", err
+		return "", toolErr(err)
 	}
 	notes, err := a.store.Notes(ctx, userID, b.ID)
 	if err != nil {
@@ -194,11 +253,7 @@ func (a *App) getTool(ctx context.Context, userID int64, args json.RawMessage) (
 		Notes       []note   `json:"notes,omitempty"`
 		Quotes      []quote  `json:"quotes,omitempty"`
 	}{
-		toolBook: toolBook{
-			ID: b.ID, Title: b.Title, Authors: b.Authors, Series: toolSeries(b.SeriesName, b.SeriesNumber),
-			Shelf: b.Shelf, Rating: b.Rating, Pages: b.Pages, StartedOn: b.Latest.StartedOn, FinishedOn: b.Latest.FinishedOn,
-			Progress: toolProgress(b.Shelf, b.Progress, b.Latest.Format, b.Pages),
-		},
+		toolBook: bookToolView(b),
 		Subtitle: b.Subtitle, Year: b.Year, Tags: b.Tags, Review: b.Review, Description: b.Description,
 	}
 	for _, n := range notes[:min(recentExtras, len(notes))] {
@@ -259,7 +314,7 @@ func parseToolArgs(args json.RawMessage, into any) error {
 		return nil
 	}
 	if err := json.Unmarshal(args, into); err != nil {
-		return app.ToolError{Msg: "The arguments are not valid: " + err.Error()}
+		return app.ToolError{Msg: "The arguments are not valid."}
 	}
 	return nil
 }

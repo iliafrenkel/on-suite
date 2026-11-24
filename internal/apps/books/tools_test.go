@@ -51,8 +51,51 @@ func TestBooksToolsDeclared(t *testing.T) {
 			t.Errorf("%s = %+v, want read-only books:read with input and description", name, tool)
 		}
 	}
-	if len(tf.tools) != 3 {
-		t.Errorf("%d tools, want 3", len(tf.tools))
+	for name, idempotent := range map[string]bool{
+		"books_start_reading": true, "books_update_progress": false, "books_finish": true, "books_mark_dnf": true,
+		"books_add_note": false, "books_add_quote": false,
+	} {
+		tool, ok := tf.tools[name]
+		if !ok {
+			t.Fatalf("missing tool %s", name)
+		}
+		if tool.Scope != "books:write" || tool.ReadOnly || tool.Idempotent != idempotent || tool.Input == nil || tool.Description == "" {
+			t.Errorf("%s = %+v, want books:write, not read-only, idempotent=%v, with input and description", name, tool, idempotent)
+		}
+	}
+	if len(tf.tools) != 9 {
+		t.Errorf("%d tools, want 9", len(tf.tools))
+	}
+}
+
+func TestBooksToolsBadArguments(t *testing.T) {
+	tf := newToolFixture(t)
+	uid := tf.s.Alice.User.ID
+	for _, args := range []string{`{"limit":"x"}`, `not json`} {
+		tf.wantToolErr(t, "books_list", uid, args, "The arguments are not valid.")
+	}
+	for i := range 201 {
+		add(t, tf.s, uid, onShelf("Book "+strconv.Itoa(i), books.ShelfWant))
+	}
+	count := func(args string) int {
+		t.Helper()
+		out, err := tf.call(t, "books_list", uid, args)
+		if err != nil {
+			t.Fatalf("%s: %v", args, err)
+		}
+		var r struct {
+			Books []json.RawMessage `json:"books"`
+		}
+		if err := json.Unmarshal([]byte(out), &r); err != nil {
+			t.Fatal(err)
+		}
+		return len(r.Books)
+	}
+	if got := count(`{"limit":0}`); got != 50 {
+		t.Errorf("limit 0 = %d books, want the default 50", got)
+	}
+	if got := count(`{"limit":500}`); got != 200 {
+		t.Errorf("limit 500 = %d books, want the cap 200", got)
 	}
 }
 

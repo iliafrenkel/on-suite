@@ -197,18 +197,21 @@ func hiddenForm(t *testing.T, body, action string) url.Values {
 	return form
 }
 
-// connect runs the browser half of the flow (authorize, consent with
-// books:read ticked) and the client's code exchange, returning the access
-// token.
-func (e *e2eEnv) connect(t *testing.T, clientID string, cookies []*http.Cookie) string {
+// connect runs the browser half of the flow (authorize, consent with the
+// scopes ticked) and the client's code exchange, returning the access
+// token. No scopes means books:read.
+func (e *e2eEnv) connect(t *testing.T, clientID string, cookies []*http.Cookie, scopes ...string) string {
 	t.Helper()
+	if len(scopes) == 0 {
+		scopes = []string{"books:read"}
+	}
 	sum := sha256.Sum256([]byte(e2eVerifier))
 	q := url.Values{
 		"client_id":             {clientID},
 		"response_type":         {"code"},
 		"redirect_uri":          {e2eRedirect},
 		"state":                 {e2eState},
-		"scope":                 {"books:read"},
+		"scope":                 {strings.Join(scopes, " ")},
 		"resource":              {e2ePublicURL + "/mcp"},
 		"code_challenge":        {base64.RawURLEncoding.EncodeToString(sum[:])},
 		"code_challenge_method": {"S256"},
@@ -219,7 +222,7 @@ func (e *e2eEnv) connect(t *testing.T, clientID string, cookies []*http.Cookie) 
 	}
 	form := hiddenForm(t, page.Body.String(), "/oauth/authorize")
 	form.Set("decision", "allow")
-	form.Set("grant_scope", "books:read")
+	form["grant_scope"] = scopes
 	rec := e.postForm(t, "/oauth/authorize", form, cookies)
 	loc, err := url.Parse(rec.Header().Get("Location"))
 	if err != nil || rec.Code/100 != 3 {
@@ -450,5 +453,107 @@ func TestMCPOnLinksAccountPages(t *testing.T) {
 	cookies := e.logIn(t, "alice")
 	if !strings.Contains(e.get(t, "/account", cookies).Body.String(), `href="/account/assistants"`) {
 		t.Error("/account does not link to connected assistants with AI access on")
+	}
+}
+
+func TestMCPBooksWriteNeedsWriteScope(t *testing.T) {
+	e := newE2EEnv(t, true)
+	alice := e.addUser(t, "alice")
+	bob := e.addUser(t, "bob")
+	dune := e.addBook(t, alice.ID, "Dune")
+	bobsBook := e.addBook(t, bob.ID, "Bob's secret diary")
+	cookies := e.logIn(t, "alice")
+
+	srv := httptest.NewServer(e.handler)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), e2eTimeout)
+	defer cancel()
+
+	call := func(cs *sdk.ClientSession, name string, args map[string]any) (*sdk.CallToolResult, error) {
+		return cs.CallTool(ctx, &sdk.CallToolParams{Name: name, Arguments: args})
+	}
+
+	// A read-only grant lists no write tool and cannot call one.
+	readOnly := mcpSession(ctx, t, srv.URL, e.connect(t, e.register(t, "Reader"), cookies))
+	list, err := readOnly.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("tools/list: %v", err)
+	}
+	for _, tool := range list.Tools {
+		if !slices.Contains([]string{"books_get", "books_list", "books_stats"}, tool.Name) {
+			t.Errorf("read-only grant lists %s", tool.Name)
+		}
+	}
+	if len(list.Tools) != 3 {
+		t.Errorf("read-only grant lists %d tools, want the 3 read tools", len(list.Tools))
+	}
+	if res, err := call(readOnly, "books_start_reading", map[string]any{"id": dune}); err == nil && !res.IsError {
+		t.Errorf("books_start_reading on a read-only grant succeeded: %q", toolText(t, res))
+	}
+
+	// A grant with books:write lists all six write tools, with annotations.
+	cs := mcpSession(ctx, t, srv.URL, e.connect(t, e.register(t, "Writer"), cookies, "books:read", "books:write"))
+	list, err = cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("tools/list: %v", err)
+	}
+	idem := map[string]bool{}
+	for _, tool := range list.Tools {
+		idem[tool.Name] = tool.Annotations != nil && tool.Annotations.IdempotentHint
+	}
+	for _, name := range []string{"books_start_reading", "books_update_progress", "books_finish", "books_mark_dnf", "books_add_note", "books_add_quote"} {
+		if _, ok := idem[name]; !ok {
+			t.Errorf("write grant does not list %s", name)
+		}
+	}
+	if !idem["books_start_reading"] {
+		t.Error("books_start_reading idempotentHint = false, want true")
+	}
+	if idem["books_add_note"] {
+		t.Error("books_add_note idempotentHint = true, want false")
+	}
+
+	// Writes land, and books_get shows them.
+	for _, c := range []struct {
+		name string
+		args map[string]any
+	}{
+		{"books_start_reading", map[string]any{"id": dune}},
+		{"books_update_progress", map[string]any{"id": dune, "percent": 50}},
+	} {
+		res, err := call(cs, c.name, c.args)
+		if err != nil || res.IsError {
+			t.Fatalf("%s: %v %v", c.name, err, res)
+		}
+	}
+	res, err := call(cs, "books_get", map[string]any{"id": dune})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Shelf    string `json:"shelf"`
+		Progress any    `json:"progress"`
+	}
+	if err := json.Unmarshal([]byte(toolText(t, res)), &got); err != nil {
+		t.Fatalf("books_get: %v", err)
+	}
+	if got.Shelf != "reading" || got.Progress == nil {
+		t.Errorf("books_get = %+v, want shelf reading with progress", got)
+	}
+
+	// Bob's book is refused as not found and stays on Want.
+	res, err = call(cs, "books_start_reading", map[string]any{"id": bobsBook})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := toolText(t, res); !res.IsError || !strings.Contains(text, "No book with that ID on your shelves") {
+		t.Errorf("start on bob's book = %q (error %v)", text, res.IsError)
+	}
+	var readings int
+	if err := e.handle.QueryRow(`SELECT COUNT(*) FROM books_readings WHERE book_id = ?`, bobsBook).Scan(&readings); err != nil {
+		t.Fatal(err)
+	}
+	if readings != 0 {
+		t.Errorf("bob's book has %d readings, want 0 (still on Want)", readings)
 	}
 }

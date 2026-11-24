@@ -237,8 +237,8 @@ this server.
 ## AI access
 
 AI access lets people connect an AI assistant, such as Claude, ChatGPT or
-Gemini, to ON Suite, so the assistant can read their own things (today,
-their ON Books reading log). Each person connects their own assistant and
+Gemini, to ON Suite, so the assistant can read, and if the person allows
+it, change their own things (today, their ON Books reading log). Each person connects their own assistant and
 chooses what it may do; the [AI assistants guide](ai-assistants.md)
 explains that side.
 
@@ -258,10 +258,17 @@ that starts ON Suite or in the server's environment:
   addresses assistants may send people back to after they allow access,
   separated by commas. The default lists Claude's and ChatGPT's, so those
   two work without changing it. An assistant whose address isn't on the
-  list can't connect — Gemini included, until you add its callback
-  address from Google's documentation. Setting this replaces the default
-  list, so keep the addresses shown on the **AI access** page (below) for
-  the assistants you still want, and add Gemini's to them.
+  list can't connect — Gemini included, until you add its addresses.
+  Gemini registers six addresses per person, all with that person's own
+  ID: `https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-<id>`,
+  the same with `/a/`, and both again on
+  `oauth-redirect-sandbox.googleusercontent.com` and
+  `oauth-redirect-test.googleusercontent.com`. Connecting fails unless
+  all six are on the list, and each household member who uses Gemini
+  needs their own six. Setting this replaces the default list, so keep
+  the addresses shown on the **AI access** page (below) for the
+  assistants you still want (Claude's and ChatGPT's included), and add
+  Gemini's to them.
 
 Restart ON Suite after changing them. The assistants' companies connect
 from their own servers, so your ON Suite must be reachable from the

@@ -167,6 +167,7 @@ func buildTools(tools []app.Tool) []builtTool {
 		ann := &sdk.ToolAnnotations{ReadOnlyHint: t.ReadOnly, Title: t.Title}
 		if !t.ReadOnly {
 			ann.DestructiveHint = new(false)
+			ann.IdempotentHint = t.Idempotent
 		}
 		out = append(out, builtTool{app: t, sdk: &sdk.Tool{
 			Name:        t.Name,
