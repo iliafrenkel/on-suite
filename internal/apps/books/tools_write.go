@@ -71,12 +71,12 @@ func (a *App) bookResult(ctx context.Context, userID, id int64) (string, error) 
 	if err != nil {
 		return "", toolErr(err)
 	}
-	return marshalTool(bookToolView(b))
+	return app.MarshalTool(bookToolView(b))
 }
 
 func (a *App) startReadingTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
 	var in idToolArgs
-	if err := parseToolArgs(args, &in); err != nil {
+	if err := app.ParseToolArgs(args, &in); err != nil {
 		return "", err
 	}
 	if err := a.store.StartReading(ctx, userID, in.ID); err != nil {
@@ -87,7 +87,7 @@ func (a *App) startReadingTool(ctx context.Context, userID int64, args json.RawM
 
 func (a *App) progressTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
 	var in progressToolArgs
-	if err := parseToolArgs(args, &in); err != nil {
+	if err := app.ParseToolArgs(args, &in); err != nil {
 		return "", err
 	}
 	if (in.Page == 0) == (in.Percent == 0) {
@@ -128,7 +128,7 @@ func (a *App) progressTool(ctx context.Context, userID int64, args json.RawMessa
 
 func (a *App) finishTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
 	var in finishToolArgs
-	if err := parseToolArgs(args, &in); err != nil {
+	if err := app.ParseToolArgs(args, &in); err != nil {
 		return "", err
 	}
 	// The store's checkRating returns a bare ErrInvalid, which the model
@@ -144,7 +144,7 @@ func (a *App) finishTool(ctx context.Context, userID int64, args json.RawMessage
 
 func (a *App) dnfTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
 	var in dnfToolArgs
-	if err := parseToolArgs(args, &in); err != nil {
+	if err := app.ParseToolArgs(args, &in); err != nil {
 		return "", err
 	}
 	if err := a.store.MarkDNF(ctx, userID, in.ID, strings.TrimSpace(in.Day), 0); err != nil {
@@ -155,24 +155,24 @@ func (a *App) dnfTool(ctx context.Context, userID int64, args json.RawMessage) (
 
 func (a *App) addNoteTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
 	var in noteToolArgs
-	if err := parseToolArgs(args, &in); err != nil {
+	if err := app.ParseToolArgs(args, &in); err != nil {
 		return "", err
 	}
 	id, err := a.store.AddNote(ctx, userID, in.ID, NoteInput{Page: in.Page, Body: in.Text})
 	if err != nil {
 		return "", toolErr(err)
 	}
-	return marshalTool(addedResult{ID: id, BookID: in.ID, Page: in.Page})
+	return app.MarshalTool(addedResult{ID: id, BookID: in.ID, Page: in.Page})
 }
 
 func (a *App) addQuoteTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
 	var in quoteToolArgs
-	if err := parseToolArgs(args, &in); err != nil {
+	if err := app.ParseToolArgs(args, &in); err != nil {
 		return "", err
 	}
 	id, err := a.store.AddQuote(ctx, userID, in.ID, QuoteInput{Page: in.Page, Text: in.Text})
 	if err != nil {
 		return "", toolErr(err)
 	}
-	return marshalTool(addedResult{ID: id, BookID: in.ID, Page: in.Page})
+	return app.MarshalTool(addedResult{ID: id, BookID: in.ID, Page: in.Page})
 }
