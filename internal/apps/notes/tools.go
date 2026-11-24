@@ -61,6 +61,24 @@ func (a *App) Tools(deps app.Deps) []app.Tool {
 			Input: dueToolArgs{},
 			Call:  a.dueTool,
 		},
+		{
+			Name:  "notes_add",
+			Title: "Add a note",
+			Description: "Add a bullet to the user's outline, at the end of a parent's children or at the top level. " +
+				"Get a parent's id from notes_search or notes_get. Text after the first line becomes the bullet's note.",
+			Scope: "notes:write",
+			Input: addToolArgs{},
+			Call:  a.addTool,
+		},
+		{
+			Name:  "notes_set_done",
+			Title: "Tick a note done",
+			Description: "Tick a bullet done, or un-tick it with done=false. " +
+				"Ticking a parent doesn't tick its children.",
+			Scope: "notes:write", Idempotent: true,
+			Input: setDoneToolArgs{},
+			Call:  a.setDoneTool,
+		},
 	}
 }
 
@@ -106,6 +124,28 @@ func toolPath(crumbs []Node) string {
 		titles[i] = c.DisplayTitle()
 	}
 	return strings.Join(titles, " › ")
+}
+
+// visibleNode loads a bullet the model may see or change, with its ancestors
+// outermost first. A missing, someone else's or archived bullet, or one under
+// an archived ancestor (spec §13), gives the same not-found ToolError.
+func (a *App) visibleNode(ctx context.Context, userID, id int64) (Node, []Node, error) {
+	n, err := a.store.ByID(ctx, userID, id)
+	if err != nil {
+		return Node{}, nil, toolErr(err)
+	}
+	crumbs, err := a.store.AncestorsMany(ctx, userID, []int64{n.ID})
+	if err != nil {
+		return Node{}, nil, err
+	}
+	hidden := n.Archived
+	for _, c := range crumbs[n.ID] {
+		hidden = hidden || c.Archived
+	}
+	if hidden {
+		return Node{}, nil, app.ToolError{Msg: noteNotFound}
+	}
+	return n, crumbs[n.ID], nil
 }
 
 func (a *App) searchTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
@@ -176,23 +216,11 @@ func (a *App) getTool(ctx context.Context, userID int64, args json.RawMessage) (
 	rootID := int64(RootID)
 	base := 0 // the indent of the outline's first level
 	if in.ID != 0 {
-		root, err := a.store.ByID(ctx, userID, in.ID)
-		if err != nil {
-			return "", toolErr(err)
-		}
-		crumbs, err := a.store.AncestorsMany(ctx, userID, []int64{root.ID})
+		root, crumbs, err := a.visibleNode(ctx, userID, in.ID)
 		if err != nil {
 			return "", err
 		}
-		// A bullet under an archived one is as good as archived (spec §13).
-		hidden := root.Archived
-		for _, c := range crumbs[root.ID] {
-			hidden = hidden || c.Archived
-		}
-		if hidden {
-			return "", app.ToolError{Msg: noteNotFound}
-		}
-		if path := toolPath(crumbs[root.ID]); path != "" {
+		if path := toolPath(crumbs); path != "" {
 			b.WriteString("Path: " + path + "\n")
 		}
 		// The root's children are listed (depth is at least 1), so it never

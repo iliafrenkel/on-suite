@@ -101,8 +101,20 @@ func TestNotesToolsDeclared(t *testing.T) {
 			t.Errorf("%s = %+v, want read-only notes:read with input and description", name, tool)
 		}
 	}
-	if len(tf.tools) != 3 {
-		t.Errorf("%d tools, want 3", len(tf.tools))
+	for _, name := range []string{"notes_add", "notes_set_done"} {
+		tool, ok := tf.tools[name]
+		if !ok {
+			t.Fatalf("missing tool %s", name)
+		}
+		if tool.Scope != "notes:write" || tool.ReadOnly || tool.Input == nil || tool.Description == "" {
+			t.Errorf("%s = %+v, want writing notes:write with input and description", name, tool)
+		}
+	}
+	if !tf.tools["notes_set_done"].Idempotent || tf.tools["notes_add"].Idempotent {
+		t.Error("notes_set_done must be idempotent and notes_add must not be")
+	}
+	if len(tf.tools) != 5 {
+		t.Errorf("%d tools, want 5", len(tf.tools))
 	}
 }
 
