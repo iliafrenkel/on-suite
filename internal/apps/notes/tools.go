@@ -47,7 +47,7 @@ func (a *App) Tools(deps app.Deps) []app.Tool {
 			Title: "Read part of the outline",
 			Description: "Read a list or project from the user's outline as indented text: give an id to read that bullet and what's under it, " +
 				"or leave id out to read from the top. A bullet whose children are cut off by depth says how many more there are. " +
-				"Use the ids it shows for notes_add and notes_set_done.",
+				"Use the ids it shows for notes_add, notes_set_done and notes_set_due.",
 			Scope: "notes:read", ReadOnly: true,
 			Input: getToolArgs{},
 			Call:  a.getTool,
@@ -65,7 +65,8 @@ func (a *App) Tools(deps app.Deps) []app.Tool {
 			Name:  "notes_add",
 			Title: "Add a note",
 			Description: "Add a bullet to the user's outline, at the end of a parent's children or at the top level. " +
-				"Get a parent's id from notes_search or notes_get. Text after the first line becomes the bullet's note.",
+				"Get a parent's id from notes_search or notes_get. Text after the first line becomes the bullet's note. " +
+				"Give due (YYYY-MM-DD) to set a due date at the same time; work out dates like 'Friday' from today's date yourself.",
 			Scope: "notes:write",
 			Input: addToolArgs{},
 			Call:  a.addTool,
@@ -78,6 +79,15 @@ func (a *App) Tools(deps app.Deps) []app.Tool {
 			Scope: "notes:write", Idempotent: true,
 			Input: setDoneToolArgs{},
 			Call:  a.setDoneTool,
+		},
+		{
+			Name:  "notes_set_due",
+			Title: "Set a due date",
+			Description: "Set or change a bullet's due date (YYYY-MM-DD), or clear it with an empty due. " +
+				"Work out dates like 'next Tuesday' from today's date yourself. Bullets with a due date show up in notes_due.",
+			Scope: "notes:write", Idempotent: true,
+			Input: setDueToolArgs{},
+			Call:  a.setDueTool,
 		},
 	}
 }

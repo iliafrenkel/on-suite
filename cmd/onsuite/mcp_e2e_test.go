@@ -624,7 +624,7 @@ func TestMCPNotesTools(t *testing.T) {
 
 	// notes:read plus notes:write adds and ticks bullets.
 	cs := mcpSession(ctx, t, srv.URL, e.connect(t, e.register(t, "Notes writer"), cookies, "notes:read", "notes:write"))
-	wantAll := []string{"notes_add", "notes_due", "notes_get", "notes_search", "notes_set_done"}
+	wantAll := []string{"notes_add", "notes_due", "notes_get", "notes_search", "notes_set_done", "notes_set_due"}
 	if got := toolNames(cs); !slices.Equal(got, wantAll) {
 		t.Errorf("write grant lists %v, want %v", got, wantAll)
 	}
@@ -657,6 +657,15 @@ func TestMCPNotesTools(t *testing.T) {
 	res = call(cs, "notes_set_done", map[string]any{"id": milk.ID, "done": true})
 	if text := toolText(t, res); res.IsError || !strings.Contains(text, `"done":true`) {
 		t.Errorf("notes_set_done = %q (error %v), want done true", text, res.IsError)
+	}
+
+	res = call(cs, "notes_set_due", map[string]any{"id": groceries.ID, "due": "2099-01-01"})
+	if text := toolText(t, res); res.IsError || !strings.Contains(text, `"due":"2099-01-01"`) {
+		t.Errorf("notes_set_due = %q (error %v), want due 2099-01-01", text, res.IsError)
+	}
+	res = call(cs, "notes_due", map[string]any{})
+	if text := toolText(t, res); res.IsError || !strings.Contains(text, `"later":[{"id":`) || !strings.Contains(text, "Groceries") {
+		t.Errorf("notes_due = %q (error %v), want Groceries under later", text, res.IsError)
 	}
 
 	res = call(cs, "notes_search", map[string]any{"query": "milk"})

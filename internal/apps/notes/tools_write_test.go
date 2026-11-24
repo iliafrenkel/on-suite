@@ -189,3 +189,74 @@ func TestNotesSetDoneNotFound(t *testing.T) {
 		t.Error("an archived bullet or its child was ticked")
 	}
 }
+
+func TestNotesAddWithDue(t *testing.T) {
+	tf := newToolFixture(t)
+	alice := tf.s.Alice.User.ID
+
+	out := tf.mustCall(t, "notes_add", alice, `{"text":"Call Sam","due":"2026-12-04"}`)
+	var r struct {
+		ID  int64  `json:"id"`
+		Due string `json:"due"`
+	}
+	if err := json.Unmarshal([]byte(out), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Due != "2026-12-04" || tf.node(t, alice, r.ID).DueOn != "2026-12-04" {
+		t.Errorf("add with due = %s, stored due %q", out, tf.node(t, alice, r.ID).DueOn)
+	}
+	if plain := tf.mustCall(t, "notes_add", alice, `{"text":"No date"}`); strings.Contains(plain, `"due"`) {
+		t.Errorf("a bullet without a due date reports one: %s", plain)
+	}
+
+	// A bad date refuses the whole add: no dateless bullet is left behind.
+	for _, due := range []string{"next friday", "2026-02-30", "04/12/2026"} {
+		tf.wantToolErr(t, "notes_add", alice, `{"text":"Bad date","due":"`+due+`"}`, "Due date must be YYYY-MM-DD.")
+	}
+	if got := tf.childTitles(t, alice, notes.RootID); len(got) != 2 {
+		t.Errorf("top level = %v, want just the two good adds", got)
+	}
+}
+
+func TestNotesSetDue(t *testing.T) {
+	tf := newToolFixture(t)
+	alice := tf.s.Alice.User.ID
+	id := tf.add(t, alice, notes.RootID, "Renew passport", "")
+	args := func(due string) string { return `{"id":` + i64(id) + `,"due":"` + due + `"}` }
+
+	for range 2 { // the second call changes nothing and is not an error
+		out := tf.mustCall(t, "notes_set_due", alice, args("2026-12-10"))
+		if !strings.Contains(out, `"due":"2026-12-10"`) || !strings.Contains(out, `"title":"Renew passport"`) || tf.node(t, alice, id).DueOn != "2026-12-10" {
+			t.Errorf("set due: %s, stored %q", out, tf.node(t, alice, id).DueOn)
+		}
+	}
+	if out := tf.mustCall(t, "notes_set_due", alice, args("")); strings.Contains(out, `"due"`) || tf.node(t, alice, id).DueOn != "" {
+		t.Errorf("clear due: %s, stored %q", out, tf.node(t, alice, id).DueOn)
+	}
+
+	tf.wantToolErr(t, "notes_set_due", alice, `{"id":`+i64(id)+`}`, "Give a due date as YYYY-MM-DD, or an empty one to clear it.")
+	tf.wantToolErr(t, "notes_set_due", alice, args("tomorrow"), "Due date must be YYYY-MM-DD.")
+	if tf.node(t, alice, id).DueOn != "" {
+		t.Error("a refused call changed the due date")
+	}
+}
+
+func TestNotesSetDueNotFound(t *testing.T) {
+	tf := newToolFixture(t)
+	alice, bob := tf.s.Alice.User.ID, tf.s.Bob.User.ID
+	bobs := tf.add(t, bob, notes.RootID, "Bob's secret", "")
+	archived := tf.add(t, alice, notes.RootID, "Old plan", "")
+	child := tf.add(t, alice, archived, "Old step", "")
+	if err := tf.s.Store.SetArchived(context.Background(), alice, archived, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{bobs, 999999, archived, child} {
+		tf.wantToolErr(t, "notes_set_due", alice, `{"id":`+i64(id)+`,"due":"2026-12-10"}`, notFoundMsg)
+	}
+	if tf.node(t, bob, bobs).DueOn != "" {
+		t.Error("Bob's bullet got a due date")
+	}
+	if tf.node(t, alice, archived).DueOn != "" || tf.node(t, alice, child).DueOn != "" {
+		t.Error("an archived bullet or its child got a due date")
+	}
+}
