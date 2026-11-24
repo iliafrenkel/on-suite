@@ -3,7 +3,6 @@ package web
 import (
 	"errors"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -185,9 +184,9 @@ func (a *Auth) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key := strings.ToLower(username) + "|" + clientIP(r)
+	key := strings.ToLower(username) + "|" + ClientIP(r)
 	if !a.limiter.Allow(key, a.now()) {
-		a.log.Warn("login rate limit reached", "username", username, "ip", clientIP(r))
+		a.log.Warn("login rate limit reached", "username", username, "ip", ClientIP(r))
 		a.errs.Status(w, r, http.StatusTooManyRequests)
 		return
 	}
@@ -241,7 +240,7 @@ func (a *Auth) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		Secure:   a.secure,
 		SameSite: http.SameSiteLaxMode,
 	})
-	a.log.Info("signed in", "username", user.Username, "ip", clientIP(r))
+	a.log.Info("signed in", "username", user.Username, "ip", ClientIP(r))
 
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }
@@ -307,18 +306,6 @@ func safeNext(next string) string {
 	return u.RequestURI()
 }
 
-// clientIP is the best available identifier for rate limiting. It reads
-// RemoteAddr only: a forwarded header is attacker-controlled unless a trusted
-// proxy is known to set it, and trusting one here would make the limiter
-// trivially bypassable.
-func clientIP(r *http.Request) string {
-	host, _, err := netSplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
-
 // AttemptLimiter counts recent failures per key and refuses more once a key
 // has maxLoginAttempts inside loginWindow. Login keys it by username and IP;
 // usermgmt keys the /account current-password check by user id (#397).
@@ -368,7 +355,3 @@ func (l *AttemptLimiter) prune(key string, now time.Time) []time.Time {
 	l.attempts[key] = kept
 	return kept
 }
-
-// netSplitHostPort is net.SplitHostPort. It is aliased here so the reason for
-// importing net is obvious at the call site.
-var netSplitHostPort = net.SplitHostPort

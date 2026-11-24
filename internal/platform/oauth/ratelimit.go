@@ -1,11 +1,12 @@
 package oauth
 
 import (
-	"net"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
 
 // limiter is a fixed-window request counter per key. The OAuth endpoints key
@@ -72,16 +73,12 @@ const (
 )
 
 // limitIP wraps next so each client IP gets at most the limiter's budget.
-// The key is the host part of RemoteAddr, as web.AttemptLimiter keys login:
-// a forwarded header is attacker-controlled unless a trusted proxy sets it.
+// The key is web.ClientIP, as login keys its limiter: the forwarded client
+// when our own loopback proxy sent the request, the peer otherwise.
 // refuse writes the 429 body; Retry-After is whole seconds, rounded up.
 func limitIP(l *limiter, refuse func(http.ResponseWriter, *http.Request), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := r.RemoteAddr
-		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-			key = host
-		}
-		if ok, wait := l.allow(key); !ok {
+		if ok, wait := l.allow(web.ClientIP(r)); !ok {
 			secs := max(int((wait+time.Second-1)/time.Second), 1)
 			w.Header().Set("Retry-After", strconv.Itoa(secs))
 			refuse(w, r)

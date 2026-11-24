@@ -26,8 +26,16 @@ func newLimitEnv(t *testing.T) *limitEnv {
 }
 
 func (e *limitEnv) do(method, path, addr, body string) *httptest.ResponseRecorder {
+	return e.doFwd(method, path, addr, "", body)
+}
+
+// doFwd is do with an X-Forwarded-For header, as the reverse proxy sends it.
+func (e *limitEnv) doFwd(method, path, addr, xff, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, testPublicURL+path, strings.NewReader(body))
 	req.RemoteAddr = addr
+	if xff != "" {
+		req.Header.Set("X-Forwarded-For", xff)
+	}
 	if method == http.MethodPost {
 		req.Header.Set("Content-Type", "application/json")
 		// The consent POST keeps its CSRF check, which runs before the
@@ -73,6 +81,31 @@ func TestRegisterLimitedPerIP(t *testing.T) {
 	if rec := e.do("POST", "/oauth/register", "192.0.2.1:5000", `{}`); rec.Code == http.StatusTooManyRequests {
 		t.Error("still limited after the window")
 	}
+}
+
+// Behind the documented reverse proxy every request comes from loopback; the
+// budget must follow the forwarded client, not the proxy, and a forwarded
+// header from a non-loopback peer must not buy a fresh budget.
+func TestRegisterLimitedPerForwardedClient(t *testing.T) {
+	e := newLimitEnv(t)
+	const proxy = "127.0.0.1:40000"
+	for i := range 10 {
+		if rec := e.doFwd("POST", "/oauth/register", proxy, "203.0.113.1", `{}`); rec.Code == http.StatusTooManyRequests {
+			t.Fatalf("request %d limited, want the first 10 allowed", i+1)
+		}
+	}
+	wantLimited(t, e.doFwd("POST", "/oauth/register", proxy, "203.0.113.1", `{}`), true)
+
+	// A second client behind the same proxy has its own budget.
+	if rec := e.doFwd("POST", "/oauth/register", proxy, "203.0.113.2", `{}`); rec.Code == http.StatusTooManyRequests {
+		t.Error("a different forwarded client was limited")
+	}
+
+	// A direct peer cannot escape its budget by claiming another address.
+	for range 10 {
+		e.doFwd("POST", "/oauth/register", "192.0.2.1:5000", "", `{}`)
+	}
+	wantLimited(t, e.doFwd("POST", "/oauth/register", "192.0.2.1:5000", "198.51.100.9", `{}`), true)
 }
 
 func TestTokenAndAuthorizeLimitedPerIP(t *testing.T) {
