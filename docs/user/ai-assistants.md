@@ -12,13 +12,14 @@ quotes. It can't delete anything.
 
 An assistant can also read your **ON Notes**: it can search your notes,
 read a list or a project, and tell you what's due. If you tick **Add
-notes**, it can also add a new bullet and tick one done (or un-tick it).
-It can't delete, move or edit your bullets, and it never sees archived
-bullets. More apps will follow.
+notes**, it can also add a new bullet, tick one done (or un-tick it),
+and set, change or clear a due date. It can't delete, move or edit your
+bullets, and it never sees archived bullets. More apps will follow.
 
 For example, you can say "I'm on page 120 of Dune", "I finished Dune,
 five stars", "save this quote from Dune: ...", "add milk to my groceries
-list", "what's due this week?" or "tick off call Sam".
+list", "remind me to call Sam on Friday", "what's due this week?" or
+"tick off call Sam".
 
 An assistant only ever sees **your** things, never anyone else's in your
 household, and only the parts you allow when you connect it.
