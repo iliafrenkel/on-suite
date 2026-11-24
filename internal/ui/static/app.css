@@ -2082,6 +2082,17 @@ input.outline-note:focus { outline: none; }
 		left: auto;
 		right: 0;
 	}
+	/* The dot is the only way to zoom in, but its box is 1.25rem wide
+	 * around an 8px circle, beside the chevron. An invisible hit area makes
+	 * it ~43px tall without taking layout width: it reaches 0.5rem up and
+	 * down, and sideways only into the 0.25rem gaps, so it never covers
+	 * the chevron (a near miss would collapse the row) or the text. */
+	.outline-dot { position: relative; }
+	.outline-dot::before {
+		content: "";
+		position: absolute;
+		inset: -0.5rem -0.25rem;
+	}
 }
 
 .outline-menu-due {

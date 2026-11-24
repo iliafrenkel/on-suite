@@ -16,3 +16,13 @@ func TestNotesOutlineIsDenserOnPhones(t *testing.T) {
 	css.mustDeclare(phone, ".outline-menu", "order: 1")
 	css.mustDeclare(phone, ".outline-menu-list", "left: auto", "right: 0")
 }
+
+// TestNotesDotHasFingerSizedTargetOnPhones pins the dot's invisible hit
+// area: the dot is the only way to zoom into a bullet, and its 1.25rem box
+// (an 8px circle) sits right next to the chevron.
+func TestNotesDotHasFingerSizedTargetOnPhones(t *testing.T) {
+	css := loadAppCSS(t)
+	const phone = "@media (max-width: 780px)"
+	css.mustDeclare(phone, ".outline-dot", "position: relative")
+	css.mustDeclare(phone, ".outline-dot::before", `content: ""`, "position: absolute")
+}
