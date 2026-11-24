@@ -3,8 +3,10 @@ package app_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
 )
@@ -93,4 +95,60 @@ func names(ts []app.Tool) []string {
 		out[i] = t.Name
 	}
 	return out
+}
+
+func TestParseToolArgsEmptyIsNoop(t *testing.T) {
+	for _, args := range []json.RawMessage{nil, {}} {
+		target := struct{ N int }{N: 7}
+		if err := app.ParseToolArgs(args, &target); err != nil {
+			t.Errorf("ParseToolArgs(%q) = %v, want nil", args, err)
+		}
+		if target.N != 7 {
+			t.Errorf("ParseToolArgs(%q) changed the target to %d", args, target.N)
+		}
+	}
+}
+
+func TestParseToolArgsBadJSONIsFixedMessage(t *testing.T) {
+	for _, args := range []string{`not json`, `{"n":"x"}`} {
+		var target struct{ N int }
+		err := app.ParseToolArgs(json.RawMessage(args), &target)
+		var te app.ToolError
+		if !errors.As(err, &te) {
+			t.Fatalf("ParseToolArgs(%s) = %v, want a ToolError", args, err)
+		}
+		if te.Msg != "The arguments are not valid." {
+			t.Errorf("ParseToolArgs(%s) Msg = %q", args, te.Msg)
+		}
+	}
+}
+
+func TestMarshalToolCompact(t *testing.T) {
+	got, err := app.MarshalTool(struct {
+		A int `json:"a"`
+	}{1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != `{"a":1}` {
+		t.Errorf("MarshalTool = %q, want {\"a\":1}", got)
+	}
+}
+
+func TestCapToolText(t *testing.T) {
+	atLimit := strings.Repeat("é", app.MaxToolText)
+	if got := app.CapToolText(atLimit); got != atLimit {
+		t.Errorf("CapToolText at the limit changed the text (%d runes)", utf8.RuneCountInString(got))
+	}
+
+	const note = "\n\n[Cut at 200,000 characters. Ask for a smaller part.]"
+	over := strings.Repeat("é", app.MaxToolText+1)
+	got := app.CapToolText(over)
+	if want := strings.Repeat("é", app.MaxToolText) + note; got != want {
+		t.Errorf("CapToolText over the limit: got %d runes, want %d runes of é then the note",
+			utf8.RuneCountInString(got), app.MaxToolText)
+	}
+	if n := utf8.RuneCountInString(got); n != app.MaxToolText+utf8.RuneCountInString(note) {
+		t.Errorf("CapToolText rune count = %d", n)
+	}
 }

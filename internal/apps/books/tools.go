@@ -176,7 +176,7 @@ func toolProgress(shelf Shelf, p Progress, format string, pages int) string {
 
 func (a *App) listTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
 	var in listToolArgs
-	if err := parseToolArgs(args, &in); err != nil {
+	if err := app.ParseToolArgs(args, &in); err != nil {
 		return "", err
 	}
 	shelf := ShelfAll
@@ -215,12 +215,12 @@ func (a *App) listTool(ctx context.Context, userID int64, args json.RawMessage) 
 			Progress: toolProgress(it.Shelf, it.Progress, it.Format, it.Pages),
 		})
 	}
-	return marshalTool(out)
+	return app.MarshalTool(out)
 }
 
 func (a *App) getTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
 	var in getToolArgs
-	if err := parseToolArgs(args, &in); err != nil {
+	if err := app.ParseToolArgs(args, &in); err != nil {
 		return "", err
 	}
 	b, err := a.store.Get(ctx, userID, in.ID)
@@ -262,12 +262,12 @@ func (a *App) getTool(ctx context.Context, userID int64, args json.RawMessage) (
 	for _, q := range quotes[:min(recentExtras, len(quotes))] {
 		out.Quotes = append(out.Quotes, quote{Page: q.Page, Text: q.Text})
 	}
-	return marshalTool(out)
+	return app.MarshalTool(out)
 }
 
 func (a *App) statsTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
 	var in statsToolArgs
-	if err := parseToolArgs(args, &in); err != nil {
+	if err := app.ParseToolArgs(args, &in); err != nil {
 		return "", err
 	}
 	year := in.Year
@@ -304,22 +304,5 @@ func (a *App) statsTool(ctx context.Context, userID int64, args json.RawMessage)
 		out.Goal = &g.Target
 	}
 	out.AllTime.Finished, out.AllTime.Pages = st.All.Finished, st.All.Pages
-	return marshalTool(out)
-}
-
-// parseToolArgs decodes a call's arguments; a client may send none at all
-// for a tool whose arguments are all optional.
-func parseToolArgs(args json.RawMessage, into any) error {
-	if len(args) == 0 {
-		return nil
-	}
-	if err := json.Unmarshal(args, into); err != nil {
-		return app.ToolError{Msg: "The arguments are not valid."}
-	}
-	return nil
-}
-
-func marshalTool(v any) (string, error) {
-	b, err := json.Marshal(v)
-	return string(b), err
+	return app.MarshalTool(out)
 }
