@@ -179,3 +179,7 @@ func (s *Server) Issuer() string { return s.publicURL }
 // ResourceURL is the MCP endpoint's resource identifier (RFC 8707), the
 // only resource any token is issued for.
 func (s *Server) ResourceURL() string { return s.publicURL + "/mcp" }
+
+// Store is the server's storage, for the wiring outside this package: the
+// maintenance job's Sweep and the MCP endpoint's Audit.
+func (s *Server) Store() *Store { return s.store }

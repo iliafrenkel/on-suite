@@ -35,6 +35,8 @@ These are non-negotiable. Most are enforced by a test, not just a convention.
   | `github.com/go-shiori/go-readability` | ON Reader's full-article extraction — allowed only in `internal/platform/article/extract.go` |
   | `github.com/open-spaced-repetition/go-fsrs/v4` | ON Flash's review scheduling — allowed in one file only |
   | `github.com/yuin/goldmark` | Markdown rendering for the in-app help at `/help` — allowed only in `internal/platform/help`, enforced by `TestGoldmarkIsContained` |
+  | `authelia.com/provider/oauth2` | the OAuth 2.1 server for AI access — allowed only in `internal/platform/oauth`, enforced by `TestOAuthLibraryIsContained` |
+  | `github.com/modelcontextprotocol/go-sdk`, `github.com/google/jsonschema-go` | the MCP endpoint for AI access — allowed only in `internal/platform/mcp`, enforced by `TestMCPSDKIsContained` |
 
 - **Migrations are forward-only.** There are no down migrations; a mistake
   is fixed by a new migration.

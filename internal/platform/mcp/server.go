@@ -46,8 +46,11 @@ type Deps struct {
 	// Issuer is the authorization server, advertised in the resource
 	// metadata.
 	Issuer string
-	Log    *slog.Logger
-	Now    func() time.Time
+	// Version is the build version, reported to clients as the server's
+	// implementation version.
+	Version string
+	Log     *slog.Logger
+	Now     func() time.Time
 }
 
 const (
@@ -218,7 +221,7 @@ func (s *server) rateLimit(next http.Handler) http.Handler {
 // handful of map inserts, cheap enough to do per request.
 func (s *server) serverFor(r *http.Request) *sdk.Server {
 	c := callerFrom(r)
-	srv := sdk.NewServer(&sdk.Implementation{Name: "onsuite", Title: "ON Suite", Version: "1"}, nil)
+	srv := sdk.NewServer(&sdk.Implementation{Name: "onsuite", Title: "ON Suite", Version: s.deps.Version}, nil)
 	hidden := map[string]bool{}
 	for _, t := range s.tools {
 		if slices.Contains(c.Scopes, t.app.Scope) {

@@ -185,6 +185,9 @@ starts again from **never** whenever ON Suite restarts.
 The jobs are:
 
 - **sweep expired sessions** — clears away sign-ins that have run out.
+- **sweep expired AI tokens** — only when [AI access](#ai-access) is on:
+  clears away assistants' expired sign-ins, and their activity records
+  older than 90 days.
 - **database snapshot** — saves a copy of the whole database to the
   backups folder on the server, keeping the newest 7 unless the server is
   set up to keep a different number.
@@ -228,6 +231,40 @@ way. You can still click **Run now** on a disabled job.
 
 A job that doesn't appear at all belongs to an app that is turned off on
 this server.
+
+## AI access
+
+AI access lets people connect an AI assistant, such as Claude, ChatGPT or
+Gemini, to ON Suite, so the assistant can read their own things (today,
+their ON Books reading log). Each person connects their own assistant and
+chooses what it may do; the [AI assistants guide](ai-assistants.md)
+explains that side.
+
+It's off until you turn it on. It needs three settings, set on the command
+that starts ON Suite or in the server's environment:
+
+- **`--mcp on`** (`ONSUITE_MCP=on`) — turns AI access on. The default is
+  `off`.
+- **`--public-url`** (`ONSUITE_PUBLIC_URL`) — the address people use to
+  reach your ON Suite from the internet, such as
+  `https://on.example.com`. It must start with `https://` and have nothing
+  after the name. AI access won't start without it.
+- **`--oauth-redirect-uris`** (`ONSUITE_OAUTH_REDIRECT_URIS`) — the
+  addresses assistants may send people back to after they allow access,
+  separated by commas. The default already lists Claude's and ChatGPT's,
+  so you only change this to add or remove an assistant. An assistant
+  whose address isn't on the list can't connect.
+
+Restart ON Suite after changing them. The assistants' companies connect
+from their own servers, so your ON Suite must be reachable from the
+internet at the public address.
+
+When AI access is on, the admin page has an **AI access** section. Click
+**Manage AI access →** to open the **AI access** page, which shows the
+**Public URL**, the **Redirect allowlist** and every **Connection**: who
+connected which assistant, what it can do and when it was last used.
+Click **Revoke** to end a connection straight away. ON Suite also runs a
+**sweep expired AI tokens** job (see [Background jobs](#background-jobs)).
 
 ## Command-line tasks
 

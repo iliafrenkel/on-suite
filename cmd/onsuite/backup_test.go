@@ -345,9 +345,6 @@ func TestRegisterMaintenanceRegistersBothJobsEnabled(t *testing.T) {
 	}
 }
 
-// A zero interval disabled runMaintenance entirely, including the session
-// sweep, which `onsuite backup` then takes over. Splitting maintenance into
-// two jobs must not quietly give the sweep a schedule of its own.
 func TestMaintenanceRegistersOAuthSweepOnlyWhenGiven(t *testing.T) {
 	const name = "sweep expired AI tokens"
 	has := func(reg *jobs.Registry) bool {
@@ -385,6 +382,9 @@ func TestMaintenanceRegistersOAuthSweepOnlyWhenGiven(t *testing.T) {
 	}
 }
 
+// A zero interval disabled runMaintenance entirely, including the session
+// sweep, which `onsuite backup` then takes over. Splitting maintenance into
+// two jobs must not quietly give the sweep a schedule of its own.
 func TestRegisterMaintenanceDisablesBothJobsWhenTheIntervalIsZero(t *testing.T) {
 	dir := t.TempDir()
 	handle := testDB(t, dir)

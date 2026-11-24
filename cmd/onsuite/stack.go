@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -15,6 +17,8 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/help"
 	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
 	"github.com/iliafrenkel/on-suite/internal/platform/jobsadmin"
+	"github.com/iliafrenkel/on-suite/internal/platform/mcp"
+	"github.com/iliafrenkel/on-suite/internal/platform/oauth"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/usermgmt"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
@@ -37,6 +41,24 @@ type stackDeps struct {
 	Config  config.Config
 	Jobs    *jobs.Registry
 	Started time.Time
+	// OAuth is the authorization server, from newOAuthServer: set exactly
+	// when Config.MCP is on. serve builds it before the stack because the
+	// maintenance jobs, registered first, need its Sweep.
+	OAuth *oauth.Server
+}
+
+// newOAuthServer builds the authorization server when AI access is on, and
+// returns nil when it is off (spec 2026-11-24-ai-access-mcp-design.md,
+// "Wiring"). HTTPClient is left nil, so CIMD fetches go through the
+// library's client that refuses loopback and private addresses.
+func newOAuthServer(ctx context.Context, handle *sql.DB, cfg config.Config) (*oauth.Server, error) {
+	if !cfg.MCP {
+		return nil, nil
+	}
+	return oauth.New(ctx, handle, oauth.Options{
+		PublicURL:    cfg.PublicURL,
+		RedirectURIs: cfg.OAuthRedirectURIs,
+	})
 }
 
 func buildStack(deps stackDeps) (http.Handler, error) {
@@ -98,6 +120,15 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		deps.Registry.RegisterJobs(deps.Jobs, appDeps)
 	}
 
+	// AI access: the OAuth server and /mcp exist only when it is on, so with
+	// it off every one of their routes is the ordinary 404. After Mount,
+	// because the tools read the stores Mount set up.
+	if deps.Config.MCP {
+		if err := mountAIAccess(mux, routes, authn, csrf, deps, appDeps, rend, errs); err != nil {
+			return nil, err
+		}
+	}
+
 	// The admin page is guarded, and RequireAdmin returns 404 (not 403) so a
 	// non-admin cannot tell it apart from a route that does not exist at
 	// all. ServeMux would undermine that on its own: registering only the
@@ -108,17 +139,18 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	// behind the same guard, and the subtree pattern is narrowed to "{$}" so
 	// it no longer matches "/admin/anything".
 	adminHandler := authn.RequireAdmin(admin.Handler(admin.Deps{
-		Config:  deps.Config,
-		DB:      deps.DB,
-		Users:   deps.Users,
-		Apps:    deps.Registry,
-		Jobs:    deps.Jobs,
-		Routes:  routes,
-		Render:  rend,
-		Errors:  errs,
-		Nav:     deps.Registry.NavItems(),
-		Version: deps.Version,
-		Started: deps.Started,
+		Config:   deps.Config,
+		DB:       deps.DB,
+		Users:    deps.Users,
+		Apps:     deps.Registry,
+		Jobs:     deps.Jobs,
+		Routes:   routes,
+		Render:   rend,
+		Errors:   errs,
+		Nav:      deps.Registry.NavItems(),
+		Version:  deps.Version,
+		Started:  deps.Started,
+		AIAccess: deps.Config.MCP,
 	}))
 	routes.Handle(mux, "GET /admin", false, adminHandler)
 	routes.Handle(mux, "GET /admin/{$}", false, adminHandler)
@@ -126,12 +158,13 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	// User management changes accounts, so it lives beside the read-only
 	// admin page rather than inside it (#310).
 	usermgmt.Routes(mux, routes, authn, usermgmt.Deps{
-		Users:   deps.Users,
-		Render:  rend,
-		Errors:  errs,
-		Log:     deps.Log,
-		Nav:     deps.Registry.NavItems(),
-		Version: deps.Version,
+		Users:    deps.Users,
+		Render:   rend,
+		Errors:   errs,
+		Log:      deps.Log,
+		Nav:      deps.Registry.NavItems(),
+		Version:  deps.Version,
+		AIAccess: deps.Config.MCP,
 	})
 
 	// Running a job on demand starts work, so it lives beside the read-only
@@ -164,6 +197,50 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
 
 	return web.Stack(mux, deps.Log, errs, csrf, authn, deps.HSTS), nil
+}
+
+// mountAIAccess mounts the OAuth authorization server and the MCP endpoint
+// (spec 2026-11-24-ai-access-mcp-design.md, "Wiring"). oauth.Routes exempts
+// its own machine-to-machine endpoints from the CSRF check; /mcp is exempted
+// here, since its callers are AI clients' servers with a bearer token and no
+// cookie, and the bearer check is its guard.
+func mountAIAccess(mux *http.ServeMux, routes *web.Recorder, authn *web.Auth, csrf *web.CSRF,
+	deps stackDeps, appDeps app.Deps, rend *render.Renderer, errs *web.Errors) error {
+	if deps.OAuth == nil {
+		return errors.New("AI access is on but no OAuth server was built")
+	}
+	deps.OAuth.Routes(mux, routes, authn, csrf, oauth.PageDeps{
+		Render:  rend,
+		Errors:  errs,
+		Nav:     deps.Registry.NavItems(),
+		Version: deps.Version,
+		Log:     deps.Log,
+	})
+
+	tools, err := deps.Registry.Tools(appDeps)
+	if err != nil {
+		return err
+	}
+	store := deps.OAuth.Store()
+	csrf.Exempt("/mcp")
+	mcp.Routes(mux, routes, mcp.Deps{
+		Tools:  tools,
+		Verify: deps.OAuth.Verify,
+		// A failed audit write is logged, not returned: the call itself
+		// already happened.
+		Audit: func(ctx context.Context, userID int64, clientName, tool string, ok bool, errorKind string) {
+			if err := store.Audit(ctx, oauth.AuditEntry{
+				UserID: userID, ClientName: clientName, Tool: tool, OK: ok, ErrorKind: errorKind,
+			}); err != nil {
+				deps.Log.Error("mcp: audit failed", "tool", tool, "user", userID, "error", err)
+			}
+		},
+		ResourceURL: deps.OAuth.ResourceURL(),
+		Issuer:      deps.OAuth.Issuer(),
+		Version:     deps.Version,
+		Log:         deps.Log,
+	})
+	return nil
 }
 
 // comingSoonApps lists apps that are specced but not yet built (see
