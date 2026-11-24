@@ -47,7 +47,10 @@ func (s *Server) Routes(mux *http.ServeMux, rec *web.Recorder, authn *web.Auth, 
 	csrf.Exempt("/oauth/token", "/oauth/revoke")
 	rec.Handle(mux, "POST /oauth/token", true,
 		limitIP(s.tokenLimiter, slowDown, http.HandlerFunc(s.token)))
-	rec.Handle(mux, "POST /oauth/revoke", true, http.HandlerFunc(s.revoke))
+	// Revocation looks tokens up in the database for anyone who asks, so it
+	// gets the token endpoint's budget, on a limiter of its own.
+	rec.Handle(mux, "POST /oauth/revoke", true,
+		limitIP(s.revokeLimiter, slowDown, http.HandlerFunc(s.revoke)))
 
 	const register = "POST /oauth/register"
 	web.RegisterBodyLimit(register, registerBodyLimit)

@@ -62,9 +62,9 @@ func (l *limiter) allow(key string) (bool, time.Duration) {
 
 // Per-IP limits (spec "Rate limits"). Registration is the tight one: a real
 // client registers once per connection, so ten an hour is generous, while an
-// open endpoint that inserts rows needs a hard ceiling. Token and
-// authorization are called a few times per connection, so 60 a minute is
-// far above any client and far below a guessing loop.
+// open endpoint that inserts rows needs a hard ceiling. Token, revocation
+// and authorization are called a few times per connection, so 60 a minute
+// is far above any client and far below a guessing loop.
 const (
 	registerLimit  = 10
 	registerWindow = time.Hour

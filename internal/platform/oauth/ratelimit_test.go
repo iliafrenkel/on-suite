@@ -108,7 +108,7 @@ func TestRegisterLimitedPerForwardedClient(t *testing.T) {
 	wantLimited(t, e.doFwd("POST", "/oauth/register", "192.0.2.1:5000", "198.51.100.9", `{}`), true)
 }
 
-func TestTokenAndAuthorizeLimitedPerIP(t *testing.T) {
+func TestTokenAuthorizeAndRevokeLimitedPerIP(t *testing.T) {
 	cases := []struct {
 		name, method, path string
 		json               bool
@@ -116,6 +116,7 @@ func TestTokenAndAuthorizeLimitedPerIP(t *testing.T) {
 		{"token", "POST", "/oauth/token", true},
 		{"authorize GET", "GET", "/oauth/authorize", false},
 		{"authorize POST", "POST", "/oauth/authorize", false},
+		{"revoke", "POST", "/oauth/revoke", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

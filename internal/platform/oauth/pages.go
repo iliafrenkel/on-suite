@@ -73,17 +73,20 @@ func accessLines(granted []string) []accessLine {
 	return out
 }
 
+// grantRows and activityRowsOf show times in the server's zone, as the
+// rest of the suite does (the store hands back UTC), in the admin page's
+// layouts.
 func grantRows(grants []Grant) []grantRow {
 	rows := make([]grantRow, 0, len(grants))
 	for _, g := range grants {
 		row := grantRow{
 			ID: g.ID, Name: g.ClientName, RedirectHost: g.RedirectHost, Username: g.Username,
 			Access:    accessLines(g.Granted),
-			Connected: g.CreatedAt.Format("2006-01-02"),
+			Connected: g.CreatedAt.Local().Format("2006-01-02"),
 			LastUsed:  "never",
 		}
 		if !g.LastUsedAt.IsZero() {
-			row.LastUsed = g.LastUsedAt.Format("2006-01-02 15:04 MST")
+			row.LastUsed = g.LastUsedAt.Local().Format("2006-01-02 15:04 MST")
 		}
 		rows = append(rows, row)
 	}
@@ -94,7 +97,7 @@ func activityRowsOf(entries []AuditEntry) []activityRow {
 	rows := make([]activityRow, 0, len(entries))
 	for _, e := range entries {
 		r := activityRow{
-			When: e.At.Format("2006-01-02 15:04:05 MST"), Assistant: e.ClientName, Tool: e.Tool,
+			When: e.At.Local().Format("2006-01-02 15:04:05 MST"), Assistant: e.ClientName, Tool: e.Tool,
 			OK: e.OK, Result: "ok",
 		}
 		if !e.OK {

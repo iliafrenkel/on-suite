@@ -116,7 +116,18 @@ func (e *pagesEnv) hasGrant(t *testing.T, id string) bool {
 	return err == nil
 }
 
+// localAEST pins the server's zone east of UTC for one test, so the pages
+// prove they show local time like the rest of the suite. Swaps time.Local,
+// so such tests must not run in parallel.
+func localAEST(t *testing.T) {
+	t.Helper()
+	saved := time.Local
+	time.Local = time.FixedZone("AEST", 10*3600)
+	t.Cleanup(func() { time.Local = saved })
+}
+
 func TestAssistantsPageListsOnlyOwnGrants(t *testing.T) {
+	localAEST(t)
 	e := newPagesEnv(t)
 	e.grant(t, "g-ilia", "ilia", "Claude", "books:read", "notes:read", "notes:write")
 	e.grant(t, "g-mia", "mia", "Mia's Secret Bot", "later:read")
@@ -142,8 +153,9 @@ func TestAssistantsPageListsOnlyOwnGrants(t *testing.T) {
 			t.Errorf("page shows someone else's grant (%q)", bad)
 		}
 	}
-	if !strings.Contains(body, "2026-11-24 12:00 UTC") {
-		t.Errorf("last used time missing:\n%s", body)
+	// Touched at 12:00 UTC, which is 22:00 in the server's zone.
+	if !strings.Contains(body, "2026-11-24 22:00 AEST") {
+		t.Errorf("last used time missing or not local:\n%s", body)
 	}
 	// An unused grant says so, in the Last used column.
 	rec = e.get(t, "mia", "/account/assistants")
@@ -205,6 +217,7 @@ func TestDisconnectRevokesOwnGrantOnly(t *testing.T) {
 }
 
 func TestAssistantsPageShowsRecentActivity(t *testing.T) {
+	localAEST(t)
 	e := newPagesEnv(t)
 	base := time.Date(2026, 11, 24, 8, 0, 0, 0, time.UTC)
 	for i := range 55 {
@@ -240,7 +253,7 @@ func TestAssistantsPageShowsRecentActivity(t *testing.T) {
 		t.Fatalf("activity rows = %d, want 50", len(rows))
 	}
 	if !strings.Contains(rows[0], "books_update") || !strings.Contains(rows[0], "error: forbidden") ||
-		!strings.Contains(rows[0], "2026-11-24 10:00:00") || !strings.Contains(rows[0], "Claude") {
+		!strings.Contains(rows[0], "2026-11-24 20:00:00 AEST") || !strings.Contains(rows[0], "Claude") {
 		t.Errorf("newest row = %q", rows[0])
 	}
 	if !strings.Contains(rows[1], "tool_54") || !strings.Contains(rows[1], "ok") {

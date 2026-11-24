@@ -44,7 +44,7 @@ type Server struct {
 
 	// Per-IP limiters, one budget per endpoint (authorize's GET and POST
 	// share one). See ratelimit.go.
-	registerLimiter, tokenLimiter, authorizeLimiter *limiter
+	registerLimiter, tokenLimiter, authorizeLimiter, revokeLimiter *limiter
 }
 
 // Lifespans (spec 2026-11-24-ai-access-mcp-design.md, "Lifetimes"). The
@@ -76,6 +76,7 @@ func New(ctx context.Context, db *sql.DB, opts Options) (*Server, error) {
 		registerLimiter:  newLimiter(registerLimit, registerWindow, now),
 		tokenLimiter:     newLimiter(endpointLimit, endpointWindow, now),
 		authorizeLimiter: newLimiter(endpointLimit, endpointWindow, now),
+		revokeLimiter:    newLimiter(endpointLimit, endpointWindow, now),
 	}
 	for _, u := range opts.RedirectURIs {
 		s.redirects[u] = true
