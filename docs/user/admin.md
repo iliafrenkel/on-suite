@@ -238,9 +238,10 @@ this server.
 
 AI access lets people connect an AI assistant, such as Claude, ChatGPT or
 Gemini, to ON Suite, so the assistant can read, and if the person allows
-it, change their own things (today, their ON Books reading log and ON Notes outline). Each person connects their own assistant and
-chooses what it may do; the [AI assistants guide](ai-assistants.md)
-explains that side.
+it, change their own things (today, their ON Books reading log and ON
+Notes outline). Each person connects their own assistant and chooses what
+it may do; the [AI assistants guide](ai-assistants.md) explains that
+side.
 
 It's off until you turn it on. It needs three settings, set on the command
 that starts ON Suite or in the server's environment:
