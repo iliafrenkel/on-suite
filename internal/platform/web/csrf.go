@@ -35,10 +35,26 @@ const (
 type CSRF struct {
 	secure bool
 	errs   *Errors
+	// exempt holds exact paths that skip verification, e.g. the OAuth token
+	// endpoint, which non-browser clients call with no cookie and which is
+	// authenticated by its own credentials instead.
+	exempt map[string]bool
 }
 
 func NewCSRF(secure bool, errs *Errors) *CSRF {
 	return &CSRF{secure: secure, errs: errs}
+}
+
+// Exempt marks exact request paths as not needing a CSRF token. Matching is
+// exact, never by prefix, so exempting /oauth/token cannot leak onto a
+// sibling route. Call it during setup, before serving.
+func (c *CSRF) Exempt(paths ...string) {
+	if c.exempt == nil {
+		c.exempt = map[string]bool{}
+	}
+	for _, p := range paths {
+		c.exempt[p] = true
+	}
 }
 
 // Middleware issues a token when there is none, verifies it on unsafe
@@ -59,7 +75,7 @@ func (c *CSRF) Middleware(next http.Handler) http.Handler {
 			token = fresh
 		}
 
-		if !safeMethod(r.Method) {
+		if !safeMethod(r.Method) && !c.exempt[r.URL.Path] {
 			ok, err := c.verify(r, token)
 			// A no-JS multipart form (the only path that reads the token
 			// from the body rather than a header) hitting the route's own

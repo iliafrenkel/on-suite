@@ -426,3 +426,26 @@ func TestCSRFMultipartParsingLeavesTheHandlersOwnFieldsReadable(t *testing.T) {
 		t.Errorf("handler saw %q; the middleware did not leave its fields readable", got)
 	}
 }
+
+func TestCSRFExemptPathsSkipCheckOthersDoNot(t *testing.T) {
+	e, _ := testErrors(t)
+	c := web.NewCSRF(false, e)
+	c.Exempt("/oauth/token")
+	h := c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("reached"))
+	}))
+	post := func(path string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
+		return rec
+	}
+	if rec := post("/oauth/token"); rec.Code != http.StatusOK || rec.Body.String() != "reached" {
+		t.Errorf("exempt path: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := post("/oauth/token/x"); rec.Code != http.StatusForbidden {
+		t.Errorf("sub-path: %d, want 403", rec.Code)
+	}
+	if rec := post("/oauth/authorize"); rec.Code != http.StatusForbidden {
+		t.Errorf("other path: %d, want 403", rec.Code)
+	}
+}

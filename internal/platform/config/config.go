@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,6 +28,21 @@ const (
 	defaultTLSHTTPAddr    = ":80"
 	defaultSecureCookies  = false
 	defaultDisableApps    = ""
+	defaultMCP            = "off"
+	defaultPublicURL      = ""
+
+	// defaultOAuthRedirectURIs is the exact-match allowlist of OAuth redirect
+	// URIs the authorization server accepts (spec 2026-11-24-ai-access-mcp-design.md):
+	// one per supported AI client, because dynamic client registration would
+	// otherwise let anyone register an arbitrary redirect.
+	//
+	// UNVERIFIED — confirm before enabling: these are the callbacks as
+	// recalled, not yet checked against
+	//   Claude:  https://claude.com/docs/connectors/building/authentication
+	//   ChatGPT: https://developers.openai.com/apps-sdk/build/auth
+	// Gemini's is added after the P1 exit gate.
+	defaultOAuthRedirectURIs = "https://claude.ai/api/mcp/auth_callback," +
+		"https://chatgpt.com/connector_platform_oauth_redirect"
 )
 
 // Source says where a setting's live value came from.
@@ -86,6 +102,9 @@ var settingSpecs = []struct{ flag, env, def string }{
 	{"tls-http-addr", "ONSUITE_TLS_HTTP_ADDR", defaultTLSHTTPAddr},
 	{"secure-cookies", "ONSUITE_SECURE_COOKIES", strconv.FormatBool(defaultSecureCookies)},
 	{"disable-apps", "ONSUITE_DISABLE_APPS", defaultDisableApps},
+	{"mcp", "ONSUITE_MCP", defaultMCP},
+	{"public-url", "ONSUITE_PUBLIC_URL", defaultPublicURL},
+	{"oauth-redirect-uris", "ONSUITE_OAUTH_REDIRECT_URIS", defaultOAuthRedirectURIs},
 }
 
 // Config is the complete runtime configuration of the server.
@@ -118,6 +137,18 @@ type Config struct {
 	// `serve` ever sets this; export/backup/user build a Config literal
 	// directly and always see every registered app.
 	DisabledApps []string
+
+	// MCP turns on the OAuth authorization server and the MCP endpoint, so AI
+	// clients can reach the suite. Off by default: it exposes new
+	// unauthenticated-by-cookie surface (spec 2026-11-24-ai-access-mcp-design.md).
+	MCP bool
+	// PublicURL is the externally visible origin (https, no path, no trailing
+	// slash). OAuth issuer and resource identifiers are derived from it, so it
+	// must be what the AI client actually connects to, not the listen address.
+	PublicURL string
+	// OAuthRedirectURIs is the exact-match allowlist of redirect URIs; no
+	// patterns, https only.
+	OAuthRedirectURIs []string
 
 	// settings records how each value above was resolved, for the admin page.
 	// It is unexported so a hand-built Config literal reports nothing rather
@@ -171,6 +202,13 @@ func Parse(args []string, getenv func(string) string, errOut io.Writer) (Config,
 	disableAppsRaw := fs.String("disable-apps", envOr(getenv, "ONSUITE_DISABLE_APPS", defaultDisableApps),
 		"comma-separated app IDs to disable for this run (e.g. \"notes,reader\")")
 
+	mcpRaw := fs.String("mcp", envOr(getenv, "ONSUITE_MCP", defaultMCP),
+		"AI access: \"on\" serves the OAuth server and MCP endpoint (needs -public-url), \"off\" does not")
+	publicURLRaw := fs.String("public-url", envOr(getenv, "ONSUITE_PUBLIC_URL", defaultPublicURL),
+		"externally visible https origin of this server, e.g. https://on.example.com; required for -mcp on")
+	redirectURIsRaw := fs.String("oauth-redirect-uris", envOr(getenv, "ONSUITE_OAUTH_REDIRECT_URIS", defaultOAuthRedirectURIs),
+		"comma-separated exact https OAuth redirect URIs AI clients may use")
+
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
 	}
@@ -211,6 +249,30 @@ func Parse(args []string, getenv func(string) string, errOut io.Writer) (Config,
 
 	c.DisabledApps = splitCleanList(*disableAppsRaw)
 
+	// Same "refuse typos" stance as envBool: a mistyped switch must not
+	// quietly leave AI access off (or on).
+	switch strings.TrimSpace(*mcpRaw) {
+	case "on":
+		c.MCP = true
+	case "off", "":
+	default:
+		return Config{}, fmt.Errorf("invalid mcp %q: want \"on\" or \"off\"", *mcpRaw)
+	}
+	publicURL, err := parsePublicURL(*publicURLRaw)
+	if err != nil {
+		return Config{}, err
+	}
+	c.PublicURL = publicURL
+	if c.MCP && c.PublicURL == "" {
+		return Config{}, fmt.Errorf("mcp on requires public-url (an https origin such as https://on.example.com)")
+	}
+	c.OAuthRedirectURIs = splitCleanList(*redirectURIsRaw)
+	for _, raw := range c.OAuthRedirectURIs {
+		if err := checkRedirectURI(raw); err != nil {
+			return Config{}, err
+		}
+	}
+
 	c.settings = collectSettings(fs, getenv, explicit, c)
 
 	return c, nil
@@ -221,15 +283,18 @@ func Parse(args []string, getenv func(string) string, errOut io.Writer) (Config,
 // actually use rather than what was asked for.
 func collectSettings(fs *flag.FlagSet, getenv func(string) string, explicit map[string]bool, c Config) []Setting {
 	live := map[string]string{
-		"addr":            c.Addr,
-		"data-dir":        c.DataDir,
-		"tls-domain":      c.TLSDomain,
-		"log-level":       strings.ToLower(c.LogLevel.String()),
-		"backup-interval": c.BackupInterval.String(),
-		"backup-keep":     strconv.Itoa(c.BackupKeep),
-		"tls-http-addr":   c.TLSHTTPAddr,
-		"secure-cookies":  strconv.FormatBool(c.SecureCookies),
-		"disable-apps":    strings.Join(c.DisabledApps, ","),
+		"addr":                c.Addr,
+		"data-dir":            c.DataDir,
+		"tls-domain":          c.TLSDomain,
+		"log-level":           strings.ToLower(c.LogLevel.String()),
+		"backup-interval":     c.BackupInterval.String(),
+		"backup-keep":         strconv.Itoa(c.BackupKeep),
+		"tls-http-addr":       c.TLSHTTPAddr,
+		"secure-cookies":      strconv.FormatBool(c.SecureCookies),
+		"disable-apps":        strings.Join(c.DisabledApps, ","),
+		"mcp":                 mcpLabel(c.MCP),
+		"public-url":          c.PublicURL,
+		"oauth-redirect-uris": strings.Join(c.OAuthRedirectURIs, ","),
 	}
 
 	described := make(map[string]bool, len(settingSpecs))
@@ -329,6 +394,44 @@ func splitCleanList(raw string) []string {
 		}
 	}
 	return out
+}
+
+func mcpLabel(on bool) string {
+	if on {
+		return "on"
+	}
+	return "off"
+}
+
+// parsePublicURL accepts an empty value (MCP off) or a bare https origin and
+// returns it without a trailing slash. A path or query would make issuer and
+// resource identifiers ambiguous, and http would put OAuth on cleartext.
+func parsePublicURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return "", fmt.Errorf("invalid public-url %q: want an https origin such as https://on.example.com", raw)
+	}
+	if (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return "", fmt.Errorf("invalid public-url %q: must be an origin only, with no path, query or fragment", raw)
+	}
+	return "https://" + u.Host, nil
+}
+
+// checkRedirectURI enforces exact, https-only redirects: a wildcard or a
+// fragment would let a client register a redirect the operator never listed.
+func checkRedirectURI(raw string) error {
+	if strings.Contains(raw, "*") {
+		return fmt.Errorf("invalid oauth-redirect-uris entry %q: patterns are not allowed", raw)
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.Fragment != "" {
+		return fmt.Errorf("invalid oauth-redirect-uris entry %q: want an https URL with no fragment", raw)
+	}
+	return nil
 }
 
 func parseLevel(s string) (slog.Level, error) {

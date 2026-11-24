@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -71,6 +72,7 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 		Log:      log,
 		Version:  version,
 		Secure:   cfg.SecureCookies,
+		HSTS:     cfg.TLSDomain != "" || strings.HasPrefix(cfg.PublicURL, "https://"),
 		Config:   cfg,
 		Jobs:     maintenance,
 		Started:  started,

@@ -28,6 +28,9 @@ type stackDeps struct {
 	Log      *slog.Logger
 	Version  string
 	Secure   bool
+	// HSTS adds Strict-Transport-Security; set when the suite is reached
+	// over HTTPS (built-in TLS or an https public URL).
+	HSTS bool
 	// Config, Jobs and Started exist for the admin page. serve.go is the
 	// only production caller of buildStack, and it is the one that
 	// populates them from the real config, job registry and start time.
@@ -160,7 +163,7 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 	routes.Handle(mux, "GET /{$}", false, authn.RequireUser(homeHandler(deps, rend, errs)))
 	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
 
-	return web.Stack(mux, deps.Log, errs, csrf, authn), nil
+	return web.Stack(mux, deps.Log, errs, csrf, authn, deps.HSTS), nil
 }
 
 // comingSoonApps lists apps that are specced but not yet built (see

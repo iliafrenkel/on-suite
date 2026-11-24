@@ -154,7 +154,7 @@ func newServerWith(t *testing.T, reg *jobs.Registry) *server {
 	routes.Handle(mux, "GET /admin/{$}", false, adminHandler)
 	routes.Handle(mux, "/", true, http.HandlerFunc(errs.NotFound))
 
-	s := &server{handler: web.Stack(mux, log, errs, csrf, authn), cfg: cfg, rend: rend, errs: errs}
+	s := &server{handler: web.Stack(mux, log, errs, csrf, authn, false), cfg: cfg, rend: rend, errs: errs}
 
 	hash := apptest.PasswordHash
 	root, err := users.CreateUser(ctx, "root", hash, true)

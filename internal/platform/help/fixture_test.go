@@ -73,7 +73,7 @@ func newServer(t *testing.T) *server {
 	help.Routes(mux, nil, help.Deps{Pages: pages, Render: rend, Errors: errs, Version: "test"})
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
 
-	s := &server{handler: web.Stack(mux, log, errs, csrf, authn)}
+	s := &server{handler: web.Stack(mux, log, errs, csrf, authn, false)}
 	if _, err := users.CreateUser(ctx, "ilia", apptest.PasswordHash, false); err != nil {
 		t.Fatal(err)
 	}

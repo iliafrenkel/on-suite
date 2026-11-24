@@ -315,7 +315,7 @@ func TestEverySettingIsDescribed(t *testing.T) {
 	want := []string{
 		"addr", "data-dir", "tls-domain", "log-level",
 		"backup-interval", "backup-keep", "tls-http-addr", "secure-cookies",
-		"disable-apps",
+		"disable-apps", "mcp", "public-url", "oauth-redirect-uris",
 	}
 	got := c.Settings()
 	if len(got) != len(want) {
@@ -364,5 +364,71 @@ func TestParseDisabledApps(t *testing.T) {
 				t.Errorf("DisabledApps = %v, want %v", c.DisabledApps, tt.want)
 			}
 		})
+	}
+}
+
+func mcpEnv(m map[string]string) func(string) string {
+	return func(k string) string { return m[k] }
+}
+
+func TestParseMCPNeedsHTTPSPublicURL(t *testing.T) {
+	_, err := Parse(nil, mcpEnv(map[string]string{"ONSUITE_MCP": "on"}), io.Discard)
+	if err == nil {
+		t.Fatal("MCP on without public URL must fail")
+	}
+	_, err = Parse(nil, mcpEnv(map[string]string{"ONSUITE_MCP": "on", "ONSUITE_PUBLIC_URL": "http://on.example.com"}), io.Discard)
+	if err == nil {
+		t.Fatal("http public URL must fail")
+	}
+	_, err = Parse(nil, mcpEnv(map[string]string{"ONSUITE_MCP": "on", "ONSUITE_PUBLIC_URL": "https://on.example.com/x"}), io.Discard)
+	if err == nil {
+		t.Fatal("public URL with a path must fail")
+	}
+	c, err := Parse(nil, mcpEnv(map[string]string{"ONSUITE_MCP": "on", "ONSUITE_PUBLIC_URL": "https://on.example.com/"}), io.Discard)
+	if err != nil || !c.MCP || c.PublicURL != "https://on.example.com" {
+		t.Fatalf("got %+v, %v", c, err)
+	}
+}
+
+func TestParseMCPOffByDefault(t *testing.T) {
+	c, err := Parse(nil, nil, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.MCP {
+		t.Error("MCP must be off by default")
+	}
+}
+
+func TestParseMCPRejectsTypos(t *testing.T) {
+	if _, err := Parse(nil, mcpEnv(map[string]string{"ONSUITE_MCP": "yes"}), io.Discard); err == nil {
+		t.Fatal("ONSUITE_MCP=yes must fail")
+	}
+	if _, err := Parse([]string{"-mcp", "true"}, nil, io.Discard); err == nil {
+		t.Fatal("-mcp true must fail")
+	}
+}
+
+func TestParseRedirectURIsExactAndHTTPS(t *testing.T) {
+	c, err := Parse(nil, nil, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := splitCleanList(defaultOAuthRedirectURIs); !slices.Equal(c.OAuthRedirectURIs, want) || len(want) < 2 {
+		t.Errorf("default = %v, want %v", c.OAuthRedirectURIs, want)
+	}
+
+	c, err = Parse(nil, mcpEnv(map[string]string{"ONSUITE_OAUTH_REDIRECT_URIS": "https://a.example/cb, https://b.example/cb"}), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"https://a.example/cb", "https://b.example/cb"}; !slices.Equal(c.OAuthRedirectURIs, want) {
+		t.Errorf("got %v, want %v", c.OAuthRedirectURIs, want)
+	}
+
+	for _, bad := range []string{"http://a.example/cb", "https://a.example/cb#frag", "*", "https://*.example/cb", "not a url"} {
+		if _, err := Parse(nil, mcpEnv(map[string]string{"ONSUITE_OAUTH_REDIRECT_URIS": bad}), io.Discard); err == nil {
+			t.Errorf("redirect URI %q must fail", bad)
+		}
 	}
 }

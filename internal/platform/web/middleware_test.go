@@ -105,7 +105,7 @@ func TestRequestLogEscalatesServerErrors(t *testing.T) {
 
 func TestSecurityHeaders(t *testing.T) {
 	rec := httptest.NewRecorder()
-	SecurityHeaders()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	SecurityHeaders(false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})).ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 
@@ -124,5 +124,33 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 	if got := rec.Header().Get("Referrer-Policy"); got != "same-origin" {
 		t.Errorf("Referrer-Policy = %q", got)
+	}
+}
+
+func TestSecurityHeadersHSTSOnlyWhenAsked(t *testing.T) {
+	serve := func(hsts bool) http.Header {
+		rec := httptest.NewRecorder()
+		SecurityHeaders(hsts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})).
+			ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+		return rec.Header()
+	}
+	if got := serve(true).Get("Strict-Transport-Security"); got != "max-age=63072000; includeSubDomains" {
+		t.Errorf("HSTS = %q", got)
+	}
+	if got := serve(false).Get("Strict-Transport-Security"); got != "" {
+		t.Errorf("HSTS = %q, want none", got)
+	}
+}
+
+func TestCSPWithFormActionAddsOnlyThatOrigin(t *testing.T) {
+	got := CSPWithFormAction("https://claude.ai")
+	if !strings.Contains(got, "form-action 'self' https://claude.ai;") {
+		t.Errorf("CSP %q lacks the extra form-action origin", got)
+	}
+	strip := func(s string) string {
+		return strings.NewReplacer("form-action 'self' https://claude.ai; ", "", "form-action 'self'; ", "").Replace(s)
+	}
+	if strip(got) != strip(contentSecurityPolicy) {
+		t.Errorf("CSP differs beyond form-action:\n%s\n%s", got, contentSecurityPolicy)
 	}
 }

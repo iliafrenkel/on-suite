@@ -78,7 +78,7 @@ func newServer(t *testing.T, reg *jobs.Registry) *server {
 	})
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
 
-	s := &server{handler: web.Stack(mux, log, errs, csrf, authn), users: users, jobs: reg, logs: logs}
+	s := &server{handler: web.Stack(mux, log, errs, csrf, authn, false), users: users, jobs: reg, logs: logs}
 	if _, err := users.CreateUser(ctx, "root", apptest.PasswordHash, true); err != nil {
 		t.Fatal(err)
 	}
