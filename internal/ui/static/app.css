@@ -2058,6 +2058,46 @@ input.outline-note:focus { outline: none; }
 	margin-left: auto;
 }
 
+/* Phones: a denser outline. At 375px the desktop geometry (3.625rem +
+ * 0.875rem of indent per level, and the "…" menu, chevron and dot all in
+ * front of the text) left level-4 text 0px wide — see
+ * docs/superpowers/specs/2026-11-24-notes-mobile-density-design.md.
+ *
+ * The indent drops to 1.25rem per level, so the guide line now runs under
+ * the parent's chevron (its centre is 0.625rem in) rather than its dot: a
+ * line under the dot would need ≥2.125rem per level.
+ *
+ * The menu moves to the end of the row with `order`, not by moving markup:
+ * its place in the form matters for #57 (Enter → append button stays the
+ * form's first submit button) and #74 (the due input's form= association).
+ * This block sits after the base .outline-menu-list rule so its left/right
+ * override wins at equal specificity. */
+@media (max-width: 780px) {
+	.outline-item .outline-list {
+		margin-left: 0.625rem;
+		padding-left: 0.625rem;
+	}
+	.outline-menu { order: 1; }
+	.outline-menu-list {
+		left: auto;
+		right: 0;
+	}
+	/* The dot is the only way to zoom in, but its box is 1.25rem wide
+	 * around an 8px circle, beside the chevron. An invisible hit area makes
+	 * it ~43px tall without taking layout width: it reaches 1rem down, into
+	 * the row's own empty note-line space under the dot, and sideways only
+	 * into the 0.25rem gaps, so it never covers the chevron (a near miss
+	 * would collapse the row) or the text. Not upwards: at 1.25rem per
+	 * level a first child's dot sits right under the start of its parent's
+	 * note line, and a tap there must still edit the note. */
+	.outline-dot { position: relative; }
+	.outline-dot::before {
+		content: "";
+		position: absolute;
+		inset: 0 -0.25rem -1rem;
+	}
+}
+
 .outline-menu-due {
 	display: flex;
 	align-items: center;
