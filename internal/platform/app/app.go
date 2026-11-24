@@ -400,6 +400,10 @@ type Tool struct {
 	// ReadOnly becomes the readOnlyHint annotation, so clients can skip
 	// confirming reads.
 	ReadOnly bool
+	// Idempotent becomes the idempotentHint annotation: calling the tool
+	// again with the same arguments changes nothing more. Only meaningful
+	// for a write.
+	Idempotent bool
 	// Input is the zero value of the arguments struct. Its JSON tags name the
 	// arguments and its `jsonschema:"…"` tags describe them; the platform
 	// derives the input schema from it.
