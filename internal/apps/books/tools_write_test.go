@@ -185,8 +185,8 @@ func TestBooksFinishBadRatingOrDay(t *testing.T) {
 	uid := tf.s.Alice.User.ID
 	id := tf.reading(t, "Dune", 412)
 	sid := strconv.FormatInt(id, 10)
-	tf.wantToolErr(t, "books_finish", uid, `{"id":`+sid+`,"rating":6}`, "rating must be a whole number from 1 to 5.")
-	tf.wantToolErr(t, "books_finish", uid, `{"id":`+sid+`,"rating":-1}`, "rating must be a whole number from 1 to 5.")
+	tf.wantToolErr(t, "books_finish", uid, `{"id":`+sid+`,"rating":6}`, "Give a rating from 1 to 5.")
+	tf.wantToolErr(t, "books_finish", uid, `{"id":`+sid+`,"rating":-1}`, "Give a rating from 1 to 5.")
 	tf.wantToolErr(t, "books_finish", uid, `{"id":`+sid+`,"day":"`+tf.dayFromToday(t, 1)+`"}`, "That date is in the future.")
 	if got := tf.shelf(t, uid, id); got != books.ShelfReading {
 		t.Errorf("shelf = %q after refused finishes, want reading", got)

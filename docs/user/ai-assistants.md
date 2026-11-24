@@ -67,9 +67,10 @@ The screen is titled **An assistant wants to access your ON Suite**.
   change anything unless you tick one. Untick anything you don't want it
   to have.
 
-An assistant you connected before changes were possible can only read. To
-let it make changes, disconnect it (see below) and connect it again with
-**Update books** ticked.
+An assistant you connected before can only make changes if you ticked
+**Update books** when you connected it. Check **Connected assistants** on
+your Account page to see what each one can do; to change that, disconnect
+it and connect it again.
 
 Only allow what you need. You can change your mind at any time by
 disconnecting and connecting again.

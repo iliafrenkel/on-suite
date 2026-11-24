@@ -134,7 +134,7 @@ func (a *App) finishTool(ctx context.Context, userID int64, args json.RawMessage
 	// The store's checkRating returns a bare ErrInvalid, which the model
 	// would see as "Something went wrong.".
 	if in.Rating < 0 || in.Rating > 5 {
-		return "", app.ToolError{Msg: "rating must be a whole number from 1 to 5."}
+		return "", app.ToolError{Msg: "Give a rating from 1 to 5."}
 	}
 	if err := a.store.FinishReading(ctx, userID, in.ID, strings.TrimSpace(in.Day), in.Rating); err != nil {
 		return "", toolErr(err)

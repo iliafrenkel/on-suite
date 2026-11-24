@@ -484,6 +484,9 @@ func TestMCPBooksWriteNeedsWriteScope(t *testing.T) {
 			t.Errorf("read-only grant lists %s", tool.Name)
 		}
 	}
+	if len(list.Tools) != 3 {
+		t.Errorf("read-only grant lists %d tools, want the 3 read tools", len(list.Tools))
+	}
 	if res, err := call(readOnly, "books_start_reading", map[string]any{"id": dune}); err == nil && !res.IsError {
 		t.Errorf("books_start_reading on a read-only grant succeeded: %q", toolText(t, res))
 	}
