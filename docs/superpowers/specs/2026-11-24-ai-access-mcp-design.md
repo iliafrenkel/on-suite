@@ -74,6 +74,7 @@ options:
 | Library | Status (Nov 2026) | Verdict |
 |---|---|---|
 | `github.com/ory/fosite` | last release v0.49.0, Dec 2024 | Stale; no DCR, CIMD or RFC 8707 |
+| `github.com/go-oauth2/oauth2/v4` | active (v4.6.0, Sep 2026), small | Has auth code, refresh and `ForcePKCE`, but no DCR, CIMD, RFC 8414 metadata, RFC 8707, revocation, or refresh-reuse detection. We would hand-write the security-sensitive parts. Considered and rejected by Ilia |
 | `github.com/zitadel/oidc/v3` | active (v3.53.0) | OIDC-first; DCR belongs to the Zitadel server, not the library |
 | **`authelia.com/provider/oauth2`** | active (v0.4.5, 21 Nov 2026), Apache-2.0, hard fork of fosite | **Chosen.** Implements RFC 7636 PKCE, 7591/7592 DCR, 8414 AS metadata, 8707 resource indicators, 9728 protected resource metadata, 7009 revocation, the RFC 9700 security BCP, and Client ID Metadata Documents (draft-03, opt-in, default resolver in `handler/cimd`) |
 
