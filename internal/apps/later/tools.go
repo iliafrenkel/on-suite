@@ -26,7 +26,7 @@ const articleNotFound = "No article with that ID in Later"
 // work on whatever Mount set up; every call is scoped to the token's user,
 // never to an argument.
 func (a *App) Tools(deps app.Deps) []app.Tool {
-	return []app.Tool{
+	tools := []app.Tool{
 		{
 			Name:  "later_list",
 			Title: "List saved articles",
@@ -56,6 +56,7 @@ func (a *App) Tools(deps app.Deps) []app.Tool {
 			Call:  a.getArticleTool,
 		},
 	}
+	return append(tools, writeTools(a)...)
 }
 
 // Optional arguments carry omitempty so the generated schema does not list

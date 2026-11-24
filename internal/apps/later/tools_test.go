@@ -16,6 +16,7 @@ import (
 const laterNotFoundMsg = "No article with that ID in Later"
 
 type toolFixture struct {
+	app   *later.App
 	s     *server
 	tools map[string]app.Tool
 }
@@ -23,7 +24,7 @@ type toolFixture struct {
 func newToolFixture(t *testing.T) *toolFixture {
 	t.Helper()
 	a := later.New()
-	tf := &toolFixture{s: apptest.NewServer(t, a, later.NewStore), tools: map[string]app.Tool{}}
+	tf := &toolFixture{app: a, s: apptest.NewServer(t, a, later.NewStore), tools: map[string]app.Tool{}}
 	for _, tool := range a.Tools(app.Deps{}) {
 		tf.tools[tool.Name] = tool
 	}
@@ -94,13 +95,19 @@ func (tf *toolFixture) list(t *testing.T, userID int64, args string) listResult 
 
 func TestLaterToolsDeclared(t *testing.T) {
 	tf := newToolFixture(t)
-	if len(tf.tools) != 3 {
-		t.Fatalf("%d tools, want 3", len(tf.tools))
+	if len(tf.tools) != 6 {
+		t.Fatalf("%d tools, want 6", len(tf.tools))
 	}
 	for _, name := range []string{"later_list", "later_search", "later_get_article"} {
 		tool := tf.tools[name]
 		if tool.Scope != "later:read" || !tool.ReadOnly || tool.Input == nil || tool.Description == "" {
 			t.Errorf("%s = %+v, want read-only later:read with input and description", name, tool)
+		}
+	}
+	for name, idem := range map[string]bool{"later_save": false, "later_set_state": true, "later_tag": true} {
+		tool := tf.tools[name]
+		if tool.Scope != "later:write" || tool.ReadOnly || tool.Idempotent != idem || tool.Input == nil || tool.Description == "" {
+			t.Errorf("%s = %+v, want later:write, idempotent=%v", name, tool, idem)
 		}
 	}
 }
