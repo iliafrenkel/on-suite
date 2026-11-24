@@ -5,7 +5,7 @@ minutes, start to finish.*
 
 ## Requirements
 
-- **Go 1.26.6 or newer** — the `go` line in `go.mod`. With an older Go 1.21+
+- **Go 1.27.0 or newer** — the `go` line in `go.mod`. With an older Go 1.21+
   toolchain, `go` downloads the right version for you.
 - Nothing else. No Docker, no Node, no database server: SQLite is the pure-Go
   `modernc.org/sqlite`, so there is no C toolchain to install either.
