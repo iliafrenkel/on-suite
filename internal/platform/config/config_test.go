@@ -390,6 +390,16 @@ func TestParseMCPNeedsHTTPSPublicURL(t *testing.T) {
 	}
 }
 
+func TestParsePublicURLNormalisesHostAndRejectsEmptyPort(t *testing.T) {
+	c, err := Parse(nil, mcpEnv(map[string]string{"ONSUITE_PUBLIC_URL": "https://On.Example.COM:8443/"}), io.Discard)
+	if err != nil || c.PublicURL != "https://on.example.com:8443" {
+		t.Fatalf("got %q, %v", c.PublicURL, err)
+	}
+	if _, err := Parse(nil, mcpEnv(map[string]string{"ONSUITE_PUBLIC_URL": "https://a:"}), io.Discard); err == nil {
+		t.Fatal("empty port must fail")
+	}
+}
+
 func TestParseMCPOffByDefault(t *testing.T) {
 	c, err := Parse(nil, nil, io.Discard)
 	if err != nil {
@@ -414,7 +424,7 @@ func TestParseRedirectURIsExactAndHTTPS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := splitCleanList(defaultOAuthRedirectURIs); !slices.Equal(c.OAuthRedirectURIs, want) || len(want) < 2 {
+	if want := splitCleanList(defaultOAuthRedirectURIs); !slices.Equal(c.OAuthRedirectURIs, want) || len(want) != 3 {
 		t.Errorf("default = %v, want %v", c.OAuthRedirectURIs, want)
 	}
 

@@ -36,12 +36,15 @@ const (
 	// one per supported AI client, because dynamic client registration would
 	// otherwise let anyone register an arbitrary redirect.
 	//
-	// UNVERIFIED — confirm before enabling: these are the callbacks as
-	// recalled, not yet checked against
+	// Sources:
 	//   Claude:  https://claude.com/docs/connectors/building/authentication
 	//   ChatGPT: https://developers.openai.com/apps-sdk/build/auth
+	// ChatGPT uses this stable URI only when the authorization server returns
+	// `iss` in the authorize response (RFC 9207), which ours does; otherwise it
+	// falls back to https://chatgpt.com/connector/oauth/{callback_id}.
 	// Gemini's is added after the P1 exit gate.
 	defaultOAuthRedirectURIs = "https://claude.ai/api/mcp/auth_callback," +
+		"https://claude.com/api/mcp/auth_callback," +
 		"https://chatgpt.com/connector_platform_oauth_redirect"
 )
 
@@ -418,7 +421,12 @@ func parsePublicURL(raw string) (string, error) {
 	if (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return "", fmt.Errorf("invalid public-url %q: must be an origin only, with no path, query or fragment", raw)
 	}
-	return "https://" + u.Host, nil
+	// An empty port ("https://a:") is a typo, and host case never matters, so
+	// normalise it: the issuer must compare equal however it was typed.
+	if strings.HasSuffix(u.Host, ":") {
+		return "", fmt.Errorf("invalid public-url %q: empty port", raw)
+	}
+	return "https://" + strings.ToLower(u.Host), nil
 }
 
 // checkRedirectURI enforces exact, https-only redirects: a wildcard or a
