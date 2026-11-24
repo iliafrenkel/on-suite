@@ -138,6 +138,29 @@ func TestAppsDoNotImportEachOther(t *testing.T) {
 	}
 }
 
+// TestAppsDoNotImportAIAccess: apps take part in AI access only by declaring
+// app.Tool values, whose Call receives the verified user ID (spec
+// 2026-11-24-ai-access-mcp-design.md); tokens, grants and the MCP server
+// are the platform's. An app that imported either package could check
+// scopes its own way or mint access, so not even its tests may.
+func TestAppsDoNotImportAIAccess(t *testing.T) {
+	imports := scan(t)
+	for _, set := range []map[string][]string{imports.prod, imports.test} {
+		for pkg, deps := range set {
+			if appName(pkg) == "" {
+				continue
+			}
+			for _, dep := range deps {
+				for _, banned := range []string{"internal/platform/oauth", "internal/platform/mcp"} {
+					if dep == banned || strings.HasPrefix(dep, banned+"/") {
+						t.Errorf("app package %q imports %q", pkg, dep)
+					}
+				}
+			}
+		}
+	}
+}
+
 // TestPlatformDoesNotImportApps keeps the platform free of app-specific
 // knowledge.
 func TestPlatformDoesNotImportApps(t *testing.T) {
