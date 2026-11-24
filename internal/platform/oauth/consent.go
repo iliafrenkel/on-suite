@@ -142,35 +142,21 @@ func (s *Server) parseAuthorize(w http.ResponseWriter, r *http.Request) (oauth2.
 	return ar, true
 }
 
-// authorize is GET /oauth/authorize: the consent page, or straight back to
-// the client when the user already approved everything asked for.
+// authorize is GET /oauth/authorize. It always shows the consent page and
+// never writes anything: a GET is reachable from any website by a plain
+// link, and the session cookie is SameSite=Lax, so a GET that skipped
+// consent would let any page silently re-authorize the user, replacing
+// (and so disconnecting) their existing connection. Only the CSRF-checked
+// POST records a grant (Ilia's decision in the Task 5 review; this
+// overrides the spec's "Consent screen" skip rule).
 func (s *Server) authorize(d PageDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		me, _ := web.UserFrom(r.Context())
 		ar, ok := s.parseAuthorize(w, r)
 		if !ok {
 			return
 		}
 		redirect := ar.GetRedirectURI()
 		name := clientName(ar.GetClient())
-
-		g, found, err := s.store.GrantFor(r.Context(), me.ID, ar.GetClient().GetID())
-		if err != nil {
-			d.Errors.Internal(w, r, err)
-			return
-		}
-		if found && g.ClientName == name && g.RedirectHost == redirect.Host {
-			if scopes := reusableScopes(g, ar.GetRequestedScopes()); len(scopes) > 0 {
-				// A new request ID makes a new grant row, replacing the old
-				// one and its tokens (one connection per user and client).
-				// CreatedAt resets with it: the 90 days restart from here.
-				s.issue(w, r, d, ar, Grant{
-					ID: ar.GetID(), UserID: me.ID, ClientID: g.ClientID, ClientName: g.ClientName,
-					RedirectHost: g.RedirectHost, Requested: g.Requested, Granted: g.Granted,
-				}, scopes)
-				return
-			}
-		}
 
 		// The browser follows the consent POST's redirect to the client, and
 		// form-action covers that redirect, so this page alone allows the
@@ -188,24 +174,6 @@ func (s *Server) authorize(d PageDeps) http.HandlerFunc {
 			d.Errors.Internal(w, r, err)
 		}
 	}
-}
-
-// reusableScopes decides whether consent can be skipped: only when the
-// request asks for nothing outside what was requested last time (spec,
-// "Consent screen"). The tokens then carry the scopes the user granted that
-// this request asks for. The grant row keeps the user's full decision, so a
-// narrower request does not quietly take scopes away from the next one.
-func reusableScopes(g Grant, requested oauth2.Arguments) []string {
-	var out []string
-	for _, sc := range requested {
-		if !slices.Contains(g.Requested, sc) {
-			return nil
-		}
-		if slices.Contains(g.Granted, sc) {
-			out = append(out, sc)
-		}
-	}
-	return out
 }
 
 // decide is POST /oauth/authorize, the consent decision. The CSRF check has

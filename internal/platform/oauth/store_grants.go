@@ -101,8 +101,9 @@ func (s *Store) UpsertGrant(ctx context.Context, g Grant) error {
 	})
 }
 
-// GrantFor returns the user's grant for a client, if any, so consent can
-// be skipped when nothing new is asked for (spec, "Consent").
+// GrantFor returns the user's grant for a client, if any. Consent is never
+// skipped because of it (see authorize in consent.go): each user and client
+// has at most one connection, and this looks it up.
 func (s *Store) GrantFor(ctx context.Context, userID int64, clientID string) (Grant, bool, error) {
 	g, err := scanGrant(s.q(ctx).QueryRowContext(ctx,
 		`SELECT `+grantColumns+grantFrom+` WHERE g.user_id = ? AND g.client_id = ?`, userID, clientID))

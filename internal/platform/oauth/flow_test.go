@@ -228,14 +228,21 @@ func redirectQuery(t *testing.T, rec *httptest.ResponseRecorder) url.Values {
 	return loc.Query()
 }
 
-// connect runs authorize and consent (when it is shown) and returns a code.
+// connect runs authorize and consent and returns a code.
 func (e *flowEnv) connect(t *testing.T, scope string, allow ...string) string {
 	t.Helper()
 	page := e.getAuthorize(t, e.authorizeQuery(scope, e.srv.ResourceURL()), e.cookies)
-	if page.Code != http.StatusOK {
-		return codeFrom(t, page)
-	}
 	return e.approve(t, page, allow...)
+}
+
+// countGrants counts every grant row, whoever's.
+func (e *flowEnv) countGrants(t *testing.T) int {
+	t.Helper()
+	var n int
+	if err := e.handle.QueryRow(`SELECT count(*) FROM oauth_grants`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 // token posts to the token endpoint with no cookie, as an AI client's
@@ -486,31 +493,56 @@ func TestConsentPostNeedsCSRF(t *testing.T) {
 	})
 }
 
-func TestConsentSkippedWhenNothingNewRequested(t *testing.T) {
+// A GET can be triggered by any website through a plain link, so it must
+// never re-authorize: it shows consent and leaves the existing connection
+// (grant row and tokens) exactly as it was.
+func TestAuthorizeAlwaysShowsConsentAndKeepsExistingGrant(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		e := newFlowEnv(t)
 		const scope = "books:read books:write"
-		e.connect(t, scope, "books:read")
+		_, refresh := e.exchangeOK(t, e.connect(t, scope, "books:read"))
 		first, _ := e.grant(t)
 
-		rec := e.getAuthorize(t, e.authorizeQuery(scope, e.srv.ResourceURL()), e.cookies)
-		code := codeFrom(t, rec)
-		status, body := e.exchange(t, code)
-		tokens(t, status, body)
-		if body["scope"] != "books:read" {
-			t.Errorf("token scope = %v, want books:read (the grant's, not the request's)", body["scope"])
+		page := e.getAuthorize(t, e.authorizeQuery(scope, e.srv.ResourceURL()), e.cookies)
+		if page.Code != http.StatusOK {
+			t.Fatalf("second authorize = %d → %q, want 200 consent page", page.Code, page.Header().Get("Location"))
 		}
+		htmlassert.Parse(t, page.Body.String()).MustHave(`form[action="/oauth/authorize"]`)
+
 		g, ok := e.grant(t)
 		if !ok {
-			t.Fatal("grant gone after a skipped consent")
+			t.Fatal("showing consent removed the existing grant")
 		}
-		if !slices.Equal(g.Granted, first.Granted) || !slices.Equal(g.Requested, first.Requested) {
-			t.Errorf("grant changed: granted %v requested %v, was %v / %v", g.Granted, g.Requested, first.Granted, first.Requested)
+		if g.ID != first.ID || !slices.Equal(g.Granted, first.Granted) || !slices.Equal(g.Requested, first.Requested) {
+			t.Errorf("grant changed: %+v, was %+v", g, first)
+		}
+		e.refreshOK(t, refresh)
+	})
+}
+
+// The hidden fields are the request the user saw; a POST that changes them
+// is re-validated from scratch and refused.
+func TestConsentPostWithTamperedRequestIsRefused(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e := newFlowEnv(t)
+
+		page := e.getAuthorize(t, e.authorizeQuery("books:read", e.srv.ResourceURL()), e.cookies)
+		form := consentForm(t, page, "allow", "books:read")
+		form.Set("resource", "https://elsewhere.example/mcp")
+		if got := redirectQuery(t, e.postForm(t, "/oauth/authorize", form, e.cookies)).Get("error"); got != "invalid_target" {
+			t.Errorf("tampered resource: error = %q, want invalid_target", got)
 		}
 
-		page := e.getAuthorize(t, e.authorizeQuery(scope+" notes:read", e.srv.ResourceURL()), e.cookies)
-		if page.Code != http.StatusOK {
-			t.Errorf("authorize asking for something new = %d, want the consent page", page.Code)
+		page = e.getAuthorize(t, e.authorizeQuery("books:read", e.srv.ResourceURL()), e.cookies)
+		form = consentForm(t, page, "allow", "books:read")
+		form.Set("client_id", "not-a-registered-client")
+		rec := e.postForm(t, "/oauth/authorize", form, e.cookies)
+		if rec.Code < 400 {
+			t.Errorf("tampered client_id = %d → %q, want an error", rec.Code, rec.Header().Get("Location"))
+		}
+
+		if n := e.countGrants(t); n != 0 {
+			t.Errorf("grant rows = %d, want 0 after tampered consents", n)
 		}
 	})
 }
@@ -522,6 +554,11 @@ func TestCodeIsSingleUseAndExpires(t *testing.T) {
 		e.exchangeOK(t, code)
 		status, body := e.exchange(t, code)
 		wantTokenError(t, status, body, "invalid_grant")
+
+		// Just inside the one-minute limit, a code still works.
+		code = e.connect(t, "books:read", "books:read")
+		time.Sleep(59 * time.Second)
+		e.exchangeOK(t, code)
 
 		code = e.connect(t, "books:read", "books:read")
 		time.Sleep(61 * time.Second)
