@@ -557,3 +557,123 @@ func TestMCPBooksWriteNeedsWriteScope(t *testing.T) {
 		t.Errorf("bob's book has %d readings, want 0 (still on Want)", readings)
 	}
 }
+
+// addNote puts a top-level bullet in a user's outline and returns its ID.
+func (e *e2eEnv) addNote(t *testing.T, userID int64, title string) int64 {
+	t.Helper()
+	now := db.FormatTime(time.Now())
+	res, err := e.handle.Exec(`INSERT INTO notes_nodes (user_id, parent_id, position, title, note, created_at, updated_at)
+		VALUES (?, NULL, 0, ?, '', ?, ?)`, userID, title, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func TestMCPNotesTools(t *testing.T) {
+	e := newE2EEnv(t, true)
+	e.addUser(t, "alice")
+	bob := e.addUser(t, "bob")
+	bobsNote := e.addNote(t, bob.ID, "Bob's secret plan")
+	cookies := e.logIn(t, "alice")
+
+	srv := httptest.NewServer(e.handler)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), e2eTimeout)
+	defer cancel()
+
+	call := func(cs *sdk.ClientSession, name string, args map[string]any) *sdk.CallToolResult {
+		t.Helper()
+		res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: name, Arguments: args})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return res
+	}
+	toolNames := func(cs *sdk.ClientSession) []string {
+		t.Helper()
+		list, err := cs.ListTools(ctx, nil)
+		if err != nil {
+			t.Fatalf("tools/list: %v", err)
+		}
+		var names []string
+		for _, tool := range list.Tools {
+			names = append(names, tool.Name)
+		}
+		slices.Sort(names)
+		return names
+	}
+
+	// A books-only grant lists no notes tool.
+	booksOnly := mcpSession(ctx, t, srv.URL, e.connect(t, e.register(t, "Books"), cookies, "books:read"))
+	for _, name := range toolNames(booksOnly) {
+		if strings.HasPrefix(name, "notes_") {
+			t.Errorf("books-only grant lists %s", name)
+		}
+	}
+
+	// notes:read lists the three read tools and no write tool.
+	reader := mcpSession(ctx, t, srv.URL, e.connect(t, e.register(t, "Notes reader"), cookies, "notes:read"))
+	if got, want := toolNames(reader), []string{"notes_due", "notes_get", "notes_search"}; !slices.Equal(got, want) {
+		t.Errorf("notes:read lists %v, want %v", got, want)
+	}
+
+	// notes:read plus notes:write adds and ticks bullets.
+	cs := mcpSession(ctx, t, srv.URL, e.connect(t, e.register(t, "Notes writer"), cookies, "notes:read", "notes:write"))
+	wantAll := []string{"notes_add", "notes_due", "notes_get", "notes_search", "notes_set_done"}
+	if got := toolNames(cs); !slices.Equal(got, wantAll) {
+		t.Errorf("write grant lists %v, want %v", got, wantAll)
+	}
+
+	type added struct {
+		ID int64 `json:"id"`
+	}
+	res := call(cs, "notes_add", map[string]any{"text": "Groceries"})
+	if res.IsError {
+		t.Fatalf("notes_add Groceries: %q", toolText(t, res))
+	}
+	var groceries added
+	if err := json.Unmarshal([]byte(toolText(t, res)), &groceries); err != nil || groceries.ID == 0 {
+		t.Fatalf("notes_add Groceries = %q: %v", toolText(t, res), err)
+	}
+	res = call(cs, "notes_add", map[string]any{"text": "Milk", "parent_id": groceries.ID})
+	if res.IsError {
+		t.Fatalf("notes_add Milk: %q", toolText(t, res))
+	}
+	var milk added
+	if err := json.Unmarshal([]byte(toolText(t, res)), &milk); err != nil || milk.ID == 0 {
+		t.Fatalf("notes_add Milk = %q: %v", toolText(t, res), err)
+	}
+
+	res = call(cs, "notes_get", map[string]any{})
+	if text := toolText(t, res); res.IsError || !strings.Contains(text, "- Groceries") || !strings.Contains(text, "\n  - Milk") {
+		t.Errorf("notes_get = %q (error %v), want Groceries with Milk indented under it", text, res.IsError)
+	}
+
+	res = call(cs, "notes_set_done", map[string]any{"id": milk.ID, "done": true})
+	if text := toolText(t, res); res.IsError || !strings.Contains(text, `"done":true`) {
+		t.Errorf("notes_set_done = %q (error %v), want done true", text, res.IsError)
+	}
+
+	res = call(cs, "notes_search", map[string]any{"query": "milk"})
+	if text := toolText(t, res); res.IsError || !strings.Contains(text, "Milk") || !strings.Contains(text, "Groceries") {
+		t.Errorf("notes_search = %q (error %v), want Milk under Groceries", text, res.IsError)
+	}
+
+	// Bob's bullet is refused as not found and stays not done.
+	res = call(cs, "notes_set_done", map[string]any{"id": bobsNote, "done": true})
+	if text := toolText(t, res); !res.IsError || !strings.Contains(text, "No note with that ID in your outline") {
+		t.Errorf("set_done on bob's note = %q (error %v)", text, res.IsError)
+	}
+	var doneAt sql.NullString
+	if err := e.handle.QueryRow(`SELECT done_at FROM notes_nodes WHERE id = ?`, bobsNote).Scan(&doneAt); err != nil {
+		t.Fatal(err)
+	}
+	if doneAt.Valid {
+		t.Errorf("bob's note done_at = %q, want NULL", doneAt.String)
+	}
+}

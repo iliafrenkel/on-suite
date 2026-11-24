@@ -8,10 +8,16 @@ Today an assistant can read your **ON Books** reading log: your shelves,
 ratings, reviews, notes, quotes and reading stats. If you allow it, it
 can also make changes there: start a book, record your progress, finish
 a book (with a rating), mark one as not finished, and add notes and
-quotes. It can't delete anything. More apps will follow.
+quotes. It can't delete anything.
+
+An assistant can also read your **ON Notes**: it can search your notes,
+read a list or a project, and tell you what's due. If you allow it, it
+can add a new bullet and tick one off as done. It can't delete, move or
+edit your bullets. More apps will follow.
 
 For example, you can say "I'm on page 120 of Dune", "I finished Dune,
-five stars", or "save this quote from Dune: ...".
+five stars", "save this quote from Dune: ...", "add milk to my groceries
+list", "what's due this week?" or "tick off call Sam".
 
 An assistant only ever sees **your** things, never anyone else's in your
 household, and only the parts you allow when you connect it.
@@ -68,7 +74,8 @@ The screen is titled **An assistant wants to access your ON Suite**.
   to have.
 
 An assistant you connected before can only make changes if you ticked
-**Update books** when you connected it. Check **Connected assistants** on
+**Update books** (for ON Books) or **Add notes** (for ON Notes) when you
+connected it. Check **Connected assistants** on
 your Account page to see what each one can do; to change that, disconnect
 it and connect it again.
 
