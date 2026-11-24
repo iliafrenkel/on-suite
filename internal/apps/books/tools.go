@@ -91,6 +91,23 @@ func (a *App) Tools(deps app.Deps) []app.Tool {
 			Input:       dnfToolArgs{},
 			Call:        a.dnfTool,
 		},
+		{
+			Name:  "books_add_note",
+			Title: "Add a note",
+			Description: "Adds the user's own thought about a book, optionally at a page. " +
+				"Use books_add_quote for words copied from the book.",
+			Scope: "books:write",
+			Input: noteToolArgs{},
+			Call:  a.addNoteTool,
+		},
+		{
+			Name:        "books_add_quote",
+			Title:       "Add a quote",
+			Description: "Saves a passage from the book, word for word, optionally with its page.",
+			Scope:       "books:write",
+			Input:       quoteToolArgs{},
+			Call:        a.addQuoteTool,
+		},
 	}
 }
 

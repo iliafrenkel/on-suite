@@ -53,6 +53,7 @@ func TestBooksToolsDeclared(t *testing.T) {
 	}
 	for name, idempotent := range map[string]bool{
 		"books_start_reading": true, "books_update_progress": false, "books_finish": true, "books_mark_dnf": true,
+		"books_add_note": false, "books_add_quote": false,
 	} {
 		tool, ok := tf.tools[name]
 		if !ok {
@@ -62,8 +63,8 @@ func TestBooksToolsDeclared(t *testing.T) {
 			t.Errorf("%s = %+v, want books:write, not read-only, idempotent=%v, with input and description", name, tool, idempotent)
 		}
 	}
-	if len(tf.tools) != 7 {
-		t.Errorf("%d tools, want 7", len(tf.tools))
+	if len(tf.tools) != 9 {
+		t.Errorf("%d tools, want 9", len(tf.tools))
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -197,5 +198,82 @@ func TestBooksMarkDNF(t *testing.T) {
 	id := tf.reading(t, "Dune", 412)
 	if got := tf.callOK(t, "books_mark_dnf", tf.s.Alice.User.ID, idArgs(id)); got.Shelf != "dnf" {
 		t.Errorf("shelf = %q, want dnf", got.Shelf)
+	}
+}
+
+// idOut is a note or quote tool's result.
+type idOut struct {
+	ID     int64 `json:"id"`
+	BookID int64 `json:"book_id"`
+	Page   int   `json:"page"`
+}
+
+func (tf *toolFixture) callID(t *testing.T, name string, userID int64, args string) idOut {
+	t.Helper()
+	out, err := tf.call(t, name, userID, args)
+	if err != nil {
+		t.Fatalf("%s %s: %v", name, args, err)
+	}
+	var r idOut
+	if err := json.Unmarshal([]byte(out), &r); err != nil {
+		t.Fatalf("%v in %s", err, out)
+	}
+	return r
+}
+
+func TestBooksAddNote(t *testing.T) {
+	tf := newToolFixture(t)
+	uid := tf.s.Alice.User.ID
+	id := tf.reading(t, "Dune", 412)
+	r := tf.callID(t, "books_add_note", uid, `{"id":`+strconv.FormatInt(id, 10)+`,"text":"Loved the ending","page":12}`)
+	if r.ID <= 0 || r.BookID != id || r.Page != 12 {
+		t.Errorf("result = %+v, want id > 0, book %d, page 12", r, id)
+	}
+	notes, err := tf.s.Store.Notes(context.Background(), uid, id)
+	if err != nil || len(notes) != 1 || notes[0].ID != r.ID || notes[0].Body != "Loved the ending" || notes[0].Page != 12 {
+		t.Errorf("notes = %+v, %v", notes, err)
+	}
+}
+
+func TestBooksAddQuote(t *testing.T) {
+	tf := newToolFixture(t)
+	uid := tf.s.Alice.User.ID
+	id := tf.reading(t, "Dune", 412)
+	r := tf.callID(t, "books_add_quote", uid, `{"id":`+strconv.FormatInt(id, 10)+`,"text":"Fear is the mind-killer."}`)
+	if r.ID <= 0 || r.BookID != id || r.Page != 0 {
+		t.Errorf("result = %+v, want id > 0, book %d, page 0", r, id)
+	}
+	quotes, err := tf.s.Store.Quotes(context.Background(), uid, id)
+	if err != nil || len(quotes) != 1 || quotes[0].ID != r.ID || quotes[0].Text != "Fear is the mind-killer." || quotes[0].Page != 0 {
+		t.Errorf("quotes = %+v, %v", quotes, err)
+	}
+}
+
+func TestBooksAddNoteRefusals(t *testing.T) {
+	tf := newToolFixture(t)
+	alice, bob := tf.s.Alice.User.ID, tf.s.Bob.User.ID
+	id := tf.reading(t, "Dune", 412)
+	bobs := add(t, tf.s, bob, books.NewBook{BookInput: books.BookInput{Title: "Secret", Pages: 100}, Shelf: books.ShelfReading})
+	sid := strconv.FormatInt(id, 10)
+	tf.wantToolErr(t, "books_add_note", alice, `{"id":`+sid+`,"text":"   "}`, "Write something in the note first.")
+	tf.wantToolErr(t, "books_add_note", alice, `{"id":`+sid+`,"text":"x","page":999}`, "Enter a page from 1 to 412.")
+	tf.wantToolErr(t, "books_add_note", alice, `{"id":`+strconv.FormatInt(bobs, 10)+`,"text":"x"}`, "No book with that ID on your shelves")
+	for _, uid := range []int64{alice, bob} {
+		for _, b := range []int64{id, bobs} {
+			if notes, err := tf.s.Store.Notes(context.Background(), uid, b); err == nil && len(notes) != 0 {
+				t.Errorf("user %d book %d has %d notes, want none", uid, b, len(notes))
+			}
+		}
+	}
+}
+
+func TestBooksAddQuoteTooLong(t *testing.T) {
+	tf := newToolFixture(t)
+	uid := tf.s.Alice.User.ID
+	id := tf.reading(t, "Dune", 412)
+	long := strings.Repeat("a", 5001)
+	tf.wantToolErr(t, "books_add_quote", uid, `{"id":`+strconv.FormatInt(id, 10)+`,"text":"`+long+`"}`, "Keep the quote to 5000 characters or fewer.")
+	if quotes, err := tf.s.Store.Quotes(context.Background(), uid, id); err != nil || len(quotes) != 0 {
+		t.Errorf("quotes = %+v, %v, want none", quotes, err)
 	}
 }
