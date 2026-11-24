@@ -279,7 +279,10 @@ A normal ON Suite page in the shell, with no app chrome:
   model-oriented description saying when to use it.
 - **Results** are compact text or small JSON suited to voice: titles, IDs
   and short fields. Long text is returned only by explicit `*_get` tools,
-  and capped (proposal: 20k characters, with a note when truncated).
+  and capped at **200k characters** (Ilia's decision), with a note when
+  truncated. There is no paging. Almost every article fits, and the user is
+  trusted to know what they're asking for. Client-side limits on result
+  size are the client's concern.
 - **Annotations:** `readOnlyHint` on reads. Writes set
   `destructiveHint=false` and `idempotentHint` where true, so clients can
   decide whether to confirm.
@@ -425,7 +428,7 @@ top of the normal code review.
   the shape of the storage adapter.
 - JSON schema derivation for `Tool.Input` (via the SDK's schema support
   inside `internal/platform/mcp`).
-- Exact rate-limit numbers and the truncation cap.
+- Exact rate-limit numbers.
 - Tool argument names and result formats per phase.
 - Consent page styling within Braun Folio.
 
