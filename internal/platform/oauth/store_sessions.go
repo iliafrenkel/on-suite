@@ -44,6 +44,8 @@ type storedRequest struct {
 	GrantedResource   oauth2.Arguments `json:"granted_resource"`
 	Form              url.Values       `json:"form"`
 	Session           json.RawMessage  `json:"session"`
+	// Claims and authorization details are deliberately not persisted: this
+	// server does no OpenID Connect and no RFC 9396 (RAR).
 }
 
 func encodeRequest(req oauth2.Requester) ([]byte, error) {

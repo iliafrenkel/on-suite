@@ -143,8 +143,10 @@ func (s *Store) inTx(ctx context.Context, fn func(q querier) error) error {
 	if err != nil {
 		return fmt.Errorf("oauth: begin: %w", err)
 	}
+	// Deferred so a panic in fn still releases the database's only
+	// connection; after Commit it is a no-op returning sql.ErrTxDone.
+	defer func() { _ = tx.Rollback() }()
 	if err := fn(tx); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	return tx.Commit()

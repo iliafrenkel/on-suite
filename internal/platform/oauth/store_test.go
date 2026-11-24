@@ -351,6 +351,98 @@ func TestRevokeRefreshTokenRevokesEveryTokenOfRequest(t *testing.T) {
 	}
 }
 
+func TestUpsertGrantNeverRewritesAnotherUsersGrant(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	f.addGrant(t, "g1", f.u1, "c1")
+	f.addGrant(t, "g2", f.u2, "c1")
+
+	hijack := Grant{
+		ID: "g1", UserID: f.u2, ClientID: "c1", ClientName: "Evil",
+		RedirectHost: "evil.example", Requested: []string{"books:write"}, Granted: []string{"books:write"},
+	}
+	if err := f.s.UpsertGrant(ctx, hijack); err == nil {
+		t.Error("UpsertGrant with another user's grant ID succeeded, want an error")
+	}
+	g, err := f.s.Grant(ctx, "g1")
+	if err != nil {
+		t.Fatalf("Grant(g1): %v", err)
+	}
+	if g.UserID != f.u1 || g.ClientName != "Claude" || g.RedirectHost != "claude.ai" || len(g.Granted) != 1 || g.Granted[0] != "books:read" {
+		t.Errorf("g1 = %+v, want it untouched", g)
+	}
+	if _, err := f.s.Grant(ctx, "g2"); err != nil {
+		t.Errorf("Grant(g2): %v, want the failed upsert's delete rolled back", err)
+	}
+}
+
+func TestClientRoundTripAndDelete(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	c, err := f.s.GetClient(ctx, "c1")
+	if err != nil {
+		t.Fatalf("GetClient: %v", err)
+	}
+	rc, ok := c.(*oauth2.DefaultRegisteredClient)
+	if !ok {
+		t.Fatalf("GetClient returned %T, want *oauth2.DefaultRegisteredClient", c)
+	}
+	uris := rc.GetRedirectURIs()
+	if len(uris) != 1 || uris[0] != "https://claude.ai/api/mcp/auth_callback" {
+		t.Errorf("redirect URIs = %v", uris)
+	}
+	if !rc.IsPublic() || rc.TokenEndpointAuthMethod != "none" || rc.ClientName != "Claude" {
+		t.Errorf("public=%v auth method=%q name=%q, want true, none, Claude", rc.IsPublic(), rc.TokenEndpointAuthMethod, rc.ClientName)
+	}
+	if _, err := f.s.GetClient(ctx, "nope"); !errors.Is(err, oauth2.ErrNotFound) {
+		t.Errorf("GetClient(unknown) err = %v, want oauth2.ErrNotFound", err)
+	}
+
+	if err := f.s.CreateClientRegistrationTokenSession(ctx, "reg1", f.request("reg-req", "c1")); err != nil {
+		t.Fatalf("CreateClientRegistrationTokenSession: %v", err)
+	}
+	if _, err := f.s.GetClientRegistrationTokenSession(ctx, "reg1", nil); err != nil {
+		t.Fatalf("GetClientRegistrationTokenSession: %v", err)
+	}
+
+	if err := f.s.DeleteClient(ctx, "c1"); err != nil {
+		t.Fatalf("DeleteClient: %v", err)
+	}
+	if _, err := f.s.GetClient(ctx, "c1"); !errors.Is(err, oauth2.ErrNotFound) {
+		t.Errorf("GetClient after delete err = %v, want oauth2.ErrNotFound", err)
+	}
+	// Counted directly: a Get would fail on the missing client either way.
+	var n int
+	if err := f.handle.QueryRow(`SELECT count(*) FROM oauth_sessions WHERE client_id = 'c1'`).Scan(&n); err != nil {
+		t.Fatalf("count sessions: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("%d session rows left for the deleted client, want its registration token gone", n)
+	}
+	if err := f.s.DeleteClient(ctx, "c1"); !errors.Is(err, oauth2.ErrNotFound) {
+		t.Errorf("second DeleteClient err = %v, want oauth2.ErrNotFound", err)
+	}
+}
+
+func TestInTxReleasesTheConnectionOnPanic(t *testing.T) {
+	f := newFixture(t)
+
+	func() {
+		defer func() { _ = recover() }()
+		_ = f.s.inTx(context.Background(), func(querier) error { panic("boom") })
+	}()
+
+	// The database has one connection; a leaked transaction would hold it
+	// and this read would time out.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := f.s.Grants(ctx, 0); err != nil {
+		t.Fatalf("query after a panicking inTx: %v, want the connection released", err)
+	}
+}
+
 func TestSetPKCEChallengeUsedIsOneShot(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

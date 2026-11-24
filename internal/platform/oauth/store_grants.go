@@ -81,18 +81,23 @@ func (s *Store) UpsertGrant(ctx context.Context, g Grant) error {
 			g.UserID, g.ClientID, g.ID); err != nil {
 			return fmt.Errorf("oauth: replace grant: %w", err)
 		}
-		if _, err := q.ExecContext(ctx,
+		res, err := q.ExecContext(ctx,
 			`INSERT INTO oauth_grants
 			   (id, user_id, client_id, client_name, redirect_host, requested_scopes, granted_scopes, created_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT (id) DO UPDATE SET
 			   client_name = excluded.client_name, redirect_host = excluded.redirect_host,
-			   requested_scopes = excluded.requested_scopes, granted_scopes = excluded.granted_scopes`,
+			   requested_scopes = excluded.requested_scopes, granted_scopes = excluded.granted_scopes
+			 WHERE oauth_grants.user_id = excluded.user_id AND oauth_grants.client_id = excluded.client_id`,
 			g.ID, g.UserID, g.ClientID, g.ClientName, g.RedirectHost,
-			strings.Join(g.Requested, " "), strings.Join(g.Granted, " "), formatTime(created)); err != nil {
+			strings.Join(g.Requested, " "), strings.Join(g.Granted, " "), formatTime(created))
+		if err != nil {
 			return fmt.Errorf("oauth: upsert grant: %w", err)
 		}
-		return nil
+		// An ID already held by another user or client is never rewritten:
+		// the guarded update changes nothing, and failing here rolls back the
+		// delete above too, so the caller learns consent was not recorded.
+		return requireRow(res, fmt.Errorf("oauth: upsert grant: id %q belongs to another user or client", g.ID))
 	})
 }
 
