@@ -102,12 +102,12 @@ containment") and upgrade deliberately.
 | Default ticks | On the consent screen, requested **read** scopes come ticked and requested **write** scopes come unticked. The user opts into writes. A request with no `scope` is treated as all four read scopes (Ilia's decision) |
 | Consent | Always shown, on every authorization request (changed during P1: no skip for a returning client). Shows the redirect host first, then the client name, and the scopes |
 | Users | Every user can connect |
-| On/off | Off by default. Enabled with `ONSUITE_MCP=on`, and needs `ONSUITE_PUBLIC_URL`. Env-only, like every other setting (no runtime toggle, no settings table). With it off, the `/oauth/*`, `/mcp` and well-known routes aren't mounted, and existing grants stay dormant until it is turned back on. The admin can still revoke them from `/admin` |
+| On/off | Off by default. Enabled with `ONSUITE_MCP=on`, and needs `ONSUITE_PUBLIC_URL`. Env-only, like every other setting (no runtime toggle, no settings table). With it off, the `/oauth/*`, `/mcp` and well-known routes aren't mounted, and existing grants stay dormant until it is turned back on. Nothing AI-related is mounted while it is off, `/admin/ai` and `/account/assistants` included, so revoking a connection from those pages works only while it is on; a password change revokes the user's grants either way (changed during P1) |
 | Clients | Cloud-hosted assistants only (Claude, ChatGPT, Gemini connectors), all with fixed HTTPS callbacks. Loopback-callback clients (Claude Code, MCP Inspector, `http://localhost:<port>`) are **out of scope**, because they would need port-agnostic loopback matching that breaks the exact-match rule |
 | Account changes | A password change (by the user, the admin, or the CLI reset) and user deletion revoke **all** the user's grants, like sessions today. The `/account` page then shows no connected assistants, so the user sees the effect |
 | Management | "Connected assistants" page at `/account/assistants` (list, scopes, last used, revoke), linked from `/account`. "AI access" admin page at `/admin/ai` (all grants, revoke, allowlist view), linked from `/admin` (changed during P1: own pages, not sections) |
-| Audit | A table of every tool call (user, client, tool, ok/error, time), shown on `/account`, kept 90 days |
-| Rate limits | Per-IP limits on `/oauth/*`; per-grant limits on `/mcp` |
+| Audit | A table of every tool call (user, client, tool, ok/error, time), shown on `/account/assistants` (changed during P1), kept 90 days |
+| Rate limits | Per-IP limits on `/oauth/*`; per-grant limits on `/mcp`. The IP is the right-most `X-Forwarded-For` entry when the peer is loopback (the documented same-host proxy), the peer address otherwise (changed during P1) |
 | Deletes | None. Every write is small and reversible in the UI |
 | Untrusted text | Article text from Reader and Later goes back clearly marked as third-party content |
 
@@ -122,7 +122,9 @@ containment") and upgrade deliberately.
     `/oauth/authorize` (GET shows consent, POST decides), `/oauth/token`,
     `/oauth/register` and `/oauth/revoke`
   - the CIMD resolver config
-  - a `Verify(ctx, bearer) (Grant, error)` function that `/mcp` uses
+  - a `Verify(ctx, bearer) (Caller, error)` function that `/mcp` uses
+    (changed during P1: it returns a `Caller` — user, grant, client name,
+    scopes, expiry — rather than the stored grant)
 - `internal/platform/mcp` is the only importer of
   `github.com/modelcontextprotocol/go-sdk`. It:
   - builds the MCP server from tools contributed by apps
@@ -200,9 +202,11 @@ Extend `internal/arch/arch_test.go` following `TestReadabilityIsContained`:
 New migration `0003_oauth.sql` in `internal/platform/auth/migrations` (or a
 new `oauth` namespace; the builder decides). Tables, in outline:
 
-- `oauth_clients`: client ID, kind (`dcr` or `cimd`), name, redirect URIs,
-  metadata JSON, created_at, last_seen_at. CIMD rows are a cache of
-  fetched documents, refreshed per the library's cache policy.
+- `oauth_clients`: dynamically registered clients only — client ID, the
+  library's client as JSON, created_at (changed during P1: no kind, name,
+  redirect URIs or last_seen_at; nothing read them). CIMD clients live in
+  `oauth_cimd`, the library's cache of fetched documents, refreshed per its
+  cache policy.
 - `oauth_grants`: one per (user, client), with granted scopes, created_at,
   last_used_at and revoked_at. This is what the user sees and revokes.
 - `oauth_sessions`: the library's request/session records (codes, PKCE,
@@ -225,7 +229,13 @@ deleting the user's `oauth_grants` rows in the same transaction. The
 builder picks one.
 
 A maintenance job beside the session sweep (`registerMaintenance`)
-deletes expired codes and tokens and audit rows older than 90 days.
+deletes expired codes and tokens and audit rows older than 90 days. It also
+deletes (changed during P1) grants with no access or refresh token left,
+once they are more than 10 minutes old (younger ones may be mid-consent or
+mid-code-exchange), and registered clients more than 24 hours old that no
+grant points at, with their registration tokens. `onsuite backup` runs the
+same sweep, as it does the session sweep, for deployments that set
+`--backup-interval 0`; it runs whether or not AI access is on.
 
 ### Redirect URI allowlist
 
@@ -377,7 +387,14 @@ and those pages have no extension point.
 A new small in-memory limiter, reusing the `AttemptLimiter` style:
 
 - `/oauth/register`: 10/hour per IP.
-- `/oauth/token`, `/oauth/authorize`: 60/min per IP.
+- `/oauth/token`, `/oauth/authorize`, `/oauth/revoke`: 60/min per IP
+  (changed during P1: revoke added).
+
+"Per IP" (changed during P1) uses `web.ClientIP`, shared with the login
+limiter: when the peer is loopback, the right-most `X-Forwarded-For` entry
+(the address the same-host proxy appended), otherwise the peer address. A
+forwarded header from any other peer is ignored, so it cannot buy a fresh
+budget. The proxy must append to `X-Forwarded-For`, as Caddy does.
 - `/mcp`: 120/min per grant.
 
 Over the limit returns 429 with `Retry-After`. Proposed numbers; the

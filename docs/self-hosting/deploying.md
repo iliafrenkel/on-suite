@@ -109,6 +109,20 @@ answers ACME challenges and redirects to HTTPS. If port 80 is unavailable, pass
 alone. Both ports are privileged, so the unit needs
 `AmbientCapabilities=CAP_NET_BIND_SERVICE`.
 
+## AI access
+
+AI access (people connecting Claude, ChatGPT or Gemini to their own data)
+is off by default. To turn it on, set `ONSUITE_MCP=on` and
+`ONSUITE_PUBLIC_URL=https://on.example.com` (or `--mcp on` and
+`--public-url`) and restart. The assistants' companies connect from their
+own servers, so the public URL must be reachable from the internet, and
+the proxy must pass `/.well-known/*`, `/oauth/*` and `/mcp` through
+unchanged — no rewriting, no extra authentication in front of them. The
+Caddy configuration above already does. The per-visitor limits on those
+endpoints rely on `X-Forwarded-For` as described above. The
+[admin guide](../user/admin.md#ai-access) covers the redirect allowlist
+and managing connections.
+
 ## Time zone
 
 Anything that works in calendar days follows the server's time zone: ON Notes'

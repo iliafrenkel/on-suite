@@ -249,7 +249,8 @@ labels — the title prefix covers that.
   `TestOAuthLibraryIsContained`) plus `github.com/modelcontextprotocol/go-sdk`
   and `github.com/google/jsonschema-go` (contained to
   `internal/platform/mcp`, enforced by `TestMCPSDKIsContained`)); adding a
-  new one is a spec change, not just an implementation detail.- Migrations are forward-only — no down migrations.
+  new one is a spec change, not just an implementation detail.
+- Migrations are forward-only — no down migrations.
 - This is a personal project with an opinionated design — open an issue or
   discussion before a large PR, especially anything touching a dependency,
   a build step, or the platform/app boundary.

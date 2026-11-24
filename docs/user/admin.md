@@ -250,7 +250,10 @@ that starts ON Suite or in the server's environment:
 - **`--public-url`** (`ONSUITE_PUBLIC_URL`) — the address people use to
   reach your ON Suite from the internet, such as
   `https://on.example.com`. It must start with `https://` and have nothing
-  after the name. AI access won't start without it.
+  after the name. AI access won't start without it. With an `https://`
+  public URL (or `--tls-domain`), ON Suite tells browsers to use HTTPS
+  only (HSTS) for two years, for that name and every name under it, so
+  pick a name where all of those already work over HTTPS.
 - **`--oauth-redirect-uris`** (`ONSUITE_OAUTH_REDIRECT_URIS`) — the
   addresses assistants may send people back to after they allow access,
   separated by commas. The default lists Claude's and ChatGPT's, so those
