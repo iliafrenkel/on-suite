@@ -199,24 +199,58 @@ func (s *Store) RecentAudit(ctx context.Context, userID int64, n int) ([]AuditEn
 	return out, rows.Err()
 }
 
+// Sweep grace periods (spec, "Storage", changed during P1). A grant is
+// written at consent, before the client exchanges its code, so a grant
+// with no tokens yet is normal for the code's one-minute life; ten minutes
+// leaves ample room. A registered client is expected to connect soon after
+// registering; a day without a grant means it never will.
+const (
+	deadGrantGrace    = 10 * time.Minute
+	orphanClientGrace = 24 * time.Hour
+)
+
 // Sweep deletes what has expired: code and token sessions, redeemed PKCE
 // challenges, cached CIMD documents, and audit rows older than 90 days
 // (spec, "Storage": the maintenance job). It returns how many rows went.
 // Inactive refresh tokens stay until they expire, so a reuse is still
 // detected until then.
+//
+// It then clears what can never be used again: grants left with no access
+// or refresh token (a dead connection would otherwise sit on /account for
+// ever), and registered clients no grant points at after a day, with their
+// registration tokens (open registration would otherwise accumulate rows).
+// The order matters: tokens expiring in this sweep can leave their grant
+// dead, and that grant's removal can orphan its client, all in one pass.
 func (s *Store) Sweep(ctx context.Context) (int, error) {
 	now := s.now()
 	cutoff := formatTime(now)
-	steps := []struct{ query, arg string }{
-		{`DELETE FROM oauth_sessions WHERE expires_at < ?`, cutoff},
-		{`DELETE FROM oauth_pkce_used WHERE expires_at < ?`, cutoff},
-		{`DELETE FROM oauth_cimd WHERE expires_at < ?`, cutoff},
-		{`DELETE FROM mcp_audit WHERE at < ?`, formatTime(now.Add(-auditRetention))},
+	orphanCutoff := formatTime(now.Add(-orphanClientGrace))
+	steps := []struct {
+		query string
+		args  []any
+	}{
+		{`DELETE FROM oauth_sessions WHERE expires_at < ?`, []any{cutoff}},
+		{`DELETE FROM oauth_pkce_used WHERE expires_at < ?`, []any{cutoff}},
+		{`DELETE FROM oauth_cimd WHERE expires_at < ?`, []any{cutoff}},
+		{`DELETE FROM mcp_audit WHERE at < ?`, []any{formatTime(now.Add(-auditRetention))}},
+		{`DELETE FROM oauth_grants WHERE created_at < ? AND NOT EXISTS (
+		    SELECT 1 FROM oauth_sessions s
+		    WHERE s.grant_id = oauth_grants.id AND s.kind IN ('access', 'refresh'))`,
+			[]any{formatTime(now.Add(-deadGrantGrace))}},
+		// Registration tokens first, while the client rows that identify
+		// them still exist.
+		{`DELETE FROM oauth_sessions WHERE kind = 'registration' AND client_id IN (
+		    SELECT c.id FROM oauth_clients c WHERE c.created_at < ?
+		    AND NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = c.id))`,
+			[]any{orphanCutoff}},
+		{`DELETE FROM oauth_clients WHERE created_at < ? AND NOT EXISTS (
+		    SELECT 1 FROM oauth_grants g WHERE g.client_id = oauth_clients.id)`,
+			[]any{orphanCutoff}},
 	}
 	total := 0
 	err := s.inTx(ctx, func(q querier) error {
 		for _, step := range steps {
-			res, err := q.ExecContext(ctx, step.query, step.arg)
+			res, err := q.ExecContext(ctx, step.query, step.args...)
 			if err != nil {
 				return fmt.Errorf("oauth: sweep: %w", err)
 			}

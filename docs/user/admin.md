@@ -186,8 +186,10 @@ The jobs are:
 
 - **sweep expired sessions** — clears away sign-ins that have run out.
 - **sweep expired AI tokens** — only when [AI access](#ai-access) is on:
-  clears away assistants' expired sign-ins, and their activity records
-  older than 90 days.
+  clears away assistants' expired sign-ins, connections that have no
+  sign-in left, assistants that registered but never connected within a
+  day, and activity records older than 90 days. If the server is set up
+  to take backups some other way, `onsuite backup` does this instead.
 - **database snapshot** — saves a copy of the whole database to the
   backups folder on the server, keeping the newest 7 unless the server is
   set up to keep a different number.

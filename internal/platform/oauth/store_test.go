@@ -559,3 +559,119 @@ func TestSweepRemovesExpiredAndOldAudit(t *testing.T) {
 		t.Errorf("audit after sweep = %+v, want only the 89-day-old row", audit)
 	}
 }
+
+// A grant whose last access and refresh rows are gone is a dead connection:
+// nothing can use it again, so the sweep drops it from /account. One still
+// inside its first ten minutes may be mid-consent or mid-code-exchange and
+// is kept.
+func TestSweepRemovesDeadGrants(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	start := f.now
+
+	f.addGrant(t, "live-refresh", f.u1, "c1")
+	if err := f.s.CreateRefreshTokenSession(ctx, "rt", "", f.request("live-refresh", "c1")); err != nil {
+		t.Fatalf("CreateRefreshTokenSession: %v", err)
+	}
+	f.addClient(t, "c2")
+	f.addGrant(t, "live-access", f.u1, "c2")
+	if err := f.s.CreateAccessTokenSession(ctx, "at", f.request("live-access", "c2")); err != nil {
+		t.Fatalf("CreateAccessTokenSession: %v", err)
+	}
+	f.addClient(t, "c3")
+	f.addGrant(t, "dead", f.u1, "c3")
+	f.addClient(t, "c4")
+	f.addGrant(t, "expired", f.u2, "c4")
+	expiring := f.request("expired", "c4")
+	expiring.Session.SetExpiresAt(oauth2.AccessToken, start.Add(5*time.Minute))
+	if err := f.s.CreateAccessTokenSession(ctx, "at-old", expiring); err != nil {
+		t.Fatalf("CreateAccessTokenSession: %v", err)
+	}
+	// Created so it is exactly ten minutes old when the sweep runs: still
+	// young enough to keep.
+	f.now = start.Add(5 * time.Minute)
+	f.addClient(t, "c5")
+	f.addGrant(t, "young", f.u2, "c5")
+
+	f.now = start.Add(15 * time.Minute)
+	if _, err := f.s.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	for _, id := range []string{"live-refresh", "live-access", "young"} {
+		if _, err := f.s.Grant(ctx, id); err != nil {
+			t.Errorf("Grant(%s): %v, want kept", id, err)
+		}
+	}
+	// "expired" loses its only token to the same sweep, so it goes too.
+	for _, id := range []string{"dead", "expired"} {
+		if _, err := f.s.Grant(ctx, id); !errors.Is(err, ErrNotFound) {
+			t.Errorf("Grant(%s) err = %v, want swept", id, err)
+		}
+	}
+
+	f.now = start.Add(15*time.Minute + time.Second)
+	if _, err := f.s.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if _, err := f.s.Grant(ctx, "young"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Grant(young) one second past ten minutes err = %v, want swept", err)
+	}
+}
+
+// A registered client nobody connected with within a day is noise from an
+// abandoned or hostile registration; the sweep drops it and its RFC 7592
+// registration token. A client with a grant, or a younger one, is kept.
+func TestSweepRemovesOrphanClients(t *testing.T) {
+	f := newFixture(t) // c1, created at start
+	ctx := context.Background()
+	start := f.now
+
+	registration := func(sig, clientID string) {
+		t.Helper()
+		if err := f.s.CreateClientRegistrationTokenSession(ctx, sig, f.request("reg-"+clientID, clientID)); err != nil {
+			t.Fatalf("CreateClientRegistrationTokenSession: %v", err)
+		}
+	}
+	registration("reg1", "c1")
+	f.addClient(t, "used")
+	registration("reg-used", "used")
+	f.addGrant(t, "g-used", f.u1, "used")
+	if err := f.s.CreateRefreshTokenSession(ctx, "rt", "", f.request("g-used", "used")); err != nil {
+		t.Fatalf("CreateRefreshTokenSession: %v", err)
+	}
+	f.now = start.Add(time.Hour)
+	f.addClient(t, "young")
+	registration("reg-young", "young")
+
+	// c1 is exactly 24h old: kept.
+	f.now = start.Add(24 * time.Hour)
+	if _, err := f.s.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	for _, id := range []string{"c1", "used", "young"} {
+		if _, err := f.s.GetClient(ctx, id); err != nil {
+			t.Errorf("GetClient(%s) at 24h: %v, want kept", id, err)
+		}
+	}
+
+	f.now = start.Add(24*time.Hour + time.Second)
+	if _, err := f.s.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if _, err := f.s.GetClient(ctx, "c1"); !errors.Is(err, oauth2.ErrNotFound) {
+		t.Errorf("GetClient(c1) err = %v, want swept", err)
+	}
+	if _, err := f.s.GetClientRegistrationTokenSession(ctx, "reg1", nil); !errors.Is(err, oauth2.ErrNotFound) {
+		t.Errorf("c1 registration token err = %v, want swept with the client", err)
+	}
+	for _, id := range []string{"used", "young"} {
+		if _, err := f.s.GetClient(ctx, id); err != nil {
+			t.Errorf("GetClient(%s): %v, want kept", id, err)
+		}
+	}
+	for _, sig := range []string{"reg-used", "reg-young"} {
+		if _, err := f.s.GetClientRegistrationTokenSession(ctx, sig, nil); err != nil {
+			t.Errorf("registration token %s: %v, want kept", sig, err)
+		}
+	}
+}

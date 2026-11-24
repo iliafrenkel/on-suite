@@ -132,6 +132,58 @@ func TestBackupCmdSweepsExpiredSessions(t *testing.T) {
 	}
 }
 
+// With --backup-interval 0 the server's "sweep expired AI tokens" job never
+// runs either, so `onsuite backup` takes over that sweep too. It runs
+// whether or not AI access is on: the tables always exist (migration 0003),
+// and a server that once had it on may still hold rows to clear.
+func TestBackupCmdSweepsAITables(t *testing.T) {
+	for _, mcp := range []string{"off", "on"} {
+		t.Run("mcp "+mcp, func(t *testing.T) {
+			dir := seedDatabase(t)
+			handle, err := db.Open(filepath.Join(dir, "onsuite.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var userID int64
+			if err := handle.QueryRow("SELECT id FROM users LIMIT 1").Scan(&userID); err != nil {
+				t.Fatal(err)
+			}
+			old := db.FormatTime(time.Now().Add(-100 * 24 * time.Hour))
+			if _, err := handle.Exec(
+				`INSERT INTO mcp_audit (user_id, client_name, tool, ok, at) VALUES (?, 'Claude', 'books_list', 1, ?)`,
+				userID, old); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := handle.Exec(
+				`INSERT INTO oauth_clients (id, data, created_at) VALUES ('orphan', x'7b7d', ?)`, old); err != nil {
+				t.Fatal(err)
+			}
+			if err := handle.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			env := map[string]string{"ONSUITE_MCP": mcp}
+			var out bytes.Buffer
+			if err := backupCmd([]string{"--data-dir", dir}, func(k string) string { return env[k] }, &out, io.Discard); err != nil {
+				t.Fatalf("backupCmd: %v", err)
+			}
+			if !strings.Contains(out.String(), "Swept 2 expired AI access rows") {
+				t.Errorf("output %q does not report the AI sweep", out.String())
+			}
+
+			handle = testDB(t, dir)
+			var left int
+			if err := handle.QueryRow(
+				`SELECT (SELECT count(*) FROM mcp_audit) + (SELECT count(*) FROM oauth_clients)`).Scan(&left); err != nil {
+				t.Fatal(err)
+			}
+			if left != 0 {
+				t.Errorf("%d AI rows remain, want the old audit row and the orphan client swept", left)
+			}
+		})
+	}
+}
+
 func TestBackupCmdOutFlag(t *testing.T) {
 	dir := seedDatabase(t)
 	target := filepath.Join(t.TempDir(), "explicit.db")

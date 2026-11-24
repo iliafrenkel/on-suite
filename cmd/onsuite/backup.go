@@ -19,6 +19,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
+	"github.com/iliafrenkel/on-suite/internal/platform/oauth"
 )
 
 // snapshotPrefix and snapshotSuffix bracket a generated snapshot name. Only
@@ -62,6 +63,16 @@ func backupCmd(args []string, getenv func(string) string, out, errOut io.Writer)
 		return fmt.Errorf("backup: sweep expired sessions: %w", err)
 	} else if swept > 0 {
 		fmt.Fprintf(out, "Swept %d expired sessions\n", swept)
+	}
+	// The same gap applies to the "sweep expired AI tokens" job (spec
+	// 2026-11-24-ai-access-mcp-design.md, "Storage"). It runs whether or
+	// not AI access is on: migration 0003 always creates the tables, a
+	// server that had it on earlier may still hold rows, and on empty
+	// tables it does nothing.
+	if swept, err := oauth.NewStore(handle, time.Now).Sweep(ctx); err != nil {
+		return fmt.Errorf("backup: sweep AI access tables: %w", err)
+	} else if swept > 0 {
+		fmt.Fprintf(out, "Swept %d expired AI access rows\n", swept)
 	}
 
 	if *outPath != "" {
@@ -163,7 +174,7 @@ func pruneSnapshots(dir string, keep int) (int, error) {
 // All take cfg.BackupInterval, so --backup-interval 0 disables all, exactly
 // as the single runMaintenance ticker did before: a deployment that drives
 // snapshots from cron or a systemd timer runs `onsuite backup`, which sweeps
-// sessions itself (see backupCmd). Giving the sweep a schedule of its own
+// sessions and the AI access tables itself (see backupCmd). Giving the sweep a schedule of its own
 // would be a behaviour change, not a refactor.
 //
 // Naming the two halves is the point of the split: the admin page can say
@@ -203,7 +214,7 @@ func registerMaintenance(
 	if oauthSweep != nil {
 		reg.Register(
 			"sweep expired AI tokens",
-			"Deletes expired AI authorization codes and sessions, and audit rows older than 90 days, so those tables do not grow forever.",
+			"Deletes expired AI authorization codes and sessions, connections with no tokens left, registered clients nobody connected with in a day, and audit rows older than 90 days, so those tables do not grow forever.",
 			cfg.BackupInterval,
 			func(ctx context.Context) error {
 				swept, err := oauthSweep(ctx)
