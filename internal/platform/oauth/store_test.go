@@ -314,7 +314,7 @@ func TestRotateRefreshTokenThenGetReturnsInactiveWithRequester(t *testing.T) {
 	}
 }
 
-func TestRevokeRefreshTokenRevokesEveryTokenOfRequest(t *testing.T) {
+func TestRevokeRefreshTokenRevokesTheWholeGrant(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
@@ -335,9 +335,16 @@ func TestRevokeRefreshTokenRevokesEveryTokenOfRequest(t *testing.T) {
 	if err := f.s.RevokeAccessToken(ctx, "g1"); err != nil {
 		t.Fatalf("RevokeAccessToken: %v", err)
 	}
+	// Revoking ends the whole grant: the row and, by cascade, every token.
+	if _, err := f.s.Grant(ctx, "g1"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("grant g1 err = %v, want ErrNotFound", err)
+	}
+	if _, err := f.s.Grant(ctx, "g2"); err != nil {
+		t.Errorf("other grant: %v, want still there", err)
+	}
 	for _, sig := range []string{"rt1", "rt2"} {
-		if req, err := f.s.GetRefreshTokenSession(ctx, sig, nil); !errors.Is(err, oauth2.ErrInactiveToken) || req == nil {
-			t.Errorf("%s err = %v, req nil %v; want ErrInactiveToken with requester", sig, err, req == nil)
+		if _, err := f.s.GetRefreshTokenSession(ctx, sig, nil); !errors.Is(err, oauth2.ErrNotFound) {
+			t.Errorf("%s err = %v, want oauth2.ErrNotFound", sig, err)
 		}
 		if _, err := f.s.GetAccessTokenSession(ctx, "a"+sig, nil); !errors.Is(err, oauth2.ErrNotFound) {
 			t.Errorf("a%s err = %v, want oauth2.ErrNotFound", sig, err)

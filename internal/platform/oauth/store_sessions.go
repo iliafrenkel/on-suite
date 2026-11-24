@@ -366,12 +366,17 @@ func (s *Store) RotateRefreshToken(ctx context.Context, requestID, signature str
 	})
 }
 
-// RevokeRefreshToken deactivates every refresh token of the request, the
-// rotated ones and the live one alike.
+// RevokeRefreshToken revokes the whole grant the request belongs to: the
+// grant row goes, and with it, by cascade, every code and token it issued.
+// The library calls this only to end a grant: a reused refresh token, a
+// replayed code, and the revocation endpoint (spec 2026-11-24-ai-access-mcp-design.md,
+// "Lifetimes": reuse revokes the whole grant). Merely deactivating the
+// tokens would leave a dead connection on /account. A later reuse then finds
+// no token at all, which the library answers with invalid_grant too.
 func (s *Store) RevokeRefreshToken(ctx context.Context, requestID string) error {
 	if _, err := s.q(ctx).ExecContext(ctx,
-		`UPDATE oauth_sessions SET active = 0 WHERE kind = 'refresh' AND request_id = ?`, requestID); err != nil {
-		return fmt.Errorf("oauth: revoke refresh tokens: %w", err)
+		`DELETE FROM oauth_grants WHERE id = ?`, requestID); err != nil {
+		return fmt.Errorf("oauth: revoke grant: %w", err)
 	}
 	return nil
 }

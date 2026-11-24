@@ -31,8 +31,8 @@ const (
 	chatGPTRedirect = "https://chatgpt.com/connector_platform_oauth_redirect"
 )
 
-// asServer is one authorization server over a test database, with its two
-// Task 4 routes mounted behind the real middleware stack.
+// asServer is one authorization server over a test database, with its
+// routes and the login routes mounted behind the real middleware stack.
 type asServer struct {
 	srv     *Server
 	handle  *sql.DB
@@ -43,6 +43,14 @@ type asServer struct {
 // nil) and mounts Routes behind web.Stack, the way the binary will.
 func newASServer(t *testing.T, handle *sql.DB, redirects []string, client *http.Client) *asServer {
 	t.Helper()
+	return buildASServer(t, handle, redirects, client, func() time.Time { return time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC) })
+}
+
+// buildASServer is newASServer with the store's clock chosen by the caller.
+// The flow tests pass time.Now: the library reads the real clock, so inside
+// a synctest bubble the store and the library then agree on the time.
+func buildASServer(t *testing.T, handle *sql.DB, redirects []string, client *http.Client, now func() time.Time) *asServer {
+	t.Helper()
 	if handle == nil {
 		handle = newFixture(t).handle
 	}
@@ -50,7 +58,7 @@ func newASServer(t *testing.T, handle *sql.DB, redirects []string, client *http.
 		PublicURL:    testPublicURL,
 		RedirectURIs: redirects,
 		HTTPClient:   client,
-		Now:          func() time.Time { return time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC) },
+		Now:          now,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -70,6 +78,7 @@ func newASServer(t *testing.T, handle *sql.DB, redirects []string, client *http.
 	authn := web.NewAuth(web.AuthOptions{Users: auth.NewStore(handle), Render: rend, Errors: errs, CSRF: csrf, Log: log, Version: "test"})
 
 	mux := http.NewServeMux()
+	authn.Routes(mux, nil)
 	srv.Routes(mux, nil, authn, csrf, PageDeps{Render: rend, Errors: errs, Version: "test", Log: log})
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
 	return &asServer{srv: srv, handle: handle, handler: web.Stack(mux, log, errs, csrf, authn, false)}

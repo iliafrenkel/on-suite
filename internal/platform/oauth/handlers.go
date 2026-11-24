@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"authelia.com/provider/oauth2"
+
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -23,17 +25,52 @@ type PageDeps struct {
 // "Body limits").
 const registerBodyLimit = 16 << 10
 
-// Routes mounts the authorization server's endpoints. Each one is public
-// (anonymous by cookie): the callers are AI clients' servers, which
-// authenticate by their own means. Registration is CSRF-exempt because those
-// servers send no cookie (spec, "CSRF").
+// Routes mounts the authorization server's endpoints. Authorization is the
+// one browser flow: it needs a signed-in user (logged-out users bounce
+// through /login?next= with the request intact), and its POST, the consent
+// decision, keeps the CSRF check. Everything else is public (anonymous by
+// cookie): the callers are AI clients' servers, which authenticate by their
+// own means and send no cookie, so those routes are CSRF-exempt (spec,
+// "Wiring").
 func (s *Server) Routes(mux *http.ServeMux, rec *web.Recorder, authn *web.Auth, csrf *web.CSRF, d PageDeps) {
 	rec.Handle(mux, "GET /.well-known/oauth-authorization-server", true, s.metadata(d))
+
+	rec.Handle(mux, "GET /oauth/authorize", false, authn.RequireUser(s.authorize(d)))
+	rec.Handle(mux, "POST /oauth/authorize", false, authn.RequireUser(s.decide(d)))
+
+	csrf.Exempt("/oauth/token", "/oauth/revoke")
+	rec.Handle(mux, "POST /oauth/token", true, http.HandlerFunc(s.token))
+	rec.Handle(mux, "POST /oauth/revoke", true, http.HandlerFunc(s.revoke))
 
 	const register = "POST /oauth/register"
 	web.RegisterBodyLimit(register, registerBodyLimit)
 	csrf.Exempt("/oauth/register")
 	rec.Handle(mux, register, true, http.HandlerFunc(s.register))
+}
+
+// token is the token endpoint: code exchange and refresh. The provider is
+// composed over checkedClients, so the client is re-checked against the
+// redirect allowlist on every call, refresh included.
+func (s *Server) token(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ar, err := s.provider.NewAccessRequest(ctx, r, new(oauth2.DefaultSession))
+	if err != nil {
+		s.provider.WriteAccessError(ctx, w, ar, err)
+		return
+	}
+	resp, err := s.provider.NewAccessResponse(ctx, ar)
+	if err != nil {
+		s.provider.WriteAccessError(ctx, w, ar, err)
+		return
+	}
+	s.provider.WriteAccessResponse(ctx, w, ar, resp)
+}
+
+// revoke is RFC 7009 token revocation. Revoking either token ends the whole
+// grant (Store.RevokeRefreshToken), the same as disconnecting on /account.
+func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	s.provider.WriteRevocationResponse(ctx, w, s.provider.NewRevocationRequest(ctx, r))
 }
 
 // metadata serves the RFC 8414 document AI clients discover us from.
