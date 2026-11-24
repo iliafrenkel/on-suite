@@ -48,11 +48,32 @@ func TestVerifyRefusesOtherResource(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		e := newFlowEnv(t)
 		access, _ := e.exchangeOK(t, e.connect(t, "books:read", "books:read"))
-		if _, err := e.handle.Exec(`UPDATE oauth_sessions SET data = CAST(json_set(CAST(data AS TEXT), '$.granted_resource', json('["https://other.example/mcp"]')) AS BLOB) WHERE kind = 'access'`); err != nil {
-			t.Fatal(err)
+		forge := func(resource string) {
+			t.Helper()
+			if _, err := e.handle.Exec(`UPDATE oauth_sessions SET data = CAST(json_set(CAST(data AS TEXT), '$.granted_resource', json(?)) AS BLOB) WHERE kind = 'access'`,
+				`["`+resource+`"]`); err != nil {
+				t.Fatal(err)
+			}
 		}
+		// Positive control: the same rewrite with our own resource is
+		// accepted, so the refusal below is down to the resource alone.
+		forge("https://onsuite.test/mcp")
+		if _, err := e.srv.Verify(context.Background(), access); err != nil {
+			t.Fatalf("Verify with our resource: %v", err)
+		}
+		forge("https://other.example/mcp")
 		if _, err := e.srv.Verify(context.Background(), access); !errors.Is(err, ErrInvalidToken) {
 			t.Errorf("Verify = %v, want ErrInvalidToken", err)
+		}
+	})
+}
+
+func TestVerifyRefusesAuthorizationCode(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e := newFlowEnv(t)
+		code := e.connect(t, "books:read", "books:read")
+		if _, err := e.srv.Verify(context.Background(), code); !errors.Is(err, ErrInvalidToken) {
+			t.Errorf("Verify(authorization code) = %v, want ErrInvalidToken", err)
 		}
 	})
 }
