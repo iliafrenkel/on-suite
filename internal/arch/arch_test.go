@@ -138,6 +138,29 @@ func TestAppsDoNotImportEachOther(t *testing.T) {
 	}
 }
 
+// TestAppsDoNotImportAIAccess: apps take part in AI access only by declaring
+// app.Tool values, whose Call receives the verified user ID (spec
+// 2026-11-24-ai-access-mcp-design.md); tokens, grants and the MCP server
+// are the platform's. An app that imported either package could check
+// scopes its own way or mint access, so not even its tests may.
+func TestAppsDoNotImportAIAccess(t *testing.T) {
+	imports := scan(t)
+	for _, set := range []map[string][]string{imports.prod, imports.test} {
+		for pkg, deps := range set {
+			if appName(pkg) == "" {
+				continue
+			}
+			for _, dep := range deps {
+				for _, banned := range []string{"internal/platform/oauth", "internal/platform/mcp"} {
+					if dep == banned || strings.HasPrefix(dep, banned+"/") {
+						t.Errorf("app package %q imports %q", pkg, dep)
+					}
+				}
+			}
+		}
+	}
+}
+
 // TestPlatformDoesNotImportApps keeps the platform free of app-specific
 // knowledge.
 func TestPlatformDoesNotImportApps(t *testing.T) {
@@ -160,10 +183,14 @@ func TestPlatformDoesNotImportApps(t *testing.T) {
 func TestLayering(t *testing.T) {
 	forbidden := map[string][]string{
 		"internal/platform/render": {"internal/platform/web", "internal/platform/app", "internal/platform/auth"},
-		"internal/platform/auth":   {"internal/platform/web", "internal/platform/app", "internal/platform/render"},
+		"internal/platform/auth":   {"internal/platform/web", "internal/platform/app", "internal/platform/render", "internal/platform/oauth"},
 		"internal/platform/db":     {"internal/platform/web", "internal/platform/app", "internal/platform/render", "internal/platform/auth"},
 		"internal/platform/config": {"internal/platform/web", "internal/platform/app", "internal/platform/render", "internal/platform/auth", "internal/platform/db"},
 		"internal/platform/web":    {"internal/platform/app"},
+		// The authorization server knows nothing of MCP: /mcp consumes oauth
+		// (Verify, scopes), never the reverse (spec
+		// 2026-11-24-ai-access-mcp-design.md).
+		"internal/platform/oauth": {"internal/platform/mcp"},
 		// jobs takes closures and nothing else. If it ever imports a platform
 		// package, someone has taught the scheduler what a backup is.
 		"internal/platform/jobs": {
@@ -438,6 +465,41 @@ func TestGoldmarkIsContained(t *testing.T) {
 	if !slices.Equal(importers, want) {
 		t.Errorf("goldmark is imported by %v, want only %v", importers, want)
 	}
+}
+
+// containedTo fails for every production importer of each of libs that lives
+// outside dir. Unlike the one-file rules above, AI access accepted its
+// libraries per package: each spans several files, but only one package may
+// know it exists.
+func containedTo(t *testing.T, dir string, libs ...string) {
+	t.Helper()
+	for _, lib := range libs {
+		importers := importersOf(t, lib)
+		if len(importers) == 0 {
+			t.Errorf("%s has no importers; the containment rule is stale", lib)
+		}
+		for _, f := range importers {
+			if !strings.HasPrefix(f, dir+"/") {
+				t.Errorf("%s is imported by %s, want only files under %s/", lib, f, dir)
+			}
+		}
+	}
+}
+
+// TestOAuthLibraryIsContained: authelia.com/provider/oauth2 was accepted for
+// the AI-access authorization server only (spec
+// 2026-11-24-ai-access-mcp-design.md); the rest of the suite sees oauth's
+// own types, so upgrading or swapping the library touches one package.
+func TestOAuthLibraryIsContained(t *testing.T) {
+	containedTo(t, "internal/platform/oauth", "authelia.com/provider/oauth2")
+}
+
+// TestMCPSDKIsContained: the MCP SDK and its schema library stay behind
+// internal/platform/mcp, so apps describe tools as plain app.Tool values and
+// never see either (same spec).
+func TestMCPSDKIsContained(t *testing.T) {
+	containedTo(t, "internal/platform/mcp",
+		"github.com/modelcontextprotocol/go-sdk", "github.com/google/jsonschema-go")
 }
 
 // TestRFC3339IsContained: stored timestamps go through db.FormatTime, whose

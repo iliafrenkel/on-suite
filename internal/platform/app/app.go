@@ -8,12 +8,14 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/auth"
@@ -376,4 +378,87 @@ func (reg *Registry) Stats(ctx context.Context, handle *sql.DB) []AppStats {
 		out = append(out, entry)
 	}
 	return out
+}
+
+// Tool is one MCP tool an app offers AI clients (spec
+// 2026-11-24-ai-access-mcp-design.md, "How apps contribute tools").
+//
+// It is a plain value so an app can describe its tools without importing the
+// MCP SDK: only internal/platform/mcp turns a Tool into something a client
+// sees, so the SDK stays contained there.
+type Tool struct {
+	// Name is what the model calls, e.g. "books_list". It starts with the
+	// app ID and "_", so names from different apps can never collide.
+	Name  string
+	Title string
+	// Description is written for the model: when to use the tool and what
+	// comes back.
+	Description string
+	// Scope is "<app ID>:read" or "<app ID>:write". A client sees and can
+	// call the tool only when its grant includes this scope.
+	Scope string
+	// ReadOnly becomes the readOnlyHint annotation, so clients can skip
+	// confirming reads.
+	ReadOnly bool
+	// Input is the zero value of the arguments struct. Its JSON tags name the
+	// arguments and its `jsonschema:"…"` tags describe them; the platform
+	// derives the input schema from it.
+	Input any
+	// Call runs the tool for userID, which always comes from the verified
+	// token and never from the arguments (spec, "Tool rules"). It returns
+	// the text the model sees.
+	Call func(ctx context.Context, userID int64, args json.RawMessage) (string, error)
+}
+
+// ToolProvider is implemented by apps that expose MCP tools. Like Scheduler
+// it is optional, discovered by type assertion, and takes Deps so a tool can
+// reach the same store its handlers use.
+type ToolProvider interface {
+	Tools(deps Deps) []Tool
+}
+
+// ToolError is a failure the model should see as written: "No book with that
+// ID on your shelves". Any other error a tool returns is replaced by
+// "Something went wrong." and logged, so internal details never reach the
+// client (spec, "Tool rules").
+type ToolError struct{ Msg string }
+
+func (e ToolError) Error() string { return e.Msg }
+
+// Tools collects every providing app's tools in display order. It refuses a
+// tool whose name or scope does not belong to its own app, or a repeated
+// name, because the scope is the only thing between a grant and a tool: a
+// "books:read" grant must never reach another app's data, nor a write.
+func (reg *Registry) Tools(deps Deps) ([]Tool, error) {
+	var out []Tool
+	seen := map[string]bool{}
+	for _, a := range reg.apps {
+		p, ok := a.(ToolProvider)
+		if !ok {
+			continue
+		}
+		id := a.Meta().ID
+		for _, t := range p.Tools(deps) {
+			if !strings.HasPrefix(t.Name, id+"_") || len(t.Name) == len(id)+1 {
+				return nil, fmt.Errorf("app: %s tool %q must be named %q followed by a word", id, t.Name, id+"_")
+			}
+			if t.Scope != id+":read" && t.Scope != id+":write" {
+				return nil, fmt.Errorf("app: %s tool %q has scope %q, want %s:read or %s:write", id, t.Name, t.Scope, id, id)
+			}
+			// ReadOnly becomes readOnlyHint, which clients use to skip
+			// confirmation, so it must agree with the scope.
+			if t.ReadOnly != strings.HasSuffix(t.Scope, ":read") {
+				return nil, fmt.Errorf("app: %s tool %q: ReadOnly must be true exactly when the scope is %s:read", id, t.Name, id)
+			}
+			if t.Call == nil {
+				return nil, fmt.Errorf("app: %s tool %q has no Call", id, t.Name)
+			}
+			if seen[t.Name] {
+				return nil, fmt.Errorf("app: %s tool %q is declared twice", id, t.Name)
+			}
+			seen[t.Name] = true
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }

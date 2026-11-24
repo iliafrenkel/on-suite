@@ -44,7 +44,11 @@ type server struct {
 	plain *session
 }
 
-func newServer(t *testing.T) *server {
+func newServer(t *testing.T) *server { return newServerWithAI(t, false) }
+
+// newServerWithAI is newServer with AI access switched on or off, as
+// cfg.MCP will switch it in buildStack.
+func newServerWithAI(t *testing.T, aiAccess bool) *server {
 	t.Helper()
 	ctx := context.Background()
 
@@ -82,10 +86,10 @@ func newServer(t *testing.T) *server {
 	authn.Routes(mux, nil)
 	usermgmt.Routes(mux, nil, authn, usermgmt.Deps{
 		Users: users, Render: rend, Errors: errs, Log: log, Version: "test",
-		Now: func() time.Time { return s.now },
+		Now: func() time.Time { return s.now }, AIAccess: aiAccess,
 	})
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
-	s.handler = web.Stack(mux, log, errs, csrf, authn)
+	s.handler = web.Stack(mux, log, errs, csrf, authn, false)
 
 	if _, err := users.CreateUser(ctx, "root", apptest.PasswordHash, true); err != nil {
 		t.Fatal(err)

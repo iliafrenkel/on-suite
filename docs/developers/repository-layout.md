@@ -48,6 +48,8 @@ on-suite/
 │   │   ├── admin/                read-only admin dashboard at /admin/
 │   │   ├── usermgmt/             /admin/users and /account
 │   │   ├── jobsadmin/            /admin/jobs with Run now
+│   │   ├── oauth/                AI access: OAuth 2.1 server, consent, /account/assistants, /admin/ai; only importer of the OAuth library
+│   │   ├── mcp/                  AI access: the /mcp endpoint serving apps' tools; only importer of the MCP SDK
 │   │   ├── webfetch/             guarded HTTP client for publisher-controlled URLs: SSRF guard, caps, image sniffing
 │   │   ├── article/              readability extraction, HTML sanitiser, image rewriting
 │   │   ├── favicon/              finds a site's icon URL

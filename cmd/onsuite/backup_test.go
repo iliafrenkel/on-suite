@@ -132,6 +132,58 @@ func TestBackupCmdSweepsExpiredSessions(t *testing.T) {
 	}
 }
 
+// With --backup-interval 0 the server's "sweep expired AI tokens" job never
+// runs either, so `onsuite backup` takes over that sweep too. It runs
+// whether or not AI access is on: the tables always exist (migration 0003),
+// and a server that once had it on may still hold rows to clear.
+func TestBackupCmdSweepsAITables(t *testing.T) {
+	for _, mcp := range []string{"off", "on"} {
+		t.Run("mcp "+mcp, func(t *testing.T) {
+			dir := seedDatabase(t)
+			handle, err := db.Open(filepath.Join(dir, "onsuite.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var userID int64
+			if err := handle.QueryRow("SELECT id FROM users LIMIT 1").Scan(&userID); err != nil {
+				t.Fatal(err)
+			}
+			old := db.FormatTime(time.Now().Add(-100 * 24 * time.Hour))
+			if _, err := handle.Exec(
+				`INSERT INTO mcp_audit (user_id, client_name, tool, ok, at) VALUES (?, 'Claude', 'books_list', 1, ?)`,
+				userID, old); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := handle.Exec(
+				`INSERT INTO oauth_clients (id, data, created_at) VALUES ('orphan', x'7b7d', ?)`, old); err != nil {
+				t.Fatal(err)
+			}
+			if err := handle.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			env := map[string]string{"ONSUITE_MCP": mcp}
+			var out bytes.Buffer
+			if err := backupCmd([]string{"--data-dir", dir}, func(k string) string { return env[k] }, &out, io.Discard); err != nil {
+				t.Fatalf("backupCmd: %v", err)
+			}
+			if !strings.Contains(out.String(), "Swept 2 expired AI access rows") {
+				t.Errorf("output %q does not report the AI sweep", out.String())
+			}
+
+			handle = testDB(t, dir)
+			var left int
+			if err := handle.QueryRow(
+				`SELECT (SELECT count(*) FROM mcp_audit) + (SELECT count(*) FROM oauth_clients)`).Scan(&left); err != nil {
+				t.Fatal(err)
+			}
+			if left != 0 {
+				t.Errorf("%d AI rows remain, want the old audit row and the orphan client swept", left)
+			}
+		})
+	}
+}
+
 func TestBackupCmdOutFlag(t *testing.T) {
 	dir := seedDatabase(t)
 	target := filepath.Join(t.TempDir(), "explicit.db")
@@ -329,7 +381,7 @@ func TestRegisterMaintenanceRegistersBothJobsEnabled(t *testing.T) {
 	reg := jobs.NewRegistry()
 	registerMaintenance(reg, handle, auth.NewStore(handle),
 		config.Config{DataDir: dir, BackupInterval: time.Hour, BackupKeep: 3},
-		slog.New(slog.DiscardHandler))
+		slog.New(slog.DiscardHandler), nil)
 
 	got := reg.Snapshot()
 	if len(got) != 2 {
@@ -345,6 +397,43 @@ func TestRegisterMaintenanceRegistersBothJobsEnabled(t *testing.T) {
 	}
 }
 
+func TestMaintenanceRegistersOAuthSweepOnlyWhenGiven(t *testing.T) {
+	const name = "sweep expired AI tokens"
+	has := func(reg *jobs.Registry) bool {
+		for _, s := range reg.Snapshot() {
+			if s.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+	dir := t.TempDir()
+	handle := testDB(t, dir)
+	cfg := config.Config{DataDir: dir, BackupInterval: time.Hour, BackupKeep: 3}
+	log := slog.New(slog.DiscardHandler)
+
+	without := jobs.NewRegistry()
+	registerMaintenance(without, handle, auth.NewStore(handle), cfg, log, nil)
+	if has(without) {
+		t.Errorf("job %q registered without an oauthSweep", name)
+	}
+
+	with := jobs.NewRegistry()
+	calls := 0
+	registerMaintenance(with, handle, auth.NewStore(handle), cfg, log,
+		func(context.Context) (int, error) { calls++; return 2, nil })
+	if !has(with) {
+		t.Fatalf("job %q not registered", name)
+	}
+	if err := with.Trigger("sweep-expired-ai-tokens"); err != nil {
+		t.Fatal(err)
+	}
+	with.Wait()
+	if calls != 1 {
+		t.Errorf("sweep ran %d times, want 1", calls)
+	}
+}
+
 // A zero interval disabled runMaintenance entirely, including the session
 // sweep, which `onsuite backup` then takes over. Splitting maintenance into
 // two jobs must not quietly give the sweep a schedule of its own.
@@ -355,7 +444,7 @@ func TestRegisterMaintenanceDisablesBothJobsWhenTheIntervalIsZero(t *testing.T) 
 	reg := jobs.NewRegistry()
 	registerMaintenance(reg, handle, auth.NewStore(handle),
 		config.Config{DataDir: dir, BackupInterval: 0, BackupKeep: 3},
-		slog.New(slog.DiscardHandler))
+		slog.New(slog.DiscardHandler), nil)
 
 	for _, s := range reg.Snapshot() {
 		if s.Enabled {
@@ -371,7 +460,7 @@ func TestTheSnapshotJobWritesASnapshot(t *testing.T) {
 	reg := jobs.NewRegistry()
 	registerMaintenance(reg, handle, auth.NewStore(handle),
 		config.Config{DataDir: dir, BackupInterval: time.Hour, BackupKeep: 3},
-		slog.New(slog.DiscardHandler))
+		slog.New(slog.DiscardHandler), nil)
 	if err := reg.Trigger("database-snapshot"); err != nil {
 		t.Fatal(err)
 	}

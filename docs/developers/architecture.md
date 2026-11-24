@@ -206,6 +206,9 @@ cmd/onsuite                     wires everything; the only production importer o
    │
    ├──► admin · usermgmt · jobsadmin · help      platform pages
    │         │
+   ├──► mcp ──► oauth    AI access (only with --mcp on); oauth must not
+   │         │           import mcp, and auth must not import oauth
+   │         │
    ▼         ▼
    app       App interface, Router, Registry, Deps
    │

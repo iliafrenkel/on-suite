@@ -89,6 +89,17 @@ on.example.com {
 }
 ```
 
+Run the proxy on the same machine. The sign-in limit and the AI access
+limits count attempts per visitor, and when a request comes from
+`127.0.0.1` the service takes the visitor's address from the last entry of
+the `X-Forwarded-For` header. So the proxy must set that header, making
+the address it actually saw the last entry, rather than passing the
+visitor's own value through untouched. Caddy does this by default (it
+replaces any incoming value with the address it saw). Without the header,
+everyone behind the proxy shares one limit. Only put an HTTP proxy that
+sets the header on `127.0.0.1`: a plain TCP or TLS pass-through there
+(an SSH tunnel, say) would let visitors choose their own address.
+
 **On its own.** Drop the proxy and let the binary obtain its own certificate:
 
 ```bash
@@ -100,6 +111,20 @@ answers ACME challenges and redirects to HTTPS. If port 80 is unavailable, pass
 `--tls-http-addr ""`; certificates are then obtained over TLS-ALPN-01 on 443
 alone. Both ports are privileged, so the unit needs
 `AmbientCapabilities=CAP_NET_BIND_SERVICE`.
+
+## AI access
+
+AI access (people connecting Claude, ChatGPT or Gemini to their own data)
+is off by default. To turn it on, set `ONSUITE_MCP=on` and
+`ONSUITE_PUBLIC_URL=https://on.example.com` (or `--mcp on` and
+`--public-url`) and restart. The assistants' companies connect from their
+own servers, so the public URL must be reachable from the internet, and
+the proxy must pass `/.well-known/*`, `/oauth/*` and `/mcp` through
+unchanged — no rewriting, no extra authentication in front of them. The
+Caddy configuration above already does. The per-visitor limits on those
+endpoints rely on `X-Forwarded-For` as described above. The
+[admin guide](../user/admin.md#ai-access) covers the redirect allowlist
+and managing connections.
 
 ## Time zone
 

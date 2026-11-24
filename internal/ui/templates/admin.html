@@ -160,6 +160,13 @@
 		<p><a href="/admin/users">Manage users →</a></p>
 	</section>
 
+	{{if .Data.AIAccess}}
+	<section class="admin-section" id="ai">
+		<h2>AI access</h2>
+		<p>AI access is on. <a href="/admin/ai">Manage AI access →</a></p>
+	</section>
+	{{end}}
+
 	<section class="admin-section" id="routes">
 		<h2>Routes</h2>
 		<p class="faint">

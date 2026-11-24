@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -59,10 +60,21 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 			"data_dir", cfg.DataDir)
 	}
 
+	// AI access's authorization server, nil when it is off. Built before the
+	// jobs so its sweep can be one of them.
+	oauthServer, err := newOAuthServer(context.Background(), handle, cfg)
+	if err != nil {
+		return err
+	}
+	var oauthSweep func(context.Context) (int, error)
+	if oauthServer != nil {
+		oauthSweep = oauthServer.Store().Sweep
+	}
+
 	// Jobs are registered before the server is built so the admin page can
 	// list them from the very first request.
 	maintenance := jobs.NewRegistry()
-	registerMaintenance(maintenance, handle, users, cfg, log)
+	registerMaintenance(maintenance, handle, users, cfg, log, oauthSweep)
 
 	handler, err := buildStack(stackDeps{
 		DB:       handle,
@@ -71,9 +83,11 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 		Log:      log,
 		Version:  version,
 		Secure:   cfg.SecureCookies,
+		HSTS:     cfg.TLSDomain != "" || strings.HasPrefix(cfg.PublicURL, "https://"),
 		Config:   cfg,
 		Jobs:     maintenance,
 		Started:  started,
+		OAuth:    oauthServer,
 	})
 	if err != nil {
 		return err

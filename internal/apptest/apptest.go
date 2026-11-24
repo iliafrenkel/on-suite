@@ -205,7 +205,7 @@ func NewServer[S any](t *testing.T, a app.App, newStore func(*sql.DB) S, opts ..
 	}
 
 	s := &Server[S]{
-		Handler: web.Stack(mux, log, errs, csrf, authn),
+		Handler: web.Stack(mux, log, errs, csrf, authn, false),
 		Store:   store,
 		Clock:   clock,
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/iliafrenkel/on-suite/internal/platform/config"
 	"github.com/iliafrenkel/on-suite/internal/platform/db"
 	"github.com/iliafrenkel/on-suite/internal/platform/jobs"
+	"github.com/iliafrenkel/on-suite/internal/platform/oauth"
 )
 
 // snapshotPrefix and snapshotSuffix bracket a generated snapshot name. Only
@@ -62,6 +63,16 @@ func backupCmd(args []string, getenv func(string) string, out, errOut io.Writer)
 		return fmt.Errorf("backup: sweep expired sessions: %w", err)
 	} else if swept > 0 {
 		fmt.Fprintf(out, "Swept %d expired sessions\n", swept)
+	}
+	// The same gap applies to the "sweep expired AI tokens" job (spec
+	// 2026-11-24-ai-access-mcp-design.md, "Storage"). It runs whether or
+	// not AI access is on: migration 0003 always creates the tables, a
+	// server that had it on earlier may still hold rows, and on empty
+	// tables it does nothing.
+	if swept, err := oauth.NewStore(handle, time.Now).Sweep(ctx); err != nil {
+		return fmt.Errorf("backup: sweep AI access tables: %w", err)
+	} else if swept > 0 {
+		fmt.Fprintf(out, "Swept %d expired AI access rows\n", swept)
 	}
 
 	if *outPath != "" {
@@ -155,12 +166,15 @@ func pruneSnapshots(dir string, keep int) (int, error) {
 	return removed, nil
 }
 
-// registerMaintenance registers the server's two housekeeping jobs.
+// registerMaintenance registers the server's housekeeping jobs: the session
+// sweep, the snapshot, and, when oauthSweep is not nil (it is nil while MCP is
+// off), the sweep of expired AI tokens (spec 2026-11-24-ai-access-mcp-design.md,
+// "Storage").
 //
-// Both take cfg.BackupInterval, so --backup-interval 0 disables both, exactly
+// All take cfg.BackupInterval, so --backup-interval 0 disables all, exactly
 // as the single runMaintenance ticker did before: a deployment that drives
 // snapshots from cron or a systemd timer runs `onsuite backup`, which sweeps
-// sessions itself (see backupCmd). Giving the sweep a schedule of its own
+// sessions and the AI access tables itself (see backupCmd). Giving the sweep a schedule of its own
 // would be a behaviour change, not a refactor.
 //
 // Naming the two halves is the point of the split: the admin page can say
@@ -171,6 +185,7 @@ func registerMaintenance(
 	users *auth.Store,
 	cfg config.Config,
 	log *slog.Logger,
+	oauthSweep func(context.Context) (int, error),
 ) {
 	if cfg.BackupInterval <= 0 {
 		log.Info("internal maintenance schedule disabled")
@@ -195,6 +210,25 @@ func registerMaintenance(
 			return nil
 		},
 	)
+
+	if oauthSweep != nil {
+		reg.Register(
+			"sweep expired AI tokens",
+			"Deletes expired AI authorization codes and sessions, connections with no tokens left, registered clients nobody connected with in a day, and audit rows older than 90 days, so those tables do not grow forever.",
+			cfg.BackupInterval,
+			func(ctx context.Context) error {
+				swept, err := oauthSweep(ctx)
+				if err != nil {
+					log.Error("sweeping expired AI tokens failed", "error", err)
+					return err
+				}
+				if swept > 0 {
+					log.Info("expired AI tokens swept", "count", swept)
+				}
+				return nil
+			},
+		)
+	}
 
 	reg.Register(
 		"database snapshot",

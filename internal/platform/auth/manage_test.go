@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 )
@@ -196,5 +197,130 @@ func TestManageMethodsReportAMissingUser(t *testing.T) {
 	}
 	if err := s.DeleteUser(ctx, missing); !errors.Is(err, ErrNotFound) {
 		t.Errorf("DeleteUser: err = %v, want ErrNotFound", err)
+	}
+}
+
+// seedOAuth gives userID one grant with an access-token row, and one audit row.
+func seedOAuth(t *testing.T, handle *sql.DB, userID int64, grantID string) {
+	t.Helper()
+	ctx := context.Background()
+	const ts = "2026-11-24T00:00:00.000000000Z"
+	if _, err := handle.ExecContext(ctx,
+		`INSERT INTO oauth_grants (id, user_id, client_id, client_name, redirect_host,
+		        requested_scopes, granted_scopes, created_at)
+		 VALUES (?, ?, 'c1', 'Claude', 'claude.ai', 'books:read', 'books:read', ?)`,
+		grantID, userID, ts); err != nil {
+		t.Fatalf("insert grant: %v", err)
+	}
+	if _, err := handle.ExecContext(ctx,
+		`INSERT INTO oauth_sessions (signature, kind, grant_id, request_id, client_id, data, expires_at)
+		 VALUES (?, 'access', ?, ?, 'c1', x'00', ?)`,
+		"sig-"+grantID, grantID, grantID, ts); err != nil {
+		t.Fatalf("insert oauth session: %v", err)
+	}
+	if _, err := handle.ExecContext(ctx,
+		`INSERT INTO mcp_audit (user_id, client_name, tool, ok, at) VALUES (?, 'Claude', 'books_list', 1, ?)`,
+		userID, ts); err != nil {
+		t.Fatalf("insert audit: %v", err)
+	}
+}
+
+func countRows(t *testing.T, handle *sql.DB, query string, args ...any) int {
+	t.Helper()
+	var n int
+	if err := handle.QueryRowContext(context.Background(), query, args...).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestSetPasswordRevokesOAuthGrants(t *testing.T) {
+	s, handle := newStore(t)
+	mustUser(t, s, "root", true)
+	alice := mustUser(t, s, "alice", false)
+	bob := mustUser(t, s, "bob", false)
+	seedOAuth(t, handle, alice.ID, "g-alice")
+	seedOAuth(t, handle, bob.ID, "g-bob")
+
+	if err := s.SetPassword(context.Background(), alice.ID, "$argon2id$new", ""); err != nil {
+		t.Fatalf("SetPassword: %v", err)
+	}
+
+	if n := countRows(t, handle, `SELECT count(*) FROM oauth_grants WHERE user_id = ?`, alice.ID); n != 0 {
+		t.Errorf("%d grants survived the password change", n)
+	}
+	if n := countRows(t, handle, `SELECT count(*) FROM oauth_sessions WHERE grant_id = 'g-alice'`); n != 0 {
+		t.Errorf("%d token rows survived the password change", n)
+	}
+	if n := countRows(t, handle, `SELECT count(*) FROM oauth_grants WHERE user_id = ?`, bob.ID); n != 1 {
+		t.Errorf("another user's grants = %d, want 1", n)
+	}
+	if n := countRows(t, handle, `SELECT count(*) FROM oauth_sessions WHERE grant_id = 'g-bob'`); n != 1 {
+		t.Errorf("another user's token rows = %d, want 1", n)
+	}
+	// Activity history is not a credential: it outlives the revoked grant.
+	if n := countRows(t, handle, `SELECT count(*) FROM mcp_audit WHERE user_id = ?`, alice.ID); n != 1 {
+		t.Errorf("audit rows after revoke = %d, want 1", n)
+	}
+}
+
+func TestDeleteUserCascadesOAuthRows(t *testing.T) {
+	s, handle := newStore(t)
+	mustUser(t, s, "root", true)
+	alice := mustUser(t, s, "alice", false)
+	seedOAuth(t, handle, alice.ID, "g-alice")
+
+	if err := s.DeleteUser(context.Background(), alice.ID); err != nil {
+		t.Fatalf("DeleteUser: %v", err)
+	}
+	for _, table := range []string{"oauth_grants", "oauth_sessions", "mcp_audit"} {
+		if n := countRows(t, handle, `SELECT count(*) FROM `+table); n != 0 {
+			t.Errorf("%s: %d rows survived the user's deletion", table, n)
+		}
+	}
+}
+
+func TestDeletingAGrantCascadesToItsTokens(t *testing.T) {
+	s, handle := newStore(t)
+	alice := mustUser(t, s, "alice", true)
+	seedOAuth(t, handle, alice.ID, "g1")
+	if _, err := handle.ExecContext(context.Background(), `DELETE FROM oauth_grants WHERE id = 'g1'`); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRows(t, handle, `SELECT count(*) FROM oauth_sessions`); n != 0 {
+		t.Errorf("%d token rows survived their grant", n)
+	}
+}
+
+func TestOAuthSessionsKeyAndGrantRule(t *testing.T) {
+	s, handle := newStore(t)
+	alice := mustUser(t, s, "alice", true)
+	seedOAuth(t, handle, alice.ID, "g1")
+	ctx := context.Background()
+	const ts = "2026-11-24T00:00:00.000000000Z"
+	insert := func(kind, sig string, grant any) error {
+		_, err := handle.ExecContext(ctx,
+			`INSERT INTO oauth_sessions (signature, kind, grant_id, request_id, client_id, data, expires_at)
+			 VALUES (?, ?, ?, 'r', 'c1', x'00', ?)`, sig, kind, grant, ts)
+		return err
+	}
+	// The library keeps the auth-code and PKCE sessions under one signature.
+	if err := insert("code", "same", "g1"); err != nil {
+		t.Fatalf("code row: %v", err)
+	}
+	if err := insert("pkce", "same", "g1"); err != nil {
+		t.Errorf("pkce row with the code's signature: %v", err)
+	}
+	if err := insert("code", "same", "g1"); err == nil {
+		t.Error("duplicate (kind, signature) accepted")
+	}
+	if err := insert("registration", "reg", nil); err != nil {
+		t.Errorf("registration row without a grant: %v", err)
+	}
+	if err := insert("access", "orphan", nil); err == nil {
+		t.Error("access row without a grant accepted")
+	}
+	if err := insert("registration", "reg2", "g1"); err == nil {
+		t.Error("registration row with a grant accepted")
 	}
 }

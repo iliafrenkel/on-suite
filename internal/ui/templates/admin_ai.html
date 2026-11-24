@@ -1,0 +1,46 @@
+{{define "content"}}
+<div class="stack">
+	<h1>AI access</h1>
+	<p class="faint">AI access is on. Assistants connect at the address below and may only be sent back to the redirect addresses listed here.</p>
+
+	<dl class="admin-facts">
+		<div class="admin-fact"><dt>Public URL</dt><dd class="small">{{.Data.PublicURL}}</dd></div>
+	</dl>
+
+	<h2>Redirect allowlist</h2>
+	<ul>
+	{{range .Data.Redirects}}
+		<li><code>{{.}}</code></li>
+	{{else}}
+		<li class="dim">The allowlist is empty, so no assistant can connect.</li>
+	{{end}}
+	</ul>
+
+	<h2>Connections</h2>
+	<div class="scroll-x">
+		<table class="admin-table">
+			<thead><tr><th>User</th><th>Assistant</th><th>Can</th><th>Connected</th><th>Last used</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+			<tbody>
+			{{range .Data.Grants}}
+				<tr>
+					<td>{{.Username}}</td>
+					<td>{{.Name}}<br><span class="faint">{{.RedirectHost}}</span></td>
+					<td>{{range .Access}}<div><strong>{{.App}}</strong>: {{.Labels}}</div>{{else}}<span class="dim">Nothing</span>{{end}}</td>
+					<td class="dim">{{.Connected}}</td>
+					<td class="dim">{{.LastUsed}}</td>
+					<td>
+						<form method="post" action="/admin/ai/{{.ID}}/revoke">
+							<input type="hidden" name="{{csrfField}}" value="{{$.Shell.CSRFToken}}">
+							<button type="submit">Revoke</button>
+						</form>
+					</td>
+				</tr>
+			{{else}}
+				<tr><td colspan="6" class="dim">No assistants are connected.</td></tr>
+			{{end}}
+			</tbody>
+		</table>
+	</div>
+	<p><a href="/admin">← Admin</a></p>
+</div>
+{{end}}

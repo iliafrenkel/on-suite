@@ -92,11 +92,11 @@ func Chain(h http.Handler, mw ...Middleware) http.Handler {
 // loading. This is the exact chain the real server runs, so anything built
 // on top of Stack — including test harnesses — exercises the same behavior
 // production traffic does.
-func Stack(h http.Handler, log *slog.Logger, errs *Errors, csrf *CSRF, authn *Auth) http.Handler {
+func Stack(h http.Handler, log *slog.Logger, errs *Errors, csrf *CSRF, authn *Auth, hsts bool) http.Handler {
 	return Chain(h,
 		Recover(log, errs),
 		RequestLog(log),
-		SecurityHeaders(),
+		SecurityHeaders(hsts),
 		limitBodyForStack(h),
 		csrf.Middleware,
 		authn.LoadUser,
@@ -197,19 +197,34 @@ func Recover(log *slog.Logger, e *Errors) Middleware {
 // reader's image proxy rewrites every article image to a same-origin
 // /reader/img/<hash> URL before it is ever rendered, so every image the app
 // serves, including third-party article images, comes from this origin.
-const contentSecurityPolicy = "default-src 'self'; " +
-	"script-src 'self'; " +
-	"style-src 'self'; " +
-	"img-src 'self'; " +
-	"font-src 'self'; " +
-	"connect-src 'self'; " +
-	"form-action 'self'; " +
-	"frame-ancestors 'none'; " +
-	"base-uri 'none'; " +
-	"object-src 'none'"
+var contentSecurityPolicy = buildCSP("'self'")
+
+func buildCSP(formAction string) string {
+	return "default-src 'self'; " +
+		"script-src 'self'; " +
+		"style-src 'self'; " +
+		"img-src 'self'; " +
+		"font-src 'self'; " +
+		"connect-src 'self'; " +
+		"form-action " + formAction + "; " +
+		"frame-ancestors 'none'; " +
+		"base-uri 'none'; " +
+		"object-src 'none'"
+}
+
+// CSPWithFormAction is the standard policy with one extra form-action origin.
+// The OAuth consent page POSTs to our own origin but the response redirects to
+// the AI client's callback, and Chrome enforces form-action on that redirect
+// chain; allowing only that one origin keeps the rest of the policy intact
+// (spec 2026-11-24-ai-access-mcp-design.md).
+func CSPWithFormAction(origin string) string {
+	return buildCSP("'self' " + origin)
+}
 
 // SecurityHeaders sets response headers that do not depend on the route.
-func SecurityHeaders() Middleware {
+// hsts adds Strict-Transport-Security; it is opt-in because sending it over a
+// deployment that is not really HTTPS-only would lock browsers out.
+func SecurityHeaders(hsts bool) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h := w.Header()
@@ -217,6 +232,9 @@ func SecurityHeaders() Middleware {
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("Referrer-Policy", "same-origin")
 			h.Set("X-Frame-Options", "DENY")
+			if hsts {
+				h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+			}
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -16,6 +16,12 @@ var ErrLastAdmin = errors.New("auth: at least one administrator must remain")
 // is the point: an admin's reset must lock out whoever held the old
 // password, and a self-service change keeps only the browser that made it
 // (spec 2026-09-27-user-management-design.md §6).
+//
+// It also deletes every AI connection (oauth_grants row) of theirs, and the
+// tokens cascade with it: an AI client holds a token, not the password, so
+// changing the password must cut it off too, including no "keep" exception
+// (spec 2026-11-24-ai-access-mcp-design.md). The self-service change, the
+// admin reset and the CLI reset all come through here.
 func (s *Store) SetPassword(ctx context.Context, userID int64, passwordHash, keepSessionID string) error {
 	if passwordHash == "" {
 		return errors.New("auth: password hash must not be empty")
@@ -37,6 +43,10 @@ func (s *Store) SetPassword(ctx context.Context, userID int64, passwordHash, kee
 		if _, err := tx.ExecContext(ctx,
 			`DELETE FROM sessions WHERE user_id = ? AND id <> ?`, userID, keepSessionID); err != nil {
 			return fmt.Errorf("auth: revoke sessions: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM oauth_grants WHERE user_id = ?`, userID); err != nil {
+			return fmt.Errorf("auth: revoke AI grants: %w", err)
 		}
 		return nil
 	})

@@ -1,6 +1,6 @@
 # Docker is not the primary way to run ON Suite — a single binary and a data
 # directory is — but the option costs almost nothing to maintain.
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 
 WORKDIR /src
 # Copy the module files first so dependency download is cached separately from

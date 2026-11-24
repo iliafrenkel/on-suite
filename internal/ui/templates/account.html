@@ -6,6 +6,7 @@
 		<div class="admin-fact"><dt>Role</dt><dd>{{if .Data.IsAdmin}}Administrator{{else}}User{{end}}</dd></div>
 		<div class="admin-fact"><dt>Joined</dt><dd>{{.Data.Joined}}</dd></div>
 	</dl>
+	{{if .Data.AIAccess}}<p><a href="/account/assistants">Connected assistants</a></p>{{end}}
 
 	<h2>Change password</h2>
 	{{with .Data.Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}

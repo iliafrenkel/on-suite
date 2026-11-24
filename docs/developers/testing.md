@@ -160,6 +160,8 @@ design's rules into failing tests:
 | `TestReadabilityIsContained` | go-readability is imported only by `internal/platform/article/extract.go` |
 | `TestFSRSIsContained` | go-fsrs is imported only by `internal/apps/flash/fsrs.go` |
 | `TestGoldmarkIsContained` | goldmark is imported only by `internal/platform/help/pages.go` |
+| `TestOAuthLibraryIsContained` | the authelia OAuth library is imported only under `internal/platform/oauth` |
+| `TestMCPSDKIsContained` | the MCP SDK and jsonschema-go are imported only under `internal/platform/mcp` |
 | `TestRFC3339IsContained` | no stored time formatted as RFC 3339 outside a short allow-list |
 | `TestAppsReadTheirStoreClock` | apps call `time.Now`/`Since`/`Until` only in their `store.go` |
 | `TestScanSeesTheRealTree` | the scan itself found the packages it should |

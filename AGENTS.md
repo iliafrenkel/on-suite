@@ -244,8 +244,12 @@ labels — the title prefix covers that.
   `internal/platform/article`),
   `github.com/open-spaced-repetition/go-fsrs/v4`, `github.com/yuin/goldmark`
   — the last one contained to `internal/platform/help`, enforced by
-  `TestGoldmarkIsContained`); adding a new one is a spec change, not just an
-  implementation detail.
+  `TestGoldmarkIsContained` — and, for AI access, `authelia.com/provider/oauth2`
+  (contained to `internal/platform/oauth`, enforced by
+  `TestOAuthLibraryIsContained`) plus `github.com/modelcontextprotocol/go-sdk`
+  and `github.com/google/jsonschema-go` (contained to
+  `internal/platform/mcp`, enforced by `TestMCPSDKIsContained`)); adding a
+  new one is a spec change, not just an implementation detail.
 - Migrations are forward-only — no down migrations.
 - This is a personal project with an opinionated design — open an issue or
   discussion before a large PR, especially anything touching a dependency,

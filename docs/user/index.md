@@ -109,6 +109,10 @@ You'll see **Password changed. Your other sessions were signed out.** You
 stay signed in where you are, but any other computer or phone you were
 signed in on will ask for the new password.
 
+If your admin has turned on AI access, the Account page also links to
+**Connected assistants**, where you see and disconnect the AI assistants
+you've connected (see [AI assistants](ai-assistants.md)).
+
 ## Getting help
 
 These guides explain everything each app can do:
@@ -120,6 +124,8 @@ These guides explain everything each app can do:
 - [ON Books](books.md) — keeping track of your reading.
 - [ON Flash](flash.md) — making decks and studying cards.
 - [ON Focus](focus.md) — making and running focus timers.
+- [AI assistants](ai-assistants.md) — connecting an AI assistant, such as
+  Claude or ChatGPT, to your ON Suite.
 - [Admin](admin.md) — managing accounts and the server (for admins only).
 
 If something doesn't work the way a guide says, tell the person who runs

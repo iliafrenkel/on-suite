@@ -333,6 +333,7 @@ func TestIndexGreetsTheSignedInUser(t *testing.T) {
 | `TestRFC3339IsContained` | you format a stored time with `time.RFC3339`/`RFC3339Nano` |
 | `TestEveryUserColumnCascadesFromUsers` | a `user_id` column lacks `ON DELETE CASCADE` |
 | `TestReadabilityIsContained`, `TestFSRSIsContained`, `TestGoldmarkIsContained` | you import go-readability, go-fsrs or goldmark outside their one allowed file |
+| `TestOAuthLibraryIsContained`, `TestMCPSDKIsContained` | you import the OAuth library or the MCP SDK outside `internal/platform/oauth` or `internal/platform/mcp`; describe tools as plain `app.Tool` values instead |
 | `TestDocsIsALeaf` | `docs/embed.go` imports anything but `embed`/`io/fs` |
 | `TestBuildStackServesHelpForEveryRegisteredApp` | your app has no `docs/user/<id>.md` guide, or it's missing from `order` in `internal/platform/help/pages.go` |
 | `TestEveryRegisteredAppHasItsOwnColour` | your app has no colour in `internal/ui/icons.go`, or shares one with another app |

@@ -35,6 +35,7 @@ func TestBuildStackServesHelpSignedOut(t *testing.T) {
 	for path, want := range map[string]int{
 		"/help":                      http.StatusOK,
 		"/help/notes":                http.StatusOK,
+		"/help/ai-assistants":        http.StatusOK, // linked from /account/assistants
 		"/help/images/dashboard.png": http.StatusOK,
 		"/help/no-such-page":         http.StatusNotFound,
 		"/help/images/no-such-image": http.StatusNotFound,

@@ -100,14 +100,14 @@ containment") and upgrade deliberately.
 | Lifetimes | Auth code 1 min; access token 1 h; refresh token 90 days, counted from when the assistant was connected (the OAuth 2.1 profile makes it an absolute limit, so users reconnect about once a quarter; Ilia's decision), rotated on every use. Reuse of an old refresh token revokes the whole grant |
 | Scopes | `books:read books:write notes:read notes:write reader:read reader:write later:read later:write`. **All 8 are advertised in `scopes_supported` from P1**, even before their tools exist, so nobody has to reconnect when P2–P4 ship (Ilia's decision). A scope with no tools yet grants nothing. The consent screen shows them grouped per app |
 | Default ticks | On the consent screen, requested **read** scopes come ticked and requested **write** scopes come unticked. The user opts into writes. A request with no `scope` is treated as all four read scopes (Ilia's decision) |
-| Consent | Always shown for a new grant and for scope increases. Shows the client name, its redirect host and the scopes |
+| Consent | Always shown, on every authorization request (changed during P1: no skip for a returning client). Shows the redirect host first, then the client name, and the scopes |
 | Users | Every user can connect |
-| On/off | Off by default. Enabled with `ONSUITE_MCP=on`, and needs `ONSUITE_PUBLIC_URL`. Env-only, like every other setting (no runtime toggle, no settings table). With it off, the `/oauth/*`, `/mcp` and well-known routes aren't mounted, and existing grants stay dormant until it is turned back on. The admin can still revoke them from `/admin` |
+| On/off | Off by default. Enabled with `ONSUITE_MCP=on`, and needs `ONSUITE_PUBLIC_URL`. Env-only, like every other setting (no runtime toggle, no settings table). With it off, the `/oauth/*`, `/mcp` and well-known routes aren't mounted, and existing grants stay dormant until it is turned back on. Nothing AI-related is mounted while it is off, `/admin/ai` and `/account/assistants` included, so revoking a connection from those pages works only while it is on; a password change revokes the user's grants either way (changed during P1) |
 | Clients | Cloud-hosted assistants only (Claude, ChatGPT, Gemini connectors), all with fixed HTTPS callbacks. Loopback-callback clients (Claude Code, MCP Inspector, `http://localhost:<port>`) are **out of scope**, because they would need port-agnostic loopback matching that breaks the exact-match rule |
 | Account changes | A password change (by the user, the admin, or the CLI reset) and user deletion revoke **all** the user's grants, like sessions today. The `/account` page then shows no connected assistants, so the user sees the effect |
-| Management | "Connected assistants" on `/account` (list, scopes, last used, revoke). An admin section on `/admin` (all grants, revoke, allowlist view) |
-| Audit | A table of every tool call (user, client, tool, ok/error, time), shown on `/account`, kept 90 days |
-| Rate limits | Per-IP limits on `/oauth/*`; per-grant limits on `/mcp` |
+| Management | "Connected assistants" page at `/account/assistants` (list, scopes, last used, revoke), linked from `/account`. "AI access" admin page at `/admin/ai` (all grants, revoke, allowlist view), linked from `/admin` (changed during P1: own pages, not sections) |
+| Audit | A table of every tool call (user, client, tool, ok/error, time), shown on `/account/assistants` (changed during P1), kept 90 days |
+| Rate limits | Per-IP limits on `/oauth/*`; per-grant limits on `/mcp`. The IP is the right-most `X-Forwarded-For` entry when the peer is loopback (the documented same-host proxy), the peer address otherwise (changed during P1) |
 | Deletes | None. Every write is small and reversible in the UI |
 | Untrusted text | Article text from Reader and Later goes back clearly marked as third-party content |
 
@@ -122,7 +122,9 @@ containment") and upgrade deliberately.
     `/oauth/authorize` (GET shows consent, POST decides), `/oauth/token`,
     `/oauth/register` and `/oauth/revoke`
   - the CIMD resolver config
-  - a `Verify(ctx, bearer) (Grant, error)` function that `/mcp` uses
+  - a `Verify(ctx, bearer) (Caller, error)` function that `/mcp` uses
+    (changed during P1: it returns a `Caller` — user, grant, client name,
+    scopes, expiry — rather than the stored grant)
 - `internal/platform/mcp` is the only importer of
   `github.com/modelcontextprotocol/go-sdk`. It:
   - builds the MCP server from tools contributed by apps
@@ -188,8 +190,9 @@ Extend `internal/arch/arch_test.go` following `TestReadabilityIsContained`:
 - **Public URL.** New `ONSUITE_PUBLIC_URL` config (e.g.
   `https://on.example.com`). The issuer, resource and metadata URLs come
   from it, never from request headers. Startup fails if `ONSUITE_MCP=on`
-  without it, or if it isn't `https://` (except `http://localhost` for
-  development).
+  without it, or if it isn't `https://`. There is no `http://localhost`
+  exception (changed during P1): the OAuth library requires an https
+  issuer.
 - **HSTS.** Not set today. Add `Strict-Transport-Security` when
   `TLS_DOMAIN` or an `https` public URL is configured, since tokens now
   cross the wire. (Small, separate commit.)
@@ -199,14 +202,18 @@ Extend `internal/arch/arch_test.go` following `TestReadabilityIsContained`:
 New migration `0003_oauth.sql` in `internal/platform/auth/migrations` (or a
 new `oauth` namespace; the builder decides). Tables, in outline:
 
-- `oauth_clients`: client ID, kind (`dcr` or `cimd`), name, redirect URIs,
-  metadata JSON, created_at, last_seen_at. CIMD rows are a cache of
-  fetched documents, refreshed per the library's cache policy.
+- `oauth_clients`: dynamically registered clients only — client ID, the
+  library's client as JSON, created_at (changed during P1: no kind, name,
+  redirect URIs or last_seen_at; nothing read them). CIMD clients live in
+  `oauth_cimd`, the library's cache of fetched documents, refreshed per its
+  cache policy.
 - `oauth_grants`: one per (user, client), with granted scopes, created_at,
   last_used_at and revoked_at. This is what the user sees and revokes.
-- `oauth_codes`, `oauth_access_tokens`, `oauth_refresh_tokens`: the
-  library's request/session records, keyed by token **signature**, each
-  linked to a grant. Revoking a grant deletes all of them.
+- `oauth_sessions`: the library's request/session records (codes, PKCE,
+  access and refresh tokens, registration tokens) in one table keyed by
+  **(kind, signature)**, each but registration tokens linked to a grant.
+  Revoking a grant deletes
+  all of them. (Changed during P1: one table rather than one per kind.)
 - `mcp_audit`: id, user_id, grant_id, tool, ok, error_kind, at. **No
   arguments or results are stored**, because they may hold private text.
 
@@ -222,14 +229,25 @@ deleting the user's `oauth_grants` rows in the same transaction. The
 builder picks one.
 
 A maintenance job beside the session sweep (`registerMaintenance`)
-deletes expired codes and tokens and audit rows older than 90 days.
+deletes expired codes and tokens and audit rows older than 90 days. It also
+deletes (changed during P1) grants with no access or refresh token left,
+once they are more than 10 minutes old (younger ones may be mid-consent or
+mid-code-exchange), and registered clients more than 24 hours old that no
+grant points at, with their registration tokens. `onsuite backup` runs the
+same sweep, as it does the session sweep, for deployments that set
+`--backup-interval 0`; it runs whether or not AI access is on.
 
 ### Redirect URI allowlist
 
 `ONSUITE_OAUTH_REDIRECT_URIS` is a comma-separated list of **exact**
 redirect URIs. The defaults ship with the known callbacks for Claude and
-ChatGPT. Gemini's callback is a Google-hosted URL that must be confirmed
-in phase 1 before it is added.
+ChatGPT: `https://claude.ai/api/mcp/auth_callback`,
+`https://claude.com/api/mcp/auth_callback` and
+`https://chatgpt.com/connector_platform_oauth_redirect` (changed during
+P1: exact values settled). ChatGPT uses that stable URI only when the
+authorize response carries `iss` (RFC 9207), which ours does. Gemini's
+callback is a Google-hosted URL that must be confirmed in phase 1 before
+it is added; until then the admin adds it by hand.
 
 - DCR: the registration is refused unless every requested `redirect_uri`
   is on the list.
@@ -247,8 +265,9 @@ restart, like every other setting today.
 A normal ON Suite page in the shell, with no app chrome:
 
 ```
-  Claude wants to access your ON Suite
+  An assistant wants to access your ON Suite
   It will send you back to: claude.ai
+  It calls itself: Claude
 
   Books    [x] Read your books    [ ] Update books
   Notes    [x] Read your notes    [ ] Add notes
@@ -264,14 +283,13 @@ A normal ON Suite page in the shell, with no app chrome:
 - Only scopes the client requested are shown. Reads come ticked, writes
   unticked. The grant holds exactly what is ticked on Allow. The server
   re-checks that every submitted scope was in the request.
-- The client name is the client's own claim, so it is shown next to the
-  redirect host, which we have validated. The host is the trustworthy part.
-- If the user already has a live grant for this client and the request asks
-  for no scope outside what was *requested* last time, consent is skipped
-  and the existing grant's scopes are reused. Without this, a client that
-  always asks for every scope would show consent on every re-auth, because
-  writes default to unticked. Anything new in the request shows consent
-  again.
+- The client name is the client's own claim, so the heading doesn't use
+  it: the validated redirect host comes first and the name follows as "It
+  calls itself" (changed during P1). The host is the trustworthy part.
+- Consent is always shown, even for a client the user already approved
+  (changed during P1). A silent skip on a GET let any website start an
+  authorization request that replaced, and so disconnected, the user's
+  existing grant.
 
 ### Tool rules
 
@@ -350,12 +368,17 @@ The exact argument names and result shapes are left to each phase's plan.
 
 ### Account and admin UI
 
-- **`/account` → "Connected assistants".** For each grant: client name,
+Both are pages of their own, linked by one line from `/account` and
+`/admin` (shown only when AI access is on), rather than sections of those
+pages (changed during P1): `usermgmt` and `admin` must not import `oauth`,
+and those pages have no extension point.
+
+- **`/account/assistants` — "Connected assistants".** For each grant: client name,
   redirect host, scopes per app, connected date, last used, and a
   "Disconnect" button (CSRF-protected POST that revokes the grant and its
   tokens). Below that, "Recent activity": the last 50 audit rows (time,
   assistant, tool, ok/error).
-- **`/admin` → "AI access" section.** Whether it is on, the public URL,
+- **`/admin/ai` — "AI access".** Whether it is on, the public URL,
   the effective redirect allowlist, and every grant across users with a
   revoke action (admin only).
 
@@ -364,7 +387,14 @@ The exact argument names and result shapes are left to each phase's plan.
 A new small in-memory limiter, reusing the `AttemptLimiter` style:
 
 - `/oauth/register`: 10/hour per IP.
-- `/oauth/token`, `/oauth/authorize`: 60/min per IP.
+- `/oauth/token`, `/oauth/authorize`, `/oauth/revoke`: 60/min per IP
+  (changed during P1: revoke added).
+
+"Per IP" (changed during P1) uses `web.ClientIP`, shared with the login
+limiter: when the peer is loopback, the right-most `X-Forwarded-For` entry
+(the address the same-host proxy appended), otherwise the peer address. A
+forwarded header from any other peer is ignored, so it cannot buy a fresh
+budget. The proxy must append to `X-Forwarded-For`, as Caddy does.
 - `/mcp`: 120/min per grant.
 
 Over the limit returns 429 with `Retry-After`. Proposed numbers; the
@@ -376,8 +406,8 @@ Each phase is its own plan and PR.
 
 1. **P1 — Platform + Books read.**
    - Everything under "Architecture": OAuth, consent, `/mcp`, storage,
-     allowlist, CSRF/CSP wiring, rate limits, audit, the `/account`
-     "Connected assistants" section with Disconnect, the `/admin` section,
+     allowlist, CSRF/CSP wiring, rate limits, audit, the "Connected
+     assistants" page with Disconnect, the "AI access" admin page,
      arch tests and HSTS.
    - Tools: `books_list`, `books_get`, `books_stats`.
    - **Exit gate (manual, by Ilia after deploy):** connect Claude, ChatGPT
