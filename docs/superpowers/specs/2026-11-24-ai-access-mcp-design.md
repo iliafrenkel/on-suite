@@ -377,10 +377,11 @@ Each phase is its own plan and PR.
      arch tests and HSTS.
    - Tools: `books_list`, `books_get`, `books_stats`.
    - **Exit gate (manual, by Ilia after deploy):** connect Claude, ChatGPT
-     and Gemini. In each, ask "what book should I read next?" by text and
-     by voice, then disconnect and confirm the assistant loses access.
-     Record which clients and voice modes work, and the confirmed Gemini
-     redirect URI, in the PR.
+     and Gemini. In each, ask "what book should I read next?", then
+     disconnect and confirm the assistant loses access. Record which clients
+     work, and the confirmed Gemini redirect URI, in the PR. Voice mode is
+     out of our control and isn't part of the gate; Ilia tries it once the
+     MCP server is ready.
 2. **P2 — Books write tools.**
 3. **P3 — Notes tools.**
 4. **P4 — Reader and Later tools**, with the untrusted-content wrapping.
@@ -429,9 +430,6 @@ top of the normal code review.
 
 ## Open questions
 
-- **Voice.** Whether each assistant's voice mode can call custom-connector
-  tools at all is unconfirmed. The P1 exit gate answers this before more
-  is built.
 - **Gemini.** Developers report its custom-MCP OAuth flow stalling after the
   callback. If it still fails at P1, we ship for Claude and ChatGPT and
   revisit Gemini later.
