@@ -92,10 +92,13 @@ on.example.com {
 Run the proxy on the same machine. The sign-in limit and the AI access
 limits count attempts per visitor, and when a request comes from
 `127.0.0.1` the service takes the visitor's address from the last entry of
-the `X-Forwarded-For` header. So the proxy must set that header, appending
-the address it actually saw to whatever the visitor sent rather than
-passing the visitor's own value through untouched. Caddy does this by
-default. Without the header, everyone behind the proxy shares one limit.
+the `X-Forwarded-For` header. So the proxy must set that header, making
+the address it actually saw the last entry, rather than passing the
+visitor's own value through untouched. Caddy does this by default (it
+replaces any incoming value with the address it saw). Without the header,
+everyone behind the proxy shares one limit. Only put an HTTP proxy that
+sets the header on `127.0.0.1`: a plain TCP or TLS pass-through there
+(an SSH tunnel, say) would let visitors choose their own address.
 
 **On its own.** Drop the proxy and let the binary obtain its own certificate:
 
