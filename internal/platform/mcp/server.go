@@ -151,6 +151,11 @@ func buildTools(tools []app.Tool) []builtTool {
 			if err != nil {
 				panic(fmt.Sprintf("mcp: tool %s: input schema: %v", t.Name, err))
 			}
+			// The SDK's AddTool panics on a non-object schema, and it runs
+			// per request; refusing here moves that to startup.
+			if s.Type != "object" {
+				panic(fmt.Sprintf("mcp: tool %s: Input must be a struct value, got %T", t.Name, t.Input))
+			}
 			schema = s
 		}
 		// Reads say so, so clients can skip confirming them; writes only add

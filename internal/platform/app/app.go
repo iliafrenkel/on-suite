@@ -445,6 +445,11 @@ func (reg *Registry) Tools(deps Deps) ([]Tool, error) {
 			if t.Scope != id+":read" && t.Scope != id+":write" {
 				return nil, fmt.Errorf("app: %s tool %q has scope %q, want %s:read or %s:write", id, t.Name, t.Scope, id, id)
 			}
+			// ReadOnly becomes readOnlyHint, which clients use to skip
+			// confirmation, so it must agree with the scope.
+			if t.ReadOnly != strings.HasSuffix(t.Scope, ":read") {
+				return nil, fmt.Errorf("app: %s tool %q: ReadOnly must be true exactly when the scope is %s:read", id, t.Name, id)
+			}
 			if t.Call == nil {
 				return nil, fmt.Errorf("app: %s tool %q has no Call", id, t.Name)
 			}

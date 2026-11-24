@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -415,8 +416,24 @@ func TestMCPBehindAProxyOnLoopback(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode == http.StatusForbidden {
-		t.Errorf("status 403 for a proxied public Host")
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status %d for a proxied public Host, want 200", resp.StatusCode)
+	}
+}
+
+func TestRoutesRefusesNonObjectInput(t *testing.T) {
+	for _, input := range []any{&listArgs{}, []string{}} {
+		t.Run(fmt.Sprintf("%T", input), func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if r == nil || !strings.Contains(fmt.Sprint(r), "books_list") {
+					t.Errorf("Routes: recovered %v, want a panic naming books_list", r)
+				}
+			}()
+			bad := readTool("books_list", done)
+			bad.Input = input
+			Routes(http.NewServeMux(), nil, Deps{Tools: []app.Tool{bad}, ResourceURL: testResource})
+		})
 	}
 }
 

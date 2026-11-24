@@ -19,12 +19,18 @@ func (a toolingApp) Tools(app.Deps) []app.Tool { return a.tools }
 
 func tool(name, scope string) app.Tool {
 	return app.Tool{
-		Name:  name,
-		Scope: scope,
+		Name:     name,
+		Scope:    scope,
+		ReadOnly: strings.HasSuffix(scope, ":read"),
 		Call: func(context.Context, int64, json.RawMessage) (string, error) {
 			return "", nil
 		},
 	}
+}
+
+func flipReadOnly(t app.Tool) app.Tool {
+	t.ReadOnly = !t.ReadOnly
+	return t
 }
 
 func TestRegistryToolsValidates(t *testing.T) {
@@ -37,6 +43,8 @@ func TestRegistryToolsValidates(t *testing.T) {
 		{"scope for another app", []app.Tool{tool("books_list", "notes:read")}},
 		{"scope not read or write", []app.Tool{tool("books_list", "books:admin")}},
 		{"duplicate name", []app.Tool{tool("books_list", "books:read"), tool("books_list", "books:read")}},
+		{"read tool not ReadOnly", []app.Tool{flipReadOnly(tool("books_list", "books:read"))}},
+		{"write tool ReadOnly", []app.Tool{flipReadOnly(tool("books_add", "books:write"))}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
