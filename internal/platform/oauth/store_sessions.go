@@ -15,17 +15,17 @@ import (
 // Session kinds, as the oauth_sessions CHECK constraint names them. One
 // table holds them all and (kind, signature) is the key, because the
 // library stores the auth-code and PKCE sessions under the same signature.
+// The constraint also allows "registration", for RFC 7592 management tokens,
+// which are no longer stored (#629, migration 0004).
 const (
-	kindCode         = "code"
-	kindPKCE         = "pkce"
-	kindAccess       = "access"
-	kindRefresh      = "refresh"
-	kindRegistration = "registration"
+	kindCode    = "code"
+	kindPKCE    = "pkce"
+	kindAccess  = "access"
+	kindRefresh = "refresh"
 )
 
-// neverExpires stands in for "no expiry" in the NOT NULL expires_at column:
-// RFC 7592 registration tokens never expire, so Sweep must never match
-// them.
+// neverExpires stands in for "no expiry" in the NOT NULL expires_at column,
+// for a session whose library session carries no expiry for its token type.
 var neverExpires = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
 // storedRequest is the part of a library Requester that survives a round
@@ -133,19 +133,17 @@ func expiry(req oauth2.Requester, tt oauth2.TokenType) time.Time {
 	return neverExpires
 }
 
-// createSession writes one session row. grant_id is the request ID for
-// every kind but registration, so a code or token for a request whose grant
-// row doesn't exist fails on the foreign key: consent writes the grant
-// first, and revoking the grant cascades to every row.
+// createSession writes one session row. grant_id is the request ID, so a
+// code or token for a request whose grant row doesn't exist fails on the
+// foreign key: consent writes the grant first, and revoking the grant
+// cascades to every row.
 func (s *Store) createSession(ctx context.Context, kind, signature, accessSignature string, req oauth2.Requester, expiresAt time.Time) error {
 	data, err := encodeRequest(req)
 	if err != nil {
 		return err
 	}
-	var grantID, accessSig any
-	if kind != kindRegistration {
-		grantID = req.GetID()
-	}
+	grantID := req.GetID()
+	var accessSig any
 	if accessSignature != "" {
 		accessSig = accessSignature
 	}
@@ -375,21 +373,21 @@ func (s *Store) RevokeRefreshToken(ctx context.Context, requestID string) error 
 	return nil
 }
 
-// CreateClientRegistrationTokenSession stores an RFC 7592 registration
-// token. Its rows have no grant: they exist before any user approves
-// anything.
-func (s *Store) CreateClientRegistrationTokenSession(ctx context.Context, signature string, req oauth2.Requester) error {
-	return s.createSession(ctx, kindRegistration, signature, "", req, neverExpires)
+// CreateClientRegistrationTokenSession is where the library stores an RFC 7592
+// management token. ON Suite doesn't mount RFC 7592 management, and the
+// registration handler strips the token from its response, so nothing is
+// kept (#629): a never-expiring credential nobody can use should not exist.
+func (s *Store) CreateClientRegistrationTokenSession(context.Context, string, oauth2.Requester) error {
+	return nil
 }
 
-// GetClientRegistrationTokenSession returns the request behind a
-// registration token.
-func (s *Store) GetClientRegistrationTokenSession(ctx context.Context, signature string, session oauth2.Session) (oauth2.Requester, error) {
-	req, _, err := s.getSession(ctx, kindRegistration, signature, session)
-	return req, err
+// GetClientRegistrationTokenSession finds no management token, since none
+// is ever stored.
+func (s *Store) GetClientRegistrationTokenSession(context.Context, string, oauth2.Session) (oauth2.Requester, error) {
+	return nil, oauth2.ErrNotFound
 }
 
-// DeleteClientRegistrationTokenSession removes a registration token.
-func (s *Store) DeleteClientRegistrationTokenSession(ctx context.Context, signature string) error {
-	return s.deleteSession(ctx, kindRegistration, signature)
+// DeleteClientRegistrationTokenSession has nothing to delete.
+func (s *Store) DeleteClientRegistrationTokenSession(context.Context, string) error {
+	return nil
 }

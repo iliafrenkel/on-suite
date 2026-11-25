@@ -404,13 +404,6 @@ func TestClientRoundTripAndDelete(t *testing.T) {
 		t.Errorf("GetClient(unknown) err = %v, want oauth2.ErrNotFound", err)
 	}
 
-	if err := f.s.CreateClientRegistrationTokenSession(ctx, "reg1", f.request("reg-req", "c1")); err != nil {
-		t.Fatalf("CreateClientRegistrationTokenSession: %v", err)
-	}
-	if _, err := f.s.GetClientRegistrationTokenSession(ctx, "reg1", nil); err != nil {
-		t.Fatalf("GetClientRegistrationTokenSession: %v", err)
-	}
-
 	if err := f.s.DeleteClient(ctx, "c1"); err != nil {
 		t.Fatalf("DeleteClient: %v", err)
 	}
@@ -423,7 +416,7 @@ func TestClientRoundTripAndDelete(t *testing.T) {
 		t.Fatalf("count sessions: %v", err)
 	}
 	if n != 0 {
-		t.Errorf("%d session rows left for the deleted client, want its registration token gone", n)
+		t.Errorf("%d session rows left for the deleted client, want none", n)
 	}
 	if err := f.s.DeleteClient(ctx, "c1"); !errors.Is(err, oauth2.ErrNotFound) {
 		t.Errorf("second DeleteClient err = %v, want oauth2.ErrNotFound", err)
@@ -619,29 +612,20 @@ func TestSweepRemovesDeadGrants(t *testing.T) {
 }
 
 // A registered client nobody connected with within a day is noise from an
-// abandoned or hostile registration; the sweep drops it and its RFC 7592
-// registration token. A client with a grant, or a younger one, is kept.
+// abandoned or hostile registration; the sweep drops it. A client with a
+// grant, or a younger one, is kept.
 func TestSweepRemovesOrphanClients(t *testing.T) {
 	f := newFixture(t) // c1, created at start
 	ctx := context.Background()
 	start := f.now
 
-	registration := func(sig, clientID string) {
-		t.Helper()
-		if err := f.s.CreateClientRegistrationTokenSession(ctx, sig, f.request("reg-"+clientID, clientID)); err != nil {
-			t.Fatalf("CreateClientRegistrationTokenSession: %v", err)
-		}
-	}
-	registration("reg1", "c1")
 	f.addClient(t, "used")
-	registration("reg-used", "used")
 	f.addGrant(t, "g-used", f.u1, "used")
 	if err := f.s.CreateRefreshTokenSession(ctx, "rt", "", f.request("g-used", "used")); err != nil {
 		t.Fatalf("CreateRefreshTokenSession: %v", err)
 	}
 	f.now = start.Add(time.Hour)
 	f.addClient(t, "young")
-	registration("reg-young", "young")
 
 	// c1 is exactly 24h old: kept.
 	f.now = start.Add(24 * time.Hour)
@@ -661,17 +645,9 @@ func TestSweepRemovesOrphanClients(t *testing.T) {
 	if _, err := f.s.GetClient(ctx, "c1"); !errors.Is(err, oauth2.ErrNotFound) {
 		t.Errorf("GetClient(c1) err = %v, want swept", err)
 	}
-	if _, err := f.s.GetClientRegistrationTokenSession(ctx, "reg1", nil); !errors.Is(err, oauth2.ErrNotFound) {
-		t.Errorf("c1 registration token err = %v, want swept with the client", err)
-	}
 	for _, id := range []string{"used", "young"} {
 		if _, err := f.s.GetClient(ctx, id); err != nil {
 			t.Errorf("GetClient(%s): %v, want kept", id, err)
-		}
-	}
-	for _, sig := range []string{"reg-used", "reg-young"} {
-		if _, err := f.s.GetClientRegistrationTokenSession(ctx, sig, nil); err != nil {
-			t.Errorf("registration token %s: %v, want kept", sig, err)
 		}
 	}
 }

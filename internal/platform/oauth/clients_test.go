@@ -210,6 +210,30 @@ func TestRegisterForcesPublicClientAndOurResource(t *testing.T) {
 	}
 }
 
+// RFC 7592 client management isn't mounted, so registration hands out no
+// management token and stores none (#629): a credential nobody can use
+// should not exist.
+func TestRegisterIssuesNoManagementToken(t *testing.T) {
+	a := newASServer(t, nil, []string{claudeRedirect}, nil)
+	code, body := a.register(t, `{"redirect_uris":["`+claudeRedirect+`"],"client_name":"Claude",`+
+		`"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("register = %d %v, want 201", code, body)
+	}
+	for _, key := range []string{"registration_access_token", "registration_client_uri"} {
+		if _, ok := body[key]; ok {
+			t.Errorf("response carries %s: %v", key, body)
+		}
+	}
+	var n int
+	if err := a.srv.store.db.QueryRow(`SELECT count(*) FROM oauth_sessions WHERE kind = 'registration'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("%d registration tokens stored, want none", n)
+	}
+}
+
 func TestRegisterRestrictsScopesToOurs(t *testing.T) {
 	a := newASServer(t, nil, []string{claudeRedirect}, nil)
 	code, body := a.register(t, `{"redirect_uris":["`+claudeRedirect+`"],"scope":"notes:read openid admin"}`)
