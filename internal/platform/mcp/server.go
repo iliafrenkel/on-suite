@@ -180,11 +180,22 @@ func buildTools(tools []app.Tool) []builtTool {
 	return out
 }
 
-// verify adapts oauth's Verify to the SDK's bearer middleware. Every failure
-// is the SDK's ErrInvalidToken, a 401 with the resource metadata pointer, so
-// a client re-runs the OAuth flow instead of seeing a 500.
+// errTryAgain is what a client sees when the token couldn't be checked. The
+// SDK answers any error other than its ErrInvalidToken with a 500 and the
+// error's text, so the text is ours, never the storage error's.
+var errTryAgain = errors.New("temporarily unavailable, try again shortly")
+
+// verify adapts oauth's Verify to the SDK's bearer middleware. A bad token is
+// the SDK's ErrInvalidToken, a 401 with the resource metadata pointer, so a
+// client re-runs the OAuth flow. A token that couldn't be checked because
+// storage failed is a logged 500 instead: a 401 there would make the client
+// drop a good connection and the user sign in again (#629).
 func (s *server) verify(ctx context.Context, token string, _ *http.Request) (*auth.TokenInfo, error) {
 	c, err := s.deps.Verify(ctx, token)
+	if errors.Is(err, oauth.ErrUnavailable) {
+		s.deps.Log.Error("mcp: checking a bearer token failed", "error", err)
+		return nil, errTryAgain
+	}
 	if err != nil {
 		return nil, auth.ErrInvalidToken
 	}

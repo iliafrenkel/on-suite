@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -30,6 +31,9 @@ type Options struct {
 	HTTPClient *http.Client
 	// Now is the store's clock. Nil means time.Now.
 	Now func() time.Time
+	// Log records failures that don't reach a caller, such as a failed
+	// "last used" write. Nil discards them.
+	Log *slog.Logger
 }
 
 // Server is the OAuth 2.1 authorization server: the composed library
@@ -41,6 +45,7 @@ type Server struct {
 	clients   checkedClients
 	publicURL string
 	redirects map[string]bool
+	log       *slog.Logger
 
 	// Per-IP limiters, one budget per endpoint (authorize's GET and POST
 	// share one). See ratelimit.go.
@@ -70,9 +75,14 @@ func New(ctx context.Context, db *sql.DB, opts Options) (*Server, error) {
 		now = time.Now
 	}
 
+	log := opts.Log
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
 	s := &Server{
 		publicURL:        issuer,
 		redirects:        map[string]bool{},
+		log:              log,
 		registerLimiter:  newLimiter(registerLimit, registerWindow, now),
 		tokenLimiter:     newLimiter(endpointLimit, endpointWindow, now),
 		authorizeLimiter: newLimiter(endpointLimit, endpointWindow, now),

@@ -62,7 +62,7 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 
 	// AI access's authorization server, nil when it is off. Built before the
 	// jobs so its sweep can be one of them.
-	oauthServer, err := newOAuthServer(context.Background(), handle, cfg)
+	oauthServer, err := newOAuthServer(context.Background(), handle, cfg, log)
 	if err != nil {
 		return err
 	}

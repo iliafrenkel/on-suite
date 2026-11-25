@@ -51,13 +51,14 @@ type stackDeps struct {
 // returns nil when it is off (spec 2026-11-24-ai-access-mcp-design.md,
 // "Wiring"). HTTPClient is left nil, so CIMD fetches go through the
 // library's client that refuses loopback and private addresses.
-func newOAuthServer(ctx context.Context, handle *sql.DB, cfg config.Config) (*oauth.Server, error) {
+func newOAuthServer(ctx context.Context, handle *sql.DB, cfg config.Config, log *slog.Logger) (*oauth.Server, error) {
 	if !cfg.MCP {
 		return nil, nil
 	}
 	return oauth.New(ctx, handle, oauth.Options{
 		PublicURL:    cfg.PublicURL,
 		RedirectURIs: cfg.OAuthRedirectURIs,
+		Log:          log,
 	})
 }
 

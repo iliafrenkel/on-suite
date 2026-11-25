@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -59,6 +60,9 @@ func newFixture(t *testing.T, tools []app.Tool, callers map[string]oauth.Caller)
 	Routes(mux, nil, Deps{
 		Tools: tools,
 		Verify: func(_ context.Context, bearer string) (oauth.Caller, error) {
+			if bearer == "storage-down" {
+				return oauth.Caller{}, fmt.Errorf("%w: disk on fire", oauth.ErrUnavailable)
+			}
 			c, ok := callers[bearer]
 			if !ok {
 				return oauth.Caller{}, oauth.ErrInvalidToken
@@ -161,6 +165,33 @@ func TestMCPNoTokenIs401WithResourceMetadata(t *testing.T) {
 		if got := resp.Header.Get("WWW-Authenticate"); !strings.Contains(got, want) {
 			t.Errorf("auth %q: WWW-Authenticate = %q, want it to contain %s", auth, got, want)
 		}
+	}
+}
+
+// When the token can't be checked because storage failed, the answer must not
+// be 401: a client told "invalid token" drops the connection and makes the
+// user sign in again (#629). The detail goes to the log, not the client.
+func TestMCPStorageFailureIsNot401(t *testing.T) {
+	f := newFixture(t, nil, nil)
+	req, _ := http.NewRequest(http.MethodPost, f.srv.URL+"/mcp", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer storage-down")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode < 500 {
+		t.Errorf("status = %d, want a 5xx, never 401", resp.StatusCode)
+	}
+	if resp.Header.Get("WWW-Authenticate") != "" {
+		t.Errorf("WWW-Authenticate = %q, want none: nothing to re-authenticate", resp.Header.Get("WWW-Authenticate"))
+	}
+	if strings.Contains(string(body), "disk on fire") {
+		t.Errorf("body %q leaks the storage error", body)
+	}
+	if !strings.Contains(f.log.String(), "disk on fire") {
+		t.Errorf("log = %q, want the storage error recorded", f.log.String())
 	}
 }
 
