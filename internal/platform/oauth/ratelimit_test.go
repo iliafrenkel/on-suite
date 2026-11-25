@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -106,6 +107,22 @@ func TestRegisterLimitedPerForwardedClient(t *testing.T) {
 		e.doFwd("POST", "/oauth/register", "192.0.2.1:5000", "", `{}`)
 	}
 	wantLimited(t, e.doFwd("POST", "/oauth/register", "192.0.2.1:5000", "198.51.100.9", `{}`), true)
+}
+
+// An IPv6 client rotating addresses inside its /64 shares one budget; the
+// next /64 over is someone else (#629).
+func TestRegisterLimitedPerIPv6Network(t *testing.T) {
+	e := newLimitEnv(t)
+	for i := range 10 {
+		peer := fmt.Sprintf("[2001:db8:1:2::%x]:5000", i+1)
+		if rec := e.do("POST", "/oauth/register", peer, `{}`); rec.Code == http.StatusTooManyRequests {
+			t.Fatalf("request %d limited, want the first 10 allowed", i+1)
+		}
+	}
+	wantLimited(t, e.do("POST", "/oauth/register", "[2001:db8:1:2:ffff::99]:5000", `{}`), true)
+	if rec := e.do("POST", "/oauth/register", "[2001:db8:1:3::1]:5000", `{}`); rec.Code == http.StatusTooManyRequests {
+		t.Error("a different /64 was limited")
+	}
 }
 
 func TestTokenAuthorizeAndRevokeLimitedPerIP(t *testing.T) {

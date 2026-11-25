@@ -184,7 +184,7 @@ func (a *Auth) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key := strings.ToLower(username) + "|" + ClientIP(r)
+	key := strings.ToLower(username) + "|" + RateKey(r)
 	if !a.limiter.Allow(key, a.now()) {
 		a.log.Warn("login rate limit reached", "username", username, "ip", ClientIP(r))
 		a.errs.Status(w, r, http.StatusTooManyRequests)

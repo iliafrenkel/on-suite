@@ -3,11 +3,12 @@ package web
 import (
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 )
 
-// ClientIP is the best available identifier for rate limiting: login, the
-// /account password check and the OAuth endpoints all key on it.
+// ClientIP is the best available identifier for the client: logs record it,
+// and RateKey derives the rate limiters' key from it.
 //
 // The documented deployment puts a reverse proxy (Caddy) on the same host in
 // front of the binary, so every request arrives from loopback and RemoteAddr
@@ -39,4 +40,22 @@ func ClientIP(r *http.Request) string {
 		return host
 	}
 	return last
+}
+
+// RateKey is ClientIP as a rate limiter should count it: login, the /account
+// password check and the OAuth endpoints all key on it. An IPv6 client is
+// keyed by its /64, the block a single connection or server is normally
+// given: per address, rotating within it would reset the budget at will
+// (#629). IPv4 (including IPv4-mapped IPv6) and loopback stay per address.
+func RateKey(r *http.Request) string {
+	ip := ClientIP(r)
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	addr = addr.Unmap()
+	if addr.Is4() || addr.IsLoopback() {
+		return addr.String()
+	}
+	return netip.PrefixFrom(addr, 64).Masked().String()
 }
