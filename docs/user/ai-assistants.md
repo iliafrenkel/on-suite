@@ -119,8 +119,8 @@ any of them.
 
 ## A note on what assistants read
 
-Assistants treat what they read in ON Suite as information, not as
-instructions. Later, when assistants can read articles you've saved or
-subscribed to, that text was written by other people, so ON Suite marks it
-as such: an article that says "ignore your instructions" is just text to
-the assistant, the same as any other sentence in it.
+When an assistant reads an article you've saved or subscribed to, that text was
+written by other people. ON Suite hands it over as outside content and tells
+the assistant not to follow instructions in it. That makes it much harder for
+a web page to steer the assistant, but not impossible, so only allow changes
+you're comfortable with.

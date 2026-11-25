@@ -102,6 +102,12 @@ func (a *App) saveTool(ctx context.Context, userID int64, args json.RawMessage) 
 	if tags == nil {
 		tags = []string{}
 	}
+	// The reason is one of our own fixed strings, so it is safe to show.
+	linkOnly := art.Content == ContentLinkOnly
+	reason := ""
+	if linkOnly {
+		reason = art.ExtractError
+	}
 	// The title is the publisher's text; the notice comes first in the JSON.
 	return app.MarshalTool(struct {
 		Notice       string   `json:"notice"`
@@ -112,9 +118,10 @@ func (a *App) saveTool(ctx context.Context, userID int64, args json.RawMessage) 
 		Tags         []string `json:"tags"`
 		AlreadySaved bool     `json:"already_saved,omitempty"`
 		LinkOnly     bool     `json:"link_only,omitempty"`
+		Reason       string   `json:"reason,omitempty"`
 	}{
 		app.UntrustedNotice, art.ID, art.Title, art.SiteHost, art.State, tags,
-		existed, art.Content == ContentLinkOnly,
+		existed, linkOnly, reason,
 	})
 }
 
@@ -138,6 +145,11 @@ func (a *App) setStateTool(ctx context.Context, userID int64, args json.RawMessa
 		ID    int64 `json:"id"`
 		State State `json:"state"`
 	}{in.ID, state})
+}
+
+// sameSet reports whether a and b hold the same tags, ignoring order.
+func sameSet(a, b []string) bool {
+	return len(a) == len(b) && !slices.ContainsFunc(a, func(t string) bool { return !slices.Contains(b, t) })
 }
 
 func (a *App) tagTool(ctx context.Context, userID int64, args json.RawMessage) (string, error) {
@@ -165,8 +177,9 @@ func (a *App) tagTool(ctx context.Context, userID int64, args json.RawMessage) (
 		}
 	}
 	want = slices.DeleteFunc(want, func(t string) bool { return slices.Contains(remove, t) })
-	slices.Sort(want)
-	if !slices.Equal(want, have) { // have is already alphabetical
+	// Existing tags keep their place ahead of the new ones, so the cap
+	// never drops one of them for an added tag.
+	if !sameSet(want, have) {
 		if err := a.store.SetTags(ctx, userID, in.ID, want); err != nil {
 			return "", toolErr(err)
 		}

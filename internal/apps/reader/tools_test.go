@@ -207,8 +207,8 @@ func TestReaderListBadFeedAndFilter(t *testing.T) {
 	tf := newToolFixture(t)
 	alice, bob := tf.s.Alice.User.ID, tf.s.Bob.User.ID
 	subBob, _ := tf.subscribe(t, bob, "https://bob.example.com/feed.xml", pi("x", "Bob's", "<p>x</p>", 1))
-	tf.wantToolErr(t, "reader_list", alice, `{"feed":`+i64(subBob)+`}`, "No feed with that ID in your subscriptions.")
-	tf.wantToolErr(t, "reader_list", alice, `{"feed":999999}`, "No feed with that ID in your subscriptions.")
+	tf.wantToolErr(t, "reader_list", alice, `{"feed":`+i64(subBob)+`}`, "No feed with that ID in your subscriptions")
+	tf.wantToolErr(t, "reader_list", alice, `{"feed":999999}`, "No feed with that ID in your subscriptions")
 	tf.wantToolErr(t, "reader_list", alice, `{"filter":"old"}`, "Filter must be unread or starred.")
 }
 

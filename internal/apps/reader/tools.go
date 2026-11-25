@@ -180,7 +180,7 @@ func (a *App) listTool(ctx context.Context, userID int64, args json.RawMessage) 
 	case in.Feed != 0:
 		if err := a.store.ownsSubscription(ctx, userID, in.Feed); err != nil {
 			if errors.Is(err, ErrNotFound) {
-				return "", app.ToolError{Msg: "No feed with that ID in your subscriptions."}
+				return "", app.ToolError{Msg: "No feed with that ID in your subscriptions"}
 			}
 			return "", err
 		}

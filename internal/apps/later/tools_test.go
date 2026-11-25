@@ -141,6 +141,9 @@ func TestLaterListByStateAndTag(t *testing.T) {
 	if got := tf.list(t, alice, `{"tag":"recipes"}`); len(got.Articles) != 1 || got.Articles[0].Title != "One" {
 		t.Errorf("tag=recipes = %+v, want just One", got.Articles)
 	}
+	if got := tf.list(t, alice, `{"tag":"#Recipes"}`); len(got.Articles) != 1 || got.Articles[0].Title != "One" {
+		t.Errorf("tag=#Recipes = %+v, want just One", got.Articles)
+	}
 	if got := tf.list(t, tf.s.Bob.User.ID, `{}`); len(got.Articles) != 0 || len(got.Tags) != 0 {
 		t.Errorf("bob sees %+v, want nothing", got)
 	}

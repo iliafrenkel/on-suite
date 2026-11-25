@@ -134,7 +134,7 @@ func (a *App) listTool(ctx context.Context, userID int64, args json.RawMessage) 
 	default:
 		return "", app.ToolError{Msg: "State must be unread, reading or archived."}
 	}
-	tag := strings.TrimSpace(in.Tag)
+	tag := tagParam(in.Tag)
 
 	items, err := a.store.List(ctx, userID, state, tag, 0, toolLimit(in.Limit))
 	if err != nil {
@@ -176,7 +176,7 @@ func (a *App) searchTool(ctx context.Context, userID int64, args json.RawMessage
 	if query == "" {
 		return "", app.ToolError{Msg: "Give some words to search for."}
 	}
-	hits, err := a.store.Search(ctx, userID, query, strings.TrimSpace(in.Tag), 0, toolLimit(in.Limit))
+	hits, err := a.store.Search(ctx, userID, query, tagParam(in.Tag), 0, toolLimit(in.Limit))
 	if err != nil {
 		return "", err
 	}
