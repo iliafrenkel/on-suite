@@ -62,7 +62,7 @@ func newE2EEnv(t *testing.T, mcpOn bool) *e2eEnv {
 	}
 	t.Cleanup(func() { _ = handle.Close() })
 
-	oauthServer, err := newOAuthServer(context.Background(), handle, cfg)
+	oauthServer, err := newOAuthServer(context.Background(), handle, cfg, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("newOAuthServer: %v", err)
 	}

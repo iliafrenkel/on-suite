@@ -91,8 +91,10 @@ func TestBooksToolsBadArguments(t *testing.T) {
 		}
 		return len(r.Books)
 	}
-	if got := count(`{"limit":0}`); got != 50 {
-		t.Errorf("limit 0 = %d books, want the default 50", got)
+	for _, limit := range []string{"0", "-5"} {
+		if got := count(`{"limit":` + limit + `}`); got != 50 {
+			t.Errorf("limit %s = %d books, want the default 50", limit, got)
+		}
 	}
 	if got := count(`{"limit":500}`); got != 200 {
 		t.Errorf("limit 500 = %d books, want the cap 200", got)

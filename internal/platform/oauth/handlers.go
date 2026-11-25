@@ -120,5 +120,10 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		s.provider.WriteRFC7591ClientRegistrationError(ctx, w, req, err)
 		return
 	}
+	// RFC 7592 management isn't mounted, so the management token and URI the
+	// library fills in would point at nothing (#629). Empty values are left
+	// out of the response; the store keeps no such token either.
+	resp.SetRegistrationAccessToken("")
+	resp.SetRegistrationClientURI("")
 	s.provider.WriteRFC7591ClientRegistrationResponse(ctx, w, req, resp)
 }

@@ -13,11 +13,14 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -97,16 +100,16 @@ func Routes(mux *http.ServeMux, rec *web.Recorder, d Deps) {
 	bearer := auth.RequireBearerToken(s.verify, &auth.RequireBearerTokenOptions{
 		ResourceMetadataURL: metadataURL(d.ResourceURL),
 	})
-	h := bearer(s.rateLimit(sdk.NewStreamableHTTPHandler(s.serverFor, &sdk.StreamableHTTPOptions{
+	h := hostGuard(publicHost(d.ResourceURL), bearer(s.rateLimit(sdk.NewStreamableHTTPHandler(s.serverFor, &sdk.StreamableHTTPOptions{
 		// Stateless: every request carries its token and stands alone, so
 		// nothing per-session lives in this process (spec, "Decisions").
 		Stateless: true,
-		// The SDK refuses a loopback connection with a non-loopback Host,
-		// against DNS rebinding of local servers. Production runs behind a
-		// reverse proxy on loopback with the public Host, which that check
-		// would refuse; /mcp is protected by the bearer token instead.
+		// The SDK's own DNS-rebinding check refuses every non-loopback Host
+		// on a loopback connection, which is exactly what the same-host
+		// proxy sends. hostGuard does the same check but also accepts the
+		// public host.
 		DisableLocalhostProtection: true,
-	})))
+	}))))
 
 	const post = "POST /mcp"
 	web.RegisterBodyLimit(post, bodyLimit)
@@ -115,6 +118,51 @@ func Routes(mux *http.ServeMux, rec *web.Recorder, d Deps) {
 	// answers these with 405, behind the same token check.
 	rec.Handle(mux, "GET /mcp", true, h)
 	rec.Handle(mux, "DELETE /mcp", true, h)
+}
+
+// hostGuard is DNS-rebinding protection that works behind a same-host proxy
+// (#629). A request that arrived on a loopback address must name a loopback
+// host or the public host; anything else is a page on another domain that
+// got its name pointed at this server, and is refused before the token is
+// looked at. Requests on other addresses (no proxy) pass: the bearer token
+// is the real protection, this is defence in depth.
+func hostGuard(public string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		local, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+		if local != nil && isLoopback(hostOnly(local.String())) {
+			host := strings.ToLower(hostOnly(r.Host))
+			if host != public && !isLoopback(host) {
+				http.Error(w, "Forbidden: unexpected Host", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// publicHost is the lower-case host name of the resource URL, without port.
+func publicHost(resource string) string {
+	u, err := url.Parse(resource)
+	if err != nil {
+		panic(fmt.Sprintf("mcp: resource URL %q: %v", resource, err))
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+// hostOnly drops a port from host[:port] or [v6]:port.
+func hostOnly(hostport string) string {
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		return h
+	}
+	return strings.Trim(hostport, "[]")
+}
+
+func isLoopback(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.IsLoopback()
 }
 
 // metadataURL is where RFC 9728 puts the metadata for resource: the
@@ -180,11 +228,22 @@ func buildTools(tools []app.Tool) []builtTool {
 	return out
 }
 
-// verify adapts oauth's Verify to the SDK's bearer middleware. Every failure
-// is the SDK's ErrInvalidToken, a 401 with the resource metadata pointer, so
-// a client re-runs the OAuth flow instead of seeing a 500.
+// errTryAgain is what a client sees when the token couldn't be checked. The
+// SDK answers any error other than its ErrInvalidToken with a 500 and the
+// error's text, so the text is ours, never the storage error's.
+var errTryAgain = errors.New("temporarily unavailable, try again shortly")
+
+// verify adapts oauth's Verify to the SDK's bearer middleware. A bad token is
+// the SDK's ErrInvalidToken, a 401 with the resource metadata pointer, so a
+// client re-runs the OAuth flow. A token that couldn't be checked because
+// storage failed is a logged 500 instead: a 401 there would make the client
+// drop a good connection and the user sign in again (#629).
 func (s *server) verify(ctx context.Context, token string, _ *http.Request) (*auth.TokenInfo, error) {
 	c, err := s.deps.Verify(ctx, token)
+	if errors.Is(err, oauth.ErrUnavailable) {
+		s.deps.Log.Error("mcp: checking a bearer token failed", "error", err)
+		return nil, errTryAgain
+	}
 	if err != nil {
 		return nil, auth.ErrInvalidToken
 	}
@@ -235,20 +294,42 @@ func (s *server) serverFor(r *http.Request) *sdk.Server {
 	return srv
 }
 
+// maxAuditedName bounds a tool name written to the audit log. Real names are
+// short; an unknown one comes from the caller and could be anything.
+const maxAuditedName = 64
+
 // refuseHidden answers a direct call to a tool the grant lacks the scope
 // for. The SDK would return a protocol error for an unknown tool; a tool
-// error result tells the model plainly, and the attempt is audited.
+// error result tells the model plainly, and the attempt is audited. A name
+// no app declares at all still gets the SDK's protocol error, but is audited
+// too (#629): that is a confused or probing client the user should see.
 func (s *server) refuseHidden(c oauth.Caller, hidden map[string]bool) sdk.Middleware {
 	return func(next sdk.MethodHandler) sdk.MethodHandler {
 		return func(ctx context.Context, method string, req sdk.Request) (sdk.Result, error) {
-			if call, ok := req.(*sdk.CallToolRequest); ok && call.Params != nil && hidden[call.Params.Name] {
-				s.audit(ctx, c, call.Params.Name, "scope")
-				return errorResult("This connection is not allowed to use " + call.Params.Name +
+			call, ok := req.(*sdk.CallToolRequest)
+			if !ok || call.Params == nil {
+				return next(ctx, method, req)
+			}
+			name := call.Params.Name
+			if hidden[name] {
+				s.audit(ctx, c, name, "scope")
+				return errorResult("This connection is not allowed to use " + name +
 					". The user can grant it by reconnecting ON Suite with more access."), nil
+			}
+			if !s.declares(name) {
+				if r := []rune(name); len(r) > maxAuditedName {
+					name = string(r[:maxAuditedName])
+				}
+				s.audit(ctx, c, name, "unknown")
 			}
 			return next(ctx, method, req)
 		}
 	}
+}
+
+// declares reports whether any app offers a tool called name.
+func (s *server) declares(name string) bool {
+	return slices.ContainsFunc(s.tools, func(t builtTool) bool { return t.app.Name == name })
 }
 
 // handler runs one tool for the token's user and audits the outcome. A

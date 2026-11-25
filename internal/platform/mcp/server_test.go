@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -59,6 +60,9 @@ func newFixture(t *testing.T, tools []app.Tool, callers map[string]oauth.Caller)
 	Routes(mux, nil, Deps{
 		Tools: tools,
 		Verify: func(_ context.Context, bearer string) (oauth.Caller, error) {
+			if bearer == "storage-down" {
+				return oauth.Caller{}, fmt.Errorf("%w: disk on fire", oauth.ErrUnavailable)
+			}
 			c, ok := callers[bearer]
 			if !ok {
 				return oauth.Caller{}, oauth.ErrInvalidToken
@@ -164,6 +168,33 @@ func TestMCPNoTokenIs401WithResourceMetadata(t *testing.T) {
 	}
 }
 
+// When the token can't be checked because storage failed, the answer must not
+// be 401: a client told "invalid token" drops the connection and makes the
+// user sign in again (#629). The detail goes to the log, not the client.
+func TestMCPStorageFailureIsNot401(t *testing.T) {
+	f := newFixture(t, nil, nil)
+	req, _ := http.NewRequest(http.MethodPost, f.srv.URL+"/mcp", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer storage-down")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode < 500 {
+		t.Errorf("status = %d, want a 5xx, never 401", resp.StatusCode)
+	}
+	if resp.Header.Get("WWW-Authenticate") != "" {
+		t.Errorf("WWW-Authenticate = %q, want none: nothing to re-authenticate", resp.Header.Get("WWW-Authenticate"))
+	}
+	if strings.Contains(string(body), "disk on fire") {
+		t.Errorf("body %q leaks the storage error", body)
+	}
+	if !strings.Contains(f.log.String(), "disk on fire") {
+		t.Errorf("log = %q, want the storage error recorded", f.log.String())
+	}
+}
+
 func TestProtectedResourceMetadata(t *testing.T) {
 	f := newFixture(t, nil, nil)
 	for _, path := range []string{"/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource"} {
@@ -240,6 +271,27 @@ func TestToolCallOutsideScopeRefused(t *testing.T) {
 		t.Error("the out-of-scope tool ran")
 	}
 	want := []auditRow{{7, "Claude", "books_add", false, "scope"}}
+	if got := f.auditRows(); !slices.Equal(got, want) {
+		t.Errorf("audit = %v, want %v", got, want)
+	}
+}
+
+// A call to a tool no app declares still gets the SDK's protocol error, but
+// is audited, with the caller-chosen name cut to a sane length (#629).
+func TestToolCallUnknownNameAudited(t *testing.T) {
+	f := newFixture(t, []app.Tool{readTool("books_list", done)}, map[string]oauth.Caller{"tok": caller(7, "g1", "books:read")})
+	cs := f.connect(t, "tok")
+
+	long := strings.Repeat("x", 500)
+	for _, name := range []string{"books_delete", long} {
+		if _, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: name, Arguments: map[string]any{}}); err == nil {
+			t.Errorf("CallTool(%.20q) succeeded, want the unknown-tool protocol error", name)
+		}
+	}
+	want := []auditRow{
+		{7, "Claude", "books_delete", false, "unknown"},
+		{7, "Claude", strings.Repeat("x", maxAuditedName), false, "unknown"},
+	}
 	if got := f.auditRows(); !slices.Equal(got, want) {
 		t.Errorf("audit = %v, want %v", got, want)
 	}
@@ -434,6 +486,38 @@ func TestMCPBehindAProxyOnLoopback(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status %d for a proxied public Host, want 200", resp.StatusCode)
+	}
+}
+
+// On a loopback connection (the same-host proxy), only a loopback Host or the
+// public URL's host is accepted: anything else is a DNS-rebinding attempt
+// and is refused before the token is even looked at (#629).
+func TestMCPHostGuardOnLoopback(t *testing.T) {
+	f := newFixture(t, nil, map[string]oauth.Caller{"tok": caller(1, "g1", "books:read")})
+	for host, want := range map[string]int{
+		"onsuite.test":              http.StatusOK,
+		"ONSUITE.test:443":          http.StatusOK,
+		"localhost:8080":            http.StatusOK,
+		"127.0.0.1":                 http.StatusOK,
+		"[::1]:8080":                http.StatusOK,
+		"evil.example":              http.StatusForbidden,
+		"onsuite.test.evil.example": http.StatusForbidden,
+		"evil.example:443":          http.StatusForbidden,
+	} {
+		req, _ := http.NewRequest(http.MethodPost, f.srv.URL+"/mcp",
+			strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+		req.Host = host
+		req.Header.Set("Authorization", "Bearer tok")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("Host %q: status %d, want %d", host, resp.StatusCode, want)
+		}
 	}
 }
 

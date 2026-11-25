@@ -114,6 +114,68 @@ func TestVerifyRefusesDeletedUser(t *testing.T) {
 	})
 }
 
+// A storage failure is not a bad token: the client must retry, not drop the
+// connection and make the user sign in again (#629). It still never accepts
+// the token.
+func TestVerifyStorageErrorIsUnavailable(t *testing.T) {
+	for _, table := range []string{"oauth_sessions", "oauth_grants"} {
+		t.Run(table, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				e := newFlowEnv(t)
+				access, _ := e.exchangeOK(t, e.connect(t, "books:read", "books:read"))
+				if _, err := e.handle.Exec(`ALTER TABLE ` + table + ` RENAME TO broken`); err != nil {
+					t.Fatal(err)
+				}
+				_, err := e.srv.Verify(context.Background(), access)
+				if !errors.Is(err, ErrUnavailable) || errors.Is(err, ErrInvalidToken) {
+					t.Errorf("Verify = %v, want ErrUnavailable and not ErrInvalidToken", err)
+				}
+			})
+		})
+	}
+}
+
+// Recording "last used" is bookkeeping: a failed write is logged, never a
+// reason to refuse a valid token.
+func TestVerifyAcceptsWhenLastUsedWriteFails(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e := newFlowEnv(t)
+		access, _ := e.exchangeOK(t, e.connect(t, "books:read", "books:read"))
+		if _, err := e.handle.Exec(`CREATE TRIGGER no_touch BEFORE UPDATE OF last_used_at ON oauth_grants
+			BEGIN SELECT RAISE(ABORT, 'read-only for the test'); END`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.srv.Verify(context.Background(), access); err != nil {
+			t.Errorf("Verify = %v, want the token accepted", err)
+		}
+	})
+}
+
+// "Last used" is written at most once a minute per grant, not on every call.
+func TestVerifyTouchesLastUsedAtMostOnceAMinute(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e := newFlowEnv(t)
+		access, _ := e.exchangeOK(t, e.connect(t, "books:read", "books:read"))
+		verify := func() time.Time {
+			t.Helper()
+			if _, err := e.srv.Verify(context.Background(), access); err != nil {
+				t.Fatal(err)
+			}
+			g, _ := e.grant(t)
+			return g.LastUsedAt
+		}
+		first := verify()
+		time.Sleep(30 * time.Second)
+		if got := verify(); !got.Equal(first) {
+			t.Errorf("last used moved after 30s: %v → %v", first, got)
+		}
+		time.Sleep(31 * time.Second)
+		if got := verify(); !got.After(first) {
+			t.Errorf("last used not moved after 61s: still %v", got)
+		}
+	})
+}
+
 func TestVerifyRefusesGarbage(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		e := newFlowEnv(t)

@@ -73,12 +73,13 @@ const (
 )
 
 // limitIP wraps next so each client IP gets at most the limiter's budget.
-// The key is web.ClientIP, as login keys its limiter: the forwarded client
-// when our own loopback proxy sent the request, the peer otherwise.
+// The key is web.RateKey, as login keys its limiter: the forwarded client
+// when our own loopback proxy sent the request, the peer otherwise, with an
+// IPv6 client counted by its /64.
 // refuse writes the 429 body; Retry-After is whole seconds, rounded up.
 func limitIP(l *limiter, refuse func(http.ResponseWriter, *http.Request), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if ok, wait := l.allow(web.ClientIP(r)); !ok {
+		if ok, wait := l.allow(web.RateKey(r)); !ok {
 			secs := max(int((wait+time.Second-1)/time.Second), 1)
 			w.Header().Set("Retry-After", strconv.Itoa(secs))
 			refuse(w, r)
