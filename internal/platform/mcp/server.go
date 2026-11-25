@@ -13,11 +13,14 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -97,16 +100,16 @@ func Routes(mux *http.ServeMux, rec *web.Recorder, d Deps) {
 	bearer := auth.RequireBearerToken(s.verify, &auth.RequireBearerTokenOptions{
 		ResourceMetadataURL: metadataURL(d.ResourceURL),
 	})
-	h := bearer(s.rateLimit(sdk.NewStreamableHTTPHandler(s.serverFor, &sdk.StreamableHTTPOptions{
+	h := hostGuard(publicHost(d.ResourceURL), bearer(s.rateLimit(sdk.NewStreamableHTTPHandler(s.serverFor, &sdk.StreamableHTTPOptions{
 		// Stateless: every request carries its token and stands alone, so
 		// nothing per-session lives in this process (spec, "Decisions").
 		Stateless: true,
-		// The SDK refuses a loopback connection with a non-loopback Host,
-		// against DNS rebinding of local servers. Production runs behind a
-		// reverse proxy on loopback with the public Host, which that check
-		// would refuse; /mcp is protected by the bearer token instead.
+		// The SDK's own DNS-rebinding check refuses every non-loopback Host
+		// on a loopback connection, which is exactly what the same-host
+		// proxy sends. hostGuard does the same check but also accepts the
+		// public host.
 		DisableLocalhostProtection: true,
-	})))
+	}))))
 
 	const post = "POST /mcp"
 	web.RegisterBodyLimit(post, bodyLimit)
@@ -115,6 +118,51 @@ func Routes(mux *http.ServeMux, rec *web.Recorder, d Deps) {
 	// answers these with 405, behind the same token check.
 	rec.Handle(mux, "GET /mcp", true, h)
 	rec.Handle(mux, "DELETE /mcp", true, h)
+}
+
+// hostGuard is DNS-rebinding protection that works behind a same-host proxy
+// (#629). A request that arrived on a loopback address must name a loopback
+// host or the public host; anything else is a page on another domain that
+// got its name pointed at this server, and is refused before the token is
+// looked at. Requests on other addresses (no proxy) pass: the bearer token
+// is the real protection, this is defence in depth.
+func hostGuard(public string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		local, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+		if local != nil && isLoopback(hostOnly(local.String())) {
+			host := strings.ToLower(hostOnly(r.Host))
+			if host != public && !isLoopback(host) {
+				http.Error(w, "Forbidden: unexpected Host", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// publicHost is the lower-case host name of the resource URL, without port.
+func publicHost(resource string) string {
+	u, err := url.Parse(resource)
+	if err != nil {
+		panic(fmt.Sprintf("mcp: resource URL %q: %v", resource, err))
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+// hostOnly drops a port from host[:port] or [v6]:port.
+func hostOnly(hostport string) string {
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		return h
+	}
+	return strings.Trim(hostport, "[]")
+}
+
+func isLoopback(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.IsLoopback()
 }
 
 // metadataURL is where RFC 9728 puts the metadata for resource: the

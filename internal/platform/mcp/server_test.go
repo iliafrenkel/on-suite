@@ -468,6 +468,38 @@ func TestMCPBehindAProxyOnLoopback(t *testing.T) {
 	}
 }
 
+// On a loopback connection (the same-host proxy), only a loopback Host or the
+// public URL's host is accepted: anything else is a DNS-rebinding attempt
+// and is refused before the token is even looked at (#629).
+func TestMCPHostGuardOnLoopback(t *testing.T) {
+	f := newFixture(t, nil, map[string]oauth.Caller{"tok": caller(1, "g1", "books:read")})
+	for host, want := range map[string]int{
+		"onsuite.test":              http.StatusOK,
+		"ONSUITE.test:443":          http.StatusOK,
+		"localhost:8080":            http.StatusOK,
+		"127.0.0.1":                 http.StatusOK,
+		"[::1]:8080":                http.StatusOK,
+		"evil.example":              http.StatusForbidden,
+		"onsuite.test.evil.example": http.StatusForbidden,
+		"evil.example:443":          http.StatusForbidden,
+	} {
+		req, _ := http.NewRequest(http.MethodPost, f.srv.URL+"/mcp",
+			strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+		req.Host = host
+		req.Header.Set("Authorization", "Bearer tok")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("Host %q: status %d, want %d", host, resp.StatusCode, want)
+		}
+	}
+}
+
 func TestRoutesRefusesNonObjectInput(t *testing.T) {
 	for _, input := range []any{&listArgs{}, []string{}} {
 		t.Run(fmt.Sprintf("%T", input), func(t *testing.T) {
