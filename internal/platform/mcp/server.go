@@ -294,20 +294,42 @@ func (s *server) serverFor(r *http.Request) *sdk.Server {
 	return srv
 }
 
+// maxAuditedName bounds a tool name written to the audit log. Real names are
+// short; an unknown one comes from the caller and could be anything.
+const maxAuditedName = 64
+
 // refuseHidden answers a direct call to a tool the grant lacks the scope
 // for. The SDK would return a protocol error for an unknown tool; a tool
-// error result tells the model plainly, and the attempt is audited.
+// error result tells the model plainly, and the attempt is audited. A name
+// no app declares at all still gets the SDK's protocol error, but is audited
+// too (#629): that is a confused or probing client the user should see.
 func (s *server) refuseHidden(c oauth.Caller, hidden map[string]bool) sdk.Middleware {
 	return func(next sdk.MethodHandler) sdk.MethodHandler {
 		return func(ctx context.Context, method string, req sdk.Request) (sdk.Result, error) {
-			if call, ok := req.(*sdk.CallToolRequest); ok && call.Params != nil && hidden[call.Params.Name] {
-				s.audit(ctx, c, call.Params.Name, "scope")
-				return errorResult("This connection is not allowed to use " + call.Params.Name +
+			call, ok := req.(*sdk.CallToolRequest)
+			if !ok || call.Params == nil {
+				return next(ctx, method, req)
+			}
+			name := call.Params.Name
+			if hidden[name] {
+				s.audit(ctx, c, name, "scope")
+				return errorResult("This connection is not allowed to use " + name +
 					". The user can grant it by reconnecting ON Suite with more access."), nil
+			}
+			if !s.declares(name) {
+				if r := []rune(name); len(r) > maxAuditedName {
+					name = string(r[:maxAuditedName])
+				}
+				s.audit(ctx, c, name, "unknown")
 			}
 			return next(ctx, method, req)
 		}
 	}
+}
+
+// declares reports whether any app offers a tool called name.
+func (s *server) declares(name string) bool {
+	return slices.ContainsFunc(s.tools, func(t builtTool) bool { return t.app.Name == name })
 }
 
 // handler runs one tool for the token's user and audits the outcome. A

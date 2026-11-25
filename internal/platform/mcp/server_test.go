@@ -276,6 +276,27 @@ func TestToolCallOutsideScopeRefused(t *testing.T) {
 	}
 }
 
+// A call to a tool no app declares still gets the SDK's protocol error, but
+// is audited, with the caller-chosen name cut to a sane length (#629).
+func TestToolCallUnknownNameAudited(t *testing.T) {
+	f := newFixture(t, []app.Tool{readTool("books_list", done)}, map[string]oauth.Caller{"tok": caller(7, "g1", "books:read")})
+	cs := f.connect(t, "tok")
+
+	long := strings.Repeat("x", 500)
+	for _, name := range []string{"books_delete", long} {
+		if _, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: name, Arguments: map[string]any{}}); err == nil {
+			t.Errorf("CallTool(%.20q) succeeded, want the unknown-tool protocol error", name)
+		}
+	}
+	want := []auditRow{
+		{7, "Claude", "books_delete", false, "unknown"},
+		{7, "Claude", strings.Repeat("x", maxAuditedName), false, "unknown"},
+	}
+	if got := f.auditRows(); !slices.Equal(got, want) {
+		t.Errorf("audit = %v, want %v", got, want)
+	}
+}
+
 func TestToolCallPassesTokenUserIDAndAudits(t *testing.T) {
 	var gotUser int64
 	var gotArgs listArgs
