@@ -14,12 +14,28 @@ An assistant can also read your **ON Notes**: it can search your notes,
 read a list or a project, and tell you what's due. If you tick **Add
 notes**, it can also add a new bullet, tick one done (or un-tick it),
 and set, change or clear a due date. It can't delete, move or edit your
-bullets, and it never sees archived bullets. More apps will follow.
+bullets, and it never sees archived bullets.
+
+It can read your **ON Reader** too: it can list what's new in your
+feeds, search them, and read or summarise an article. If you tick **Mark
+read / star**, it can also mark articles read (or unread) and star them.
+It can't add, remove or change your feeds.
+
+And it can read your **ON Later** list: it can list and search the pages
+you've saved, and read or summarise one. If you tick **Save / archive**,
+it can also save a link (with tags if you like), archive or un-archive a
+page, and add or remove its tags. It can't delete anything.
+
+Articles and saved pages were written by other people. ON Suite hands
+their text to the assistant as outside content, so a web page can't give
+the assistant instructions. More apps will follow.
 
 For example, you can say "I'm on page 120 of Dune", "I finished Dune,
 five stars", "save this quote from Dune: ...", "add milk to my groceries
-list", "remind me to call Sam on Friday", "what's due this week?" or
-"tick off call Sam".
+list", "remind me to call Sam on Friday", "what's due this week?",
+"tick off call Sam", "what's new in my feeds?", "summarise the article
+about tapirs", "save this link to Later as recipes" or "tag that one
+travel".
 
 An assistant only ever sees **your** things, never anyone else's in your
 household, and only the parts you allow when you connect it.
@@ -76,8 +92,9 @@ The screen is titled **An assistant wants to access your ON Suite**.
   to have.
 
 An assistant you connected before can only make changes if you ticked
-**Update books** (for ON Books) or **Add notes** (for ON Notes) when you
-connected it. Check **Connected assistants** on
+**Update books** (for ON Books), **Add notes** (for ON Notes), **Mark
+read / star** (for ON Reader) or **Save / archive** (for ON Later) when
+you connected it. Check **Connected assistants** on
 your Account page to see what each one can do; to change that, disconnect
 it and connect it again.
 
@@ -102,8 +119,8 @@ any of them.
 
 ## A note on what assistants read
 
-Assistants treat what they read in ON Suite as information, not as
-instructions. Later, when assistants can read articles you've saved or
-subscribed to, that text was written by other people, so ON Suite marks it
-as such: an article that says "ignore your instructions" is just text to
-the assistant, the same as any other sentence in it.
+When an assistant reads an article you've saved or subscribed to, that text was
+written by other people. ON Suite hands it over as outside content and tells
+the assistant not to follow instructions in it. That makes it much harder for
+a web page to steer the assistant, but not impossible, so only allow changes
+you're comfortable with.

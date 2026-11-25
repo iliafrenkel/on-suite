@@ -686,3 +686,134 @@ func TestMCPNotesTools(t *testing.T) {
 		t.Errorf("bob's note done_at = %q, want NULL", doneAt.String)
 	}
 }
+
+// addReaderItem subscribes a user to a new feed holding one item with the
+// given feed-supplied text, and returns the item's ID.
+func (e *e2eEnv) addReaderItem(t *testing.T, userID int64, name, title, body string) int64 {
+	t.Helper()
+	old := db.FormatTime(time.Now().Add(-48 * time.Hour))
+	now := db.FormatTime(time.Now())
+	feedURL := "https://" + name + ".example/feed"
+	res, err := e.handle.Exec(`INSERT INTO reader_feeds (url, resolved_url, title, site_url, next_fetch_at)
+		VALUES (?, ?, ?, ?, ?)`, feedURL, feedURL, name, "https://"+name+".example/", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	feedID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.handle.Exec(`INSERT INTO reader_subs (user_id, feed_id, added_at) VALUES (?, ?, ?)`, userID, feedID, old); err != nil {
+		t.Fatal(err)
+	}
+	res, err = e.handle.Exec(`INSERT INTO reader_items (feed_id, guid, url, title, published_at, fetched_at, content_html)
+		VALUES (?, 'g1', ?, ?, ?, ?, ?)`, feedID, "https://"+name+".example/post", title, now, now, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// addLaterArticle saves an extracted article for a user and returns its ID.
+func (e *e2eEnv) addLaterArticle(t *testing.T, userID int64, name, title, html, text string) int64 {
+	t.Helper()
+	now := db.FormatTime(time.Now())
+	res, err := e.handle.Exec(`INSERT INTO later_articles (user_id, url, title, site_host, content, content_html, content_text, word_count, saved_at, updated_at)
+		VALUES (?, ?, ?, ?, 'extracted', ?, ?, 3, ?, ?)`, userID, "https://"+name+".example/a", title, name+".example", html, text, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func TestMCPReaderAndLaterTools(t *testing.T) {
+	e := newE2EEnv(t, true)
+	alice := e.addUser(t, "alice")
+	bob := e.addUser(t, "bob")
+	aliceItem := e.addReaderItem(t, alice.ID, "alicefeed", "Tapir news", "<p>Tapirs swim at night.</p>")
+	bobItem := e.addReaderItem(t, bob.ID, "bobfeed", "Bob's feed post", "<p>Bob private text.</p>")
+	aliceSaved := e.addLaterArticle(t, alice.ID, "alicelater", "Sourdough guide", "<p>Feed the starter daily.</p>", "Feed the starter daily.")
+	bobSaved := e.addLaterArticle(t, bob.ID, "boblater", "Bob's saved page", "<p>Bob secret.</p>", "Bob secret.")
+	cookies := e.logIn(t, "alice")
+
+	srv := httptest.NewServer(e.handler)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), e2eTimeout)
+	defer cancel()
+
+	call := func(cs *sdk.ClientSession, name string, args map[string]any) *sdk.CallToolResult {
+		t.Helper()
+		res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: name, Arguments: args})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return res
+	}
+	toolNames := func(cs *sdk.ClientSession) []string {
+		t.Helper()
+		list, err := cs.ListTools(ctx, nil)
+		if err != nil {
+			t.Fatalf("tools/list: %v", err)
+		}
+		var names []string
+		for _, tool := range list.Tools {
+			names = append(names, tool.Name)
+		}
+		slices.Sort(names)
+		return names
+	}
+
+	readOnly := mcpSession(ctx, t, srv.URL, e.connect(t, e.register(t, "Readers"), cookies, "reader:read", "later:read"))
+	wantRead := []string{"later_get_article", "later_list", "later_search", "reader_get_article", "reader_list", "reader_search"}
+	if got := toolNames(readOnly); !slices.Equal(got, wantRead) {
+		t.Errorf("read grant lists %v, want %v", got, wantRead)
+	}
+
+	cs := mcpSession(ctx, t, srv.URL, e.connect(t, e.register(t, "Writers"), cookies,
+		"reader:read", "reader:write", "later:read", "later:write"))
+	wantAll := []string{"later_get_article", "later_list", "later_save", "later_search", "later_set_state", "later_tag",
+		"reader_get_article", "reader_list", "reader_mark_read", "reader_search", "reader_star"}
+	if got := toolNames(cs); !slices.Equal(got, wantAll) {
+		t.Errorf("full grant lists %v, want %v", got, wantAll)
+	}
+
+	res := call(cs, "reader_get_article", map[string]any{"id": aliceItem})
+	if text := toolText(t, res); res.IsError || !strings.Contains(text, "<untrusted_article source=") || !strings.Contains(text, "Tapirs swim at night.") {
+		t.Errorf("reader_get_article = %q (error %v), want an untrusted block with the text", text, res.IsError)
+	}
+	res = call(cs, "reader_star", map[string]any{"id": aliceItem, "starred": true})
+	if text := toolText(t, res); res.IsError || !strings.Contains(text, `"starred":true`) {
+		t.Errorf("reader_star = %q (error %v), want starred true", text, res.IsError)
+	}
+
+	res = call(cs, "later_tag", map[string]any{"id": aliceSaved, "add": []string{"ai"}})
+	if text := toolText(t, res); res.IsError || !strings.Contains(text, `"ai"`) {
+		t.Errorf("later_tag = %q (error %v), want the ai tag", text, res.IsError)
+	}
+	res = call(cs, "later_set_state", map[string]any{"id": aliceSaved, "state": "archived"})
+	if text := toolText(t, res); res.IsError || !strings.Contains(text, `"state":"archived"`) {
+		t.Errorf("later_set_state = %q (error %v), want archived", text, res.IsError)
+	}
+	res = call(cs, "later_list", map[string]any{"state": "archived"})
+	if text := toolText(t, res); res.IsError || !strings.Contains(text, "Sourdough guide") {
+		t.Errorf("later_list archived = %q (error %v), want the article", text, res.IsError)
+	}
+
+	// Bob's articles are refused as not found.
+	res = call(cs, "reader_get_article", map[string]any{"id": bobItem})
+	if text := toolText(t, res); !res.IsError || !strings.Contains(text, "No article with that ID in your feeds") {
+		t.Errorf("reader_get_article on bob's item = %q (error %v)", text, res.IsError)
+	}
+	res = call(cs, "later_get_article", map[string]any{"id": bobSaved})
+	if text := toolText(t, res); !res.IsError || !strings.Contains(text, "No article with that ID in Later") {
+		t.Errorf("later_get_article on bob's article = %q (error %v)", text, res.IsError)
+	}
+}
