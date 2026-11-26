@@ -24,7 +24,7 @@
 			{{range .Data.Grants}}
 				<tr>
 					<td>{{.Username}}</td>
-					<td>{{.Name}}<br><span class="faint">{{.RedirectHost}}</span></td>
+					<td>{{.Name}}<br><span class="faint">{{if .Personal}}Personal token{{else}}{{.RedirectHost}}{{end}}</span></td>
 					<td>{{range .Access}}<div><strong>{{.App}}</strong>: {{.Labels}}</div>{{else}}<span class="dim">Nothing</span>{{end}}</td>
 					<td class="dim">{{.Connected}}</td>
 					<td class="dim">{{.LastUsed}}</td>

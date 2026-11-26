@@ -1,0 +1,24 @@
+{{define "content"}}
+{{/* Shown once, as the response to the create form, with Cache-Control:
+no-store. The token is never stored or shown again. */}}
+<div class="stack">
+	<h1>Your token is ready</h1>
+	<p>Copy it now. ON Suite won't show it again.</p>
+
+	<div class="row">
+		<input type="text" readonly aria-label="Your token" class="mono" value="{{.Data.Token}}">
+		<button type="button" class="quiet" data-copy-text="{{.Data.Token}}">Copy</button>
+	</div>
+
+	<p>To use it, add a custom MCP server in the app:</p>
+	<dl class="admin-facts">
+		<div class="admin-fact"><dt>Server address</dt><dd><code>{{.Data.ServerURL}}</code></dd></div>
+		<div class="admin-fact"><dt>Header</dt><dd><code>Authorization: Bearer &lt;your token&gt;</code></dd></div>
+	</dl>
+
+	<p class="faint">A token that isn't used for 90 days is removed automatically.</p>
+	<div class="row">
+		<a class="button primary" href="/account/assistants">Done</a>
+	</div>
+</div>
+{{end}}

@@ -75,6 +75,35 @@ user) to ON Suite's list of allowed addresses; see the
 You connect each assistant once; it stays connected for about three months, after which
 it asks you to sign in to ON Suite again.
 
+## Apps that can't sign in (personal tokens)
+
+Some apps can't open ON Suite in your browser to sign in. The Pebble ring
+is one: its phone app only lets you paste in a server address and a
+fixed key. For those, you create a **personal token** yourself and paste
+it into the app.
+
+1. Open **Account** from the user menu and click **Connected
+   assistants**, then **Create a token**.
+2. Give it a name you'll recognise later, such as "Pebble ring".
+3. Tick what it may do. The boxes are the same as on the permission
+   screen (see below), and the ones that make changes start unticked. To
+   add notes and record book progress from your ring, for example, tick
+   **Add notes** and **Update books**.
+4. Click **Create token**. ON Suite shows the token once. Copy it now:
+   it can't be shown again.
+5. In the app, add a custom MCP server. Use your ON Suite address
+   followed by `/mcp` (for example `https://on.example.com/mcp`) and the
+   header `Authorization: Bearer` followed by a space and your token.
+
+A personal token doesn't expire on a date, but one that isn't used for
+90 days is removed automatically. Changing your password removes it too.
+It shows in **Connected assistants** as **Personal token**, and its
+activity shows under **Recent activity** like any assistant's. Click
+**Disconnect** to stop it straight away. If you lose the token, or want
+to change what it can do, disconnect it and create a new one.
+
+You can have up to 10 personal tokens.
+
 ## What the permission screen means
 
 The screen is titled **An assistant wants to access your ON Suite**.
