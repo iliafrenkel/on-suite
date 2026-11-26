@@ -25,6 +25,7 @@ const activityRows = 50
 // ID is the opaque grant ID the disconnect form posts back.
 type grantRow struct {
 	ID, Name, RedirectHost, Username string
+	Personal                         bool // a personal token, shown as such instead of a redirect host
 	Access                           []accessLine
 	Connected, LastUsed              string
 }
@@ -84,6 +85,10 @@ func grantRows(grants []Grant) []grantRow {
 			Access:    accessLines(g.Granted),
 			Connected: g.CreatedAt.Local().Format("2006-01-02"),
 			LastUsed:  "never",
+			Personal:  g.ClientID == PersonalClientID,
+		}
+		if row.Personal {
+			row.LastUsed = "Not used yet"
 		}
 		if !g.LastUsedAt.IsZero() {
 			row.LastUsed = g.LastUsedAt.Local().Format("2006-01-02 15:04 MST")
@@ -130,18 +135,20 @@ func (s *Server) RedirectURIs() []string {
 // CSRF check.
 func (s *Server) mountPages(mux *http.ServeMux, rec *web.Recorder, authn *web.Auth, d PageDeps) {
 	rec.Handle(mux, "GET /account/assistants", false, authn.RequireUser(s.assistants(d)))
+	rec.Handle(mux, "GET /account/assistants/new-token", false, authn.RequireUser(s.newTokenForm(d)))
+	rec.Handle(mux, "POST /account/assistants/new-token", false, authn.RequireUser(s.createToken(d)))
 	rec.Handle(mux, "POST /account/assistants/{id}/disconnect", false,
 		authn.RequireUser(s.revokeGrant(d, false)))
 	rec.Handle(mux, "GET /admin/ai", false, authn.RequireAdmin(s.adminAI(d)))
 	rec.Handle(mux, "POST /admin/ai/{id}/revoke", false, authn.RequireAdmin(s.revokeGrant(d, true)))
 }
 
-func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, d PageDeps, tmpl, title, activeApp string, data any) {
+func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, d PageDeps, status int, tmpl, title, activeApp string, data any) {
 	r = r.WithContext(web.WithActiveApp(r.Context(), activeApp))
 	page := app.NewPage(r, title, d.Nav)
 	page.Shell.Version = d.Version
 	page.Data = data
-	if err := d.Render.Page(w, http.StatusOK, tmpl, page); err != nil {
+	if err := d.Render.Page(w, status, tmpl, page); err != nil {
 		d.Errors.Internal(w, r, err)
 	}
 }
@@ -159,7 +166,7 @@ func (s *Server) assistants(d PageDeps) http.HandlerFunc {
 			d.Errors.Internal(w, r, err)
 			return
 		}
-		s.renderPage(w, r, d, "account_assistants", "Connected assistants", "",
+		s.renderPage(w, r, d, http.StatusOK, "account_assistants", "Connected assistants", "",
 			assistantsPage{Grants: grantRows(grants), Activity: activityRowsOf(audit)})
 	}
 }
@@ -171,7 +178,7 @@ func (s *Server) adminAI(d PageDeps) http.HandlerFunc {
 			d.Errors.Internal(w, r, err)
 			return
 		}
-		s.renderPage(w, r, d, "admin_ai", "AI access", "admin", adminAIPage{
+		s.renderPage(w, r, d, http.StatusOK, "admin_ai", "AI access", "admin", adminAIPage{
 			PublicURL: s.publicURL, Redirects: s.RedirectURIs(), Grants: grantRows(grants),
 		})
 	}

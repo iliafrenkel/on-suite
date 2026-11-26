@@ -1,0 +1,43 @@
+{{define "content"}}
+{{/* Create a personal token (spec 2026-11-26-personal-tokens-design.md,
+"Account page"). The boxes are the consent screen's, so the wording
+matches. */}}
+<div class="stack">
+	<p class="faint"><a href="/account/assistants">Connected assistants</a> / New token</p>
+	<h1>Create a personal token</h1>
+
+	{{with .Data.Error}}<div class="notice notice-error" role="alert">{{.}}</div>{{end}}
+
+	<form method="post" action="/account/assistants/new-token" class="stack">
+		<input type="hidden" name="{{csrfField}}" value="{{.Shell.CSRFToken}}">
+		<input type="hidden" name="form_id" value="{{.Data.FormID}}">
+		<div class="field">
+			<label for="token-name">Name</label>
+			<input id="token-name" name="name" type="text" maxlength="60" required
+			       autocomplete="off" placeholder="Pebble ring" value="{{.Data.Name}}">
+		</div>
+
+		<h2>What it can do</h2>
+		<div class="scroll-x">
+			<table class="admin-table">
+				<thead><tr><th><span class="visually-hidden">App</span></th><th><span class="visually-hidden">Read</span></th><th><span class="visually-hidden">Write</span></th></tr></thead>
+				<tbody>
+				{{range .Data.Rows}}
+					<tr>
+						<th scope="row">{{.App}}</th>
+						<td>{{with .Read}}<label class="row"><input type="checkbox" name="grant_scope" value="{{.Scope}}"{{if .Checked}} checked{{end}}> {{.Label}}</label>{{end}}</td>
+						<td>{{with .Write}}<label class="row"><input type="checkbox" name="grant_scope" value="{{.Scope}}"{{if .Checked}} checked{{end}}> {{.Label}}</label>{{end}}</td>
+					</tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+
+		<p class="faint">A token that isn't used for 90 days is removed automatically. Changing your password also removes it.</p>
+		<div class="row">
+			<a class="button" href="/account/assistants">Cancel</a>
+			<button type="submit" class="primary">Create token</button>
+		</div>
+	</form>
+</div>
+{{end}}

@@ -3,6 +3,11 @@
 	<h1>Connected assistants</h1>
 	<p class="faint">AI assistants you have allowed to use your ON Suite. Disconnecting one ends its access straight away.</p>
 
+	<div class="stack">
+		<p><a class="button" href="/account/assistants/new-token">Create a token</a></p>
+		<p class="faint">For apps that can't sign in to ON Suite themselves, such as the Pebble ring.</p>
+	</div>
+
 	{{if .Data.Grants}}
 	<div class="scroll-x">
 		<table class="admin-table">
@@ -10,7 +15,7 @@
 			<tbody>
 			{{range .Data.Grants}}
 				<tr>
-					<td>{{.Name}}<br><span class="faint">{{.RedirectHost}}</span></td>
+					<td>{{.Name}}<br><span class="faint">{{if .Personal}}Personal token{{else}}{{.RedirectHost}}{{end}}</span></td>
 					<td>{{range .Access}}<div><strong>{{.App}}</strong>: {{.Labels}}</div>{{else}}<span class="dim">Nothing</span>{{end}}</td>
 					<td class="dim">{{.Connected}}</td>
 					<td class="dim">{{.LastUsed}}</td>
