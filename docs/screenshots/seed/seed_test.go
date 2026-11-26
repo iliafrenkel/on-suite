@@ -26,7 +26,7 @@ func TestSeedFillsEveryApp(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 9, 28, 9, 30, 0, 0, time.UTC)
 
-	sid, err := Seed(ctx, dir, now)
+	sid, err := Seed(ctx, dir, now, "")
 	if err != nil {
 		t.Fatalf("Seed: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestShotIDsPointAtTheIntendedItems(t *testing.T) {
 
 	ctx := context.Background()
 	dir := t.TempDir()
-	if _, err := Seed(ctx, dir, time.Date(2026, 9, 28, 9, 30, 0, 0, time.UTC)); err != nil {
+	if _, err := Seed(ctx, dir, time.Date(2026, 9, 28, 9, 30, 0, 0, time.UTC), ""); err != nil {
 		t.Fatal(err)
 	}
 	handle, err := db.Open(dbPath(dir))
@@ -333,10 +333,10 @@ func TestShotIDsPointAtTheIntendedItems(t *testing.T) {
 
 func TestSeedRefusesANonEmptyDataDir(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := Seed(context.Background(), dir, time.Now()); err != nil {
+	if _, err := Seed(context.Background(), dir, time.Now(), ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Seed(context.Background(), dir, time.Now()); err == nil {
+	if _, err := Seed(context.Background(), dir, time.Now(), ""); err == nil {
 		t.Fatal("second Seed into the same dir succeeded; want an error")
 	}
 }
@@ -357,4 +357,29 @@ func anyReadDay(days []reader.DayStat) bool {
 		}
 	}
 	return false
+}
+
+// The screenshots are taken against a release build, so the seeded accounts
+// must already have seen that version: otherwise every image would show the
+// "What's new" dot next to the username.
+func TestSeedStartsUsersSeenAtTheGivenVersion(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	if _, err := Seed(ctx, dir, time.Date(2026, 9, 28, 9, 30, 0, 0, time.UTC), "6.5.0"); err != nil {
+		t.Fatalf("Seed: %v", err)
+	}
+	handle, err := db.Open(dbPath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = handle.Close() }()
+	for _, name := range []string{"demo", "sam"} {
+		u, err := auth.NewStore(handle).UserByUsername(ctx, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if u.SeenVersion != "6.5.0" {
+			t.Errorf("%s SeenVersion = %q, want 6.5.0", name, u.SeenVersion)
+		}
+	}
 }
