@@ -64,7 +64,7 @@ on-suite/
 ├── docs/
 │   ├── developers/               this guide, plus releasing.md
 │   ├── self-hosting/             deploying.md, running-locally.md, the systemd unit
-│   ├── user/                     end-user guides, one per app plus admin; served at /help (internal/platform/help)
+│   ├── user/                     end-user guides, one per app plus admin, and changelog.md (What's new); served at /help (internal/platform/help)
 │   │   └── images/               the guides' screenshots
 │   ├── screenshots/              regenerates every screenshot; README.md says how
 │   │   ├── seed/                 a fresh data directory with demo accounts and content
@@ -75,6 +75,7 @@ on-suite/
 │   ├── embed.go                  //go:embed user — the guides compiled into the binary; docs.User() feeds help.Load
 │   └── links_test.go             checks every link, image and #anchor in the docs
 ├── scripts/next-version.sh       suggests the next release tag from commit history
+├── scripts/tag-message.sh        prints a release tag message from docs/user/changelog.md
 ├── .github/workflows/            ci.yml (the checks) and release.yml (tagged releases)
 ├── .goreleaser.yaml              cross-compiled release builds and the Docker image
 ├── Dockerfile                    build-from-source image (scratch-based)
