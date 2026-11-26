@@ -230,11 +230,13 @@ A token that isn't used for 90 days is removed automatically.
 ```
 
 *(My call.)* Refreshing this page would re-send the form and create a
-second token. To stop that, the create form carries a one-use nonce (a
-random value stored in the user's web session when the form is shown,
-cleared when it's used). A POST with a missing or used nonce sends the
-user back to Connected assistants with no new token. The 10-token limit is
-a second safety net.
+second token. To stop that, the create form carries a one-use value: the
+form shows a fresh random grant ID in a hidden field, and the POST creates
+the grant under that ID. A refresh re-sends the same ID, the insert finds
+it taken, and the user is sent back to Connected assistants with no new
+token. (The web session has nowhere to keep a separate nonce, and grant IDs
+aren't secret: every Disconnect form already shows one.) The 10-token
+limit is a second safety net.
 
 The response must be sent with `Cache-Control: no-store`. **Done** goes
 back to Connected assistants. The server address is the configured public
@@ -299,7 +301,7 @@ token** in the place of the redirect host. Revoking works unchanged.
   missing scope; the call shows in Recent activity under the token's name.
 - **Handlers:** the create form needs sign-in and CSRF; an empty name or
   no scopes is refused with the form shown again; the show-once page sends
-  `Cache-Control: no-store`; re-sending the same POST (a used nonce)
+  `Cache-Control: no-store`; re-sending the same POST (the same form ID)
   creates no second token; the eleventh token is refused; the list labels
   the token **Personal token**.
 - **Ownership:** user A's token can't read user B's data (reuse the
@@ -312,7 +314,6 @@ token** in the place of the redirect host. Revoking works unchanged.
 - The grant ID generator (reuse whatever the OAuth store already uses for
   random IDs if there is one).
 - The wording of the 10-token limit message.
-- Where the one-use nonce lives, if the web session store doesn't suit.
 - Whether the last-used "touch" for personal tokens shares code with the
   OAuth path.
 
