@@ -651,3 +651,76 @@ func TestSweepRemovesOrphanClients(t *testing.T) {
 		}
 	}
 }
+
+// A personal token never has access or refresh rows, so the dead-grant rule
+// must leave it alone.
+func TestSweepKeepsPersonalTokens(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	_, hash := f.addPersonal(t, f.u1)
+	f.now = f.now.Add(time.Hour)
+	if _, err := f.s.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if _, err := f.s.PersonalTokenGrant(ctx, hash); err != nil {
+		t.Errorf("PersonalTokenGrant after sweep: %v, want kept", err)
+	}
+}
+
+// A personal token nobody has used for 90 days, counted from its last use
+// or from creation if never used, is removed.
+func TestSweepRemovesIdlePersonalTokens(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	start := f.now
+
+	// An OAuth connection whose refresh token outlives the test.
+	f.addGrant(t, "oauth", f.u2, "c1")
+	req := f.request("oauth", "c1")
+	req.Session.SetExpiresAt(oauth2.RefreshToken, start.Add(365*24*time.Hour))
+	if err := f.s.CreateRefreshTokenSession(ctx, "rt", "", req); err != nil {
+		t.Fatalf("CreateRefreshTokenSession: %v", err)
+	}
+
+	idA, _ := f.addPersonal(t, f.u1)
+	idB, _ := f.addPersonal(t, f.u1)
+	idC, _ := f.addPersonal(t, f.u1)
+	touchAt := func(id string, at time.Time) {
+		t.Helper()
+		f.now = at
+		if err := f.s.TouchGrant(ctx, id); err != nil {
+			t.Fatalf("TouchGrant: %v", err)
+		}
+	}
+	touchAt(idB, start.Add(24*time.Hour))
+	touchAt(idC, start.Add(48*time.Hour))
+
+	sweepAt := func(at time.Time) {
+		t.Helper()
+		f.now = at
+		if _, err := f.s.Sweep(ctx); err != nil {
+			t.Fatalf("Sweep: %v", err)
+		}
+	}
+	kept := func(id string, want bool) {
+		t.Helper()
+		_, err := f.s.Grant(ctx, id)
+		if want && err != nil {
+			t.Errorf("Grant(%s): %v, want kept", id, err)
+		}
+		if !want && !errors.Is(err, ErrNotFound) {
+			t.Errorf("Grant(%s) err = %v, want swept", id, err)
+		}
+	}
+
+	sweepAt(start.Add(90*24*time.Hour + time.Minute))
+	kept(idA, false)
+	kept(idB, true)
+	kept(idC, true)
+	kept("oauth", true)
+
+	sweepAt(start.Add(91*24*time.Hour + time.Minute))
+	kept(idB, false)
+	kept(idC, true)
+	kept("oauth", true)
+}

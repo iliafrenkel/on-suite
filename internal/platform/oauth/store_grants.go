@@ -215,9 +215,10 @@ const (
 // Inactive refresh tokens stay until they expire, so a reuse is still
 // detected until then.
 //
-// It then clears what can never be used again: grants left with no access
-// or refresh token (a dead connection would otherwise sit on /account for
-// ever), and registered clients no grant points at after a day, with their
+// It then clears what can never be used again: OAuth grants left with no
+// access or refresh token (a dead connection would otherwise sit on
+// /account for ever), personal tokens unused for 90 days (personalIdle,
+// counted from creation if never used), and registered clients no grant points at after a day, with their
 // registration tokens (open registration would otherwise accumulate rows).
 // The order matters: tokens expiring in this sweep can leave their grant
 // dead, and that grant's removal can orphan its client, all in one pass.
@@ -233,10 +234,14 @@ func (s *Store) Sweep(ctx context.Context) (int, error) {
 		{`DELETE FROM oauth_pkce_used WHERE expires_at < ?`, []any{cutoff}},
 		{`DELETE FROM oauth_cimd WHERE expires_at < ?`, []any{cutoff}},
 		{`DELETE FROM mcp_audit WHERE at < ?`, []any{formatTime(now.Add(-auditRetention))}},
-		{`DELETE FROM oauth_grants WHERE created_at < ? AND NOT EXISTS (
+		// Personal tokens never have session rows, so they are kept out of
+		// the dead-grant rule and have one of their own below.
+		{`DELETE FROM oauth_grants WHERE created_at < ? AND client_id <> ? AND NOT EXISTS (
 		    SELECT 1 FROM oauth_sessions s
 		    WHERE s.grant_id = oauth_grants.id AND s.kind IN ('access', 'refresh'))`,
-			[]any{formatTime(now.Add(-deadGrantGrace))}},
+			[]any{formatTime(now.Add(-deadGrantGrace)), PersonalClientID}},
+		{`DELETE FROM oauth_grants WHERE client_id = ? AND COALESCE(last_used_at, created_at) < ?`,
+			[]any{PersonalClientID, formatTime(now.Add(-personalIdle))}},
 		// Registration tokens first, while the client rows that identify
 		// them still exist.
 		{`DELETE FROM oauth_sessions WHERE kind = 'registration' AND client_id IN (
