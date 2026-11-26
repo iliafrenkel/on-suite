@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"authelia.com/provider/oauth2"
@@ -44,6 +45,9 @@ type Caller struct {
 // auth check. A storage failure is ErrUnavailable rather than
 // ErrInvalidToken, so the client retries instead of reconnecting.
 func (s *Server) Verify(ctx context.Context, bearer string) (Caller, error) {
+	if strings.HasPrefix(bearer, personalTokenPrefix) {
+		return s.verifyPersonal(ctx, bearer)
+	}
 	use, req, err := s.provider.IntrospectToken(ctx, bearer, oauth2.AccessToken, new(oauth2.DefaultSession))
 	if errors.Is(err, oauth2.ErrServerError) {
 		// The library reports anything its storage returned, other than
@@ -73,11 +77,7 @@ func (s *Server) Verify(ctx context.Context, bearer string) (Caller, error) {
 	case g.UserID != userID:
 		return Caller{}, ErrInvalidToken
 	}
-	if s.store.now().Sub(g.LastUsedAt) >= touchEvery {
-		if err := s.store.TouchGrant(ctx, g.ID); err != nil {
-			s.log.Warn("oauth: recording when a connection was last used failed", "grant", g.ID, "error", err)
-		}
-	}
+	s.touch(ctx, g)
 	return Caller{
 		UserID:     userID,
 		GrantID:    g.ID,
@@ -85,4 +85,41 @@ func (s *Server) Verify(ctx context.Context, bearer string) (Caller, error) {
 		Scopes:     slices.Clone([]string(req.GetGrantedScopes())),
 		Expires:    sess.GetExpiresAt(oauth2.AccessToken),
 	}, nil
+}
+
+// verifyPersonal checks a personal token (spec
+// 2026-11-26-personal-tokens-design.md, "Verify"). Nothing here goes through
+// the OAuth library: the token is looked up by its hash, and the grant it
+// belongs to says who it speaks for and what it may do.
+func (s *Server) verifyPersonal(ctx context.Context, bearer string) (Caller, error) {
+	g, err := s.store.PersonalTokenGrant(ctx, hashPersonalToken(bearer))
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return Caller{}, ErrInvalidToken
+	case err != nil:
+		return Caller{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	s.touch(ctx, g)
+	return Caller{
+		UserID:     g.UserID,
+		GrantID:    g.ID,
+		ClientName: g.ClientName,
+		Scopes:     slices.Clone(g.Granted),
+		// A personal token has no expiry date, but the MCP SDK refuses a
+		// zero one. It only checks this within the current request, so a
+		// day ahead is plenty; the real limit is the sweep's 90 days
+		// without use (personalIdle).
+		Expires: s.store.now().Add(24 * time.Hour),
+	}, nil
+}
+
+// touch records that g was just used, at most once every touchEvery. It is
+// bookkeeping: a failed write is logged, never a reason to refuse the token.
+func (s *Server) touch(ctx context.Context, g Grant) {
+	if s.store.now().Sub(g.LastUsedAt) < touchEvery {
+		return
+	}
+	if err := s.store.TouchGrant(ctx, g.ID); err != nil {
+		s.log.Warn("oauth: recording when a connection was last used failed", "grant", g.ID, "error", err)
+	}
 }
