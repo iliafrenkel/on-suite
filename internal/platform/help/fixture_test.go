@@ -30,6 +30,7 @@ type session struct{ cookies []*http.Cookie }
 type server struct {
 	handler http.Handler
 	user    *session
+	users   *auth.Store
 }
 
 // newServer runs as release 6.5.0, which "ilia" has not seen yet.
@@ -77,10 +78,10 @@ func newServerAt(t *testing.T, version string) *server {
 
 	mux := http.NewServeMux()
 	authn.Routes(mux, nil)
-	help.Routes(mux, nil, help.Deps{Pages: pages, Render: rend, Errors: errs, Version: version})
+	help.Routes(mux, nil, help.Deps{Pages: pages, Render: rend, Errors: errs, Users: users, Version: version})
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
 
-	s := &server{handler: web.Stack(mux, log, errs, csrf, authn, false)}
+	s := &server{handler: web.Stack(mux, log, errs, csrf, authn, false), users: users}
 	if _, err := users.CreateUser(ctx, "ilia", apptest.PasswordHash, false); err != nil {
 		t.Fatal(err)
 	}

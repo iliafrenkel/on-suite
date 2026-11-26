@@ -1,6 +1,7 @@
 package help_test
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -28,8 +29,8 @@ func TestHelpPageRendersInTheShellWithASidebar(t *testing.T) {
 	if href, _ := htmlassert.Attr(cur, "href"); href != "/help/notes" {
 		t.Errorf("current sidebar link = %q, want /help/notes", href)
 	}
-	if got := len(d.QueryAll(".help-nav a")); got != 10 {
-		t.Errorf("sidebar has %d links, want 10", got)
+	if got := len(d.QueryAll(".help-nav a")); got != 11 {
+		t.Errorf("sidebar has %d links, want 11", got)
 	}
 	d.MustHave(".help-body h1")
 }
@@ -50,11 +51,12 @@ func TestSignedOutHelpStillHasItsSidebar(t *testing.T) {
 func TestHelpPageTitles(t *testing.T) {
 	s := newServer(t)
 	for path, want := range map[string]string{
-		"/help":        "Help · ON Suite",
-		"/help/index":  "Help · ON Suite",
-		"/help/notes":  "ON Notes help · ON Suite",
-		"/help/admin":  "Administration help · ON Suite",
-		"/help/reader": "ON Reader help · ON Suite",
+		"/help":           "Help · ON Suite",
+		"/help/index":     "Help · ON Suite",
+		"/help/notes":     "ON Notes help · ON Suite",
+		"/help/admin":     "Administration help · ON Suite",
+		"/help/reader":    "ON Reader help · ON Suite",
+		"/help/changelog": "What's new · ON Suite",
 	} {
 		d := doc(t, s.get(t, nil, path))
 		if got := strings.TrimSpace(htmlassert.Text(d.MustHave("title"))); got != want {
@@ -136,4 +138,47 @@ func TestErrorPageKeepsTheBadge(t *testing.T) {
 		t.Fatalf("GET /help/no-such-page = %d, want 404", rec.Code)
 	}
 	doc(t, rec).MustHave(".shell-user-toggle .whats-new-dot")
+}
+
+func TestOpeningTheChangelogClearsTheBadge(t *testing.T) {
+	s := newServer(t)
+	doc(t, s.get(t, s.user, "/help/notes")).MustHave(".whats-new-dot")
+
+	// The changelog itself already renders without the dot...
+	d := doc(t, s.get(t, s.user, "/help/changelog"))
+	d.MustNotHave(".whats-new-dot")
+	d.MustHave(".help-body h1")
+	// ...and so does every page after it.
+	doc(t, s.get(t, s.user, "/help/notes")).MustNotHave(".whats-new-dot")
+
+	u, err := s.users.UserByUsername(context.Background(), "ilia")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.SeenVersion != "6.5.0" {
+		t.Errorf("SeenVersion = %q, want 6.5.0", u.SeenVersion)
+	}
+}
+
+func TestSignedOutChangelogRenders(t *testing.T) {
+	s := newServer(t)
+	rec := s.get(t, nil, "/help/changelog")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /help/changelog signed out = %d, want 200", rec.Code)
+	}
+	if got := strings.TrimSpace(htmlassert.Text(doc(t, rec).MustHave("title"))); !strings.HasPrefix(got, "What's new") {
+		t.Errorf("title = %q, want it to start with What's new", got)
+	}
+}
+
+func TestDevBuildDoesNotMarkSeen(t *testing.T) {
+	s := newServerAt(t, "dev")
+	s.get(t, s.user, "/help/changelog")
+	u, err := s.users.UserByUsername(context.Background(), "ilia")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.SeenVersion != "" {
+		t.Errorf("SeenVersion = %q after a dev build's changelog, want it left empty", u.SeenVersion)
+	}
 }
