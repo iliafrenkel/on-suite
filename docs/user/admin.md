@@ -188,7 +188,8 @@ The jobs are:
 - **sweep expired AI tokens** — only when [AI access](#ai-access) is on:
   clears away assistants' expired sign-ins, connections that have no
   sign-in left, assistants that registered but never connected within a
-  day, and activity records older than 90 days. If the server is set up
+  day, personal tokens nobody has used for 90 days, and activity records
+  older than 90 days. If the server is set up
   to take backups some other way, `onsuite backup` does this instead.
 - **database snapshot** — saves a copy of the whole database to the
   backups folder on the server, keeping the newest 7 unless the server is
@@ -281,6 +282,14 @@ When AI access is on, the admin page has an **AI access** section. Click
 connected which assistant, what it can do and when it was last used.
 Click **Revoke** to end a connection straight away. ON Suite also runs a
 **sweep expired AI tokens** job (see [Background jobs](#background-jobs)).
+
+People can also create **personal tokens** for apps that can't sign in to
+ON Suite themselves, such as the Pebble ring (see the
+[AI assistants guide](ai-assistants.md#apps-that-cant-sign-in-personal-tokens)).
+They come with AI access, with no separate setting. They show on the
+**AI access** page as **Personal token** and can be revoked like any
+other connection. A personal token nobody has used for 90 days is
+removed by the sweep job.
 
 ## Command-line tasks
 
