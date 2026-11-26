@@ -32,7 +32,13 @@ type server struct {
 	user    *session
 }
 
+// newServer runs as release 6.5.0, which "ilia" has not seen yet.
 func newServer(t *testing.T) *server {
+	t.Helper()
+	return newServerAt(t, "6.5.0")
+}
+
+func newServerAt(t *testing.T, version string) *server {
 	t.Helper()
 	ctx := context.Background()
 
@@ -60,8 +66,9 @@ func newServer(t *testing.T) *server {
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	errs := web.NewErrors(rend, log)
+	errs.Version = version
 	csrf := web.NewCSRF(false, errs)
-	authn := web.NewAuth(web.AuthOptions{Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Version: "test"})
+	authn := web.NewAuth(web.AuthOptions{Users: users, Render: rend, Errors: errs, CSRF: csrf, Log: log, Version: version})
 
 	pages, err := help.Load(docs.User())
 	if err != nil {
@@ -70,7 +77,7 @@ func newServer(t *testing.T) *server {
 
 	mux := http.NewServeMux()
 	authn.Routes(mux, nil)
-	help.Routes(mux, nil, help.Deps{Pages: pages, Render: rend, Errors: errs, Version: "test"})
+	help.Routes(mux, nil, help.Deps{Pages: pages, Render: rend, Errors: errs, Version: version})
 	mux.Handle("/", http.HandlerFunc(errs.NotFound))
 
 	s := &server{handler: web.Stack(mux, log, errs, csrf, authn, false)}

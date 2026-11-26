@@ -103,3 +103,37 @@ func TestHelpImagesServeWithAnImageType(t *testing.T) {
 		}
 	}
 }
+
+func TestWhatsNewBadgeShowsForAnUnseenVersion(t *testing.T) {
+	s := newServer(t)
+	d := doc(t, s.get(t, s.user, "/help/notes"))
+	d.MustHave(".shell-user-toggle .whats-new-dot")
+	d.MustHave(`.shell-user-menu-panel a[href="/help/changelog"] .whats-new-dot`)
+}
+
+func TestFooterVersionLinksToTheChangelog(t *testing.T) {
+	s := newServer(t)
+	for _, sess := range []*session{nil, s.user} {
+		d := doc(t, s.get(t, sess, "/help/notes"))
+		a := d.MustHave(`.app-footer a[href="/help/changelog"]`)
+		if got := strings.TrimSpace(htmlassert.Text(a)); got != "6.5.0" {
+			t.Errorf("footer link text = %q, want 6.5.0", got)
+		}
+	}
+}
+
+func TestDevFooterVersionIsPlainText(t *testing.T) {
+	s := newServerAt(t, "dev")
+	d := doc(t, s.get(t, s.user, "/help/notes"))
+	d.MustNotHave(".app-footer a")
+	d.MustNotHave(".whats-new-dot")
+}
+
+func TestErrorPageKeepsTheBadge(t *testing.T) {
+	s := newServer(t)
+	rec := s.get(t, s.user, "/help/no-such-page")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET /help/no-such-page = %d, want 404", rec.Code)
+	}
+	doc(t, rec).MustHave(".shell-user-toggle .whats-new-dot")
+}

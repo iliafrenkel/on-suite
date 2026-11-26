@@ -76,6 +76,7 @@ func (e *Errors) Status(w http.ResponseWriter, r *http.Request, status int) {
 		page.Shell.LoggedIn = true
 		page.Shell.Username = u.Username
 		page.Shell.IsAdmin = u.IsAdmin
+		page.Shell.SeenVersion = u.SeenVersion
 	}
 	page.Shell.CSRFToken = CSRFToken(r.Context())
 
