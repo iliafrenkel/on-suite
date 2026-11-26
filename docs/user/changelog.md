@@ -3,6 +3,17 @@
 Every ON Suite release, newest first. When your server is updated to a new
 version, a dot on your user menu points here until you've had a look.
 
+## 6.6.0: ON Suite - Personal tokens
+
+*26 November 2026*
+
+Some apps and gadgets can't sign in to ON Suite the usual way. The Pebble
+ring is one. You can now create a **personal token** for them under
+**Account → Connected assistants**: give it a name, choose what it may do,
+and paste it into the app. It works with the same permissions, activity
+log and Disconnect button as any assistant. A token nobody uses for 90
+days is removed automatically.
+
 ## 6.5.0: ON Suite - What's new
 
 *26 November 2026*
