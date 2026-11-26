@@ -332,6 +332,16 @@ kbd {
 }
 
 .shell-user-menu[open] .shell-user-toggle { background: var(--c-bg-inset); }
+
+/* The "What's new" badge, on the user-menu button and its menu item. */
+.whats-new-dot {
+	flex: none;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: var(--c-accent-attention);
+}
+.shell-menu-item .whats-new-dot { margin-left: auto; }
 .shell-user-menu[open] .shell-user-toggle .toolbar-icon:last-child { transform: rotate(180deg); }
 
 .shell-user-name {
@@ -539,6 +549,9 @@ kbd {
 	text-transform: uppercase;
 	text-align: center;
 }
+
+.app-footer a { color: inherit; text-decoration: none; }
+.app-footer a:hover { color: var(--c-text-dim); text-decoration: underline; }
 
 /* min-width: 0 because main is a flex item in .app-shell: the default
  * min-width: auto stops it shrinking below its content, so one long snippet

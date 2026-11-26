@@ -192,6 +192,8 @@ func buildStack(deps stackDeps) (http.Handler, error) {
 		Errors:  errs,
 		Nav:     deps.Registry.NavItems(),
 		Version: deps.Version,
+		Users:   deps.Users,
+		Log:     deps.Log,
 	})
 
 	routes.Handle(mux, "GET /{$}", false, authn.RequireUser(homeHandler(deps, rend, errs)))

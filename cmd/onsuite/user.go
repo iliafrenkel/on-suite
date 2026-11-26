@@ -70,7 +70,9 @@ func userAdd(args []string, getenv func(string) string, in *os.File, out, errOut
 	}
 	defer func() { _ = handle.Close() }()
 
-	user, err := auth.NewStore(handle).CreateUser(ctx, username, hash, *admin)
+	store := auth.NewStore(handle)
+	store.SetVersion(version)
+	user, err := store.CreateUser(ctx, username, hash, *admin)
 	if err != nil {
 		return err
 	}

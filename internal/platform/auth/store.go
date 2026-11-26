@@ -50,6 +50,10 @@ type User struct {
 	PasswordHash string
 	IsAdmin      bool
 	CreatedAt    time.Time
+	// SeenVersion is the ON Suite version whose changelog the user last
+	// opened; the shell shows a "What's new" badge while it differs from the
+	// running version. Empty means never.
+	SeenVersion string
 }
 
 // Store is all the SQL for identity. It has no HTTP knowledge, which is what
@@ -57,6 +61,9 @@ type User struct {
 type Store struct {
 	db  *sql.DB
 	now func() time.Time
+	// version is the running build version, written into new accounts'
+	// seen_version. Empty unless SetVersion was called.
+	version string
 }
 
 func NewStore(handle *sql.DB) *Store {
@@ -66,6 +73,11 @@ func NewStore(handle *sql.DB) *Store {
 // SetClock replaces the time source. It exists so expiry behaviour can be
 // tested by moving time forward instead of sleeping for thirty days.
 func (s *Store) SetClock(now func() time.Time) { s.now = now }
+
+// SetVersion records the running build version, so CreateUser can start new
+// accounts as having already seen it: nobody is told "what's new" about a
+// version that was already running when they joined.
+func (s *Store) SetVersion(v string) { s.version = v }
 
 // ValidateUsername reports whether name is acceptable for a new account.
 func ValidateUsername(name string) error {
@@ -91,14 +103,14 @@ func (s *Store) CreateUser(ctx context.Context, username, passwordHash string, i
 
 	now := s.now()
 	var (
-		u         = User{Username: username, PasswordHash: passwordHash, IsAdmin: isAdmin}
+		u         = User{Username: username, PasswordHash: passwordHash, IsAdmin: isAdmin, SeenVersion: s.version}
 		createdAt string
 	)
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO users (username, username_fold, password_hash, is_admin, created_at)
-		 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO users (username, username_fold, password_hash, is_admin, created_at, seen_version)
+		 VALUES (?, ?, ?, ?, ?, ?)
 		 RETURNING id, created_at`,
-		username, fold(username), passwordHash, boolToInt(isAdmin), formatTime(now),
+		username, fold(username), passwordHash, boolToInt(isAdmin), formatTime(now), s.version,
 	).Scan(&u.ID, &createdAt)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -117,14 +129,32 @@ func (s *Store) CreateUser(ctx context.Context, username, passwordHash string, i
 // UserByUsername looks up an account case-insensitively.
 func (s *Store) UserByUsername(ctx context.Context, username string) (User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash, is_admin, created_at
+		`SELECT id, username, password_hash, is_admin, created_at, seen_version
 		 FROM users WHERE username_fold = ?`, fold(username)))
 }
 
 func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash, is_admin, created_at
+		`SELECT id, username, password_hash, is_admin, created_at, seen_version
 		 FROM users WHERE id = ?`, id))
+}
+
+// MarkSeen records that the user has seen the changelog for version, which
+// clears their "What's new" badge until the next upgrade.
+func (s *Store) MarkSeen(ctx context.Context, userID int64, version string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET seen_version = ? WHERE id = ?`, version, userID)
+	if err != nil {
+		return fmt.Errorf("auth: mark seen: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("auth: mark seen: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // CountUsers lets the serve command warn when a database has no accounts,
@@ -210,7 +240,7 @@ func (s *Store) scanUser(row *sql.Row) (User, error) {
 		isAdmin   int
 		createdAt string
 	)
-	switch err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &isAdmin, &createdAt); {
+	switch err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &isAdmin, &createdAt, &u.SeenVersion); {
 	case errors.Is(err, sql.ErrNoRows):
 		return User{}, ErrNotFound
 	case err != nil:

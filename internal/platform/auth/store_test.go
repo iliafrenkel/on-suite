@@ -238,3 +238,64 @@ func TestSessionCountsOnAnEmptyTableIsZeroNotAnError(t *testing.T) {
 		t.Errorf("SessionCounts() = %d, %d, want 0, 0", live, expired)
 	}
 }
+
+func TestNewUserStartsSeenAtTheRunningVersion(t *testing.T) {
+	s, _ := newStore(t)
+	s.SetVersion("6.5.0")
+	ctx := context.Background()
+
+	created, err := s.CreateUser(ctx, "ilia", "$argon2id$fake", false)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if created.SeenVersion != "6.5.0" {
+		t.Errorf("CreateUser SeenVersion = %q, want 6.5.0", created.SeenVersion)
+	}
+	got, err := s.UserByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("UserByID: %v", err)
+	}
+	if got.SeenVersion != "6.5.0" {
+		t.Errorf("SeenVersion = %q, want 6.5.0 — a new account must not be badged", got.SeenVersion)
+	}
+}
+
+func TestNewUserWithoutAVersionStartsUnseen(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+
+	created, err := s.CreateUser(ctx, "ilia", "$argon2id$fake", false)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	got, err := s.UserByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("UserByID: %v", err)
+	}
+	if got.SeenVersion != "" {
+		t.Errorf("SeenVersion = %q, want empty", got.SeenVersion)
+	}
+}
+
+func TestMarkSeen(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+
+	created, err := s.CreateUser(ctx, "ilia", "$argon2id$fake", false)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := s.MarkSeen(ctx, created.ID, "6.5.0"); err != nil {
+		t.Fatalf("MarkSeen: %v", err)
+	}
+	got, err := s.UserByUsername(ctx, "ilia")
+	if err != nil {
+		t.Fatalf("UserByUsername: %v", err)
+	}
+	if got.SeenVersion != "6.5.0" {
+		t.Errorf("SeenVersion = %q, want 6.5.0", got.SeenVersion)
+	}
+	if err := s.MarkSeen(ctx, created.ID+100, "6.5.0"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("MarkSeen(missing user) = %v, want ErrNotFound", err)
+	}
+}

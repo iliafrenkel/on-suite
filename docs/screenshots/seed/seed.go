@@ -52,8 +52,10 @@ const day = 24 * time.Hour
 func at(t time.Time) func() time.Time { return func() time.Time { return t } }
 
 // Seed creates the demo accounts and content and returns a live session id
-// for "demo". It refuses a data dir that already holds a database.
-func Seed(ctx context.Context, dataDir string, now time.Time) (string, error) {
+// for "demo". It refuses a data dir that already holds a database. version
+// is what the server will run as; the accounts start having seen it, so the
+// screenshots carry no "What's new" dot.
+func Seed(ctx context.Context, dataDir string, now time.Time, version string) (string, error) {
 	now = now.UTC()
 	if _, err := os.Stat(dbPath(dataDir)); err == nil {
 		return "", errors.New("seed: data dir already has a database; use an empty one")
@@ -88,6 +90,9 @@ func Seed(ctx context.Context, dataDir string, now time.Time) (string, error) {
 	}
 
 	users := auth.NewStore(handle)
+	// The accounts have already seen this version's changelog, so the
+	// screenshots don't show the "What's new" dot.
+	users.SetVersion(version)
 	users.SetClock(at(now.Add(-60 * day)))
 	hash, err := auth.HashPassword(Password)
 	if err != nil {

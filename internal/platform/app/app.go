@@ -138,6 +138,7 @@ func NewPage(r *http.Request, title string, nav []render.NavItem) render.Page {
 		shell.LoggedIn = true
 		shell.Username = u.Username
 		shell.IsAdmin = u.IsAdmin
+		shell.SeenVersion = u.SeenVersion
 	}
 	return render.Page{Title: title, Shell: shell}
 }

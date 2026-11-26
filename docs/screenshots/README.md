@@ -42,7 +42,7 @@ From the repository root:
 # v: releases stamp the tag without it, so real footers read "2.0.0".
 VERSION=2.0.0
 SEED=$(mktemp -d)/demo
-go run ./docs/screenshots/seed --data-dir $SEED
+go run ./docs/screenshots/seed --data-dir $SEED --version $VERSION
 go build -ldflags "-X main.version=$VERSION" -o $SEED/onsuite ./cmd/onsuite
 $SEED/onsuite serve --addr :8308 --data-dir $SEED &
 SERVER=$!
@@ -50,6 +50,10 @@ until curl -fs http://localhost:8308/healthz >/dev/null; do sleep 0.2; done
 go run ./docs/screenshots/capture --session-file $SEED/demo-session
 kill $SERVER
 ```
+
+Pass the seed the same `--version` as the build: the demo accounts then
+start having seen that version's changelog, so no screenshot shows the
+**What's new** dot next to the username.
 
 `capture` prints `wrote <path>` for each PNG. Always seed a fresh
 directory: the seed uses today's date, so due dates and "3 days ago"
