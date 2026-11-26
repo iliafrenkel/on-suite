@@ -633,3 +633,25 @@ func TestRendererRejectsBadInput(t *testing.T) {
 		t.Error("Fragment rendered a nonexistent block")
 	}
 }
+
+func TestShellWhatsNew(t *testing.T) {
+	cases := []struct {
+		loggedIn      bool
+		version, seen string
+		want          bool
+	}{
+		{false, "6.5.0", "", false},
+		{true, "dev", "", false},
+		{true, "", "", false},
+		{true, "6.5.0", "6.5.0", false},
+		{true, "6.5.0", "6.4.0", true},
+		{true, "6.5.0", "", true},
+	}
+	for _, c := range cases {
+		s := render.Shell{LoggedIn: c.loggedIn, Version: c.version, SeenVersion: c.seen}
+		if got := s.WhatsNew(); got != c.want {
+			t.Errorf("WhatsNew(loggedIn=%v, version=%q, seen=%q) = %v, want %v",
+				c.loggedIn, c.version, c.seen, got, c.want)
+		}
+	}
+}

@@ -3,10 +3,12 @@ package help
 import (
 	"html/template"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/iliafrenkel/on-suite/internal/platform/app"
+	"github.com/iliafrenkel/on-suite/internal/platform/auth"
 	"github.com/iliafrenkel/on-suite/internal/platform/render"
 	"github.com/iliafrenkel/on-suite/internal/platform/web"
 )
@@ -18,6 +20,10 @@ type Deps struct {
 	Errors  *web.Errors
 	Nav     []render.NavItem
 	Version string
+	// Users records that a signed-in user opened the changelog, which
+	// clears their "What's new" badge. Nil leaves the badge alone.
+	Users *auth.Store
+	Log   *slog.Logger
 }
 
 // Routes registers /help. Every route is public: the guides hold nothing
@@ -56,8 +62,11 @@ func href(slug string) string {
 // title is the browser tab and breadcrumb title: "Help" for the index,
 // "<Label> help" for the rest.
 func title(p Page) string {
-	if p.Slug == "index" {
+	switch p.Slug {
+	case "index":
 		return "Help"
+	case "changelog":
+		return p.Label // "What's new", not "What's new help"
 	}
 	return p.Label + " help"
 }
@@ -74,10 +83,39 @@ func (h *handlers) page(w http.ResponseWriter, r *http.Request) {
 	}
 	page := app.NewPage(r, title(pg), h.d.Nav)
 	page.Shell.Version = h.d.Version
+	if pg.Slug == changelogSlug {
+		h.markSeen(r, &page)
+	}
 	page.Data = data
 	if err := h.d.Render.Page(w, http.StatusOK, "help", page); err != nil {
 		h.d.Errors.Internal(w, r, err)
 	}
+}
+
+// changelogSlug is the "What's new" page; opening it clears the badge.
+const changelogSlug = "changelog"
+
+// markSeen records that the signed-in user has now seen this version's
+// changelog, and drops the badge from the page being rendered so it's gone
+// right away rather than on the next page. It's a write on GET on purpose:
+// the worst a forged request can do is clear someone's badge, and the page
+// keeps working with JavaScript off. A failed write only means the badge
+// stays, so it is logged, not shown.
+func (h *handlers) markSeen(r *http.Request, page *render.Page) {
+	if !page.Shell.WhatsNew() || h.d.Users == nil {
+		return
+	}
+	u, ok := web.UserFrom(r.Context())
+	if !ok {
+		return
+	}
+	if err := h.d.Users.MarkSeen(r.Context(), u.ID, h.d.Version); err != nil {
+		if h.d.Log != nil {
+			h.d.Log.Warn("help: could not mark the changelog seen", "user", u.ID, "error", err)
+		}
+		return
+	}
+	page.Shell.SeenVersion = h.d.Version
 }
 
 // image serves one screenshot from the guides' images directory. Only a

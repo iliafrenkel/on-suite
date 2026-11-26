@@ -40,6 +40,9 @@ type Shell struct {
 	ActiveApp string
 	CSRFToken string
 	Version   string
+	// SeenVersion is the version whose changelog the signed-in user last
+	// opened (auth.User.SeenVersion). Only WhatsNew reads it.
+	SeenVersion string
 
 	// Theme is "light" or "dark", read from a cookie once per request so the
 	// first response already carries the right value.
@@ -54,6 +57,14 @@ type Shell struct {
 	// home page).
 	ActiveAppName string
 	ActiveAppPath string
+}
+
+// WhatsNew reports whether to badge the "What's new" link: the user is signed
+// in and hasn't opened the changelog since this version started running. A
+// dev build (or one with no version) never badges, since it has no release
+// notes. It's a plain inequality, so a downgrade badges too.
+func (s Shell) WhatsNew() bool {
+	return s.LoggedIn && s.Version != "" && s.Version != "dev" && s.SeenVersion != s.Version
 }
 
 // Page is the argument to Page. Data is the page's own view model.

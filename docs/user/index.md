@@ -51,7 +51,8 @@ After signing in you land on the dashboard, your home page.
   normally. If it turns red, you've lost your connection; wait for it to go
   green again before making more changes.
 - **The footer** at the bottom shows which version of ON Suite you're using.
-  It's handy to mention if you report a problem.
+  It's handy to mention if you report a problem. Click the version number to
+  see [what's new](changelog.md).
 
 ## Moving between apps
 
@@ -80,6 +81,9 @@ Click your name in the top right corner to open the user menu.
 - **Help** — opens this guide. If you're inside an app (ON Paste, ON Notes,
   ON Reader, ON Flash or Admin), it opens straight to that app's guide;
   elsewhere it opens the welcome guide.
+- **What's new** — what changed in each ON Suite release. When your
+  ON Suite has been updated, a small dot appears next to your name and on
+  this item until you open it (see [What's new](changelog.md)).
 - **Display** — change how ON Suite looks:
   - **Theme:** **Light** or **Dark**.
 

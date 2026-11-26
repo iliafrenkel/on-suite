@@ -50,6 +50,7 @@ func serve(args []string, getenv func(string) string, errOut io.Writer) error {
 	}
 
 	users := auth.NewStore(handle)
+	users.SetVersion(version)
 	switch n, err := users.CountUsers(context.Background()); {
 	case err != nil:
 		return err

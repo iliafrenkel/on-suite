@@ -53,22 +53,39 @@ suggestion: when a release is a milestone, tag the next major instead.
    # v2.0.0
    ```
 
-   Then write the release's friendly name and summary into the tag's
-   message. The first line is the name; after a blank line, a few plain,
-   friendly sentences about what changed. They become the release's title
-   and the text above its generated changelog:
+   Then add the release to [`docs/user/changelog.md`](../user/changelog.md),
+   in a PR, and merge it before tagging. That file is the in-app **What's
+   new** page (`/help/changelog`); users see a badge on their user menu
+   until they've opened it after an upgrade. Add a new entry at the top:
 
-   ```bash
-   git tag -a v1.1.0 -F - <<'EOF'
-   ON Flash - Major UI update
+   ```markdown
+   ## 1.1.0: ON Flash - Major UI update
+
+   *27 September 2026*
 
    Flash cards are beautiful again! Plus, a lot of bug fixes, accessibility
    and performance improvements.
-   EOF
+   ```
+
+   The heading is the version without its `v` and the release's friendly
+   name; the summary is a few plain, friendly sentences about what changed.
+   `TestChangelogEntries` (in `docs/`) checks the shape: newest first, a
+   date line under every heading. Set the date to the day you tag.
+
+   Once it's merged, tag from it. [`scripts/tag-message.sh`](../../scripts/tag-message.sh)
+   prints the top entry as a tag message (the name, a blank line, the
+   summary) and refuses if the top entry isn't the version you're tagging,
+   so the app and GitHub always say the same thing:
+
+   ```bash
+   git checkout main && git pull
+   scripts/tag-message.sh 1.1.0 | git tag -a v1.1.0 -F -
+   git show v1.1.0   # check the message
    git push origin v1.1.0
    ```
 
-   The release then reads:
+   The name and summary become the release's title and the text above its
+   generated changelog:
 
    ```markdown
    # ON Flash - Major UI update (v1.1.0)
@@ -80,11 +97,10 @@ suggestion: when a release is a milestone, tag the next major instead.
    ...
    ```
 
-   A tag whose message is just the version (`git tag -a v1.1.1 -m v1.1.1`)
-   gets a plain `v1.1.1` title and no summary, which is fine for a small
-   patch. Check the message before pushing with `git show v1.1.0`. Once the
-   tag is pushed, fix a typo by editing the GitHub Release text instead of
-   re-tagging.
+   Every release gets a changelog entry, even a small patch, since that's
+   what tells users their server was updated. Once the tag is pushed, fix a
+   typo by editing the GitHub Release text and `changelog.md` (in a PR)
+   instead of re-tagging.
 
    The tag must start with `v` — that's what the workflow's `on.push.tags:
    ['v*']` filter matches.

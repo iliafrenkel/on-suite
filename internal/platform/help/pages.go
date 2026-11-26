@@ -41,6 +41,7 @@ var order = []struct{ Slug, Label string }{
 	{"focus", "ON Focus"},
 	{"ai-assistants", "AI assistants"},
 	{"admin", "Administration"},
+	{"changelog", "What's new"},
 }
 
 // Page is one rendered user guide.
