@@ -1012,3 +1012,44 @@ func TestArticleCarriesItsLanguageAndDirection(t *testing.T) {
 		t.Errorf("article without a language has lang=%q", v)
 	}
 }
+
+// The meta line under the title links to the original as an icon, next to
+// the read time, for readable and link-only articles alike.
+func TestArticleMetaLinksToTheOriginal(t *testing.T) {
+	s := newServer(t)
+	for name, a := range map[string]later.Article{
+		"readable":  seedReadable(t, s),
+		"link-only": seedLinkOnly(t, s),
+	} {
+		doc := s.Get(t, s.Alice, articlePath(a, ""))
+		link := doc.MustHave(".later-article-meta a.later-article-source")
+		for attr, want := range map[string]string{
+			"href":       a.URL,
+			"aria-label": "Open original",
+			"title":      "Open original",
+			"target":     "_blank",
+			"rel":        "noopener noreferrer",
+		} {
+			if got, _ := htmlassert.Attr(link, attr); got != want {
+				t.Errorf("%s: source link %s = %q, want %q", name, attr, got, want)
+			}
+		}
+		if link.FirstChild == nil || doc.Query(".later-article-source svg") == nil {
+			t.Errorf("%s: source link has no icon", name)
+		}
+	}
+}
+
+// "Open the original" in the can't-read box is a link, not just words.
+func TestLinkOnlyBoxLinksToTheOriginal(t *testing.T) {
+	s := newServer(t)
+	a := seedLinkOnly(t, s)
+	doc := s.Get(t, s.Alice, articlePath(a, ""))
+	link := doc.MustHave(fmt.Sprintf(`.later-linkonly a[href=%q]`, a.URL))
+	if got := htmlassert.Text(link); got != "Open the original" {
+		t.Errorf("link text = %q, want %q", got, "Open the original")
+	}
+	if rel, _ := htmlassert.Attr(link, "rel"); rel != "noopener noreferrer" {
+		t.Errorf("rel = %q", rel)
+	}
+}

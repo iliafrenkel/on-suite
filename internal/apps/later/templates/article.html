@@ -103,10 +103,12 @@
 			</p>
 			<h1 class="later-article-title" dir="auto">{{$d.Title}}</h1>
 			<div class="later-article-meta-bar">
-				{{if or $d.Byline (not $d.LinkOnly)}}<p class="later-article-meta">
+				<p class="later-article-meta">
 					{{with $d.Byline}}<bdi>{{.}}</bdi>{{end}}{{if and $d.Byline (not $d.LinkOnly)}} · {{end}}
 					{{if not $d.LinkOnly}}{{$d.Minutes}} min read{{end}}
-				</p>{{end}}
+					{{/* The href is safe: NormalizeURL only stores http(s) URLs. */}}
+					<a class="later-article-source" href="{{$d.URL}}" target="_blank" rel="noopener noreferrer" aria-label="Open original" title="Open original">{{ticon "external"}}</a>
+				</p>
 				{{if $d.Tags}}<p class="later-article-tags">{{range $d.Tags}}<a class="later-pill later-pill-tag" href="{{.URL}}">{{.Name}}</a>
 				{{end}}</p>{{end}}
 			</div>
@@ -116,7 +118,7 @@
 		<section class="later-linkonly stack" aria-labelledby="later-linkonly-title">
 			<h2 id="later-linkonly-title">Couldn't read this page</h2>
 			<p>{{$d.Reason}}</p>
-			<p>Open the original, copy the article's text, and paste it here to read it in ON Later.</p>
+			<p><a href="{{$d.URL}}" target="_blank" rel="noopener noreferrer">Open the original</a>, copy the article's text, and paste it here to read it in ON Later.</p>
 			<form class="stack" method="post" action="/later/a/{{$d.ID}}/text">
 				<input type="hidden" name="{{csrfField}}" value="{{$csrf}}">
 				<label for="later-text">Article text</label>
