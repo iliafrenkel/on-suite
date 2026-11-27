@@ -4176,6 +4176,19 @@ main:has(.later-reader) { max-width: none; padding: 0; }
 	color: var(--c-text-dim);
 	margin: 0;
 }
+/* The source link: an icon after the read time. The padding widens the tap
+ * target; the negative margin keeps it from pushing the line taller. */
+.later-article-source {
+	display: inline-flex;
+	vertical-align: middle;
+	padding: var(--s-1);
+	margin: calc(-1 * var(--s-1)) 0;
+	margin-inline-start: var(--s-1);
+	border-radius: var(--radius);
+	color: var(--c-text-dim);
+}
+.later-article-source:hover,
+.later-article-source:focus-visible { color: var(--c-accent); }
 .later-article-body { line-height: 1.72; overflow-wrap: anywhere; }
 .later-article:not(:lang(ar)):not(:lang(he)):not(:lang(fa)):not(:lang(ur)):not(:lang(zh)):not(:lang(ja)):not(:lang(ko)) .later-article-body:not(:dir(rtl)) > p:first-of-type::first-letter {
 	float: inline-start;
